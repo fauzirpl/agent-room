@@ -695,6 +695,48 @@ Aplikasi desktop cuma menampilkan sesinya sendiri, jadi tugas dari sini tidak
 akan pernah nongol di sana. Yang benar untuk dilihat: **pegawainya di ruangan**,
 barisnya di panel kanan, dan daftar tugas berjalan di `GET /kendali`.
 
+### Dua sumber untuk sesi dari halaman
+
+Sesi terminal yang kamu jalankan sendiri terbaca lewat hook. Sesi yang
+dilahirkan halaman ini terbaca **dua kali**: lewat hook seperti biasa, dan lewat
+stdout-nya sendiri — dia dijalankan dengan `--output-format stream-json
+--verbose`, jadi jalannya sesi mengalir baris per baris sebagai NDJSON ke server
+ini.
+
+Itu bukan pemborosan. Jalur hook untuk sesi headless punya tanggal kedaluwarsa:
+`--bare` melewati hook sepenuhnya, dan dokumentasi Anthropic menyatakan dia akan
+jadi default untuk `-p`. Sudah diuji juga bahwa di mode itu hook **tidak bisa**
+dititipkan lewat `--settings` maupun `--plugin-dir` — kunci `apiKeyHelper` dari
+berkas settings yang sama tetap dieksekusi, kunci `hooks` tidak sama sekali.
+Kalau hari itu tiba, jalur hook untuk sesi headless mati total. stdout tidak
+ikut mati.
+
+Yang menentukan siapa yang bicara adalah hook mana yang datang duluan:
+
+| Keadaan sesi | Yang menggerakkan ruangan | Yang disumbang stream |
+|---|---|---|
+| ada hook masuk | **hook** | biaya, percobaan ulang API, galat API |
+| tidak ada hook sama sekali | **stream-json** | semuanya |
+
+Pembagian itu wajib ada. Tanpanya satu panggilan tool terhitung dua kali —
+sekali dari hook, sekali dari stream.
+
+Tiga hal yang memang cuma bisa datang dari stream, karena payload hook tidak
+pernah membawanya:
+
+- **biaya sesi**, dari `total_cost_usd` di pesan `result`. Ditulis dengan `±`
+  di depan karena dokumentasinya sendiri menyebutnya perkiraan sisi klien, bukan
+  tagihan
+- **percobaan ulang API** (`api_retry`), lengkap dengan sebabnya — kena batas
+  pemakaian, server penuh, tagihan
+- **galat API** yang menghentikan giliran. Dia datang sebagai pesan asisten
+  biasa yang ditandai khusus, jadi sebabnya terbaca **selagi sesinya masih
+  jalan**, bukan setelah prosesnya mati
+
+Pohon rapatnya juga lebih baik dari jalur hook: `parent_tool_use_id` menyebutkan
+panggilan tool mana yang melahirkan sebuah pesan, jadi peserta rapat dari sesi
+halaman tidak perlu ditebak sama sekali.
+
 ### Kalau tugasnya tidak pernah muncul
 
 Sesi headless butuh kredensial sendiri. Kalau server dijalankan dari lingkungan
@@ -713,10 +755,21 @@ arahan*, dan tidak pernah bekerja. Prosesnya memang lahir — yang tidak terjadi
 adalah sesinya mulai, jadi tidak ada satu pun hook yang dikirim.
 
 Kegagalan itu dulu diam selama 15 menit penuh sampai timeout. Sekarang server
-memasang **penjaga bisu**: kalau 25 detik setelah lahir tidak ada satu pun hook
-dari sesi itu, server menerbitkan `tugas-bisu` — muncul merah di log halaman dan
-sebagai peringatan di konsol server, lengkap dengan saran di atas. Satu hook yang
-masuk membatalkan penjaga itu, jadi sesi yang sehat tidak pernah kena.
+memasang **penjaga bisu** 25 detik. Satu hook yang masuk membatalkannya, jadi
+sesi yang sehat tidak pernah kena.
+
+Sejak stream-json ikut dibaca, penjaga itu bisa membedakan dua diam yang dulu
+dilaporkan sama:
+
+| Yang diterima dalam 25 detik | Artinya | Yang dilakukan |
+|---|---|---|
+| hook | sesinya sehat | penjaga dibatalkan |
+| tidak ada hook, tapi stream mengalir | sesinya jalan, hook-nya yang tidak ada — persis yang terjadi di mode `--bare` | dicatat di konsol sebagai keterangan, **bukan** peringatan |
+| tidak ada hook maupun stream | sesinya memang tidak pernah mulai | `tugas-bisu` terbit merah di log, plus peringatan kredensial di konsol |
+
+Baris kedua itu yang dulu salah. Sesi yang sebenarnya bekerja dengan baik tapi
+kebetulan hook-nya tidak terpasang ikut dituduh gagal autentikasi, dan tuduhan
+itu menunjuk ke arah yang sepenuhnya salah.
 
 Satu jebakan yang pernah bikin peringatan ini berbohong: **payload hook yang
 kebesaran**. Hook mengirim payload Claude Code apa adanya, termasuk

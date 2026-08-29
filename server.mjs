@@ -418,6 +418,113 @@ function publish(ev) {
   }
 }
 
+/* ————— stream-json: sumber kedua untuk sesi yang dilahirkan halaman ini —————
+
+   Sesi dari `/perintah` dibaca dua kali — lewat hook seperti sesi terminal
+   biasa, dan lewat stdout-nya sendiri. Itu bukan pemborosan, itu menambal
+   tanggal kedaluwarsa: `--bare` melewati hook sepenuhnya, dan dokumentasi
+   Anthropic menyatakan ia akan jadi default untuk `-p`. Sudah diuji juga bahwa
+   di mode itu hook tidak bisa dititipkan lewat `--settings` maupun
+   `--plugin-dir` — jadi kalau hari itu tiba, jalur hook untuk sesi headless
+   mati total. stdout tidak ikut mati.
+
+   `rec.hidup` yang menentukan siapa yang bicara. Begitu satu hook masuk untuk
+   sesi ini, hook yang pegang kendali dan stream cuma menyumbang yang memang
+   tidak pernah dibawa hook: biaya dan percobaan ulang API. Kalau tidak ada hook
+   sama sekali, stream mengambil alih seluruhnya. Tanpa pembagian itu satu
+   panggilan tool terhitung dua kali — sekali dari hook, sekali dari stream. */
+function serapStream(rec, sid, m) {
+  const sesi = sid.slice(0, 12);
+  rec.streamMasuk++;
+
+  const dasar = (tambah) => ({
+    id: ++seq, ts: Date.now(), session: sesi, cwd: baseName(rec.cwd),
+    nama: rec.nama, tool: null, label: '', ok: true,
+    ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
+    ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
+    ...tambah,
+  });
+
+  /* Tiga hal ini diserap apa pun keadaannya, karena hook memang tidak
+     membawanya sama sekali. */
+  if (m.type === 'result') {
+    rec.hasil = m;
+    if (typeof m.total_cost_usd === 'number') rec.biaya = m.total_cost_usd;
+    return;
+  }
+  if (m.type === 'system' && m.subtype === 'api_retry') {
+    publish(dasar({ kind: 'notify', ok: false,
+      label: clip('mencoba ulang — ' + (GALAT_STOP[m.error] || m.error || 'gangguan'), 60) }));
+    return;
+  }
+  if (m.type === 'system' && m.subtype === 'init') {
+    if (m.model && !modelSesi.has(sesi)) modelSesi.set(sesi, m.model);
+    if (!rec.hidup) {
+      publish(dasar({ kind: 'session-start', label: 'lewat stream-json',
+                      model: modelSesi.get(sesi) }));
+    }
+    return;
+  }
+  /* Galat API datang sebagai pesan asisten biasa yang ditandai khusus, bukan
+     sebagai pesan galat tersendiri. Ini satu-satunya tempat sebab berhentinya
+     sesi terbaca selagi sesinya masih jalan — hook tidak pernah membawanya, dan
+     menunggu `result` berarti ruangannya diam dulu tanpa alasan. */
+  if (m.type === 'assistant' && m.is_api_error_message) {
+    publish(dasar({ kind: 'stop-gagal', ok: false,
+      label: clip(GALAT_STOP[m.error] || String(m.error || 'galat API'), 60) }));
+    return;
+  }
+
+  if (rec.hidup) return;                      // hook sudah pegang kendali
+
+  const isi = Array.isArray(m.message?.content) ? m.message.content : [];
+
+  /* Panggilan tool dari agen. `parent_tool_use_id` yang terisi berarti panggilan
+     itu datang DARI subagent, bukan dari agen utama — pohon rapat yang sungguhan,
+     bukan tebakan jarak waktu seperti dulu. */
+  if (m.type === 'assistant') {
+    for (const b of isi) {
+      if (b?.type !== 'tool_use') continue;
+      const label = describe(b.name, b.input);
+      // dicatat karena tool_result nanti cuma membawa id-nya, tanpa nama tool
+      // maupun input — padahal justru itu yang dibaca orang di panel
+      if (rec.alat.size < 500) rec.alat.set(b.id, { tool: b.name, label });
+      const ev = dasar({ kind: 'pre', tool: b.name, label });
+      if (m.parent_tool_use_id) ev.agenId = m.parent_tool_use_id;
+      if (b.name === 'Task' || b.name === 'Agent') {
+        const nm = clip(b.input?.description || b.input?.subagent_type || 'agen', 26);
+        rec.rapat.set(b.id, nm);
+        ev.peserta = [nm];
+        publish(ev);
+        publish(dasar({ kind: 'subagent-start', agenId: b.id, label: nm, peserta: [nm] }));
+        continue;
+      }
+      publish(ev);
+    }
+    return;
+  }
+
+  /* Hasil tool. Sekaligus penutup rapat: kalau id yang selesai ini id panggilan
+     Task/Agent-nya, subagent-nya memang sudah berhenti — tidak perlu ambang
+     waktu untuk menebaknya. */
+  if (m.type === 'user') {
+    for (const b of isi) {
+      if (b?.type !== 'tool_result') continue;
+      const asal = rec.alat.get(b.tool_use_id);
+      rec.alat.delete(b.tool_use_id);
+      const ev = dasar({ kind: 'post', ok: b.is_error !== true,
+                         tool: asal?.tool || null, label: asal?.label || '' });
+      if (m.parent_tool_use_id) ev.agenId = m.parent_tool_use_id;
+      publish(ev);
+      if (rec.rapat.has(b.tool_use_id)) {
+        const nm = rec.rapat.get(b.tool_use_id);
+        rec.rapat.delete(b.tool_use_id);
+        publish(dasar({ kind: 'subagent-stop', agenId: b.tool_use_id, label: nm }));
+      }
+    }
+  }
+}
+
 /* Payload hook membawa `tool_response` apa adanya, jadi satu Read berkas besar
    atau satu Bash yang cerewet gampang lewat setengah mega. Batasnya tetap ada
    supaya satu payload raksasa tidak menghabiskan memori, tapi angkanya jauh di
@@ -841,7 +948,9 @@ const server = http.createServer(async (req, res) => {
     const args = [
       '-p', prompt,
       '--session-id', sid,
-      '--output-format', 'json',
+      // stream-json, bukan json: yang dibaca bukan cuma hasil akhirnya, tapi
+      // jalannya sesi — dan `-p` mensyaratkan --verbose untuk bentuk ini.
+      '--output-format', 'stream-json', '--verbose',
       '--permission-mode', p.mode || 'bypassPermissions',
       '--add-dir', kerja,
     ];
@@ -867,27 +976,75 @@ const server = http.createServer(async (req, res) => {
       return tolak(500, 'gagal menjalankan claude: ' + err.message);
     }
 
-    const rec = { anak, nama, mulai: Date.now(), cwd: kerja, keluar: '', galat: '', hidup: false };
+    const rec = {
+      anak, nama, mulai: Date.now(), cwd: kerja, keluar: '', galat: '', hidup: false,
+      streamMasuk: 0,          // berapa pesan stream-json yang sudah terbaca
+      hasil: null,             // pesan `result` terakhir — sumber sebab gagal & biaya
+      biaya: null,
+      alat: new Map(),         // tool_use_id -> { tool, label }
+      rapat: new Map(),        // tool_use_id panggilan Task/Agent -> nama pesertanya
+    };
     jalan.set(sid, rec);
 
     // Prosesnya lahir bukan berarti sesinya jalan. Kalau tidak ada satu pun
     // hook dalam BISU_MS, bilang sekarang — jangan biarkan halaman menampilkan
     // pegawai yang tampak sehat padahal sesinya tidak pernah mulai.
+    /* Sejak stream-json ikut dibaca, "tidak ada hook" dan "tidak ada apa-apa"
+       jadi dua hal yang berbeda — dan cuma yang kedua pantas dituduh gagal
+       autentikasi. Dulu keduanya dilaporkan sama, jadi sesi yang sebenarnya
+       sehat tapi hook-nya tidak terpasang ikut kena tuduhan yang salah. */
     rec.bisu = setTimeout(() => {
       if (rec.hidup) return;
-      console.warn('[agent-room] sesi ' + sid.slice(0, 12) + ' belum mengirim hook apa pun '
-        + (BISU_MS / 1000) + ' detik setelah lahir. Sesi headless butuh kredensial sendiri: '
-        + 'jalankan server ini dari terminal biasa tempat perintah claude normal jalan, '
-        + 'atau siapkan token lewat: claude setup-token');
+      if (rec.streamMasuk > 0) {
+        console.log('[agent-room] sesi ' + sid.slice(0, 12) + ' jalan tanpa hook — '
+          + 'ruangannya digerakkan dari stream-json (' + rec.streamMasuk + ' pesan). '
+          + 'Itu yang terjadi di mode --bare, dan memang tidak apa-apa.');
+        return;
+      }
+      console.warn('[agent-room] sesi ' + sid.slice(0, 12) + ' belum mengirim apa pun '
+        + (BISU_MS / 1000) + ' detik setelah lahir — hook maupun stream-json. '
+        + 'Sesi headless butuh kredensial sendiri: jalankan server ini dari terminal '
+        + 'biasa tempat perintah claude normal jalan, atau siapkan token lewat: '
+        + 'claude setup-token');
       publish({
         id: ++seq, ts: Date.now(), kind: 'tugas-bisu', session: sid.slice(0, 12),
         nama, tool: null, ok: false,
-        label: 'belum ada kabar ' + (BISU_MS / 1000) + ' dtk — sesi headless mungkin gagal autentikasi',
+        label: 'nihil ' + (BISU_MS / 1000) + ' dtk, hook maupun stream — sesinya tidak pernah mulai',
       });
     }, BISU_MS);
 
-    anak.stdout.on('data', (c) => { rec.keluar += c; });
-    anak.stderr.on('data', (c) => { rec.galat += c; });
+    /* stdout sekarang NDJSON, bukan satu JSON di akhir: dibaca baris per baris
+       supaya ruangannya bergerak selagi sesinya jalan, bukan menunggu selesai. */
+    let sisa = '';
+    anak.stdout.on('data', (c) => {
+      const teks = String(c);
+      // Mentahnya tetap disimpan sebagai cadangan pembaca sebab gagal, tapi
+      // ekornya saja: stream satu sesi panjang bisa puluhan MB, dan yang
+      // dibutuhkan cuma bagian akhir.
+      rec.keluar = (rec.keluar + teks).slice(-64 * 1024);
+      sisa += teks;
+      if (sisa.length > 8 * 1024 * 1024) {     // satu baris raksasa tanpa newline
+        console.warn('[agent-room] baris stream-json > 8 MB dibuang (sesi '
+                     + sid.slice(0, 12) + ')');
+        sisa = '';
+        return;
+      }
+      const baris = sisa.split('\n');
+      sisa = baris.pop();
+      for (const b of baris) {
+        const t = b.trim();
+        if (!t) continue;
+        let m;
+        // Baris yang tidak bisa diurai dilewati, bukan bikin meledak: satu
+        // pesan rusak tidak boleh mematikan seluruh sesi.
+        try { m = JSON.parse(t); } catch { continue; }
+        try { serapStream(rec, sid, m); }
+        catch (err) {
+          console.warn('[agent-room] stream-json ' + sid.slice(0, 12) + ': ' + err.message);
+        }
+      }
+    });
+    anak.stderr.on('data', (c) => { rec.galat = (rec.galat + c).slice(-16 * 1024); });
 
     const batas = setTimeout(() => {
       rec.galat += '\n[dihentikan: lewat batas waktu]';
@@ -899,11 +1056,12 @@ const server = http.createServer(async (req, res) => {
          di stdout sebagai JSON hasil (mis. "Not logged in · Please run /login")
        - JSON itu panjang; yang dibaca orang cuma field result/error-nya */
     const sebabGagal = () => {
-      try {
-        const j = JSON.parse(rec.keluar);
-        const inti = j.result || j.error;
+      // Pesan `result` terakhir dari stream sudah terurai waktu ia lewat, jadi
+      // tidak perlu mengurai ulang ekor stdout yang mungkin terpotong di tengah.
+      if (rec.hasil) {
+        const inti = rec.hasil.result || rec.hasil.error;
         if (inti) return String(inti);
-      } catch { /* bukan JSON: pakai apa adanya */ }
+      }
       const err = rec.galat.split(/\r?\n/)
         .map((l) => l.trim())
         .filter((l) => l && !/^warning:/i.test(l))
@@ -918,13 +1076,18 @@ const server = http.createServer(async (req, res) => {
       // Jangan diam kalau gagal: sesi yang tidak pernah lahir tidak akan
       // memunculkan pegawai apa pun, jadi kegagalannya harus terlihat.
       const gagal = kode !== 0;
+      // Biaya cuma ada kalau pesan `result` sempat lewat, dan angkanya diakui
+      // dokumentasi sebagai perkiraan sisi klien — jadi ditulis apa adanya di
+      // label, bukan disajikan sebagai tagihan.
+      const biaya = typeof rec.biaya === 'number'
+        ? ' · ±$' + rec.biaya.toFixed(4).replace('.', ',') : '';
       publish({
         id: ++seq, ts: Date.now(), kind: 'tugas-selesai',
         session: sid.slice(0, 12), nama, tool: null, ok: !gagal,
         label: gagal
           ? clip('gagal (kode ' + kode + (sinyal ? '/' + sinyal : '') + ') '
                  + sebabGagal(), 220)
-          : nama,
+          : nama + biaya,
       });
     };
     anak.on('error', (err) => { rec.galat += err.message; selesai(-1, null); });
