@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kantor Agent</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🏛️</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <section class="stage">
+    <div class="stage-inner" id="stageInner">
+      <canvas id="room"></canvas>
+      <div class="overlay" id="overlay"></div>
+      <!-- kartu detail pegawai; isinya dibangun room.js waktu ada yang diklik -->
+      <div class="kartu" id="kartu" hidden></div>
+    </div>
+    <div class="stage-bar">
+      <span class="dot" id="connDot"></span>
+      <span id="connText">menyambung…</span>
+      <span class="sep">/</span>
+      <span id="nowDoing">kantor masih sepi</span>
+      <button id="soundBtn" class="ghost" title="efek suara">🔇</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <header>
+      <h1>KANTOR<span>AGENT</span></h1>
+      <p class="sub">kantor dinas · live dari Claude Code</p>
+    </header>
+
+    <div class="stats">
+      <div class="stat"><b id="statTools">0</b><span>tool call</span></div>
+      <div class="stat"><b id="statAgents">0</b><span id="statAgentsKet">sesi</span></div>
+      <div class="stat"><b id="statTime">0:00</b><span>sesi</span></div>
+    </div>
+
+
+    <div class="panel-isi">
+    <div class="kendali" id="kendali">
+      <div class="kendali-mati" id="kendaliMati">kendali web mati</div>
+      <form id="formTugas" hidden>
+        <input id="tugasNama" type="text" placeholder="nama pegawai (mis. Budi)" maxlength="24">
+        <select id="tugasPeran" title="jabatan pegawai baru"></select>
+        <select id="tugasModel" title="model yang dipakai sesi ini"></select>
+        <textarea id="tugasPrompt" rows="3" placeholder="tugasnya apa? mis. rapikan README lalu jalankan test"></textarea>
+        <div class="baris-folder">
+          <input id="tugasCwd" type="text" placeholder="folder kerja" spellcheck="false">
+          <button type="button" id="bukaFolder" title="telusuri folder">📁</button>
+        </div>
+        <button type="submit" id="tugasKirim">Tugaskan</button>
+        <div class="kendali-pesan" id="tugasPesan"></div>
+        <details class="kredensial">
+          <summary>token headless</summary>
+          <p class="kredensial-nota">
+            Dipakai sesi yang dilahirkan halaman ini, dan tidak pernah dikirim balik
+            ke halaman. Tanpa centang di bawah, tokennya cuma hidup di memori server
+            dan hilang saat server berhenti; dengan centang, ditulis apa adanya ke
+            berkas lokal — perlakukan berkas itu seperti kunci.
+          </p>
+          <input id="tokenNilai" type="password" autocomplete="off" spellcheck="false"
+                 placeholder="tempel token dari: claude setup-token">
+          <label class="kredensial-ingat">
+            <input type="checkbox" id="tokenIngat" checked>
+            ingat di berkas <code>.agent-room-token</code>
+          </label>
+          <div class="kredensial-aksi">
+            <button type="button" id="tokenSimpan">Simpan</button>
+            <button type="button" id="tokenHapus">Hapus</button>
+          </div>
+          <div class="kredensial-status" id="tokenStatus"></div>
+        </details>
+      </form>
+    </div>
+    <div class="crew" id="crew"></div>
+
+    <h2>Aktivitas</h2>
+    <ul class="log" id="log"></ul>
+    </div>
+  </aside>
+</div>
+
+<div class="dlg-latar" id="dlgFolder" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-label="Pilih folder kerja">
+    <header class="dlg-kepala">
+      <b>Pilih folder kerja</b>
+      <button type="button" id="dlgTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <nav class="dlg-remah" id="dlgRemah"></nav>
+    <div class="dlg-badan">
+      <aside class="dlg-sisi" id="dlgSisi"></aside>
+      <div class="dlg-utama">
+        <input id="dlgSaring" type="text" placeholder="ketik untuk menyaring…" spellcheck="false">
+        <div class="dlg-daftar" id="dlgDaftar"></div>
+      </div>
+    </div>
+    <footer class="dlg-kaki">
+      <input id="dlgJalur" type="text" spellcheck="false" placeholder="atau tempel path di sini">
+      <button type="button" id="dlgBatal">Batal</button>
+      <button type="button" id="dlgPakai" class="utama">Pakai folder ini</button>
+    </footer>
+  </div>
+</div>
+<script src="room.js"></script>
+<!-- katalog event acak; harus sesudah room.js, yang menyediakan daftarEvent() -->
+<script src="event-acak.js"></script>
+</body>
+</html>
