@@ -25,9 +25,22 @@ const target = global_
   ? path.join(os.homedir(), '.claude', 'settings.json')
   : path.join(process.cwd(), '.claude', 'settings.json');
 
-// Events yang punya `matcher` (tool-scoped) vs yang tidak.
-const TOOL_EVENTS = ['PreToolUse', 'PostToolUse'];
-const PLAIN_EVENTS = ['UserPromptSubmit', 'Stop', 'SubagentStop', 'Notification', 'SessionStart', 'SessionEnd'];
+// Events yang matcher-nya menyaring NAMA TOOL. Dipasang dengan matcher '*'.
+const TOOL_EVENTS = [
+  'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
+  'PermissionRequest', 'PermissionDenied',
+];
+// Sisanya dipasang tanpa matcher. Sebagian di daftar ini sebenarnya PUNYA
+// matcher (SessionStart menyaring cara mulai, SubagentStart menyaring tipe
+// agen, PreCompact/PostCompact menyaring pemicunya, StopFailure menyaring jenis
+// galat) — tapi matcher yang dihilangkan artinya sama dengan '*': kena semua.
+// Jadi bentuk polos ini benar untuk keduanya, dan satu daftar lebih sedikit.
+const PLAIN_EVENTS = [
+  'UserPromptSubmit', 'Stop', 'StopFailure',
+  'SubagentStart', 'SubagentStop', 'Notification',
+  'SessionStart', 'SessionEnd',
+  'PreCompact', 'PostCompact',
+];
 
 // curl ~42ms vs node ~153ms per panggilan, dan hook ini jalan tiap tool call.
 // `|| exit 0` supaya sesi tidak kena warning waktu server ruangan lagi mati.

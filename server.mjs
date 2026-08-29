@@ -167,14 +167,58 @@ const baseName = (p) => String(p ?? '').split(/[\\/]/).filter(Boolean).pop() || 
 const EVENT_ALIAS = {
   PreToolUse: 'pre',
   PostToolUse: 'post',
+  // Sejak PostToolUse cuma menyala waktu tool-nya BERHASIL, kegagalan datang
+  // lewat event terpisah. Tetap dipetakan ke 'post' karena yang harus terjadi
+  // sama persis — giliran kerjanya ditutup, rapatnya dibubarkan — bedanya cuma
+  // `ok:false` plus pesan galatnya. Kind sendiri berarti menyalin semua itu.
+  PostToolUseFailure: 'post',
   UserPromptSubmit: 'prompt',
   Stop: 'stop',
+  StopFailure: 'stop-gagal',
+  SubagentStart: 'subagent-start',
   SubagentStop: 'subagent-stop',
+  PermissionRequest: 'izin-minta',
+  PermissionDenied: 'izin-tolak',
   Notification: 'notify',
   SessionStart: 'session-start',
   SessionEnd: 'session-end',
   PreCompact: 'compact',
+  PostCompact: 'compact-selesai',
 };
+
+/* Jenis galat yang bikin giliran agen berhenti di tengah jalan. Namanya datang
+   dalam bahasa Inggris dan cuma segelintir, jadi diterjemahkan di sini supaya
+   panel tidak mendadak berbahasa Inggris. Yang tidak dikenal lewat apa adanya —
+   lebih jujur daripada memaksanya jadi "galat lain". */
+const GALAT_STOP = {
+  rate_limit: 'kena batas pemakaian',
+  overloaded: 'server penuh',
+  authentication_failed: 'kredensial ditolak',
+  oauth_org_not_allowed: 'organisasi tidak diizinkan',
+  billing_error: 'urusan tagihan',
+  invalid_request: 'permintaan tidak sah',
+  model_not_found: 'model tidak ketemu',
+  server_error: 'server bermasalah',
+  max_output_tokens: 'jawabannya kepanjangan',
+  unknown: 'sebabnya tidak jelas',
+};
+
+/* Pemicu pemadatan konteks. Dua nilai saja, tapi bedanya penting dibaca:
+   yang manual kamu yang minta, yang otomatis berarti konteksnya sudah mepet. */
+const PEMICU_COMPACT = { manual: 'diminta', auto: 'otomatis' };
+
+/* Sesi yang berhenti MENUNGGU KEPUTUSAN KAMU. Ini keadaan ketiga, di samping
+   sedang bekerja dan menganggur, dan bedanya nyata: yang menganggur sudah
+   selesai, yang ini tidak bisa lanjut sampai ada orang yang menjawab.
+   Disimpan per sesi supaya server tetap jadi sumbernya — halaman cukup
+   mengikuti apa yang dikirim, tidak perlu menebak sendiri. */
+const butuhManusia = new Map();             // sesi 12-char -> { sebab, alasan }
+
+/* Dari 12 nilai `notification_type`, cuma dua yang benar-benar berarti
+   gilirannya ada di kamu. Sisanya kabar lewat: `auth_success` memberitahu
+   login berhasil, `agent_completed` memberitahu subagent kelar, `quota_*`
+   memberitahu kuota. Tidak satu pun menahan sesinya. */
+const NOTIFY_BUTUH = new Set(['permission_prompt', 'agent_needs_input']);
 
 /** Human-readable one-liner for what the agent is doing. */
 function describe(tool, input) {
@@ -232,8 +276,14 @@ function namaWorkflow(i) {
 /* Siapa saja yang ikut duduk di meja rapat untuk satu panggilan tool.
    Workflow: satu kursi per fase, diambil dari `meta.phases` di script-nya —
    itu satu-satunya daftar peserta yang bisa dibaca sebelum workflow-nya jalan
-   (jumlah agent per fase sering ditentukan saat runtime). Task/Agent: satu
-   kursi untuk subagent yang dipanggil. */
+   (jumlah agent per fase sering ditentukan saat runtime).
+
+   Task/Agent: satu kursi SEMENTARA. Identitas subagent yang sebenarnya datang
+   dari `SubagentStart` (`agent_type`/`agent_id`), tapi baru beberapa saat
+   kemudian; `description` di sisi pemanggil sudah bisa dibaca sekarang, jadi
+   dia yang menempati kursinya lebih dulu dan diambil alih begitu agennya
+   memperkenalkan diri. Ini juga yang menahan kursinya tetap terisi kalau
+   `SubagentStart` memang tidak pernah datang. */
 function pesertaRapat(tool, input) {
   const i = input && typeof input === 'object' ? input : {};
   if (tool === 'Task' || tool === 'Agent') {
@@ -266,6 +316,9 @@ function isError(resp) {
 function normalize(raw) {
   const kind = EVENT_ALIAS[raw.hook_event_name] || String(raw.hook_event_name || 'unknown').toLowerCase();
   const tool = raw.tool_name || null;
+  // Kegagalan datang lewat event sendiri sekarang, tapi isError() tetap dipakai:
+  // versi Claude Code lama masih mengirim PostToolUse berisi respons galat.
+  const gagalTool = raw.hook_event_name === 'PostToolUseFailure';
   const ev = {
     id: ++seq,
     ts: Date.now(),
@@ -274,8 +327,12 @@ function normalize(raw) {
     cwd: raw.cwd ? baseName(raw.cwd) : '',
     tool,
     label: tool ? describe(tool, raw.tool_input) : '',
-    ok: kind === 'post' ? !isError(raw.tool_response) : true,
+    ok: kind === 'post' ? !gagalTool && !isError(raw.tool_response) : true,
   };
+  // Id panggilan tool: pre dan post-nya membawa nilai yang sama. Ini yang bikin
+  // pasangan pre→post bisa dicocokkan persis, bukan ditebak lewat (sesi, tool).
+  if (raw.tool_use_id) ev.panggilan = clip(raw.tool_use_id, 64);
+  if (Number.isFinite(raw.duration_ms)) ev.durasi = Math.round(raw.duration_ms);
   const panggilan = namaSesi.get(ev.session);
   if (panggilan) ev.nama = panggilan;
   const peran = peranSesi.get(ev.session);
@@ -291,6 +348,7 @@ function normalize(raw) {
   }
   if (kind === 'prompt') ev.label = clip(raw.prompt, 120);
   if (kind === 'notify') {
+    if (raw.notification_type) ev.jenis = clip(raw.notification_type, 32);
     // pesan notifikasi datang dalam bahasa Inggris dari Claude Code
     ev.label = clip(String(raw.message || '')
       .replace(/^Claude needs your permission to use\s*/i, 'minta izin memakai ')
@@ -299,6 +357,46 @@ function normalize(raw) {
   }
   if (kind === 'session-start') ev.label = clip(raw.source || 'startup', 40);
   if (kind === 'session-end') ev.label = clip(raw.reason || '', 40);
+  if (gagalTool) {
+    ev.galat = clip(raw.error, 120);
+    // Ctrl+C bukan kegagalan tool: yang berhenti kamu, bukan alatnya. Dibedakan
+    // supaya panelnya tidak menuduh alat yang sebenarnya baik-baik saja.
+    ev.interupsi = raw.is_interrupt === true;
+  }
+  if (kind === 'stop-gagal') {
+    const jenis = String(raw.error || 'unknown');
+    ev.label = clip(GALAT_STOP[jenis] || jenis, 60);
+    ev.galat = clip(raw.error_details || '', 120);
+  }
+  if (kind === 'subagent-start' || kind === 'subagent-stop') {
+    // Identitas subagent yang sebenarnya — bukan `description` milik pemanggil.
+    // Ada HANYA kalau hook-nya menyala di dalam subagent, dan itu justru yang
+    // membuatnya bisa dipakai memasangkan siapa masuk dengan siapa keluar.
+    if (raw.agent_id) ev.agenId = clip(raw.agent_id, 64);
+    if (raw.agent_type) ev.agen = clip(raw.agent_type, 26);
+    ev.label = ev.agen || '';
+  }
+  if (kind === 'izin-tolak') ev.alasan = clip(raw.reason || '', 120);
+  if (kind === 'compact' || kind === 'compact-selesai') {
+    const p = String(raw.trigger || '');
+    ev.label = clip(PEMICU_COMPACT[p] || p, 40);
+  }
+  /* Keadaan "butuh manusia" dihitung di sini, bukan lewat sapuan berkala.
+     Alasannya waktu: izin yang kamu berikan detik ini langsung disusul
+     PostToolUse, dan pegawainya harus duduk lagi saat itu juga — kalau
+     menunggu penyapu lewat, dia berdiri mengangkat map padahal sesinya sudah
+     jalan lagi. Jadi event APA PUN dari sesi yang sama membatalkannya. */
+  const sebab = kind === 'izin-minta' ? 'izin'
+    : kind === 'izin-tolak' ? 'tolak'
+    : kind === 'notify' && NOTIFY_BUTUH.has(String(raw.notification_type || '')) ? 'tanya'
+    : '';
+  if (sebab) {
+    const keadaan = { sebab, alasan: ev.alasan || '', label: ev.label || '' };
+    butuhManusia.set(ev.session, keadaan);
+    ev.butuh = keadaan;
+  } else if (butuhManusia.delete(ev.session)) {
+    ev.butuh = false;
+  }
   return ev;
 }
 

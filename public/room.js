@@ -1659,16 +1659,33 @@ function drawPerson(a) {
   // lengan (kolom gelap di pangkal biar tidak menyatu dengan sisi badan)
   // a.pose menang atas keduanya: itu jalur event, dan event tahu persis pose
   // apa yang sedang diperlukan — mengangkat, menunjuk, menguap, bertepuk.
-  const pose = a.pose ? posEvent(a) : (a.state === 'work' ? workArms(a) : { l: armL, r: armR });
+  // Menunggu keputusan kamu menang atas semuanya: dua tangan mengangkat map.
+  const pose = a.butuh ? { l: -6, r: -6 }
+    : a.pose ? posEvent(a)
+    : (a.state === 'work' ? workArms(a) : { l: armL, r: armR });
   box3(x - 8, yb - 6 + pose.l, 3, 7, 2, p.main);
   box3(x + 6, yb - 6 + pose.r, 3, 7, 2, p.main);
   r(x + 6, yb - 13 + pose.r, 1, 7, sh(p.main, 0.82));
   r(x - 8, yb - 8 + pose.l, 3, 2, p.skin);
   r(x + 6, yb - 8 + pose.r, 3, 2, p.skin);
 
+  // Map disposisi digambar SEBELUM kepala supaya kepalanya menang: yang jadi
+  // tanda justru wajah yang menghadap penonton, jadi tidak boleh tertutup map.
+  if (a.butuh) {
+    // Lebarnya berhenti di pangkal telapak, bukan menutupinya: kalau tangannya
+    // ikut tertutup, mapnya terbaca menempel di dada, bukan diangkat.
+    r(x - 5, yb - 16, 5, 1, '#e8a0a8');                     // lidah map
+    r(x - 5, yb - 15, 11, 8, '#e8a0a8');                    // map disposisi
+    r(x - 5, yb - 8, 11, 1, '#c07e86');                     // sisi bawah: tebalnya terbaca
+    r(x - 3, yb - 13, 7, 1, P.paper);                       // lembar di dalamnya
+    r(x - 3, yb - 11, 5, 1, P.paper);
+    r(x + 2, yb - 11, 3, 3, '#c03030');                     // cap merah, belum diteken
+  }
+
   // kepala peserta yang ketiduran turun beberapa piksel, lalu tersentak naik
   drawHead(a, x, yb - 13 + (a.ngantuk || 0));
-  if (a.state === 'work') drawTool(a, x, yb);
+  // perkakas mejanya disembunyikan selagi menunggu: tangannya sedang penuh
+  if (a.state === 'work' && !a.butuh) drawTool(a, x, yb);
   if (a.bawa) drawBawaan(a, x, yb);
   ctx.globalAlpha = 1;
 }
@@ -1970,6 +1987,7 @@ class Agent {
     this.doingEvent = '';    // keterangan kartu selama dipinjam event
     this.bawa = null;        // barang bawaan sementara (map, gelas, jerigen)
     this.pose = null;        // pose sesaat: 'angkat', 'nunjuk', 'ngantuk', ...
+    this.butuh = null;       // keadaan ketiga: berhenti menunggu keputusan kamu
 
     this.el = document.createElement('div');
     this.el.className = 'bubble';
@@ -2027,6 +2045,17 @@ class Agent {
     return true;
   }
 
+  /* Berhenti menunggu keputusan manusia. Arah hadapnya dipasang di sini, bukan
+     dibaca waktu menggambar: pegawai yang sudah berdiri di mejanya tidak
+     memanggil arrive() lagi, jadi kalau tidak dipasang sekarang dia tetap
+     membelakangi kamera sampai perjalanan berikutnya. */
+  setButuh(b) {
+    this.butuh = b || null;
+    this.face = this.butuh
+      ? 'down'
+      : this.hadap || (STATIONS[this.station] || {}).face || 'down';
+  }
+
   say(text, cls) {
     this.el.className = 'bubble' + (cls ? ' ' + cls : '');
     this.el.innerHTML = text;
@@ -2069,7 +2098,9 @@ class Agent {
       // Yang terlanjur menunggu di sudut tunggu ikut dipanggil balik begitu ada
       // meja yang kosong: sudut tunggu bukan tempat parkir, cuma limpahan.
       const pulang = stasiunPulang(this);
-      if (!this.betah && now > this.busyUntil
+      // Yang menunggu keputusan kamu bukan menganggur: dia berhenti di tempat.
+      // Kalau dia balik ke mejanya, tandanya justru hilang dari layar.
+      if (!this.betah && !this.butuh && now > this.busyUntil
           && now - diamSejak > IDLE_AFTER && this.station !== pulang) {
         this.doing = '';
         this.adaTugas = false;
@@ -2108,7 +2139,9 @@ class Agent {
 
   arrive() {
     this.arrivedAt = now;
-    this.face = this.hadap || (STATIONS[this.station] || {}).face || 'down';
+    this.face = this.butuh
+      ? 'down'
+      : this.hadap || (STATIONS[this.station] || {}).face || 'down';
     // Menyeberang ruangan bisa makan sampai 9 detik — lebih lama dari jatah
     // kerja yang dipasang saat event datang. Tanpa jatah minimum setibanya,
     // pegawai sampai di meja lalu langsung balik kanan tanpa sempat bekerja.
@@ -2141,11 +2174,20 @@ function agentFor(id) {
 }
 
 /* ----------------------------------------------------------- peserta rapat */
-/* Fase workflow dan subagent tidak punya hook sendiri, jadi tidak bisa jadi
-   pegawai penuh seperti sesi. Yang bisa dibaca cuma daftar fase di
-   `meta.phases` waktu tool-nya dipanggil — daftar itu kita perlakukan sebagai
-   undangan rapat: mereka masuk lewat pintu, duduk selama rapatnya berjalan,
-   lalu permisi begitu panggilan tool-nya selesai. */
+/* Subagent punya hook sendiri: `SubagentStart` menandai satu agen masuk,
+   `SubagentStop` dengan `agent_id` yang sama menandai dia keluar. Itu identitas
+   sungguhan, dan itu yang dipakai di sini.
+
+   Fase workflow tetap tidak punya hook sendiri — yang bisa dibaca cuma daftar
+   fase di `meta.phases` waktu tool-nya dipanggil. Untuk workflow, daftar itu
+   masih jadi undangan rapat seperti dulu.
+
+   Untuk `Task`/`Agent` daftar dari pemanggil dipakai sebagai KURSI SEMENTARA:
+   `description`-nya sudah bisa dibaca di `PreToolUse`, sementara `agent_type`
+   baru datang beberapa saat kemudian. Begitu `SubagentStart` masuk, kursi itu
+   diambil alih — bukan ditambah kursi baru — lalu namanya diganti nama agen
+   yang sebenarnya. Kalau `SubagentStart` tidak pernah datang (Claude Code lama,
+   atau hook-nya belum dipasang ulang), kursi sementara itu yang bertahan. */
 let pesertaSeq = 0;
 
 class Peserta extends Agent {
@@ -2158,6 +2200,18 @@ class Peserta extends Agent {
     this.adaTugas = true;
     this.busyUntil = Infinity;
     this.keluar = false;
+    this.agenId = '';          // diisi SubagentStart; kursi sementara kosong
+  }
+
+  /* Kursi sementara diambil alih oleh agen yang sebenarnya. Namanya diganti
+     hanya kalau `agent_type` memang ada — `description` dari pemanggil sering
+     lebih deskriptif daripada "general-purpose", jadi jangan ditimpa kosong. */
+  jadikan(agenId, agen) {
+    this.agenId = agenId;
+    if (agen) {
+      this.nama = agen;
+      this.say('<b>' + esc(agen) + '</b> hadir');
+    }
   }
 
   // dipanggil setelah terdaftar di `peserta`, supaya kursinya tidak bentrok
@@ -2193,20 +2247,12 @@ class Peserta extends Agent {
   }
 }
 
-/* Rapat yang sedang berjalan. PostToolUse tidak membawa id panggilan yang
-   dipasangkannya, jadi pre dan post dicocokkan lewat (sesi, tool): yang dibuka
-   duluan yang ditutup duluan. */
+/* Rapat yang sedang berjalan. Pre dan post dicocokkan lewat `tool_use_id` yang
+   dibawa keduanya; kalau payload-nya tidak membawanya (Claude Code lama), jatuh
+   ke (sesi, tool) seperti dulu — yang dibuka duluan yang ditutup duluan. */
 const rapatAktif = [];
 
-// Subagent yang dijalankan di LATAR bikin PostToolUse datang sepersekian detik
-// setelah PreToolUse: yang ditandainya pengiriman, bukan selesainya. Kalau
-// pesertanya dibubarkan di situ, meja rapat justru kosong selama rapatnya
-// benar-benar berlangsung. Yang pre-post-nya serapat ini ditahan sampai
-// SubagentStop datang — atau sampai sapuan 15 menit, kalau sesinya mati.
-const AMBANG_LATAR = 2000;
-
-const sedangRapat = (session) =>
-  rapatAktif.some((rp) => rp.tag.startsWith(session + '|'));
+const sedangRapat = (session) => rapatAktif.some((rp) => rp.sesi === session);
 
 // Ruangan dijaga minimal berisi 4 orang supaya tidak terlihat mati saat cuma
 // ada satu sesi. Yang menambal itu pegawai standby — dan mereka SENGAJA
@@ -2251,6 +2297,16 @@ function kursiKosong() {
   return Math.max(0, KURSI_TOTAL - dipakai);
 }
 
+/* Rapat yang pesertanya subagent (`Task`/`Agent`) ditutup `SubagentStop`, bukan
+   `PostToolUse`. Alasannya: untuk subagent, `post` tidak pernah bisa dipercaya
+   menandai selesai — kalau agennya dikirim ke latar, `post` datang sepersekian
+   detik setelah `pre` dan yang ditandainya cuma pengiriman. Dulu bedanya ditebak
+   dari jarak pre→post; sekarang tidak perlu ditebak sama sekali, karena
+   `SubagentStop` selalu datang setelah agennya benar-benar berhenti — baik yang
+   sinkron maupun yang di latar. Rapat workflow tetap ditutup `post`: fasenya
+   memang habis waktu panggilan tool-nya habis. */
+const TUNGGU_SUBAGENT = /^(Task|Agent)$/;
+
 function bukaRapat(ev) {
   const nama = Array.isArray(ev.peserta) ? ev.peserta.filter(Boolean) : [];
   if (!nama.length) return;
@@ -2262,7 +2318,14 @@ function bukaRapat(ev) {
     p.masuk();
     anggota.push(p);
   }
-  rapatAktif.push({ tag: ev.session + '|' + ev.tool, anggota, sejak: now });
+  rapatAktif.push({
+    tag: ev.session + '|' + ev.tool,
+    panggilan: ev.panggilan || '',
+    sesi: ev.session,
+    anggota,
+    sejak: now,
+    tunggu: TUNGGU_SUBAGENT.test(ev.tool || ''),
+  });
   if (nama.length > 1) {
     const daring = nama.length - muat;
     pushLog(ev, 'mark',
@@ -2270,42 +2333,94 @@ function bukaRapat(ev) {
   }
 }
 
-function tutupRapat(session, tool) {
-  const i = rapatAktif.findIndex((rp) => rp.tag === session + '|' + tool);
-  if (i < 0) return;
-  const rp = rapatAktif[i];
-  if (now - rp.sejak < AMBANG_LATAR) { rp.latar = true; return; }
-  for (const p of rp.anggota) p.bubar();
-  rapatAktif.splice(i, 1);
+/* SubagentStart: agen yang sebenarnya menempati kursinya. Yang dicari dulu
+   kursi sementara yang dipasang `pre` untuk sesi ini — kalau ada, diambil alih
+   supaya tidak ada dua kursi untuk satu agen. Kalau tidak ada (agen dilahirkan
+   tanpa lewat tool `Task`, atau kursinya sudah ditempati agen lain), barulah
+   kursi baru dibuka. */
+function pesertaMasuk(ev) {
+  const agenId = ev.agenId || '';
+  if (agenId && peserta.some((p) => !p.keluar && p.agenId === agenId)) return null;
+
+  for (const rp of rapatAktif) {
+    if (rp.sesi !== ev.session || !rp.tunggu) continue;
+    const kosong = rp.anggota.find((p) => !p.keluar && !p.agenId);
+    if (!kosong) continue;
+    kosong.jadikan(agenId, ev.agen);
+    return kosong;
+  }
+
+  if (!kursiKosong()) return null;              // meja penuh: dicatat, tidak dipaksa
+  const p = new Peserta(ev.agen || 'agen', ev.session);
+  peserta.push(p);
+  p.jadikan(agenId, '');
+  p.masuk();
+  rapatAktif.push({
+    tag: ev.session + '|SubagentStart',
+    panggilan: '',
+    sesi: ev.session,
+    anggota: [p],
+    sejak: now,
+    tunggu: true,
+  });
+  return p;
 }
 
-// `paksa` dipakai waktu sesinya benar-benar berakhir. Tanpa itu, rapat latar
-// dibiarkan: giliran main agent boleh selesai duluan sementara subagent-nya
-// masih bekerja — persis yang terjadi kalau Task/Agent dikirim ke latar.
-function tutupSemuaRapat(session, paksa) {
+/* Rapat yang semua kursinya sudah kosong dicoret saat itu juga, kalau tidak
+   entrinya menyangkut sampai sapuan 15 menit dan `sedangRapat()` ikut bohong. */
+function sapuRapatKosong() {
   for (let i = rapatAktif.length - 1; i >= 0; i--) {
-    const rp = rapatAktif[i];
-    if (!rp.tag.startsWith(session + '|')) continue;
-    if (rp.latar && !paksa) continue;
-    for (const p of rp.anggota) p.bubar();
-    rapatAktif.splice(i, 1);
+    if (rapatAktif[i].anggota.every((p) => p.keluar)) rapatAktif.splice(i, 1);
   }
 }
 
-// SubagentStop membubarkan SATU peserta: yang paling awal masih duduk di salah
-// satu rapat milik sesi ini. Rapat yang kursinya sudah kosong ikut dicoret,
-// kalau tidak entri latar-nya menyangkut sampai sapuan 15 menit.
+/* SubagentStop membubarkan SATU peserta: yang `agent_id`-nya cocok. Tanpa
+   `agent_id` (payload lama) jatuh ke tebakan lama — yang paling awal masih
+   duduk di salah satu rapat milik sesi ini. */
+function pesertaKeluar(ev) {
+  const agenId = ev.agenId || '';
+  if (agenId) {
+    const p = peserta.find((q) => !q.keluar && q.agenId === agenId);
+    if (p) { p.bubar(); sapuRapatKosong(); return p; }
+  }
+  return bubarkanSatu(ev.session);
+}
+
 function bubarkanSatu(session) {
-  for (let i = 0; i < rapatAktif.length; i++) {
-    const rp = rapatAktif[i];
-    if (!rp.tag.startsWith(session + '|')) continue;
+  for (const rp of rapatAktif) {
+    if (rp.sesi !== session) continue;
     const p = rp.anggota.find((q) => !q.keluar);
     if (!p) continue;
     p.bubar();
-    if (rp.anggota.every((q) => q.keluar)) rapatAktif.splice(i, 1);
+    sapuRapatKosong();
     return p;
   }
   return null;
+}
+
+function tutupRapat(ev) {
+  const i = ev.panggilan
+    ? rapatAktif.findIndex((rp) => rp.panggilan === ev.panggilan)
+    : rapatAktif.findIndex((rp) => rp.tag === ev.session + '|' + ev.tool);
+  if (i < 0) return;
+  // Rapat subagent tetap berjalan: yang menutupnya `SubagentStop`.
+  if (rapatAktif[i].tunggu) return;
+  for (const p of rapatAktif[i].anggota) p.bubar();
+  rapatAktif.splice(i, 1);
+}
+
+// `paksa` dipakai waktu sesinya benar-benar berakhir. Tanpa itu, rapat yang
+// menunggu SubagentStop dibiarkan: giliran main agent boleh selesai duluan
+// sementara subagent-nya masih bekerja — persis yang terjadi kalau Task/Agent
+// dikirim ke latar.
+function tutupSemuaRapat(session, paksa) {
+  for (let i = rapatAktif.length - 1; i >= 0; i--) {
+    const rp = rapatAktif[i];
+    if (rp.sesi !== session) continue;
+    if (rp.tunggu && !paksa) continue;
+    for (const p of rp.anggota) p.bubar();
+    rapatAktif.splice(i, 1);
+  }
 }
 
 /* ------------------------------------------------------------------- HUD */
@@ -2393,6 +2508,14 @@ function gemuruh(tundaMs) {
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/* Tiga sebab sesi berhenti menunggu manusia, ditulis dari sudut pandang
+   pembacanya: yang ditunggu selalu kamu, bukan sistemnya. */
+const TUNGGU_TEKS = {
+  izin: 'menunggu izin kamu',
+  tolak: 'izin ditolak — menunggu kamu',
+  tanya: 'menunggu jawaban kamu',
+};
+
 function pushLog(ev, kindClass, frasa) {
   const [v, o] = frasa || kegiatan(ev.tool, ev.label);
   const li = document.createElement('li');
@@ -2442,7 +2565,11 @@ function renderCrew() {
   for (const a of agents.values()) {
     const panggilan = namaPanggilan.get(a.id);
     const who = panggilan || ((a.project ? a.project.slice(0, 12) + '·' : '') + a.id.slice(0, 4));
-    const row = barisKru(a, 'crew-row', who, a.doing || (STATIONS[a.station] || {}).name || '');
+    // Yang menunggu keputusan kamu tidak boleh terbaca sedang bekerja — kegiatan
+    // terakhirnya memang belum berubah, tapi kegiatan itu justru yang tertahan.
+    const apa = a.butuh ? TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin
+      : a.doing || (STATIONS[a.station] || {}).name || '';
+    const row = barisKru(a, 'crew-row', who, apa);
     if (panggilan) row.classList.add('tugas');
     const bNama = document.createElement('button');
     bNama.className = 'aksi'; bNama.textContent = 'nama'; bNama.title = 'beri nama pegawai ini';
@@ -2474,8 +2601,9 @@ function renderCrew() {
 setInterval(() => {
   const s = ((Date.now() - started) / 1000) | 0;
   statTime.textContent = ((s / 60) | 0) + ':' + String(s % 60).padStart(2, '0');
-  // Sesi yang mati di tengah workflow tidak pernah mengirim PostToolUse-nya.
-  // Tanpa sapuan ini kursinya terkunci selamanya.
+  // Sesi yang mati di tengah jalan tidak pernah mengirim penutupnya — workflow
+  // tanpa PostToolUse, subagent tanpa SubagentStop. Tanpa sapuan ini kursinya
+  // terkunci selamanya.
   for (let i = rapatAktif.length - 1; i >= 0; i--) {
     if (performance.now() - rapatAktif[i].sejak < 900000) continue;
     for (const p of rapatAktif[i].anggota) p.bubar();
@@ -2638,6 +2766,13 @@ function perbaruiKartu() {
     if (a.project) baris.push(['proyek', a.project]);
   }
   baris.push(['posisi', (STATIONS[a.station] || {}).name || a.station]);
+  // Alasan penolakan ditulis apa adanya dari Claude Code — itu satu-satunya
+  // keterangan kenapa sesinya tertahan, jadi jangan diringkas jadi "ditolak".
+  if (a.butuh) {
+    baris.push(['tertahan', TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin]);
+    const ket = a.butuh.alasan || a.butuh.label;
+    if (ket) baris.push([a.butuh.sebab === 'tolak' ? 'alasan' : 'perkara', ket]);
+  }
   // Kegiatan event ditulis apa adanya sebagai suasana, tidak dicampur dengan
   // kegiatan tool: yang membaca kartu harus tahu mana laporan, mana ruangan.
   baris.push(['kegiatan', a.doing
@@ -2715,6 +2850,10 @@ function handle(ev) {
   // pemeran, dia dilepas saat itu juga — halaman ini melaporkan pekerjaan
   // sungguhan dulu, baru menghidupkan ruangan.
   lepasDariEvent(a);
+  // Keadaan "butuh manusia" beserta pembatalannya dihitung server; halaman
+  // cuma mengikuti. `false` berarti tunggunya sudah lewat, `undefined` berarti
+  // event ini tidak mengubah apa-apa soal itu.
+  if (ev.butuh !== undefined) a.setButuh(ev.butuh);
   a.lastEvent = now;
   toolTerakhir = now;
   if (ev.cwd) a.project = ev.cwd;
@@ -2753,7 +2892,7 @@ function handle(ev) {
     }
     case 'post': {
       a.busyUntil = now + 900;
-      if (ev.peserta) tutupRapat(ev.session, ev.tool);
+      if (ev.peserta) tutupRapat(ev);
       if (ev.ok === false) {
         a.gagal++;
         // yang barusan dicatat itulah yang gagal: ditandai, bukan ditambah baris
@@ -2762,8 +2901,12 @@ function handle(ev) {
         // objeknya ikut dipakai: 'koordinasi dengan' tanpa objek jadi menggantung
         const [v, o] = kegiatan(ev.tool, '');
         const apa = v + (o ? ' ' + o : '');
-        a.say('gagal <b>' + esc(apa) + '</b>', 'err');
-        pushLog(ev, 'err', ['gagal', apa]);
+        // Ctrl+C bukan alat yang rusak: yang menghentikan kamu sendiri.
+        const sebab = ev.interupsi ? 'dihentikan' : 'gagal';
+        a.say(sebab + ' <b>' + esc(apa) + '</b>', 'err');
+        // Pesan galat dari Claude Code lebih berguna daripada nama kegiatannya —
+        // itu satu-satunya keterangan kenapa. Kegiatannya sudah ada di baris atas.
+        pushLog(ev, 'err', [sebab, ev.galat || apa]);
         for (let i = 0; i < 12; i++) spawn('ink', a.x, a.y - 16);
         blip(180, 0.12);
       }
@@ -2782,11 +2925,19 @@ function handle(ev) {
       blip(720, 0.07);
       break;
     }
+    // Subagent mulai: kursinya diisi identitas agen yang sebenarnya. Pegawainya
+    // sendiri tidak diapa-apakan — yang datang tamu, bukan tugas baru untuknya.
+    case 'subagent-start': {
+      const pm = pesertaMasuk(ev);
+      pushLog(ev, 'mark',
+        ['peserta rapat masuk', pm ? pm.nama : (ev.agen || '') + ' (ikut daring)']);
+      break;
+    }
     // Subagent selesai bukan berarti sesinya selesai: yang bubar cuma satu
     // peserta rapat, pegawainya tetap di mejanya.
     case 'subagent-stop': {
-      const pb = bubarkanSatu(ev.session);
-      pushLog(ev, 'mark', ['peserta rapat selesai', pb ? pb.nama : '']);
+      const pb = pesertaKeluar(ev);
+      pushLog(ev, 'mark', ['peserta rapat selesai', pb ? pb.nama : (ev.agen || '')]);
       blip(420, 0.1);
       break;
     }
@@ -2806,7 +2957,47 @@ function handle(ev) {
     case 'notify': {
       a.say('<b>!</b> ' + esc(ev.label || ''), 'say');
       pushLog(ev, 'mark', ['butuh perhatian', ev.label]);
+      if (ev.butuh) nowDoing.textContent = 'menunggu jawaban kamu';
       blip(880, 0.08);
+      break;
+    }
+    /* Minta izin: sesinya berhenti sampai kamu menjawab. Tidak menaikkan
+       statistik apa pun — yang terjadi bukan pekerjaan, justru pekerjaan yang
+       tertahan. Yang dicatat cuma satu baris log dan pose di ruangan. */
+    case 'izin-minta': {
+      a.say('minta izin: <b>' + esc(ev.label || ev.tool || '') + '</b>', 'say');
+      pushLog(ev, 'mark', ['minta izin', [ev.tool, ev.label].filter(Boolean).join(' ')]);
+      nowDoing.textContent = 'menunggu izin kamu';
+      blip(880, 0.08);
+      break;
+    }
+    case 'izin-tolak': {
+      a.say('izin ditolak: <b>' + esc(ev.alasan || ev.tool || '') + '</b>', 'err');
+      pushLog(ev, 'err', ['izin ditolak', ev.alasan || [ev.tool, ev.label].filter(Boolean).join(' ')]);
+      nowDoing.textContent = 'izin ditolak — cek panel';
+      blip(200, 0.1);
+      break;
+    }
+    // Giliran agennya berhenti di tengah jalan, bukan selesai. Bedanya penting:
+    // yang selesai tidak perlu diapa-apakan, yang ini biasanya perlu diulang.
+    case 'stop-gagal': {
+      a.busyUntil = 0;
+      a.adaTugas = false;
+      a.doing = 'berhenti: ' + (ev.label || 'galat');
+      a.fx = null;
+      a.say('berhenti — <b>' + esc(ev.label || 'galat') + '</b>', 'err');
+      pushLog(ev, 'err', ['giliran berhenti', ev.label || '']);
+      nowDoing.textContent = 'berhenti: ' + (ev.label || 'galat');
+      blip(180, 0.12);
+      break;
+    }
+    case 'compact': {
+      a.say('merapikan catatan (<b>' + esc(ev.label || '') + '</b>)', 'say');
+      pushLog(ev, 'mark', ['merapikan catatan', ev.label || '']);
+      break;
+    }
+    case 'compact-selesai': {
+      pushLog(ev, 'mark', ['catatan sudah rapi', ev.label || '']);
       break;
     }
     case 'session-start': {
@@ -3623,7 +3814,10 @@ function frame(ts) {
     const diPitaBawah = a.y > 240 && a.y < 266;
     // Yang sudah duduk di kursi rapat sisi dekat justru harus tenggelam DI
     // BELAKANG sandarannya — itu yang bikin dia terbaca duduk, bukan berdiri.
-    const dudukDekat = a.station === 'rapat' && a.hadap === 'up' && !a.path.length;
+    // Yang menunggu keputusan kamu dikecualikan: dia memang BERDIRI dari
+    // kursinya, jadi harus naik ke depan sandaran.
+    const dudukDekat = a.station === 'rapat' && a.hadap === 'up'
+      && !a.path.length && !a.butuh;
     layers.push({
       y: dudukDekat ? SORT_KURSI_DEKAT : (diPitaBawah ? a.y + 24 : a.y),
       fn: () => { if (a === terpilih) drawSorot(a); drawPerson(a); },

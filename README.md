@@ -55,6 +55,36 @@ aman dijalankan berulang, dan tidak menghapus hook lain yang sudah ada.
 
 **Restart sesi Claude Code setelah install** — hook dibaca waktu sesi mulai.
 
+### Event yang dipasang
+
+Dokumentasi hook Claude Code mencantumkan 33 event. Yang dipasang 16 — yang
+sisanya tidak punya apa pun untuk digambar di ruangan.
+
+| Event | Yang terjadi di ruangan |
+|---|---|
+| `PreToolUse` | pegawainya berangkat ke stasiun tool-nya |
+| `PostToolUse` | giliran kerjanya ditutup |
+| `PostToolUseFailure` | cipratan tinta merah + baris merah di log, berisi pesan galatnya |
+| `PermissionRequest` | **berdiri mengangkat map disposisi menghadap kamera** |
+| `PermissionDenied` | pose yang sama, alasan penolakannya masuk kartu pegawai |
+| `UserPromptSubmit` | dipanggil ke meja rapat untuk briefing |
+| `Stop` | balik ke mejanya, "beres, siap disposisi" |
+| `StopFailure` | berhenti di tengah jalan; jenis galatnya ditulis di panel |
+| `SubagentStart` | satu peserta rapat masuk, namanya `agent_type` |
+| `SubagentStop` | peserta dengan `agent_id` itu permisi |
+| `Notification` | balon tanda seru; dua jenisnya ikut memicu pose menunggu |
+| `SessionStart` | pegawainya masuk kantor |
+| `SessionEnd` | pulang, rapatnya dibubarkan paksa |
+| `PreCompact` | "merapikan catatan" |
+| `PostCompact` | "catatan sudah rapi" |
+
+Lima yang pertama dipasang dengan `matcher: "*"` karena matcher-nya menyaring
+**nama tool**. Sisanya dipasang tanpa `matcher` sama sekali — untuk Claude Code,
+matcher yang dihilangkan sama artinya dengan `"*"`, jadi bentuk polos itu benar
+baik untuk event yang punya matcher (`SessionStart` menyaring cara mulai,
+`SubagentStart` menyaring tipe agen, `PreCompact` menyaring pemicunya) maupun
+untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
+
 ## Peta stasiun
 
 | Stasiun | Tool | Yang kelihatan |
@@ -77,6 +107,38 @@ yang orangnya sibuk di mejanya masing-masing lebih enak dilihat daripada ruangan
 yang orangnya antre. Ruang tunggu tinggal jadi limpahan: dipakai hanya kalau
 empat meja sudah terisi semua, dan begitu ada meja yang kosong, yang menunggu
 langsung dipanggil balik.
+
+### Butuh manusia
+
+Ada keadaan ketiga di samping *sedang bekerja* dan *menganggur*: **sesinya
+berhenti menunggu keputusan kamu.** Bedanya nyata — yang menganggur sudah
+selesai, yang ini tidak bisa lanjut sampai ada orang yang menjawab. Tanpa
+tanda sendiri, dua-duanya terlihat sama: berdiri diam di ruangan.
+
+Pemicunya tiga: `PermissionRequest`, `PermissionDenied`, dan `Notification`
+yang `notification_type`-nya `permission_prompt` atau `agent_needs_input`.
+Sembilan `notification_type` sisanya cuma kabar lewat — `auth_success`
+memberitahu login berhasil, `agent_completed` memberitahu subagent kelar,
+`quota_*` memberitahu kuota — dan tidak satu pun menahan sesinya.
+
+Tandanya dibuat supaya terbaca **tanpa membaca teks**: pegawainya berdiri dari
+kursinya, mengangkat map disposisi bercap merah dengan dua tangan, dan
+**menghadap penonton**. Perkakas mejanya ikut disembunyikan — tangannya sedang
+penuh. Selama menunggu dia juga tidak pulang ke mejanya walau lewat batas
+menganggur; kalau dia balik ke meja, tandanya justru hilang dari layar.
+
+Keadaannya **batal seketika**, bukan lewat sapuan berkala: event apa pun
+berikutnya dari sesi yang sama sudah berarti tunggunya lewat. Itu penting soal
+waktu — izin yang kamu berikan detik ini langsung disusul `PostToolUse`, dan
+pegawainya harus duduk lagi saat itu juga.
+
+Alasan penolakan dari `PermissionDenied` (mis. `Blocked by classifier`) ditulis
+apa adanya di kartu pegawai. Itu satu-satunya keterangan kenapa sesinya
+tertahan, jadi tidak diringkas jadi "ditolak".
+
+Keadaan ini **tidak pernah muncul untuk pegawai standby** — standby tidak punya
+sesi, jadi tidak pernah menerima event ini — dan **tidak menaikkan statistik apa
+pun**. Yang terjadi bukan pekerjaan; justru pekerjaan yang tertahan.
 
 ### Berpikir mengikuti tempatnya
 
@@ -113,42 +175,68 @@ kata "git" di mana pun.
 
 ## Peserta rapat
 
-Fase workflow dan subagent tidak punya hook sendiri — Claude Code tidak
-mengirimkan event terpisah untuk tiap agen di panel **Phases**, jadi mereka tidak
-bisa jadi pegawai penuh seperti sesi. Yang bisa dibaca cuma daftar fase di
-`meta.phases` pada script workflow-nya, dan itu ikut dikirim server sebagai
-`ev.peserta`.
+Subagent punya hook sendiri: `SubagentStart` menandai satu agen masuk,
+`SubagentStop` dengan `agent_id` yang sama menandai dia keluar. Keduanya
+membawa `agent_type` dan `agent_id` — **identitas subagent-nya sendiri**, bukan
+tebakan dari sisi yang memanggilnya. Itu yang dipakai menamai dan memasangkan
+peserta rapat.
 
-Begitu `Workflow` dipanggil, satu **peserta undangan** masuk lewat pintu untuk
-tiap fase, duduk di meja rapat, dan tetap di situ selama panggilan tool-nya
-berjalan — bukan pulang ke ruang tunggu seperti pegawai yang menganggur. `Task`
-dan `Agent` mengundang satu peserta, dinamai dari `description` atau
-`subagent_type`-nya.
+Fase workflow tetap tidak punya hook sendiri: Claude Code tidak mengirimkan
+event terpisah untuk tiap agen di panel **Phases**. Yang bisa dibaca cuma daftar
+fase di `meta.phases` pada script workflow-nya, dan itu ikut dikirim server
+sebagai `ev.peserta`. Begitu `Workflow` dipanggil, satu **peserta undangan**
+masuk lewat pintu untuk tiap fase dan duduk di meja rapat sampai panggilan
+tool-nya selesai.
+
+### Kursi sementara, lalu diambil alih
+
+`Task` dan `Agent` juga membuka satu kursi di `PreToolUse`, dinamai dari
+`description` atau `subagent_type`-nya. Bedanya, kursi itu **sementara**:
+`description` sudah bisa dibaca sekarang, sementara `agent_type` baru datang
+beberapa saat kemudian lewat `SubagentStart`. Begitu agennya memperkenalkan
+diri, kursi itu **diambil alih** — bukan ditambah kursi baru — lalu namanya
+diganti nama agen yang sebenarnya dan diikat ke `agent_id`-nya.
+
+Dua hal yang dijaga rancangan ini:
+
+- **Tidak pernah ada dua kursi untuk satu agen.** Yang datang belakangan
+  menempati kursi yang sudah ada, bukan bikin sendiri.
+- **Kalau `SubagentStart` tidak pernah datang** — Claude Code lama, atau
+  hook-nya belum dipasang ulang — kursi sementara itu yang bertahan, dengan
+  nama dari `description`. Ruangannya tetap terisi, cuma namanya kurang tepat.
 
 ### Kapan mereka permisi
 
-Yang gampang salah: **`PostToolUse` tidak selalu berarti subagent-nya selesai.**
-Kalau agennya dijalankan di latar, `post` datang sepersekian detik setelah `pre`
-— yang ditandainya pengiriman, bukan hasilnya — sementara agennya masih bekerja
-menit-menit berikutnya. Ini terlihat waktu satu tugas nyata memanggil `Agent` di
-detik ke-50 dan `SubagentStop`-nya baru datang di detik ke-230.
+Yang gampang salah: **`PostToolUse` tidak pernah bisa dipercaya menandai
+subagent selesai.** Kalau agennya dijalankan di latar, `post` datang
+sepersekian detik setelah `pre` — yang ditandainya pengiriman, bukan hasilnya —
+sementara agennya masih bekerja menit-menit berikutnya. Ini terlihat waktu satu
+tugas nyata memanggil `Agent` di detik ke-50 dan `SubagentStop`-nya baru datang
+di detik ke-230.
 
-Jadi jaraknya yang dipakai memutuskan:
+Dulu bedanya ditebak dari jarak `pre`→`post`: di bawah dua detik dianggap
+dikirim ke latar. Tebakan itu **sudah dihapus**, dan tidak diganti tebakan lain
+— `SubagentStop` selalu datang setelah agennya benar-benar berhenti, baik yang
+sinkron maupun yang di latar, jadi tidak ada yang perlu dibedakan:
 
-| Jarak `pre` → `post` | Artinya | Pesertanya |
-|---|---|---|
-| ≥ 2 detik | subagent sinkron, hasilnya sudah ada | permisi saat itu juga |
-| < 2 detik | dikirim ke latar | tetap duduk sampai `SubagentStop` |
+| Rapatnya | Ditutup oleh |
+|---|---|
+| `Task`, `Agent` | `SubagentStop` yang `agent_id`-nya cocok |
+| `Workflow` | `PostToolUse` — fasenya memang habis waktu panggilan tool-nya habis |
 
-Giliran main agent boleh selesai duluan: `Stop` **tidak** membubarkan rapat latar,
-karena subagent-nya memang masih jalan. Yang membubarkan paksa cuma
-`SessionEnd` — sesinya habis, tidak ada lagi yang bisa ditunggu — dan sapuan 15
-menit untuk sesi yang mati mendadak.
+Pasangan `pre`→`post` sendiri dicocokkan lewat `tool_use_id` yang dibawa
+keduanya, bukan lewat (sesi, tool). Kalau payload-nya tidak membawanya, jatuh ke
+cara lama: yang dibuka duluan yang ditutup duluan.
+
+Giliran main agent boleh selesai duluan: `Stop` **tidak** membubarkan rapat yang
+masih menunggu `SubagentStop`, karena subagent-nya memang masih jalan. Yang
+membubarkan paksa cuma `SessionEnd` — sesinya habis, tidak ada lagi yang bisa
+ditunggu — dan sapuan 15 menit untuk sesi yang mati mendadak.
 
 Namanya muncul di panel kanan sebagai baris kecil menjorok di bawah sesi yang
 mengundang. `SubagentStop` membubarkan satu peserta saja — subagent selesai bukan
 berarti sesinya selesai, jadi pegawainya tetap di mejanya. Rapat yang kursinya
-sudah habis ikut dicoret dari daftar saat itu juga, supaya entri latarnya tidak
+sudah habis ikut dicoret dari daftar saat itu juga, supaya entrinya tidak
 menyangkut sampai sapuan 15 menit.
 
 Kursinya ada 9: tujuh menghadap kamera di sisi jauh, dua lagi membelakangi kamera
@@ -227,6 +315,7 @@ ditebak kartu ini punya siapa; yang sedang dibuka juga diberi sorotan di lantai.
 | nama + jabatan | lengkap dengan padanan software house dan uraian tugasnya |
 | sesi / proyek | id sesi 12-char dan nama folder project-nya |
 | posisi + kegiatan | stasiun tempat dia berdiri dan yang sedang dikerjakan |
+| tertahan + alasan | cuma muncul waktu sesinya menunggu keputusan kamu; alasan penolakan ditulis apa adanya |
 | di kantor | sudah berapa lama sejak pegawainya muncul |
 | model | model yang dipakai sesi itu, kalau ketahuan |
 | tool call | jumlah panggilan, plus berapa yang gagal |
@@ -393,6 +482,28 @@ latensinya langsung terasa di sesi kamu:
 |---|---|
 | `curl` | ~42 ms |
 | `node hook.mjs` | ~153 ms |
+
+Tiap event yang dipasang menambah satu panggilan `curl` **saat event itu
+menyala**, bukan tiap tool call. Yang perlu diingat waktu menimbang daftar di
+atas:
+
+- `PreToolUse` dan `PostToolUse` yang benar-benar sering — itu yang menentukan
+  laju kerja sesi, dan keduanya memang tidak bisa ditawar.
+- `PostToolUseFailure`, `PermissionRequest`, dan `PermissionDenied` sama-sama
+  ber-`matcher` nama tool, tapi menyala jauh lebih jarang. `PostToolUseFailure`
+  malah menggantikan `PostToolUse` waktu tool-nya gagal — sejak keduanya
+  terpisah, satu panggilan tool tetap menghasilkan tepat satu event akhir.
+- Sisanya menyala paling banyak beberapa kali per sesi: `SessionStart`,
+  `SessionEnd`, `PreCompact`, `PostCompact`, `StopFailure`.
+- Yang paling mahal dari daftar tambahan adalah `SubagentStart`/`SubagentStop`,
+  karena tugas yang memanggil banyak subagent bisa menyalakannya belasan kali.
+  Itu tetap sepadan: tanpa keduanya, identitas peserta rapat cuma tebakan.
+
+Satu event sengaja **tidak** dipasang meski sempat dicoba: `TeammateIdle`. Dia
+cuma menambah satu baris log dan tidak menggerakkan siapa pun di ruangan, jadi
+buat yang tidak memakai fitur tim dia murni ongkos. Aturannya dipakai untuk
+seluruh 17 event sisanya juga: hook dipasang kalau ada yang bergerak karenanya,
+bukan karena datanya ada.
 
 Installer otomatis milih `curl`. Kalau `curl` tidak ada, dia jatuh ke
 `hook.mjs`. Mau maksa pakai node: `node install.mjs --node`.
