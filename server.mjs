@@ -1379,17 +1379,20 @@ const server = http.createServer(async (req, res) => {
          yang dijalankan dengan token dari `claude setup-token` berautentikasi
          lewat langganan: yang terpakai kuota paket, bukan saldo API. Yang
          dikirim Claude Code di `total_cost_usd` adalah perkiraan sisi klien
-         soal berapa pemakaian itu KALAU ditagih lewat API. Menulisnya sebagai
-         "$0,0298" saja bikin orang mengira baru saja dicharge padahal tidak. */
-      const biaya = typeof rec.biaya === 'number'
-        ? ' · setara $' + rec.biaya.toFixed(4).replace('.', ',') : '';
+         soal berapa pemakaian itu KALAU ditagih lewat API. Dikirim sebagai
+         field sendiri, bukan digabung ke label — supaya halaman yang
+         memutuskan cara memberi taunya, bukan server yang sudah merangkai
+         kalimatnya. `resmi:false` di sini bukan hiasan: itu yang membuat
+         halaman menuliskannya sebagai "data sementara", bukan angka pasti. */
+      const biaya = typeof rec.biaya === 'number' ? { usd: rec.biaya, resmi: false } : null;
       publish({
         id: ++seq, ts: Date.now(), kind: 'tugas-selesai',
         session: sid.slice(0, 12), nama, tool: null, ok: !gagal,
         label: gagal
           ? clip('gagal (kode ' + kode + (sinyal ? '/' + sinyal : '') + ') '
                  + sebabGagal(), 220)
-          : nama + biaya,
+          : nama,
+        ...(biaya ? { biaya } : {}),
       });
     };
     anak.on('error', (err) => { rec.galat += err.message; selesai(-1, null); });

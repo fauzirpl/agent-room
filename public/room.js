@@ -384,7 +384,7 @@ function hitungAmbien() {
    membaca open-meteo. Kalau servernya versi lama, offline, atau fiturnya
    dimatikan, halaman jatuh ke "hujan sesekali": dadu deterministik per jam,
    sama untuk semua penonton. Uji cepat: ?hujan=gerimis|deras|petir|0..1 */
-const CUACA = { hujan: 0, petir: false, sumber: 'menunggu' };
+const CUACA = { hujan: 0, petir: false, sumber: 'menunggu', hujanTinggiSejak: 0 };
 
 const HUJAN_PAKSA = (() => {
   const v = new URLSearchParams(location.search).get('hujan');
@@ -1672,7 +1672,10 @@ function drawPerson(a) {
   const alphaDasar = (a.standby ? 0.55 : 1) * (a.alpha == null ? 1 : a.alpha);
   if (alphaDasar <= 0.01) return;
   ctx.globalAlpha = alphaDasar;
-  const x = Math.round(a.x), y = Math.round(a.y);
+  // a.miring: sempoyongan sesaat (tersandung kabel) — offset badan, kaki tetap
+  // di titik asli supaya terbaca "hampir jatuh", bukan "berjalan miring"
+  const x = Math.round(a.x) + (a.miring ? 4 : 0), y = Math.round(a.y);
+  const xKaki = Math.round(a.x);
   const p = a.pal;
   const t = a.phase;
   const back = a.face === 'up';
@@ -1694,7 +1697,7 @@ function drawPerson(a) {
   ctx.globalAlpha = 0.18 * alphaDasar;
   ctx.fillStyle = '#20301f';
   ctx.beginPath();
-  ctx.ellipse(x + 1, y + 1, 9, 2.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(xKaki + 1, y + 1, 9, 2.6, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = alphaDasar;
 
@@ -1702,11 +1705,11 @@ function drawPerson(a) {
 
   // kaki + sepatu pantofel — atau sandal jepit, kalau sudah lewat jam setengah tiga
   const alas = a.sandal ? '#8a6844' : '#26221c';
-  box3(x - 5, y - liftL, 3, 5, 2, p.pants);
-  box3(x + 1, y - liftR, 3, 5, 2, p.pants);
-  r(x - 5, y - 1 - liftL, 3, 1, alas);
-  r(x + 1, y - 1 - liftR, 3, 1, alas);
-  if (a.sandal) { r(x - 4, y - 2 - liftL, 1, 1, '#d9b96a'); r(x + 2, y - 2 - liftR, 1, 1, '#d9b96a'); }
+  box3(xKaki - 5, y - liftL, 3, 5, 2, p.pants);
+  box3(xKaki + 1, y - liftR, 3, 5, 2, p.pants);
+  r(xKaki - 5, y - 1 - liftL, 3, 1, alas);
+  r(xKaki + 1, y - 1 - liftR, 3, 1, alas);
+  if (a.sandal) { r(xKaki - 4, y - 2 - liftL, 1, 1, '#d9b96a'); r(xKaki + 2, y - 2 - liftR, 1, 1, '#d9b96a'); }
 
   // badan seragam
   box3(x - 5, yb - 5, 10, 8, 4, p.main);
@@ -2043,6 +2046,7 @@ class Agent {
     this.sejak = Date.now();       // bahan kartu detail: sejak kapan dia di kantor
     this.calls = 0;
     this.gagal = 0;
+    this.biaya = null;      // { usd, resmi } — cuma ada buat sesi lewat halaman
     this.perStasiun = Object.create(null);
     this.riwayat = [];
     this.x = -14;          // masuk dari luar layar
@@ -2683,6 +2687,17 @@ const TUNGGU_TEKS = {
   tanya: 'menunggu jawaban kamu',
 };
 
+/* Satu tempat buat angka yang bukan hasil hitungan kita sendiri — beda dari
+   "tool call" atau "di kantor" yang server hitung sendiri dan pasti benar,
+   angka begini datang dari Claude Code sebagai perkiraan. Laporan dinas
+   membedakan data tetap dari data sementara; angka begini ikut aturan yang
+   sama, dan `resmi:false`-nya harus terbaca, bukan cuma kata "kira-kira" yang
+   gampang lewat tanpa dibaca. */
+function formatBiaya(b) {
+  const usd = '$' + b.usd.toFixed(4).replace('.', ',');
+  return b.resmi ? usd : usd + ' (data sementara)';
+}
+
 /* Nama yang dipakai baris panel DAN kepala modal kabar: nama panggilan kalau
    sudah diberi, kalau belum nama project + potongan id sesinya. Satu tempat
    saja, supaya orang yang sama tidak muncul dengan dua nama berbeda. */
@@ -2966,6 +2981,7 @@ function perbaruiKartu() {
       .sort((x, y) => y[1] - x[1]).slice(0, 2)
       .map(([id, n]) => ((STATIONS[id] || {}).name || id) + ' ×' + n).join(', ');
     if (sering) baris.push(['sering di', sering]);
+    if (a.biaya) baris.push(['biaya', formatBiaya(a.biaya)]);
   }
   document.getElementById('kartuInfo').innerHTML = baris
     .map(([k, v]) => '<span class="kk">' + esc(k) + '</span><span class="vv">' + esc(v) + '</span>')
@@ -3231,8 +3247,11 @@ function handle(ev) {
       break;
     }
     case 'tugas-selesai': {
-      pushLog(ev, ev.ok ? 'mark' : 'err',
-        [ev.ok ? 'tugas selesai' : 'tugas gagal', ev.label || '']);
+      // Disimpan di orangnya, bukan cuma lewat di log: kartu yang dibuka
+      // belakangan harus tetap bisa menjawab "sesi ini habis berapa".
+      if (ev.biaya) a.biaya = ev.biaya;
+      const ket = ev.biaya ? (ev.label || '') + ' · ' + formatBiaya(ev.biaya) : (ev.label || '');
+      pushLog(ev, ev.ok ? 'mark' : 'err', [ev.ok ? 'tugas selesai' : 'tugas gagal', ket]);
       if (!ev.ok) nowDoing.textContent = 'tugas gagal — cek panel';
       break;
     }
@@ -4166,6 +4185,10 @@ function tickRuangan(dt) {
     if ((RUANGAN.kertasLantai[i].sisa -= dt) <= 0) RUANGAN.kertasLantai.splice(i, 1);
   }
   if (RUANGAN.laciBuka > 0) RUANGAN.laciBuka -= dt;
+  // dicatat di sini, bukan di pasangCuaca(): itu cuma jalan saat status
+  // berganti, sementara "pernah > 0.6 dalam 15 menit terakhir" perlu jam yang
+  // terus berjalan selama hujan derasnya bertahan.
+  if (CUACA.hujan > 0.6) CUACA.hujanTinggiSejak = Date.now();
 }
 
 function tickEvent(dt) {
