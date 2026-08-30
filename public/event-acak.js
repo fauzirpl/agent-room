@@ -100,6 +100,22 @@ function gambarOrangLuar(fx, fy, baju, motif, bawa, kepala) {
   if (bawa) drawBawaan({ bawa, face: 'right' }, x, y);
 }
 
+// Taksiran kalender Hijriah (aritmetik tabular, akurasi ±1 hari) — cukup
+// buat menentukan "sedang bulan Ramadan atau bukan", bukan buat ibadah.
+function taksirHijri(d) {
+  const jd = Math.floor(d.getTime() / 86400000 + 2440587.5);
+  const l0 = jd - 1948440 + 10632;
+  const n = Math.floor((l0 - 1) / 10631);
+  const l1 = l0 - 10631 * n + 354;
+  const j = Math.floor((10985 - l1) / 5316) * Math.floor((50 * l1) / 17719)
+    + Math.floor(l1 / 5670) * Math.floor((43 * l1) / 15238);
+  const l2 = l1 - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50)
+    - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+  const bulan = Math.floor((24 * l2) / 709);
+  const tgl = l2 - Math.floor((709 * bulan) / 24);
+  return { bulan, tgl };
+}
+
 const KOORD = {
   jam: [168, 38], garuda: [300, 16], jendela: [212, 138], stempel: [286, 140],
   filing: [132, 138], arsip: [54, 138], rak: [390, 141], pintu: [452, 140],
@@ -5874,6 +5890,1540 @@ daftarEvent(
   },
   sortY: 200,
   selesai(E) { for (const a of E.data.orang) a.pose = null; },
+},
+
+);
+/* ==========================================================================
+   EASTER EGG — lanjutan gelombang 2
+   ========================================================================== */
+
+daftarEvent(
+
+{
+  id: 'bolpoin-jatuh-ke-kolong',
+  kelas: 'latar', bobot: B.sedang, cooldown: 900, durasi: 6,
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1, (o) => o.station === 'think')[0];
+    if (!a) return;
+    E.data.a = a;
+    a.pose = 'jongkok';
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    pada(E, 4, () => { a.say('lho, di kuping'); a.pulpenDiTelinga = true; spawn('idea', a.x, a.y - 24); });
+    pada(E, 4.5, () => { a.pose = null; });
+  },
+  gambarLantai(E) {
+    const a = E.data.a;
+    if (!a || E.umur > 4) return;
+    r(Math.round(a.x) - 6, Math.round(a.y) - 2, 1, 2, '#1c4e8a');
+  },
+  selesai(E) { if (E.data.a) E.data.a.pose = null; },
+},
+
+{
+  id: 'huruf-spanduk-lepas',
+  kelas: 'latar', bobot: B.jarang, cooldown: 3000, durasi: 4,
+  syarat: () => !RUANGAN.spanduk,
+  mulai() {
+    const teks = 'MELAYANI SEPENUH HATI';
+    let idx = new Date().getHours() % teks.length;
+    while (teks[idx] === ' ') idx = (idx + 1) % teks.length;
+    RUANGAN.spanduk = { hilang: idx, tempel: -1 };
+    spawn('paper', 24 + idx * 4.2, 22, '#f0ede2');
+  },
+},
+
+{
+  id: 'kursi-kepala-dicoba-magang',
+  kelas: 'latar', bobot: B.jarang, cooldown: 2400, durasi: 9,
+  syarat: (S) => !S.orang.some((o) => o.station === 'rapat') && S.orang.some((o) => o.peran === 'magang' && bisaDipinjam(o)),
+  perluAktor: true,
+  mulai(E) {
+    const a = pemeran(E, ['magang']);
+    if (!a) return;
+    E.data.a = a;
+    a.goTo('rapat');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && !E.data.duduk) { E.data.duduk = true; spawn('idea', a.x, a.y - 26, P.amber); a.say('sebentar saja'); }
+    if (E.umur > 8 && E.umur < 8.6) MOD.pintuKadis = true;
+    pada(E, 8.3, () => { a.say('eh permisi'); a.laju = 1.8; a.goTo('think'); });
+  },
+  selesai(E) { if (E.data.a) E.data.a.laju = 1; },
+},
+
+{
+  id: 'lupa-mau-ngapain',
+  kelas: 'latar', bobot: B.jarang, cooldown: 600, durasi: 4,
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1, (o) => o.station === 'think')[0];
+    if (!a) return;
+    E.data.a = a; E.data.balikX = a.x; E.data.balikY = a.y;
+    a.goToXY(a.x + (a.face === 'left' ? -8 : 8), a.y, a.face);
+    E.data.tahap = 1;
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && E.data.tahap === 1) {
+      E.data.tahap = 2;
+      a.say('tadi mau apa ya');
+      spawn('talk', a.x, a.y - 24);
+    }
+    pada(E, 1.5, () => { if (E.data.tahap === 2) { a.goToXY(E.data.balikX, E.data.balikY, null); E.data.tahap = 3; } });
+  },
+},
+
+{
+  id: 'magang-salah-sebut-jabatan',
+  kelas: 'latar', bobot: B.jarang, cooldown: 840, durasi: 9,
+  syarat: (S) => S.orang.some((o) => o.peran === 'magang') && S.orang.some((o) => ['kadis', 'sekdis', 'kabid'].includes(o.peran)),
+  mulai(E, S) {
+    const magang = S.orang.find((o) => o.peran === 'magang' && bisaDipinjam(o));
+    const pejabat = S.orang.find((o) => ['kadis', 'sekdis', 'kabid'].includes(o.peran) && bisaDipinjam(o));
+    if (!magang || !pejabat) { E.selesaiCepat = true; return; }
+    magang.eventKerja = E; magang.betahAsli = magang.betah; magang.betah = true; E.aktor.push(magang);
+    pejabat.eventKerja = E; pejabat.betahAsli = pejabat.betah; pejabat.betah = true; E.aktor.push(pejabat);
+    E.data.magang = magang; E.data.pejabat = pejabat;
+    const lain = JABATAN.filter((j) => j.id !== pejabat.peran && ['kadis', 'sekdis', 'kabid', 'kasi'].includes(j.id));
+    const salah = pilih(lain.length ? lain : JABATAN);
+    magang.say('pagi Pak ' + salah.singkat);
+    E.data.tanya = true;
+  },
+  tick(E) {
+    const { magang, pejabat } = E.data;
+    if (!magang || !pejabat) return;
+    pada(E, 3.5, () => { magang.say('...eh, Pak ' + jabatanDari(pejabat.peran).singkat + ', maaf'); });
+    pada(E, 4, () => { pejabat.mulut = true; });
+    pada(E, 5, () => { pejabat.mulut = false; });
+  },
+  gambarAtas(E) {
+    if (!E.data.tanya || E.umur > 3.5) return;
+    const p = E.data.pejabat;
+    r(Math.round(p.x) + 3, Math.round(p.y) - 34, 3, 5, '#ffb454');
+  },
+},
+
+{
+  id: 'monitor-crt-bergaris',
+  kelas: 'latar', bobot: B.sedang, cooldown: 720, durasi: 25,
+  tick(E, dt, S) {
+    MOD.crtAktif = true;
+    if (!E.data.ditepuk && E.umur > 4) {
+      const dekat = S.orang.find((o) => o.path.length && Math.abs(o.x - 160) < 40 && o.y < 170);
+      if (dekat && Math.random() < 0.02) {
+        E.data.ditepuk = true;
+        E.data.tenangSampai = E.umur + 20;
+        spawn('dust', 168, 48); spawn('dust', 170, 46);
+      }
+    }
+    if (E.data.tenangSampai && E.umur < E.data.tenangSampai) MOD.crtAktif = false;
+  },
+},
+
+{
+  id: 'stapler-kosong-njepret',
+  kelas: 'latar', bobot: B.jarang, cooldown: 480, durasi: 10,
+  syarat: (S) => S.stasiunAktif.has('edit') || S.stasiunAktif.has('web'),
+  perluAktor: true,
+  mulai(E) {
+    E.data.a = pemeranStasiun(E, 'edit') || pemeranStasiun(E, 'web');
+    if (E.data.a) E.data.a.say('isinya habis');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    pada(E, 1.5, () => { a.doingEvent = 'ambil isi stapler'; a.goTo('read'); });
+    if (E.umur > 1.5 && a.diam && a.station === 'read' && !E.data.balik) {
+      E.data.balik = true;
+      spawn('dust', a.x, a.y - 20);
+      a.goTo('web');
+    }
+  },
+  selesai(E) { if (E.data.a) E.data.a.doingEvent = ''; },
+},
+
+{
+  id: 'ubin-retak-kesandung',
+  kelas: 'latar', bobot: B.sering, cooldown: 20, durasi: 1,
+  syarat: (S) => S.orang.some((o) => o.path.length && !o.miring),
+  mulai(E, S) {
+    const calon = S.orang.filter((o) => o.path.length && !o.miring);
+    if (!calon.length) { E.selesaiCepat = true; return; }
+    const a = pilih(calon);
+    E.data.a = a;
+    a.miring = true;
+    for (let i = 0; i < 4; i++) spawn('dust', a.x, a.y);
+    if (Math.random() < 0.3) a.say('aduh');
+    menoleh(S.orang.filter((o) => o !== a && jarakKe(o, a.x, a.y) < 40), a.x, a.y, 800);
+  },
+  selesai(E) { if (E.data.a) E.data.a.miring = false; },
+},
+
+{
+  id: 'cctv-menyapu-ruangan',
+  kelas: 'latar', bobot: B.sedang, cooldown: 360, durasi: 18,
+  tick(E, dt, S) {
+    const frac = (E.umur % 9) / 9;
+    const t = frac < 0.5 ? frac * 2 : (1 - frac) * 2;
+    E.data.sapuX = 466 - t * 400;
+    if (!E.data.melambai) {
+      const kena = S.orang.find((o) => !o.adaTugas && o.y > 100 && Math.abs(o.x - E.data.sapuX) < 26);
+      if (kena) {
+        E.data.melambai = kena;
+        kena.pose = 'salam';
+        kena.say('Halo, Pak Kadis, kalau lagi lihat');
+        E.data.lambaiSampai = E.umur + 1.2;
+      }
+    }
+    if (E.data.melambai && E.data.lambaiSampai && E.umur > E.data.lambaiSampai) { E.data.melambai.pose = null; E.data.melambai = null; }
+  },
+  gambarLantai(E) {
+    const x = E.data.sapuX == null ? 466 : E.data.sapuX;
+    ctx.globalAlpha = 0.06;
+    ctx.beginPath();
+    ctx.moveTo(466, 18);
+    ctx.lineTo(x - 30, 356); ctx.lineTo(x + 30, 356);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+  selesai(E) { if (E.data.melambai) E.data.melambai.pose = null; },
+},
+
+{
+  id: 'cicak-jatuh',
+  kelas: 'latar', bobot: B.langka, cooldown: 1800, durasi: 13,
+  syarat: (S) => S.stasiunAktif.has('edit'),
+  mulai(E) { E.data.x = 110; E.data.y = 62; E.data.jeda = 0.8; },
+  tick(E, dt) {
+    const D = E.data;
+    if (!D.jatuh) {
+      D.jeda -= dt;
+      if (D.jeda <= 0) { D.x += 20; D.jeda = 0.8; }
+      if (D.x >= 270) D.jatuh = true;
+    } else {
+      D.vy = (D.vy || 0) + 240 * dt;
+      D.y += D.vy * dt;
+      if (D.y >= 112) {
+        D.y = 112;
+        if (!D.mendarat) {
+          D.mendarat = true;
+          const a = pemeranStasiun(E, 'edit');
+          if (a) { E.data.a = a; a.miring = true; a.say('aduh!'); E.data.selesaiPada = E.umur + 3; }
+        }
+      }
+      D.x -= 12 * dt;
+    }
+    if (E.data.selesaiPada && E.umur > E.data.selesaiPada && E.data.a) { E.data.a.miring = false; E.data.a = null; }
+  },
+  gambarDinding(E) {
+    if (E.data.jatuh) return;
+    const x = Math.round(E.data.x);
+    r(x, 62, 4, 2, '#8a8070'); r(x + 4, 61, 2, 2, '#8a8070');
+  },
+  gambarProp(E) {
+    if (!E.data.jatuh) return;
+    r(Math.round(E.data.x), Math.round(E.data.y), 4, 2, '#8a8070');
+  },
+  sortY: 120,
+  selesai(E) { if (E.data.a) E.data.a.miring = false; },
+},
+
+{
+  id: 'gerhana-sebagian',
+  kelas: 'panggung', bobot: B.langka, cooldown: 10800, durasi: 80,
+  syarat: (S) => S.jam > 10 && S.jam < 14 && S.luar > 0.7 && CUACA.hujan < 0.1,
+  mulai(E) {
+    E.data.orang = pinjamAktor(E, 3);
+    E.data.orang.forEach((a, i) => a.goToXY(200 + i * 14, 138, 'up'));
+  },
+  tick(E) {
+    const jarak = Math.abs(E.umur - 40);
+    const inten = Math.max(0, 1 - jarak / 34);
+    MOD.luar = 1 - inten * 0.55;
+    MOD.ambPlus = inten * 0.16;
+    MOD.lampuMin = inten > 0.3 ? 0.6 : 0;
+    pada(E, 8, () => { for (const a of E.data.orang) a.bawa = 'hp'; });
+  },
+  gambarAtas(E) {
+    const A = ambien();
+    if (A.luar < 0.06) return;
+    const tJ = (A.jam - 5.7) / 12.6;
+    if (tJ < 0 || tJ > 1) return;
+    const mx = JENDELA.x + 5 + (JENDELA.w - 10) * tJ;
+    const my = JENDELA.y + JENDELA.h - 13 - Math.sin(tJ * Math.PI) * (JENDELA.h - 20);
+    const tutup = Math.min(0.7, Math.max(0, 1 - Math.abs(E.umur - 40) / 34) * 0.7);
+    if (tutup <= 0.02) return;
+    klipJendela(() => r(Math.round(mx - 1 - tutup * 3), Math.round(my - 1), Math.max(1, Math.round(tutup * 3)), 3, A.atas));
+  },
+  selesai(E) { for (const a of E.data.orang) a.bawa = null; },
+},
+
+{
+  id: 'map-tertukar-ditukar-balik',
+  kelas: 'latar', bobot: B.jarang, cooldown: 720, durasi: 4,
+  perluAktor: true,
+  syarat: (S) => !S.orang.some((o) => o.station === 'rapat'),
+  mulai(E) {
+    const dua = pinjamAktor(E, 2);
+    if (dua.length < 2) return;
+    E.data.a = dua[0]; E.data.b = dua[1];
+    E.data.a.goToXY(240, 254, 'right');
+    E.data.b.goToXY(252, 254, 'left');
+  },
+  tick(E) {
+    const { a, b } = E.data;
+    if (!a || !b) return;
+    if (a.diam && b.diam && !E.data.tukar) {
+      E.data.tukar = true;
+      spawn('talk', 246, 250);
+    }
+  },
+},
+
+{
+  id: 'salah-duduk-kursi-kadis',
+  kelas: 'latar', bobot: B.jarang, cooldown: 600, durasi: 9,
+  syarat: (S) => S.orang.some((o) => o.peran === 'kadis') && S.orang.some((o) => o.station === 'rapat' && o.slotIdx === 0 && o.peran !== 'kadis'),
+  mulai(E, S) {
+    const salah = S.orang.find((o) => o.station === 'rapat' && o.slotIdx === 0 && o.peran !== 'kadis');
+    if (!salah) { E.selesaiCepat = true; return; }
+    salah.eventKerja = E; salah.betahAsli = salah.betah; salah.betah = true; E.aktor.push(salah);
+    E.data.salah = salah;
+    const sebelah = pinjamAktor(E, 1, (o) => o.station === 'rapat' && o.slotIdx === 1);
+    E.data.sebelah = sebelah[0];
+  },
+  tick(E) {
+    const { salah, sebelah } = E.data;
+    if (!salah) return;
+    pada(E, 3, () => { if (sebelah) sebelah.say('itu kursi Pak Kadis'); });
+    pada(E, 4, () => {
+      salah.say('eh, maaf');
+      const baru = slotBebas('rapat', salah);
+      if (baru >= 0) { salah.slotIdx = baru; salah.goTo('rapat'); }
+      else salah.goTo('think');
+    });
+  },
+  gambarAtas(E) {
+    if (E.umur < 3 || E.umur > 4 || !E.data.sebelah) return;
+    const s = E.data.sebelah;
+    r(Math.round(s.x) + 3, Math.round(s.y) - 34, 2, 5, '#e8d873');
+  },
+},
+
+{
+  id: 'salah-ketik-nama-kadis',
+  kelas: 'latar', bobot: B.langka, cooldown: 5400, durasi: 12,
+  lanjutan: [{ id: 'numpang-print', peluang: 1 }],
+  perluAktor: true,
+  mulai(E) {
+    E.data.a = pemeranStasiun(E, 'web') || pemeran(E);
+    if (!E.data.a) return;
+    E.data.a.bawa = 'kertas';
+    E.data.a.goTo('think');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && !E.data.baca) {
+      E.data.baca = true;
+      a.say('astaga, nama Pak Kadis kurang satu huruf');
+      a.laju = 1.5;
+      a.goToXY(352, 288, 'down');
+    }
+    if (E.data.baca && a.diam && a.x > 340 && !E.data.buang) {
+      E.data.buang = true;
+      for (let i = 0; i < 4; i++) spawn('paper', 352, 288);
+      a.bawa = null;
+      a.laju = 1;
+      a.goTo('web');
+    }
+  },
+  selesai(E) { if (E.data.a) { E.data.a.laju = 1; E.data.a.bawa = null; } },
+},
+
+);
+/* ==========================================================================
+   SUASANA — lanjutan gelombang 2
+   ========================================================================== */
+
+daftarEvent(
+
+{
+  id: 'daun-tanaman-jatuh',
+  kelas: 'latar', bobot: B.jarang, cooldown: 720, durasi: 3,
+  mulai() {
+    spawn('dust', 32, 270);
+    if (RUANGAN.propLantai.filter((p) => p.jenis === 'daun').length < 2) {
+      RUANGAN.propLantai.push({ x: 30 + Math.random() * 10, y: 278 + Math.random() * 6, jenis: 'daun' });
+    }
+  },
+},
+
+{
+  id: 'debu-menari-di-berkas',
+  kelas: 'latar', bobot: B.sering, cooldown: 20, durasi: 6,
+  syarat: () => ambien().sinarA > 0.09,
+  tick(E, dt, S) {
+    if (Math.random() < dt) spawn('dust', 164 + Math.random() * 100, 120 + Math.random() * 60);
+    if (!E.data.melintas) {
+      const lewat = S.orang.find((o) => o.path.length && o.x > 164 && o.x < 266 && o.y > 100 && o.y < 200 && o.laju === 1);
+      if (lewat) {
+        E.data.melintas = lewat;
+        for (let i = 0; i < 6; i++) spawn('dust', lewat.x, lewat.y);
+        lewat.laju = 0.8;
+        E.data.lajuSampai = E.umur + 1;
+      }
+    }
+    if (E.data.lajuSampai && E.umur > E.data.lajuSampai && E.data.melintas) {
+      E.data.melintas.laju = 1;
+      E.data.melintas = null;
+    }
+  },
+  selesai(E) { if (E.data.melintas) E.data.melintas.laju = 1; },
+},
+
+{
+  id: 'kursi-digeser-berdecit',
+  kelas: 'latar', bobot: B.sering, cooldown: 6, durasi: 2,
+  syarat: (S) => Date.now() - RUANGAN.kursiBerderit > 20000 && S.orang.some((o) => o.station === 'rapat'),
+  mulai(E, S) {
+    const idx = (Math.random() * KURSI_N) | 0;
+    RUANGAN.kursiBerderit = Date.now();
+    RUANGAN.geserKursi[idx] = 3;
+    const kx = RAPAT.cx + slotKe(idx);
+    spawn('dust', kx - 6, 186); spawn('dust', kx + 6, 186);
+    const dengar = S.orang.find((o) => o.station === 'rapat' && o.diam);
+    if (dengar) menoleh([dengar], kx, 186, 1000);
+  },
+},
+
+{
+  id: 'laptop-ditutup-pelan',
+  kelas: 'latar', bobot: B.sedang, cooldown: 300, durasi: 6,
+  syarat: (S) => S.jam > 16 && S.orang.some((o) => o.station === 'think' && o.diam),
+  perluAktor: true,
+  mulai(E, S) {
+    const a = S.orang.find((o) => o.station === 'think' && o.diam && bisaDipinjam(o));
+    if (!a) return;
+    a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+    E.data.a = a; E.data.slot = a.slotIdx;
+  },
+  tick(E) {
+    if (E.data.slot == null) return;
+    if (E.umur > 1) MOD.mejaPadam = E.data.slot;
+    pada(E, 2, () => { if (E.data.a) { lepaskanAktor(E.data.a); E.data.a = null; } });
+  },
+},
+
+{
+  id: 'merenung-depan-kipas',
+  kelas: 'latar', bobot: B.sering, cooldown: 180, durasi: 12,
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1, (o) => now - Math.max(o.lastEvent, o.arrivedAt) > 12000)[0];
+    if (!a) return;
+    E.data.a = a;
+    a.goToXY(400, 272, 'up');
+  },
+  tick(E, dt, S) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && !E.data.diam) { E.data.diam = true; a.bekuSampai = now + 10000; a.pose = 'diam'; }
+    if (E.data.diam) {
+      for (const o of S.orang) {
+        if (o !== a && o.path.length && jarakKe(o, a.x, a.y) < 40 && !o.eventKerja) {
+          hadapkan(o, a.x, a.y);
+          o.busyUntil = Math.max(o.busyUntil, now + 1200);
+        }
+      }
+    }
+    pada(E, 11, () => { if (a) { a.busyUntil = now + 3000; a.state = 'work'; } });
+  },
+  selesai(E) { if (E.data.a) { E.data.a.pose = null; E.data.a.bekuSampai = 0; } },
+},
+
+{
+  id: 'tetes-terakhir-ember',
+  kelas: 'latar', bobot: B.sedang, cooldown: 600, durasi: 8,
+  syarat: () => CUACA.hujan < 0.05,
+  tick(E) {
+    if (E.umur < 3) MOD.drip = 1.2;
+    else if (E.umur < 6) MOD.drip = 2.5;
+    else MOD.drip = 6;
+    pada(E, 6.2, () => {
+      E.data.a = pemeran(E);
+      if (E.data.a) E.data.a.goToXY(347, 130, 'up');
+    });
+    pada(E, 7.5, () => { if (E.data.a) E.data.a.say('sudah, tenang'); });
+  },
+},
+
+{
+  id: 'berkas-pagi-berdebu',
+  kelas: 'latar', bobot: B.sering, cooldown: 3600, durasi: 55,
+  syarat: (S) => S.jam > 6.5 && S.jam < 8.5 && S.luar > 0.4,
+  tick(E, dt, S) {
+    MOD.sinar = 1.5;
+    if (Math.random() < 2 * dt) spawn('dust', 190 + Math.random() * 60, 120 + Math.random() * 60);
+    if (!E.data.a && E.umur > 3) {
+      const lewat = S.orang.find((o) => o.path.length && o.x > 190 && o.x < 250 && o.y > 150 && o.y < 200);
+      if (lewat) { E.data.a = lewat; lewat.bekuSampai = now + 5000; lewat.pose = 'usap'; E.data.lepasPada = E.umur + 5; }
+    }
+    if (E.data.lepasPada && E.umur > E.data.lepasPada && E.data.a) { E.data.a.pose = null; E.data.a = null; }
+  },
+  selesai(E) { if (E.data.a) { E.data.a.pose = null; E.data.a.bekuSampai = 0; } },
+},
+
+{
+  id: 'hujan-pertama-bau-tanah',
+  kelas: 'latar', bobot: B.langka, cooldown: 3600, durasi: 35,
+  syarat: () => CUACA.hujan > 0.5 && Date.now() - CUACA.hujanTinggiSejak > 1200000,
+  mulai(E) {
+    E.data.a = pemeran(E);
+    if (E.data.a) E.data.a.goTo('web');
+  },
+  tick(E, dt, S) {
+    if (Math.random() < 6 * dt) spawn('dust', JENDELA.x + JENDELA.w - 6, JENDELA.y + 4, '#c8b48a');
+    const a = E.data.a;
+    if (a && a.diam && !E.data.buka) {
+      E.data.buka = true;
+      a.say('wangi tanah');
+      a.pose = 'angkat';
+      a.bekuSampai = now + 8000;
+      for (const o of S.orang) { if (o !== a && o.path.length) o.laju = 0.7; }
+      E.data.lajuSampai = E.umur + 5;
+    }
+    if (E.data.lajuSampai && E.umur > E.data.lajuSampai && !E.data.direset) {
+      E.data.direset = true;
+      for (const o of S.orang) { if (o.laju === 0.7) o.laju = 1; }
+    }
+  },
+  selesai(E) { if (E.data.a) { E.data.a.pose = null; E.data.a.bekuSampai = 0; } },
+},
+
+{
+  id: 'jeda-maghrib',
+  kelas: 'latar', bobot: B.sering, cooldown: 82800, durasi: 8,
+  syarat: (S) => S.jam >= 18 && S.jam < 18.33 && S.orang.length >= 1,
+  mulai(E, S) {
+    E.data.orang = S.orang.filter((o) => !o.adaTugas);
+    for (const o of E.data.orang) o.bekuSampai = now + 8000;
+    const a = E.data.orang.find((o) => !o.path.length);
+    if (a) hadapkan(a, 212, 40);
+  },
+  tick() { MOD.ambPlus = 0.04; },
+},
+
+{
+  id: 'lembur-sampai-malam',
+  kelas: 'latar', bobot: B.sedang, cooldown: 900, durasi: 120,
+  syarat: (S) => S.jam > 20 || S.jam < 4,
+  mulai() { minDiLayarTimpa = 0; },
+  tick() {
+    MOD.neonMati[0] = 1;
+    MOD.ambPlus = 0.05;
+  },
+  gambarProp(E, S) {
+    for (const o of S.orang) {
+      if (o.station === 'think' && o.diam) glow(o.x + 21, o.y - 10, 26, '#9fc3ff', 0.22);
+    }
+  },
+  sortY: 349,
+  selesai() { minDiLayarTimpa = null; },
+},
+
+{
+  id: 'matahari-silau-monitor',
+  kelas: 'latar', bobot: B.sedang, cooldown: 900, durasi: 45,
+  syarat: (S) => S.jam > 15.5 && S.jam < 17 && S.luar > 0.6 && S.stasiunAktif.has('server'),
+  perluAktor: true,
+  mulai(E) { E.data.a = pemeranStasiun(E, 'server'); },
+  tick(E, dt) {
+    if (!E.data.a) return;
+    pada(E, 2, () => { E.data.a.say('silau, ndan'); E.data.a.goTo('web'); });
+    if (E.umur > 2 && E.umur < 10) RUANGAN.gordenKanan = Math.min(16, RUANGAN.gordenKanan + 5 * dt);
+    pada(E, 10, () => { if (E.data.a) E.data.a.goTo('server'); });
+  },
+  gambarProp(E) {
+    if (E.umur > 10) return;
+    ctx.globalAlpha = 0.5 * Math.max(0, 1 - E.umur / 10);
+    r(384, 108, 10, 14, '#ffffff');
+    ctx.globalAlpha = 1;
+  },
+  sortY: 130,
+},
+
+{
+  id: 'pelangi-selepas-hujan',
+  kelas: 'latar', bobot: B.jarang, cooldown: 1800, durasi: 50,
+  syarat: (S) => CUACA.hujan < 0.1 && S.jam > 15 && S.jam < 17.5 && Math.random() < 0.25,
+  mulai(E) {
+    E.data.orang = pinjamAktor(E, 3);
+    E.data.orang.forEach((a, i) => a.goToXY(198 + i * 16, 138, 'up'));
+    if (E.data.orang[0]) E.data.orang[0].say('eh, ada pelangi');
+  },
+  gambarAtas(E) {
+    const fade = E.umur < 3 ? E.umur / 3 : (E.umur > 44 ? Math.max(0, 1 - (E.umur - 44) / 6) : 1);
+    if (fade <= 0.01) return;
+    klipJendela(() => {
+      const warna = ['#c22b2b', '#e07a2c', '#e8c93a', '#3e6b4f', '#3565b0', '#4b2f8a', '#7a3f9c'];
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.45 * fade;
+      for (let i = 0; i < 7; i++) {
+        ctx.strokeStyle = warna[i];
+        ctx.beginPath();
+        ctx.arc(JENDELA.x + JENDELA.w / 2, JENDELA.y + JENDELA.h + 30, 46 - i, Math.PI, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    });
+  },
+},
+
+{
+  id: 'ramadan-siang-sunyi',
+  kelas: 'latar', bobot: B.jarang, cooldown: 3600, durasi: 140,
+  syarat: (S) => {
+    const h = taksirHijri(new Date());
+    return h.bulan === 9 && S.jam >= 6 && S.jam < 17.75;
+  },
+  tick() {
+    MOD.ambPlus = 0.03;
+    MOD.lajuGlobal = 0.8;
+    RUANGAN.gordenKanan = Math.max(RUANGAN.gordenKanan, 12);
+  },
+  gambarProp() {
+    r(326, 266, 18, 34, '#c9c3b0');
+    r(326, 266, 18, 1, '#e2ddc8');
+    for (let i = 0; i < 3; i++) r(328 + i * 5, 270, 1, 26, '#b0a98e');
+  },
+  sortY: 300,
+},
+
+{
+  id: 'silau-sore-gorden',
+  kelas: 'latar', bobot: B.sedang, cooldown: 3600, durasi: 60,
+  syarat: (S) => S.jam > 16.5 && S.jam < 17.8 && S.luar > 0.5 && RUANGAN.gordenKanan <= 6,
+  perluAktor: true,
+  mulai(E, S) {
+    const a = pinjamAktor(E, 1, (o) => o.station === 'think' && o.slotIdx === 0)[0] || pinjamAktor(E, 1)[0];
+    E.data.a = a;
+    if (a) a.pose = 'usap';
+  },
+  tick(E, dt) {
+    const a = E.data.a;
+    if (!a) return;
+    pada(E, 2, () => { a.pose = null; a.goTo('web'); });
+    if (E.umur > 2 && E.umur < 4) RUANGAN.gordenKanan = Math.min(16, RUANGAN.gordenKanan + 5 * dt);
+    pada(E, 4, () => { if (a) a.say('silau, ditutup ya'); });
+    pada(E, 6, () => { if (a) a.goTo('think'); });
+  },
+  gambarProp(E) {
+    if (E.umur > 6) return;
+    ctx.globalAlpha = 0.16 * Math.max(0, 1 - E.umur / 6);
+    ctx.beginPath();
+    ctx.moveTo(186, 196); ctx.lineTo(238, 196); ctx.lineTo(300, 200); ctx.lineTo(150, 200);
+    ctx.closePath(); ctx.fillStyle = '#ffd88a'; ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+  sortY: 113,
+},
+
+);
+/* ==========================================================================
+   CUACA & WAKTU — lanjutan gelombang 2
+   ========================================================================== */
+
+daftarEvent(
+
+{
+  id: 'kilat-menyambar',
+  kelas: 'latar', bobot: B.jarang, cooldown: 40, durasi: 3,
+  syarat: () => CUACA.petir,
+  mulai(E, S) {
+    for (const o of S.orang) { if (!o.eventKerja) o.bekuSampai = now + 800; }
+    for (let i = 0; i < 6; i++) spawn('dust', 60 + Math.random() * 360, 3);
+    const a = pilih(S.orang);
+    if (a && Math.random() < 0.5) a.say('waduh');
+  },
+  tick(E) {
+    if (E.umur > 0.9 && E.umur < 1.9) MOD.getar = 1.4 * Math.max(0, 1 - (E.umur - 0.9));
+  },
+},
+
+{
+  id: 'gelombang-panas-siang',
+  kelas: 'latar', bobot: B.sering, cooldown: 900, durasi: 120,
+  syarat: (S) => S.jam > 11 && S.jam < 14 && S.luar > 0.9 && CUACA.hujan < 0.05,
+  mulai(E) {
+    E.data.kipas = pinjamAktor(E, 2, (o) => o.station === 'think');
+    for (const a of E.data.kipas) a.pose = 'mengipas';
+  },
+  tick(E, dt) {
+    MOD.ambPlus = 0.05;
+    MOD.kipas = 1.7;
+    if (Math.random() < 0.15 * dt) spawn('splash', 330, 274, '#bcd9ee');
+    if (!E.data.idle && E.umur > 5) {
+      const a = pinjamAktor(E, 1, (o) => o.station !== 'think')[0];
+      if (a) { E.data.idle = a; a.goTo('idle'); }
+    }
+  },
+  selesai(E) { for (const a of E.data.kipas) a.pose = null; },
+},
+
+{
+  id: 'kabut-asap',
+  kelas: 'latar', bobot: B.langka, cooldown: 2400, durasi: 130,
+  syarat: (S) => S.jam >= 6 && S.jam < 10 && CUACA.hujan < 0.05,
+  mulai(E) {
+    E.data.masker = pinjamAktor(E, 2);
+    for (const a of E.data.masker) a.masker = true;
+  },
+  tick() {
+    MOD.luar = 0.5;
+    MOD.ambPlus = 0.08;
+    MOD.kipas = 0;
+  },
+  selesai(E) { for (const a of E.data.masker) a.masker = false; },
+},
+
+{
+  id: 'kabut-embun-jendela',
+  kelas: 'latar', bobot: B.sedang, cooldown: 2400, durasi: 120,
+  syarat: (S) => (S.jam > 5.4 && S.jam < 7.2) || (Date.now() - CUACA.hujanTinggiSejak < 180000 && CUACA.hujan < 0.1),
+  tick(E) {
+    MOD.kacaBuram = Math.min(1, 0.3 + 0.5 * Math.sin(E.umur / 8));
+    if (!E.data.a && E.umur > 6) {
+      const a = pemeranStasiun(E, 'web') || pemeran(E);
+      if (a) { E.data.a = a; a.goTo('web'); }
+    }
+    if (E.data.a && E.data.a.diam && !E.data.usap) {
+      E.data.usap = true;
+      E.data.a.pose = 'lap';
+      E.data.a.say('cerah juga hari ini');
+      E.data.lapSampai = E.umur + 3;
+    }
+    if (E.data.lapSampai && E.umur > E.data.lapSampai) MOD.kacaBuram = 0.15;
+  },
+  selesai(E) { if (E.data.a) E.data.a.pose = null; },
+},
+
+{
+  id: 'panas-terik-siang',
+  kelas: 'latar', bobot: B.sering, cooldown: 480, durasi: 80,
+  syarat: (S) => S.jam > 11 && S.jam < 14.5 && !sedangJalan('gelombang-panas-siang') && !sedangJalan('kabut-asap'),
+  mulai(E) {
+    E.data.orang = pinjamAktor(E, 2, (o) => o.station === 'think');
+    for (const a of E.data.orang) a.pose = 'mengipas';
+  },
+  tick(E, dt) {
+    MOD.ambPlus = 0.06;
+    MOD.kipas = 1.5;
+    if (Math.random() < 0.1 * dt) spawn('splash', 330, 270, '#bcd9ee');
+  },
+  selesai(E) { for (const a of E.data.orang) a.pose = null; },
+},
+
+{
+  id: 'senyap-magrib',
+  kelas: 'latar', bobot: B.sedang, cooldown: 82800, durasi: 12,
+  syarat: (S) => S.jam >= 17.9 && S.jam < 18.02,
+  tick(E) {
+    MOD.ambPlus = 0.04 * Math.min(1, E.umur / 3);
+    MOD.hening = true;
+    MOD.lajuGlobal = 0.7;
+  },
+  gambarAtas(E) {
+    for (const rTime of [0, 1.2, 2.4]) {
+      const t = E.umur - rTime;
+      if (t < 0 || t > 3) continue;
+      const rad = 8 + (t / 3) * 62;
+      ctx.globalAlpha = 0.25 * (1 - t / 3);
+      ctx.strokeStyle = '#ffd9a0'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(JENDELA.x + JENDELA.w / 2, JENDELA.y + JENDELA.h / 2, rad, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  },
+},
+
+);
+/* ==========================================================================
+   KULTUR KANTOR — lanjutan gelombang 2
+   (lap-kacamata-di-ujung-baju SENGAJA dilewati: butuh atribut kacamata baru
+   di JABATAN yang belum ada di mana pun, kerumitannya tidak sepadan untuk
+   satu event K2 kecil)
+   ========================================================================== */
+
+daftarEvent(
+
+{
+  id: 'hape-getar-di-meja-kosong',
+  kelas: 'latar', bobot: B.sedang, cooldown: 360, durasi: 8,
+  syarat: (S) => S.orang.length >= 4 && S.bekerja.some((o) => o.station !== 'think' && o.station !== 'rapat' && !o.eventKerja),
+  mulai(E, S) {
+    const slot = slotBebas('think', null);
+    if (slot < 0) { E.selesaiCepat = true; return; }
+    const a = S.bekerja.find((o) => o.station !== 'think' && o.station !== 'rapat' && !o.eventKerja);
+    if (!a) { E.selesaiCepat = true; return; }
+    E.data.slot = slot;
+    E.data.a = a;
+  },
+  tick(E) {
+    if (E.data.slot == null) return;
+    if (E.umur > 1.5 && !E.data.dijemput) {
+      E.data.dijemput = true;
+      const a = E.data.a;
+      a.doingEvent = 'ambil HP di meja';
+      a.goToXY(MEJA_KERJA_X[E.data.slot] + 21, 316, 'down');
+    }
+    if (E.data.dijemput && E.data.a.diam && !E.data.selesai) {
+      E.data.selesai = true;
+      E.data.selesaiPada = E.umur + 1;
+    }
+    if (E.data.selesaiPada && E.umur > E.data.selesaiPada) E.selesaiCepat = true;
+  },
+  gambarProp(E) {
+    if (E.data.slot == null || E.umur > 2.5) return;
+    const x = MEJA_KERJA_X[E.data.slot];
+    const getar = Math.round(Math.sin(now / 30) * 1);
+    r(x + 6 + getar, 310, 3, 5, '#20242c');
+    r(x + 7 + getar, 311, 1, 2, '#7aa5e8');
+  },
+  sortY: 349,
+  selesai(E) { if (E.data.a) E.data.a.doingEvent = ''; },
+},
+
+{
+  id: 'jumat-bersih',
+  kelas: 'panggung', bobot: B.jarang, cooldown: 5400, durasi: 50,
+  syarat: (S) => (new Date().getDay() === 5 && S.jam >= 14 && S.jam < 15.5) || Math.random() < 0.02,
+  perluAktor: true,
+  mulai(E) {
+    E.data.orang = pinjamAktor(E, 2);
+    if (E.data.orang[0]) E.data.orang[0].goTo('edit');
+    if (E.data.orang[1]) E.data.orang[1].goTo('search');
+  },
+  tick(E, dt) {
+    for (const a of E.data.orang) {
+      if (a.diam) { a.pose = 'lap'; if (Math.random() < 6 * dt) spawn('dust', a.x, a.y - 10); }
+    }
+    pada(E, 40, () => {
+      RUANGAN.nodaMeja = [];
+      if (RUANGAN.edaran.length) RUANGAN.edaran.pop();
+      RUANGAN.tongPenuh = 0;
+    });
+  },
+  selesai(E) { for (const a of E.data.orang) a.pose = null; },
+},
+
+{
+  id: 'kertas-bekas-dibalik',
+  kelas: 'latar', bobot: B.sedang, cooldown: 360, durasi: 3,
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1, (o) => o.station !== 'rapat')[0];
+    if (!a) return;
+    E.data.a = a;
+    a.bawa = 'kertas';
+    a.bawaSampai = now + 12000;
+    spawn('paper', 232, 96);
+  },
+},
+
+{
+  id: 'keset-baru-dipasang',
+  kelas: 'latar', bobot: B.jarang, cooldown: 999999, durasi: 8,
+  syarat: () => !RUANGAN.kesetAda,
+  mulai() {
+    RUANGAN.kesetAda = true;
+    for (let i = 0; i < 3; i++) spawn('dust', 456 + i * 3, 112, '#8a6a4a');
+  },
+},
+
+{
+  id: 'regang-badan-di-kursi',
+  kelas: 'latar', bobot: B.sering, cooldown: 40, durasi: 2.5,
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1, (o) => o.station === 'think')[0];
+    if (!a) return;
+    E.data.a = a;
+    a.pose = 'angkat';
+  },
+  tick(E) {
+    pada(E, 1.5, () => { if (E.data.a) { E.data.a.pose = null; hadapkan(E.data.a, E.data.a.x, 40); } });
+  },
+  selesai(E) { if (E.data.a) E.data.a.pose = null; },
+},
+
+{
+  id: 'selip-pulpen-di-telinga',
+  kelas: 'latar', bobot: B.jarang, cooldown: 300, durasi: 2.5,
+  syarat: (S) => S.stasiunAktif.has('edit'),
+  perluAktor: true,
+  mulai(E) {
+    const a = pemeranStasiun(E, 'edit');
+    if (!a) return;
+    a.pulpenDiTelinga = true;
+    E.data.a = a;
+  },
+},
+
+{
+  id: 'analis-beda-bahasa',
+  kelas: 'latar', bobot: B.sedang, cooldown: 600, durasi: 18,
+  syarat: (S) => S.orang.some((o) => o.peran === 'analis_kebijakan') && S.orang.some((o) => o.peran === 'analis_sistem'),
+  mulai(E, S) {
+    const a = S.orang.find((o) => o.peran === 'analis_kebijakan' && bisaDipinjam(o));
+    const b = S.orang.find((o) => o.peran === 'analis_sistem' && bisaDipinjam(o));
+    if (!a || !b) { E.selesaiCepat = true; return; }
+    a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+    b.eventKerja = E; b.betahAsli = b.betah; b.betah = true; E.aktor.push(b);
+    E.data.a = a; E.data.b = b;
+    a.goToXY(122, 138, 'up'); b.goToXY(142, 138, 'up');
+  },
+  tick(E) {
+    const { a, b } = E.data;
+    if (!a || !b) return;
+    if (Math.random() < 0.06) spawn('paper', a.x, a.y - 24);
+    if (Math.random() < 0.06) spawn('data', b.x, b.y - 24);
+    pada(E, 15, () => {
+      a.say('kebijakan: maksudnya keluaran layanan');
+      const slot = slotBebas('rapat', a);
+      if (slot >= 0) { a.slotIdx = slot; a.goTo('rapat'); }
+      const slot2 = slotBebas('rapat', b);
+      if (slot2 >= 0) { b.slotIdx = slot2; b.goTo('rapat'); }
+    });
+  },
+},
+
+{
+  id: 'antre-stempel-berdua',
+  kelas: 'latar', bobot: B.sedang, cooldown: 60, durasi: 15,
+  syarat: (S) => S.orang.some((o) => o.station === 'edit' && o.slotIdx > 0 && o.diam),
+  tick(E, dt, S) {
+    const antre = S.orang.filter((o) => o.station === 'edit' && o.slotIdx > 0 && o.diam);
+    if (!antre.length) { E.selesaiCepat = true; return; }
+    if (Math.random() < 1.5 * dt) { const a = pilih(antre); spawn('step', a.x, a.y); }
+  },
+},
+
+{
+  id: 'arsiparis-bimbing-magang',
+  kelas: 'latar', bobot: B.sedang, cooldown: 360, durasi: 18,
+  syarat: (S) => S.orang.some((o) => o.peran === 'arsiparis') && S.orang.some((o) => o.peran === 'magang') && !S.stasiunAktif.has('read'),
+  mulai(E, S) {
+    const ar = S.orang.find((o) => o.peran === 'arsiparis' && bisaDipinjam(o));
+    const mg = S.orang.find((o) => o.peran === 'magang' && bisaDipinjam(o));
+    if (!ar || !mg) { E.selesaiCepat = true; return; }
+    ar.eventKerja = E; ar.betahAsli = ar.betah; ar.betah = true; E.aktor.push(ar);
+    mg.eventKerja = E; mg.betahAsli = mg.betah; mg.betah = true; E.aktor.push(mg);
+    E.data.ar = ar; E.data.mg = mg;
+    ar.goToXY(54, 138, 'up'); mg.goToXY(73, 138, 'up');
+    RUANGAN.laciTerbuka = 1;
+  },
+  tick(E, dt) {
+    if (Math.random() < 0.4 * dt) spawn('dust', 130, 76);
+    pada(E, 15, () => { if (E.data.ar) E.data.ar.say('kode klasifikasi dulu, baru tahun'); });
+  },
+  selesai() { RUANGAN.laciTerbuka = -1; },
+},
+
+{
+  id: 'bersandar-ayun-kursi',
+  kelas: 'latar', bobot: B.sedang, cooldown: 360, durasi: 4,
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1, (o) => o.station === 'think')[0];
+    if (!a) return;
+    E.data.a = a;
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    a.miring = E.umur < 3.6;
+    if (E.umur > 3.6 && !E.data.sentak) { E.data.sentak = true; menoleh([a], a.x - 8, a.y, 500); }
+  },
+  selesai(E) { if (E.data.a) E.data.a.miring = false; },
+},
+
+{
+  id: 'dus-arsip-ditumpuk',
+  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 28,
+  syarat: () => RUANGAN.dusTambahanArsip < 2,
+  perluAktor: true,
+  mulai(E) {
+    const a = pemeran(E, ['arsiparis']);
+    if (!a) return;
+    E.data.a = a;
+    a.bawa = 'boks';
+    a.laju = 0.6;
+    a.goToXY(452, 300, 'up');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && a.x > 440 && !E.data.angkat) {
+      E.data.angkat = true;
+      a.goToXY(440, 240, 'up');
+    } else if (E.data.angkat && a.diam && Math.abs(a.x - 440) < 4 && Math.abs(a.y - 240) < 4 && !E.data.taruh) {
+      E.data.taruh = true;
+      RUANGAN.dusTambahanArsip = Math.min(2, RUANGAN.dusTambahanArsip + 1);
+      RUANGAN.arsipPenuh = true;
+      a.bawa = null;
+      a.pose = 'usap';
+      E.data.selesaiPada = E.umur + 2;
+    }
+    if (E.data.selesaiPada && E.umur > E.data.selesaiPada) { a.pose = null; a.laju = 1; }
+  },
+  selesai(E) { if (E.data.a) { E.data.a.laju = 1; E.data.a.bawa = null; E.data.a.pose = null; } },
+},
+
+{
+  id: 'edar-amplop-patungan',
+  kelas: 'latar', bobot: B.sedang, cooldown: 1800, durasi: 26,
+  syarat: (S) => S.orang.length >= 3,
+  perluAktor: true,
+  mulai(E, S) {
+    const urutan = pinjamAktor(E, Math.min(4, S.orang.length));
+    if (urutan.length < 2) return;
+    E.data.urutan = urutan;
+    E.data.i = 0;
+    urutan[0].bawa = 'amplop-coklat';
+    urutan[0].goToXY(urutan[1].x - 12, urutan[1].y, null);
+  },
+  tick(E) {
+    const U = E.data.urutan;
+    if (!U || U.length < 2) return;
+    const bawa = U[E.data.i];
+    if (bawa.diam && !E.data.tunggu) {
+      E.data.tunggu = true;
+      E.data.tungguSampai = E.umur + 2.5;
+      spawn('paper', bawa.x, bawa.y - 20);
+    }
+    if (E.data.tunggu && E.umur > E.data.tungguSampai) {
+      E.data.tunggu = false;
+      bawa.bawa = null;
+      E.data.i++;
+      if (E.data.i >= U.length) {
+        const stempel = U[U.length - 1];
+        stempel.bawa = 'amplop-coklat';
+        stempel.goTo('edit');
+        E.data.selesai = true;
+      } else {
+        U[E.data.i].bawa = 'amplop-coklat';
+        const target = U[E.data.i + 1] || null;
+        if (target) U[E.data.i].goToXY(target.x - 12, target.y, null);
+      }
+    }
+  },
+  selesai(E) { if (E.data.urutan) for (const a of E.data.urutan) a.bawa = null; },
+},
+
+{
+  id: 'galon-habis-diganti',
+  kelas: 'latar', bobot: B.sering, cooldown: 240, durasi: 24,
+  syarat: () => RUANGAN.gelasDispenser <= 3,
+  perluAktor: true,
+  mulai(E) {
+    const a = pemeran(E);
+    if (!a) return;
+    E.data.a = a;
+    a.goTo('idle');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && !E.data.tekan) {
+      E.data.tekan = true;
+      a.bawa = 'gelas';
+      a.say('Angkat sama-sama, jangan pinggangnya');
+      a.goToXY(440, 220, 'up');
+    }
+    if (E.data.tekan && a.diam && a.x > 430 && !E.data.angkat) {
+      E.data.angkat = true;
+      a.bawa = 'jerigen';
+      a.laju = 0.6;
+      a.goTo('idle');
+    }
+    if (E.data.angkat && a.diam && a.x < 340 && !E.data.pasang) {
+      E.data.pasang = true;
+      a.bawa = null;
+      a.laju = 1;
+      RUANGAN.gelasDispenser = 6;
+      for (let i = 0; i < 4; i++) spawn('splash', 330, 250, '#b8dcf4');
+    }
+  },
+  selesai(E) { if (E.data.a) { E.data.a.laju = 1; E.data.a.bawa = null; } },
+},
+
+{
+  id: 'gantian-jaga-loket',
+  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 12,
+  syarat: (S) => S.orang.some((o) => o.station === 'idle' && o.diam),
+  perluAktor: true,
+  mulai(E, S) {
+    const lama = S.orang.find((o) => o.station === 'idle' && o.diam);
+    if (!lama) return;
+    lama.eventKerja = E; lama.betahAsli = lama.betah; lama.betah = true; E.aktor.push(lama);
+    E.data.lama = lama;
+    const baru = pinjamAktor(E, 1, (o) => o.station !== 'idle');
+    E.data.baru = baru[0];
+    if (E.data.baru) E.data.baru.goToXY(lama.x + 14, lama.y, 'left');
+  },
+  tick(E) {
+    const { lama, baru } = E.data;
+    if (!lama) return;
+    if (!baru) { pada(E, 2, () => { lama.say('itu jam berapa ya'); }); return; }
+    if (baru.diam && !E.data.tukar) {
+      E.data.tukar = true;
+      spawn('paper', lama.x, lama.y - 20);
+      lama.goTo('think');
+      baru.goTo('idle');
+    }
+  },
+},
+
+{
+  id: 'humas-latihan-sambutan',
+  kelas: 'latar', bobot: B.jarang, cooldown: 600, durasi: 20,
+  syarat: (S) => S.orang.some((o) => o.peran === 'humas') && S.orang.length < 6,
+  mulai(E, S) {
+    const a = S.orang.find((o) => o.peran === 'humas' && bisaDipinjam(o));
+    if (!a) { E.selesaiCepat = true; return; }
+    a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+    E.data.a = a;
+    a.goToXY(30, 220, 'down');
+  },
+  tick(E, dt) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && Math.random() < 0.3 * dt) spawn('talk', a.x, a.y - 26);
+    pada(E, 15, () => { a.say('yang terhormat, Bapak/Ibu...'); });
+    if (!E.data.penonton && E.umur > 8) {
+      const p = pinjamAktor(E, 1, (o) => o !== a);
+      if (p.length) { E.data.penonton = p[0]; E.data.penonton.goToXY(a.x, a.y + 20, 'up'); }
+    }
+    if (E.data.penonton && E.data.penonton.diam && !E.data.tepuk) {
+      E.data.tepuk = true;
+      E.data.penonton.pose = 'tepuk';
+      E.data.penonton.say('lanjut, bagus itu');
+    }
+  },
+  selesai(E) { if (E.data.penonton) E.data.penonton.pose = null; },
+},
+
+{
+  id: 'istirahat-sholat-dzuhur',
+  kelas: 'latar', bobot: B.sering, cooldown: 10800, durasi: 45,
+  syarat: (S) => (S.jam > 12 && S.jam < 12.5) || (S.jam > 15.25 && S.jam < 15.75),
+  mulai(E, S) {
+    const a = S.orang.find((o) => bisaDipinjam(o));
+    if (a) a.say('Duluan ya, titip meja');
+  },
+  tick(E) {
+    MOD.hening = Math.sin(E.umur * 0.3) > 0.3;
+    if (!E.data.kopi && E.umur > 5) {
+      const a = pinjamAktor(E, 1, (o) => o.station !== 'idle');
+      if (a.length) { E.data.kopi = a[0]; E.data.kopi.goTo('idle'); }
+    }
+  },
+},
+
+{
+  id: 'kabar-cuaca-di-grup',
+  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 25,
+  syarat: () => CUACA.hujan > 0.4 || sedangJalan('kilat-menyambar'),
+  perluAktor: true,
+  mulai(E) {
+    E.data.orang = pinjamAktor(E, 3);
+    for (const a of E.data.orang) { a.bawa = 'hp'; a.bekuSampai = now + 24000; }
+  },
+  tick(E) {
+    if (Math.random() < 0.05) { const a = pilih(E.data.orang); if (a) spawn('ping', a.x, a.y - 22); }
+    pada(E, 20, () => { for (const a of E.data.orang) { a.bawa = null; a.bekuSampai = 0; } });
+  },
+  selesai(E) { for (const a of E.data.orang) { a.bawa = null; a.bekuSampai = 0; } },
+},
+
+{
+  id: 'kabid-kasi-adu-argumen',
+  kelas: 'latar', bobot: B.sedang, cooldown: 540, durasi: 15,
+  syarat: (S) => S.orang.some((o) => o.peran === 'kabid') && S.orang.some((o) => o.peran === 'kasi'),
+  mulai(E, S) {
+    const kabid = S.orang.find((o) => o.peran === 'kabid' && bisaDipinjam(o));
+    const kasi = S.orang.find((o) => o.peran === 'kasi' && bisaDipinjam(o));
+    if (!kabid || !kasi) { E.selesaiCepat = true; return; }
+    kabid.eventKerja = E; kabid.betahAsli = kabid.betah; kabid.betah = true; E.aktor.push(kabid);
+    kasi.eventKerja = E; kasi.betahAsli = kasi.betah; kasi.betah = true; E.aktor.push(kasi);
+    E.data.kabid = kabid; E.data.kasi = kasi;
+    kabid.goToXY(226, 210, 'down'); kasi.goToXY(266, 210, 'down');
+  },
+  tick(E) {
+    const { kabid, kasi } = E.data;
+    if (!kabid || !kasi) return;
+    pada(E, 2, () => { kabid.say('itu bukan kewenangan kita'); });
+    pada(E, 5, () => { kasi.say('di juknis boleh, Pak'); });
+    pada(E, 8, () => { kabid.pose = 'nunjuk'; });
+    pada(E, 10, () => { kabid.pose = null; kasi.laju = 1.3; kasi.goTo('read'); });
+    pada(E, 14, () => { kasi.laju = 1; kasi.goTo('rapat'); });
+  },
+  selesai(E) {
+    if (E.data.kabid) E.data.kabid.pose = null;
+    if (E.data.kasi) E.data.kasi.laju = 1;
+  },
+},
+
+{
+  id: 'kasi-inspeksi-meja-staf',
+  kelas: 'latar', bobot: B.sering, cooldown: 360, durasi: 19,
+  syarat: (S) => S.orang.some((o) => o.peran === 'kasi') && S.orang.filter((o) => o.station === 'think').length >= 2,
+  mulai(E, S) {
+    const kasi = S.orang.find((o) => o.peran === 'kasi' && bisaDipinjam(o));
+    if (!kasi) { E.selesaiCepat = true; return; }
+    kasi.eventKerja = E; kasi.betahAsli = kasi.betah; kasi.betah = true; E.aktor.push(kasi);
+    E.data.kasi = kasi; E.data.i = 0;
+    kasi.goToXY(MEJA_KERJA_X[0] + 5, 316, 'down');
+  },
+  tick(E) {
+    const kasi = E.data.kasi;
+    if (!kasi) return;
+    if (kasi.diam && !E.data.tunggu) {
+      E.data.tunggu = true;
+      E.data.tungguSampai = E.umur + 4;
+      spawn('scan', kasi.x, kasi.y - 20);
+    }
+    if (E.data.tunggu && E.umur > E.data.tungguSampai) {
+      E.data.tunggu = false;
+      E.data.i++;
+      if (E.data.i < MEJA_KERJA_X.length) kasi.goToXY(MEJA_KERJA_X[E.data.i] + 5, 316, 'down');
+      else if (!E.data.selesai) { E.data.selesai = true; kasi.say('lanjut, lanjut'); }
+    }
+  },
+},
+
+{
+  id: 'kasi-panggil-magang-fotokopi',
+  kelas: 'latar', bobot: B.sedang, cooldown: 240, durasi: 14,
+  syarat: (S) => S.orang.some((o) => ['kasi', 'kabid'].includes(o.peran)) && S.orang.some((o) => o.peran === 'magang'),
+  mulai(E, S) {
+    const kasi = S.orang.find((o) => ['kasi', 'kabid'].includes(o.peran) && bisaDipinjam(o));
+    const mg = S.orang.find((o) => o.peran === 'magang' && bisaDipinjam(o));
+    if (!kasi || !mg) { E.selesaiCepat = true; return; }
+    kasi.eventKerja = E; kasi.betahAsli = kasi.betah; kasi.betah = true; E.aktor.push(kasi);
+    mg.eventKerja = E; mg.betahAsli = mg.betah; mg.betah = true; E.aktor.push(mg);
+    E.data.kasi = kasi; E.data.mg = mg;
+    kasi.say('tolong gandakan 15 rangkap');
+    mg.goToXY(kasi.x - 10, kasi.y, 'right');
+  },
+  tick(E) {
+    const { kasi, mg } = E.data;
+    if (!kasi || !mg) return;
+    if (mg.diam && !E.data.terima) {
+      E.data.terima = true;
+      mg.say('siap');
+      mg.bawa = 'kertas';
+      mg.goTo('web');
+    }
+    if (E.data.terima && mg.diam && mg.station === 'web' && !E.data.ping) {
+      E.data.ping = true;
+      E.data.pingSampai = E.umur + 5;
+    }
+    if (E.data.ping && E.umur > E.data.pingSampai && !E.data.balik) {
+      E.data.balik = true;
+      mg.bawa = 'kertas';
+      mg.goToXY(kasi.x, kasi.y, null);
+    }
+    if (E.data.balik && mg.diam && !E.data.serah) {
+      E.data.serah = true;
+      spawn('paper', kasi.x, kasi.y - 20);
+      mg.bawa = null;
+    }
+  },
+  selesai(E) { if (E.data.mg) E.data.mg.bawa = null; },
+},
+
+{
+  id: 'kerja-bakti-berkas',
+  kelas: 'latar', bobot: B.jarang, cooldown: 600, durasi: 35,
+  syarat: (S) => (RUANGAN.mapDisposisi >= 2 || RUANGAN.tumpukanFiling >= 2) && S.nganggur.length >= 3,
+  perluAktor: true,
+  mulai(E) {
+    const tiga = pinjamAktor(E, 3);
+    if (tiga.length < 2) return;
+    E.data.orang = tiga;
+    tiga.forEach((a, i) => a.goToXY(40 + i * 30, LANE_UP, 'up'));
+  },
+  tick(E, dt) {
+    const O = E.data.orang;
+    if (!O || O.length < 2) return;
+    if (!O.every((a) => a.diam)) return;
+    E.data.opT = (E.data.opT || 0) + dt;
+    const jeda = O.length >= 3 ? 1.5 : 2.5;
+    if (E.data.opT > jeda) {
+      E.data.opT = 0;
+      spawn('paper', O[0].x, O[0].y - 20);
+      E.data.putaran = (E.data.putaran || 0) + 1;
+      if (E.data.putaran % 3 === 0) {
+        if (RUANGAN.mapDisposisi > 0) RUANGAN.mapDisposisi--;
+        else if (RUANGAN.tumpukanFiling > 0) RUANGAN.tumpukanFiling--;
+        for (let i = 0; i < 4; i++) spawn('dust', O[0].x, O[0].y);
+      }
+    }
+  },
+},
+
+{
+  id: 'kipas-direbut-arah',
+  kelas: 'latar', bobot: B.sedang, cooldown: 900, durasi: 18,
+  syarat: (S) => S.jam > 11 && S.jam < 15 && S.orang.filter((o) => o.station === 'think').length >= 2,
+  mulai(E, S) {
+    const a = S.orang.find((o) => o.station === 'think' && bisaDipinjam(o));
+    if (!a) { E.selesaiCepat = true; return; }
+    a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+    E.data.a = a;
+    a.goToXY(400, 280, 'up');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && !E.data.putar) {
+      E.data.putar = true;
+      RUANGAN.kipasArah = a.x < 400 ? -1 : 1;
+      a.goTo('think');
+    }
+    if (!E.data.b && E.umur > 8) {
+      const b = pinjamAktor(E, 1, (o) => o.station === 'think' && o !== a);
+      if (b.length) { E.data.b = b[0]; E.data.b.goToXY(400, 280, 'up'); }
+    }
+    if (E.data.b && E.data.b.diam && !E.data.putar2) {
+      E.data.putar2 = true;
+      RUANGAN.kipasArah *= -1;
+      spawn('talk', E.data.b.x, E.data.b.y - 24);
+      E.data.b.say('Gantian ya, panas nih');
+      E.data.b.goTo('think');
+    }
+  },
+},
+
+{
+  id: 'kopi-pagi-dispenser',
+  kelas: 'latar', bobot: B.sering, cooldown: 300, durasi: 20,
+  syarat: (S) => S.jam > 7 && S.jam < 9.5 && S.nganggur.length >= 2,
+  perluAktor: true,
+  mulai(E) {
+    E.data.orang = pinjamAktor(E, 2);
+    if (E.data.orang.length < 2) return;
+    E.data.orang[0].goToXY(320, 280, 'right');
+    E.data.orang[1].goToXY(340, 280, 'left');
+  },
+  tick(E, dt) {
+    const O = E.data.orang;
+    if (!O || O.length < 2) return;
+    if (O.every((a) => a.diam)) {
+      if (Math.random() < 0.3 * dt) { const a = pilih(O); spawn('talk', a.x, a.y - 24); }
+      if (Math.random() < 0.15 * dt) { const a = pilih(O); spawn('steam', a.x + 4, a.y - 20); }
+    }
+  },
+},
+
+{
+  id: 'kunci-lemari-hilang',
+  kelas: 'latar', bobot: B.jarang, cooldown: 1080, durasi: 30,
+  syarat: (S) => !S.stasiunAktif.has('read'),
+  perluAktor: true,
+  mulai(E) {
+    const a = pemeran(E);
+    if (!a) return;
+    E.data.a = a;
+    a.say('Kuncinya di siapa?');
+    a.goToXY(54, 138, 'up');
+    E.data.titik = [[176, 306], [286, 140], [54, 138]];
+    E.data.i = -1;
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && E.umur > 3) {
+      if (!E.data.tunggu) { E.data.tunggu = true; E.data.tungguSampai = E.umur + 3; }
+      else if (E.umur > E.data.tungguSampai) {
+        E.data.tunggu = false;
+        E.data.i++;
+        if (E.data.i < E.data.titik.length) {
+          const [tx, ty] = E.data.titik[E.data.i];
+          a.goToXY(tx, ty, null);
+          if (E.data.i === E.data.titik.length - 1) a.say('Ketemu!');
+        }
+      }
+    }
+    if (a.adaTugas) a.busyUntil = Math.max(a.busyUntil, now + 2000);
+  },
+},
+
+{
+  id: 'kupu-kupu-tanda-tamu',
+  kelas: 'latar', bobot: B.jarang, cooldown: 1500, durasi: 30,
+  syarat: (S) => S.jam > 8 && S.jam < 15,
+  mulai(E) { E.data.x = JENDELA.x; E.data.y = JENDELA.y + 20; E.data.tahap = 0; E.data.t = 0; },
+  tick(E, dt) {
+    const D = E.data;
+    D.t += dt;
+    if (D.tahap === 0) { D.x += 14 * dt; D.y += Math.sin(D.t * 4) * 3; if (D.x > 300) { D.tahap = 1; D.t = 0; } }
+    else if (D.tahap === 1) { D.x = 300; D.y = 16; if (D.t > 5) { D.tahap = 2; D.t = 0; } }
+    else if (D.tahap === 2) { D.x = 44; D.y = 258; if (D.t > 5) { D.tahap = 3; D.t = 0; } }
+    else { D.x -= 20 * dt; }
+    if (!D.dibilang && D.t > 0.3 && D.tahap >= 1) {
+      D.dibilang = true;
+      const a = pemeran(E);
+      if (a) a.say('wah, ada kupu-kupu — bakal ada tamu');
+    }
+  },
+  gambarAtas(E) {
+    const x = Math.round(E.data.x), y = Math.round(E.data.y);
+    r(x, y, 4, 3, '#c9a03a');
+    r(x + 1, y - 1, 2, 1, Math.sin(now / 90) > 0 ? '#e8c05a' : '#c9a03a');
+  },
+},
+
+{
+  id: 'luruskan-kursi-rapat',
+  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 4,
+  syarat: (S) => S.orang.length <= 2 && RUANGAN.geserKursi.some((v) => v),
+  perluAktor: true,
+  mulai(E) {
+    const a = pemeran(E, ['magang', 'arsiparis', 'teknisi', 'statistisi']);
+    if (!a) return;
+    E.data.a = a;
+    a.goToXY(RAPAT.cx, 178, 'up');
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    if (a.diam && !E.data.rapikan) {
+      E.data.rapikan = true;
+      for (let i = 0; i < RUANGAN.geserKursi.length; i++) {
+        if (RUANGAN.geserKursi[i]) spawn('dust', RAPAT.cx + slotKe(i), 186);
+      }
+      RUANGAN.geserKursi = [];
+    }
+  },
+},
+
+{
+  id: 'papasan-di-lorong-minggir',
+  kelas: 'latar', bobot: B.sering, cooldown: 3, durasi: 2,
+  mulai(E, S) {
+    const jalan = S.orang.filter((o) => o.path.length && !o.eventKerja);
+    let pasang = null;
+    for (let i = 0; i < jalan.length && !pasang; i++) {
+      for (let j = i + 1; j < jalan.length; j++) {
+        const a = jalan[i], b = jalan[j];
+        if (Math.abs(a.y - b.y) < 6 && jarakKe(a, b.x, b.y) < 14 && a.x !== b.x) { pasang = [a, b]; break; }
+      }
+    }
+    if (!pasang) { E.selesaiCepat = true; return; }
+    const [a, b] = pasang;
+    const rankA = JABATAN.findIndex((j) => j.id === a.peran), rankB = JABATAN.findIndex((j) => j.id === b.peran);
+    const minggir = rankA > rankB ? a : b;
+    minggir.bekuSampai = now + 400;
+    E.data.minggir = minggir;
+  },
+  selesai(E) { if (E.data.minggir) E.data.minggir.bekuSampai = 0; },
+},
+
+{
+  id: 'pinjam-charger-keliling',
+  kelas: 'latar', bobot: B.sering, cooldown: 420, durasi: 18,
+  syarat: (S) => S.orang.length >= 3 && S.orang.filter((o) => o.station === 'think').length >= 1,
+  perluAktor: true,
+  mulai(E, S) {
+    const a = pinjamAktor(E, 1, (o) => o.station !== 'think')[0];
+    if (!a) return;
+    E.data.a = a;
+    E.data.meja = S.orang.filter((o) => o.station === 'think');
+    E.data.tahap = 0;
+    const target = E.data.meja[0];
+    if (target) a.goToXY(target.x + 10, target.y, 'left'); else E.selesaiCepat = true;
+  },
+  tick(E) {
+    const a = E.data.a;
+    const meja = E.data.meja;
+    if (!a || !meja || !meja.length) return;
+    if (a.diam && !E.data.tunggu) { E.data.tunggu = true; E.data.tungguSampai = E.umur + 2; }
+    else if (E.data.tunggu && E.umur > E.data.tungguSampai) {
+      E.data.tunggu = false;
+      E.data.tahap++;
+      if (E.data.tahap < meja.length) {
+        a.goToXY(meja[E.data.tahap].x + 10, meja[E.data.tahap].y, 'left');
+        if (E.data.tahap === meja.length - 1) a.say('colokannya nganggur nggak?');
+      } else if (!E.data.selesai) {
+        E.data.selesai = true;
+        a.doingEvent = 'numpang colokan';
+      }
+    }
+  },
+  selesai(E) { if (E.data.a) E.data.a.doingEvent = ''; },
+},
+
+{
+  id: 'pranata-madya-bimbing-pranata-pertama',
+  kelas: 'latar', bobot: B.sering, cooldown: 360, durasi: 17,
+  syarat: (S) => S.orang.some((o) => ['pranata_madya', 'analis_sistem'].includes(o.peran) && o.station === 'think')
+    && S.orang.some((o) => ['pranata_pertama', 'pranata_muda', 'magang'].includes(o.peran) && o.station === 'think'),
+  mulai(E, S) {
+    const senior = S.orang.find((o) => ['pranata_madya', 'analis_sistem'].includes(o.peran) && o.station === 'think' && bisaDipinjam(o));
+    const junior = S.orang.find((o) => ['pranata_pertama', 'pranata_muda', 'magang'].includes(o.peran) && o.station === 'think' && o !== senior && bisaDipinjam(o));
+    if (!senior || !junior) { E.selesaiCepat = true; return; }
+    senior.eventKerja = E; senior.betahAsli = senior.betah; senior.betah = true; E.aktor.push(senior);
+    E.data.senior = senior; E.data.junior = junior;
+    E.data.magang = junior.peran === 'magang';
+    senior.goToXY(junior.x - 10, junior.y + 6, 'up');
+  },
+  tick(E) {
+    const { senior, junior } = E.data;
+    if (!senior || !junior) return;
+    if (senior.diam) senior.pose = 'nunjuk';
+    const t = E.data.magang ? 14 : 10;
+    pada(E, t, () => { spawn('idea', junior.x, junior.y - 26, P.amber); });
+    pada(E, t + 1, () => { senior.pose = null; senior.say('coba dari sini dulu'); });
+  },
+  selesai(E) { if (E.data.senior) E.data.senior.pose = null; },
+},
+
+{
+  id: 'tamu-merokok-ditegur-rambu',
+  kelas: 'latar', bobot: B.sedang, cooldown: 1500, durasi: 14,
+  syarat: (S) => S.orang.some((o) => o.station === 'idle' && o.diam),
+  mulai(E, S) {
+    const t = S.orang.find((o) => o.station === 'idle' && o.diam);
+    if (!t) { E.selesaiCepat = true; return; }
+    E.data.tamuX = t.x; E.data.tamuY = t.y;
+  },
+  tick(E) {
+    if (Math.random() < 0.3) spawn('asap', E.data.tamuX, E.data.tamuY - 30);
+    if (!E.data.a && E.umur > 3) {
+      const a = pemeran(E);
+      if (a) { E.data.a = a; a.goToXY(E.data.tamuX + 12, E.data.tamuY, 'left'); }
+    }
+    if (E.data.a && E.data.a.diam && !E.data.tegur) {
+      E.data.tegur = true;
+      E.data.a.pose = 'nunjuk';
+      E.data.a.say('maaf, di luar ya pak');
+      E.data.rambuSampai = E.umur + 2;
+    }
+  },
+  gambarAtas(E) {
+    if (E.data.rambuSampai && E.umur < E.data.rambuSampai && Math.sin(now / 90) > 0) r(428, 42, 4, 4, '#ffffff');
+  },
+  selesai(E) { if (E.data.a) E.data.a.pose = null; },
 },
 
 );

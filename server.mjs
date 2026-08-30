@@ -1043,6 +1043,12 @@ const server = http.createServer(async (req, res) => {
       alasan: !IZIN ? 'jalankan server dengan --izinkan-perintah'
         : !CLAUDE ? 'biner claude tidak ketemu di PATH' : '',
       cwdBawaan: process.cwd(),
+      port: PORT,
+      host: HOST,
+      // status apa adanya, dibaca panel Pengaturan di halaman — read-only,
+      // tidak ada endpoint yang mengubahnya balik dari sini.
+      isiAktif: !ISI_MATI,
+      cuacaAktif: CUACA_ATUR.toLowerCase() !== 'off',
       // hanya ADA atau TIDAK, plus nama env-nya. Nilainya tidak pernah keluar.
       punyaKredensial: Boolean(kredensial),
       kredensialEnv: kredensial ? kredensial.envKey : '',

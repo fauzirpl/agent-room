@@ -553,5 +553,49 @@ body {
 .kbr-kaki .kbr-auto input { accent-color: var(--amber); margin: 0; }
 .kbr-hitung { flex: 1; text-align: right; color: var(--dim); font-size: 10px; }
 .kbr-kaki button { min-width: 34px; }
+
+/* ---------- modal statistik token ----------
+   Rangka sama seperti kabar, isinya cuma angka: total sejak halaman ini
+   dibuka, lalu rincian per sesi yang masih aktif. Bukan pembukuan resmi —
+   lihat catatan di formatToken()/formatBiaya() soal cakupannya. */
+.dlg.stat { height: min(420px, 100%); width: min(400px, 100%); }
+.stat-total { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 4px; }
+.stat-per h3 {
+  margin: 0; padding: 10px 0 5px; font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--dim); border-top: 1px solid var(--line);
+}
+.stat-per ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.stat-per li { display: flex; gap: 6px; font-size: 10.5px; color: var(--ink); }
+.stat-per li .t { color: var(--amber); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-per li span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.stat-per li.kosong { color: var(--dim); font-style: italic; }
 .kbr-kaki button:disabled { opacity: .35; cursor: default; }
 .kbr-kaki button:disabled:hover { border-color: var(--line); }
+
+/* ---------- pengaturan ---------- */
+.dlg.pengaturan { height: min(460px, 100%); width: min(400px, 100%); }
+.pengaturan-badan { display: flex; flex-direction: column; gap: 16px; }
+.pengaturan-grup h3 {
+  margin: 0 0 8px; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--dim); font-weight: 600;
+}
+.pengaturan-baris {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 0; font-size: 12px; color: var(--ink); cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+.pengaturan-baris:last-child { border-bottom: 0; }
+.pengaturan-baris input { accent-color: var(--amber); width: 15px; height: 15px; margin: 0; }
+/* Tiga baris suara: checkbox + slider volume digabung dalam satu blok, garis
+   pemisahnya pindah ke pembungkusnya supaya baris checkbox & slider kelihatan
+   satu kesatuan, bukan dua baris terpisah. */
+.pengaturan-audio { border-bottom: 1px solid var(--line); }
+.pengaturan-audio:last-child { border-bottom: 0; }
+.pengaturan-audio .pengaturan-baris { border-bottom: 0; }
+.pengaturan-vol { display: flex; align-items: center; gap: 8px; padding: 0 0 8px 22px; }
+.pengaturan-vol input[type="range"] {
+  flex: 1; accent-color: var(--amber); height: 3px; cursor: pointer; margin: 0;
+}
+.pengaturan-vol-nilai { font-size: 9.5px; color: var(--dim); width: 30px; text-align: right; flex-shrink: 0; }
+.pengaturan-nota { margin: 8px 0 0; font-size: 9.5px; line-height: 1.5; color: var(--dim); }
+.pengaturan-grup .kartu-info { border-top: 0; padding-top: 0; grid-template-columns: 92px 1fr; }

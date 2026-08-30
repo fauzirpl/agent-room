@@ -41,7 +41,7 @@ tanpa perlu sesi Claude Code sungguhan.
 
 - Setiap tool call Claude Code jadi gerakan di ruangan, bukan cuma baris log
 - Balon pikiran & kotak kabar — isi transkrip beneran, bukan cuma nama tool
-- 100+ event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat)
+- 250+ event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat)
 - Cuaca sungguhan di jendela + siklus siang–malam
 - Notifikasi suara pas sesi selesai, plus musik lofi kantor opsional —
   semua bunyi disintesis langsung, nol file audio eksternal

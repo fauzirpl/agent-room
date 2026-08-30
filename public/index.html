@@ -21,11 +21,9 @@
       <span id="connText">menyambung…</span>
       <span class="sep">/</span>
       <span id="nowDoing">kantor masih sepi</span>
-      <button id="pikirBtn" class="ghost" title="balon pikiran">💭</button>
+      <button id="settingBtn" class="ghost" title="pengaturan">⚙️</button>
       <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
-      <button id="soundBtn" class="ghost" title="efek suara">🔇</button>
-      <button id="notifBtn" class="ghost mati" title="notifikasi tugas selesai: mati">🔔</button>
-      <button id="musikBtn" class="ghost mati" title="musik lofi kantor: mati">🎧</button>
+      <button id="statsBtn" class="ghost" title="statistik token">📊</button>
     </div>
   </section>
 
@@ -125,6 +123,75 @@
       <button type="button" id="kabarSebelum" title="kabar sebelumnya (←)">‹</button>
       <button type="button" id="kabarLanjut" class="utama" title="kabar berikutnya (→)">›</button>
     </footer>
+  </div>
+</div>
+<div class="dlg-latar" id="dlgStats" hidden>
+  <div class="dlg stat" role="dialog" aria-modal="true" aria-labelledby="statsJudul">
+    <header class="dlg-kepala">
+      <b id="statsJudul">Statistik token</b>
+      <button type="button" id="statsTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="kbr-badan" id="statsBadan"></div>
+  </div>
+</div>
+<div class="dlg-latar" id="dlgSetting" hidden>
+  <div class="dlg pengaturan" role="dialog" aria-modal="true" aria-labelledby="settingJudul">
+    <header class="dlg-kepala">
+      <b id="settingJudul">Pengaturan</b>
+      <button type="button" id="settingTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="kbr-badan pengaturan-badan">
+      <div class="pengaturan-grup">
+        <h3>Tampilan &amp; suara</h3>
+        <label class="pengaturan-baris">
+          <span>💭 balon pikiran</span>
+          <input type="checkbox" id="setBalonPikir">
+        </label>
+        <label class="pengaturan-baris">
+          <span>💬 buka kabar otomatis</span>
+          <input type="checkbox" id="setKabarOtomatis">
+        </label>
+        <div class="pengaturan-audio">
+          <label class="pengaturan-baris">
+            <span>🔊 efek suara</span>
+            <input type="checkbox" id="setSuara">
+          </label>
+          <div class="pengaturan-vol">
+            <input type="range" id="volEfek" min="0" max="1" step="0.01" value="1" aria-label="volume efek suara">
+            <span class="pengaturan-vol-nilai" id="volEfekNilai">100%</span>
+          </div>
+        </div>
+        <div class="pengaturan-audio">
+          <label class="pengaturan-baris">
+            <span>🔔 notifikasi tugas selesai</span>
+            <input type="checkbox" id="setNotif">
+          </label>
+          <div class="pengaturan-vol">
+            <input type="range" id="volNotif" min="0" max="1" step="0.01" value="1" aria-label="volume notifikasi">
+            <span class="pengaturan-vol-nilai" id="volNotifNilai">100%</span>
+          </div>
+        </div>
+        <div class="pengaturan-audio">
+          <label class="pengaturan-baris">
+            <span>🎧 musik lofi kantor</span>
+            <input type="checkbox" id="setMusik">
+          </label>
+          <div class="pengaturan-vol">
+            <input type="range" id="volMusik" min="0" max="1" step="0.01" value="1" aria-label="volume musik lofi">
+            <span class="pengaturan-vol-nilai" id="volMusikNilai">100%</span>
+          </div>
+        </div>
+        <p class="pengaturan-nota">
+          Tiga centang di atas sengaja tidak diingat browser — selalu mati
+          waktu halaman dibuka lagi, karena bunyi baru boleh jalan sesudah
+          klik kamu. Volumenya diingat.
+        </p>
+      </div>
+      <div class="pengaturan-grup">
+        <h3>Status server</h3>
+        <div class="kartu-info" id="settingInfo"></div>
+      </div>
+    </div>
   </div>
 </div>
 <script src="room.js"></script>

@@ -339,19 +339,46 @@ ditutup dengan `Esc`.
 
 | Tombol | Guna |
 |---|---|
-| 💭 | balon pikiran nyala/mati |
+| ⚙️ | buka panel **Pengaturan** — lihat di bawah |
 | 💬 | buka kotak kabar; lencananya jumlah kabar yang belum dibaca |
-| 🔇/🔊 | efek suara (blip tiap event) nyala/mati |
-| 🔔 | notifikasi "tugas selesai" — lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
-| 🎧 | musik lofi kantor nyala/mati — chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio |
 
-Centang **buka sendiri** di kaki modal mematikan hak menyela tadi tanpa
-mematikan kotak kabarnya. Tiga setelan pertama diingat peramban
-(`localStorage`), dan halaman tetap jalan kalau peramban memang tidak
-mengizinkannya. Tiga tombol suara (🔇 🔔 🎧) sengaja **tidak** diingat — selalu
-mati waktu halaman dibuka lagi, karena `AudioContext` baru boleh jalan sesudah
-klik pengguna; menyalakannya otomatis dari `localStorage` toh tidak akan
-kedengaran sampai ada klik lagi.
+Lima setelan yang dulu masing-masing punya tombol sendiri di bilah ini sekarang
+digabung ke satu panel **Pengaturan** (⚙️), supaya tidak perlu menghafal lima
+posisi tombol berbeda:
+
+| Setelan di panel | Guna |
+|---|---|
+| 💭 balon pikiran | balon pikiran nyala/mati |
+| 💬 buka kabar otomatis | kembaran dari centang **buka sendiri** di kaki modal kabar — dua-duanya setelan yang sama, cuma dua tempat |
+| 🔊 efek suara | efek suara (blip tiap event) nyala/mati |
+| 🔔 notifikasi tugas selesai | lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
+| 🎧 musik lofi kantor | chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio |
+
+Dua yang pertama diingat peramban (`localStorage`), dan halaman tetap jalan
+kalau peramban memang tidak mengizinkannya. Tiga setelan suara (efek suara,
+notifikasi, musik) sengaja **tidak** diingat — selalu mati waktu halaman
+dibuka lagi, karena `AudioContext` baru boleh jalan sesudah klik pengguna;
+menyalakannya otomatis dari `localStorage` toh tidak akan kedengaran sampai
+ada klik lagi.
+
+Ketiga setelan suara itu masing-masing punya **slider volume** sendiri
+(0–100%, label persennya live) di bawah centangnya. Beda dari centang
+nyala/mati: angka volume ini BOLEH diingat lewat `localStorage`, karena cuma
+pengali relatif, bukan yang memaksa `AudioContext` menyala sendiri. Di baliknya
+satu `AudioContext` dipakai bersama dengan tiga bus `GainNode` (`busEfek`/
+`busNotif`/`busMusik`), dan setiap penghasil bunyi (blip tool call, derau
+hujan/guntur, lonceng notifikasi + `ucapSuara`, beat/chord musik lofi,
+termasuk Indonesia Raya) disambungkan ke bus yang sesuai alih-alih langsung
+ke `audio.destination` — supaya volumenya bisa digeser sendiri-sendiri tanpa
+mengubah campuran/attack tiap bunyi satu per satu.
+
+Panel yang sama juga menampilkan **status server** apa adanya — kendali web
+nyala/mati, sumber cuaca (nyata/dipaksa/tebakan), isi transkrip nyala/mati,
+dan alamat server — dibaca dari `/kendali` dan dari cek cuaca yang sudah
+berjalan. Bagian ini murni bacaan: mengubah port, host, cuaca, atau isi
+transkrip tetap lewat env var saat server dinyalakan (lihat **Konfigurasi**
+di bawah), bukan dari panel ini — sama seperti kendali web sendiri, yang
+sengaja tidak bisa dinyalakan dari halaman.
 
 Notifikasi 🔔 memicu di event `Stop` — giliran sesinya kelar, "beres, siap
 disposisi" — bukan di `SubagentStop`. Peserta rapat yang bubar satu-satu

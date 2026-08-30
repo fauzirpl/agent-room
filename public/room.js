@@ -103,7 +103,11 @@ function box3(x, y, w, h, d, c) {
 // benar-benar bebas perabot (54..118, 159..194, 369..381, 419..471). Jarak yang
 // rapi akan memaksa pegawai menembus ruang tunggu atau kipas menuju mejanya.
 const MEJA_KERJA_X = [176, 374, 86, 444];   // urut prioritas pemakaian
-const MEJA_KERJA_Y = 316;                   // garis kaki pegawai yang duduk
+// Dulu 316 (di tengah kaki meja, jadi tertutup papan & kaki meja -> kebaca
+// "duduk"). Sekarang 350: sedikit LEBIH BESAR dari sortY meja (348, garis kaki
+// meja itu sendiri) supaya pegawai kalah-urut belakangan dan digambar DI ATAS
+// meja saat depth-sort -> badannya utuh, berdiri persis di depan mejanya.
+const MEJA_KERJA_Y = 350;                   // garis kaki pegawai yang berdiri di depan mejanya
 
 const STATIONS = {
   read:   { x: 54,  y: 138, lane: LANE_UP,   face: 'up',   name: 'lemari arsip',   fx: 'dust'  },
@@ -116,9 +120,11 @@ const STATIONS = {
             face: 'up', name: 'PC server',      fx: 'data'  },
   agent:  { x: 452, y: 140, lane: LANE_UP,   face: 'up',   name: 'ruang kadis',    fx: 'paper' },
   rapat:  { x: 246, y: 192, lane: LANE_UP,   face: 'down', name: 'meja rapat',     fx: 'talk'  },
-  // empat meja kerja; slotsX dipakai karena jaraknya tidak seragam
+  // empat meja kerja; slotsX dipakai karena jaraknya tidak seragam.
+  // face 'up': berdiri membelakangi penonton, menghadap laptop di mejanya —
+  // bukan menghadap kamera seperti stasiun lain yang orangnya mengobrol.
   think:  { x: 176, y: MEJA_KERJA_Y, lane: LANE_DOWN, slotsX: MEJA_KERJA_X,
-            face: 'down', name: 'meja kerja',     fx: 'idea'  },
+            face: 'up',   name: 'meja kerja',     fx: 'idea'  },
   // ruang tunggu ditaruh di baris depan tengah, sejajar meja disposisi: jaraknya
   // ke semua stasiun kira-kira sama, jadi tidak ada sisi yang jadi trip panjang.
   // Langkah slotnya 23 biar yang berdiri menunggu tidak saling tumpang.
@@ -1440,15 +1446,31 @@ function drawMejaKerja() {
     // penghuninya mengetik — meja tidak goyang sendiri
     const goyang = MOD.mejaGetar === i && terpakai.has(i) && Math.sin(now / 70) > 0 ? 1 : 0;
     const cx = cx0;
-    const x = cx - 32, y = 306 + goyang, w = 64;
+    // Dulu y dasarnya 306 dengan kaki 28px — meja jadi lebih tinggi dari
+    // pegawainya sendiri (tinggi pegawai ~19px kaki-ke-kepala), jadi tangan
+    // yang mengetik tidak pernah sampai ke keyboard. Digeser turun 16px dan
+    // kakinya dipendekkan supaya papan mejanya jatuh sejajar tangan.
+    const x = cx - 32, y = 322 + goyang, w = 64;
     const nyala = (terpakai.has(i) || MOD.mejaHantu === i) && MOD.mejaPadam !== i;
     const terkunci = MOD.slotTerkunci === i;
 
     r(x, y + 8, w, 6, P.wood);                            // papan meja
     r(x, y + 8, w, 2, sh(P.wood, 1.25));
-    r(x + 2, y + 14, 5, 28, P.woodD);                     // kaki
-    r(x + w - 7, y + 14, 5, 28, P.woodD);
-    r(x + 8, y + 34, w - 16, 4, '#3f2f21');               // palang bawah
+    r(x + 2, y + 14, 5, 12, P.woodD);                     // kaki
+    r(x + w - 7, y + 14, 5, 12, P.woodD);
+    r(x + 8, y + 22, w - 16, 3, '#3f2f21');               // palang bawah
+
+    // Kursi kerja pribadi, kompak — punggung menghadap kamera karena
+    // pegawainya menghadap meja (sama seperti kursi rapat sisi dekat).
+    // Sengaja selalu digambar, bukan cuma waktu meja kosong: waktu ditempati
+    // pegawainya digambar SESUDAH ini (sortY meja < sortY pegawai) jadi
+    // badannya menutupi kursi persis seperti orang yang benar-benar duduk.
+    r(cx - 4, 347, 8, 2, '#7c838a');                      // kaki roda
+    r(cx - 1, 341, 2, 6, '#9aa1a6');                      // tiang
+    r(cx - 6, 337, 12, 4, '#2a4f8a');                     // dudukan
+    r(cx - 6, 337, 12, 1, '#3f74c4');
+    r(cx - 5, 329, 10, 8, '#2a4f8a');                     // sandaran dari belakang
+    r(cx - 5, 329, 10, 2, '#3f74c4');
 
     // Laptop ditaruh di sisi kanan meja, bukan di tengah: kalau di tengah, dia
     // menutupi dada pegawai yang duduk dan orangnya jadi tidak terbaca.
@@ -1480,6 +1502,14 @@ function drawMejaKerja() {
     }
     r(lx - 9, y + 7, 18, 2, '#b6bcc1');                   // badan keyboard
     r(lx - 10, y + 9, 20, 2, '#9aa1a6');
+
+    // pot mini di celah kosong tengah meja (antara berkas dan laptop) — bagian
+    // dari renovasi: dulu kosong melompong, sekarang mejanya kelihatan dirawat.
+    r(x + 33, y + 3, 4, 4, '#8a5a3a');
+    r(x + 33, y + 3, 4, 1, '#a8734a');
+    r(x + 34, y - 2, 1, 5, '#3e6b4f');
+    r(x + 36, y - 1, 1, 4, '#4f8a56');
+    r(x + 35, y - 3, 1, 3, '#3e6b4f');
 
     // sisi kiri meja: berkas, dibedakan biar tidak terlihat salin-tempel
     if (i % 2 === 0) {
@@ -1942,6 +1972,7 @@ function drawHead(a, x, yFoot) {
     else if (p.kumis) r(x - 1, yFoot - 2, 3, 1, '#2b2118');
     if (a.mulut) r(x - 1, yFoot - 2, 2, 2, '#3a2a24');          // menguap
   }
+  if (a.pulpenDiTelinga) r(x + 3, yFoot - 4, 1, 2, '#1c4e8a');  // bolpoin diselipkan di telinga
 }
 
 function drawEyes(a, x, ey) {
@@ -2791,6 +2822,10 @@ const MIN_DI_LAYAR = 4;
 // Variabel terpisah, bukan mengubah MIN_DI_LAYAR langsung, supaya nilai
 // aslinya tidak pernah hilang kalau event dibatalkan di tengah jalan.
 let minDiLayarTimpa = null;
+// Standby yang dihapus manual dari panel (tombol "hapus") tidak boleh langsung
+// digantikan pengganti oleh jagaPopulasi — tiap penghapusan menurunkan syarat
+// minimalnya satu, seumur halaman ini terbuka. Reset otomatis kalau dimuat ulang.
+let standbyDihapus = 0;
 // Standby lebih sering nongkrong di mejanya sendiri daripada di sudut tunggu —
 // itu yang bikin ruangan terbaca sibuk, bukan terbaca antre.
 const MAMPIR = ['think', 'think', 'think', 'server', 'read', 'search', 'web', 'rapat', 'idle'];
@@ -2813,14 +2848,36 @@ class Standby extends Agent {
   say() {}                              // dibungkam: standby bukan sesi nyata
 }
 
-// standby = penambal, jumlahnya selalu (4 - sesi nyata), tidak pernah negatif
+// standby = penambal, jumlahnya selalu (4 - sesi nyata - yang sudah dihapus
+// manual), tidak pernah negatif
 function jagaPopulasi() {
-  const perlu = Math.max(0, (minDiLayarTimpa == null ? MIN_DI_LAYAR : minDiLayarTimpa) - agents.size);
+  const dasar = minDiLayarTimpa == null ? MIN_DI_LAYAR : minDiLayarTimpa;
+  const perlu = Math.max(0, dasar - standbyDihapus - agents.size);
   while (standby.length > perlu) {
     const keluar = standby.pop();
     keluar.destroy();
   }
   while (standby.length < perlu) standby.push(new Standby(spawnIndex));
+}
+
+/* ------------------------------------------------------- hapus dari daftar --
+   Beda dari "stop": ini tidak menyentuh proses apa pun, cuma melupakan
+   tampilannya di halaman ini. Dipakai untuk pegawai standby (penambal yang
+   memang bukan sesi nyata) dan sesi nyata yang lagi idle — misalnya sesi
+   terminal yang jadi diam tanpa pernah mengirim penutup ('session-end'), jadi
+   kursinya tidak terkunci selamanya. Kalau sesi nyata yang dihapus ternyata
+   masih hidup dan mengirim event lagi, dia lapor diri lagi sebagai pegawai
+   baru — bukan bug, itu memang bagaimana halaman ini mengenali sesi. */
+function hapusPegawai(a) {
+  a.destroy();
+  if (a.standby) {
+    const i = standby.indexOf(a);
+    if (i !== -1) { standby.splice(i, 1); standbyDihapus++; }
+  } else {
+    agents.delete(a.id);
+  }
+  jagaPopulasi();
+  renderCrew();
 }
 
 function kursiKosong() {
@@ -2962,69 +3019,114 @@ const nowDoing = document.getElementById('nowDoing');
 const statTools = document.getElementById('statTools');
 const statAgents = document.getElementById('statAgents');
 const statTime = document.getElementById('statTime');
-const soundBtn = document.getElementById('soundBtn');
-const notifBtn = document.getElementById('notifBtn');
-const musikBtn = document.getElementById('musikBtn');
+const statsBtn = document.getElementById('statsBtn');
 
 let toolCount = 0;
+/* Total token sejak HALAMAN INI dibuka, dijumlah dari tiap event `token`
+   yang isinya angka kumulatif PER SESI (bukan delta) — jadi yang ditambahkan
+   ke total cuma selisihnya dari nilai terakhir sesi itu, supaya sesi yang
+   sudah pulang tidak lenyap dari totalnya. tokenPerSesi menyimpan nilai
+   terakhir itu; kuncinya sesi 12-karakter, sama seperti server. */
+const tokenPerSesi = new Map();
+const tokenTotal = { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+function tambahTokenTotal(sesi, t) {
+  const lama = tokenPerSesi.get(sesi) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+  tokenTotal.input += (t.input || 0) - lama.input;
+  tokenTotal.output += (t.output || 0) - lama.output;
+  tokenTotal.cacheTulis += (t.cacheTulis || 0) - lama.cacheTulis;
+  tokenTotal.cacheBaca += (t.cacheBaca || 0) - lama.cacheBaca;
+  tokenPerSesi.set(sesi, t);
+  if (!dlgStats.hidden) statsGambar();
+}
+/* Beda cakupan dari token: biaya cuma ada buat sesi headless yang dilahirkan
+   halaman ini (lihat catatan di server.mjs soal `total_cost_usd`), dan
+   datang SEKALI waktu sesinya selesai — bukan angka yang jalan terus. */
+let biayaTotal = 0;
+let biayaCount = 0;
+function tambahBiayaTotal(b) {
+  biayaTotal += b.usd;
+  biayaCount++;
+  if (!dlgStats.hidden) statsGambar();
+}
 // Kapan tool call terakhir masuk — dipakai event yang menggambarkan MENUNGGU
 // (layar mengantuk, berdiri di depan pintu kadis, detak jam di ruangan sepi).
 let toolTerakhir = 0;
 const started = Date.now();
 let sound = false;
 let audio = null;
+let busEfek = null, busNotif = null, busMusik = null;
+/* Level mixer per komponen (0..1) — BEDA dari nyala/mati (`sound`/`notifOn`/
+   `musikNyala` di bawah) yang sengaja tidak diingat browser: angka ini cuma
+   pengali relatif, jadi aman diingat lewat localStorage. Dibaca ulang dari
+   `ingatan` di blok "pengaturan" jauh di bawah (sesudah `ingatan` ada);
+   nilai bawaan 1 di sini cuma jaga-jaga kalau bus sempat dibuat sebelum
+   pembacaan itu sempat jalan. */
+const VOL = { efek: 1, notif: 1, musik: 1 };
 
-soundBtn.onclick = () => {
-  sound = !sound;
-  soundBtn.textContent = sound ? '🔊' : '🔇';
-  if (sound && !audio) audio = new (window.AudioContext || window.webkitAudioContext)();
-  // derau hujan tidak boleh terus terdengar setelah 🔇 — redam cepat, jangan
-  // menunggu tick interval; unmute sebaliknya menyalakan lagi seketika
-  if (!sound && hujanAudio) hujanAudio.g.gain.setTargetAtTime(0.0001, audio.currentTime, 0.08);
-  if (sound) aturSuaraHujan();
-};
-
-/* Notifikasi "tugas selesai" — tombol terpisah dari efek suara di atas, sengaja:
-   orang bisa mau dikabari begitu sesi kelar tanpa mau dengar blip tiap tool
-   call. Nyala/mati tidak diingat browser, sama seperti `sound` — dua-duanya
-   sama-sama butuh AudioContext yang baru boleh jalan sesudah klik pengguna. */
-let notifOn = false;
-notifBtn.onclick = () => {
-  notifOn = !notifOn;
-  notifBtn.classList.toggle('mati', !notifOn);
-  notifBtn.title = 'notifikasi tugas selesai: ' + (notifOn ? 'nyala' : 'mati');
-  if (notifOn && !audio) audio = new (window.AudioContext || window.webkitAudioContext)();
-};
-
-/* Lonceng sinus 3 nada naik — beda timbre dan bentuk dari blip persegi biasa,
-   supaya "sesi ini kelar" kedengaran lain dari sekadar tool call berikutnya.
-   Disusul suara ngomong beneran kalau browsernya punya Web Speech API: itu
-   realisasi "Izin.." yang diminta — bukan efek bunyi, tapi benar disuarakan. */
-function notifSelesai(nama) {
-  if (audio) {
-    const t0 = audio.currentTime;
-    [523.25, 659.25, 783.99].forEach((freq, i) => {   // C5 E5 G5
-      const o = audio.createOscillator(), g = audio.createGain();
-      o.type = 'sine';
-      o.frequency.value = freq;
-      const mulai = t0 + i * 0.1;
-      g.gain.setValueAtTime(0.0001, mulai);
-      g.gain.exponentialRampToValueAtTime(0.1, mulai + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, mulai + 0.55);
-      o.connect(g); g.connect(audio.destination);
-      o.start(mulai); o.stop(mulai + 0.6);
-    });
-  }
-  ucapSelesai(nama);
+// Satu AudioContext dipakai semua suara di halaman ini; tiga "bus" gain di
+// baliknya (efek/notifikasi/musik) supaya volume tiap komponen bisa digeser
+// sendiri-sendiri tanpa mengubah campuran/attack tiap bunyi satu per satu.
+// Semua tempat yang dulu `if (!audio) audio = new AudioContext()` sekarang
+// panggil ini saja.
+function pastikanAudio() {
+  if (audio) return audio;
+  audio = new (window.AudioContext || window.webkitAudioContext)();
+  busEfek = audio.createGain();  busEfek.gain.value = VOL.efek;  busEfek.connect(audio.destination);
+  busNotif = audio.createGain(); busNotif.gain.value = VOL.notif; busNotif.connect(audio.destination);
+  busMusik = audio.createGain(); busMusik.gain.value = VOL.musik; busMusik.connect(audio.destination);
+  return audio;
 }
 
-function ucapSelesai(nama) {
+/* Notifikasi "tugas selesai" — setelan terpisah dari efek suara di atas,
+   sengaja: orang bisa mau dikabari begitu sesi kelar tanpa mau dengar blip
+   tiap tool call. Nyala/mati tidak diingat browser, sama seperti `sound` —
+   dua-duanya sama-sama butuh AudioContext yang baru boleh jalan sesudah klik
+   pengguna. Keduanya dan `musikNyala` disambungkan ke checkbox di panel
+   Pengaturan lebih bawah (lihat blok "pengaturan"), bukan di sini — supaya
+   pemasangannya sejajar dengan `audio`/`musikGain`/dkk yang baru didefinisikan
+   sesudah titik ini. */
+let notifOn = false;
+
+/* Lonceng sinus 3 nada naik — beda timbre dan bentuk dari blip persegi biasa,
+   supaya "sesi ini kelar" (atau "butuh arahan kamu") kedengaran lain dari
+   sekadar tool call berikutnya. Disusul suara ngomong beneran kalau
+   browsernya punya Web Speech API: itu realisasi "Izin.." yang diminta —
+   bukan efek bunyi, tapi benar disuarakan. */
+function bunyiLonceng() {
+  if (!audio) return;
+  const t0 = audio.currentTime;
+  [523.25, 659.25, 783.99].forEach((freq, i) => {   // C5 E5 G5
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    const mulai = t0 + i * 0.1;
+    g.gain.setValueAtTime(0.0001, mulai);
+    g.gain.exponentialRampToValueAtTime(0.1, mulai + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, mulai + 0.55);
+    o.connect(g); g.connect(busNotif);
+    o.start(mulai); o.stop(mulai + 0.6);
+  });
+}
+
+function notifSelesai(nama) {
+  bunyiLonceng();
+  ucapSuara('Izin, ' + (nama ? nama + ' ' : 'tugasnya ') + 'selesai');
+}
+
+// Dipicu saat sesi minta izin atau bertanya dan menunggu jawabanmu — beda
+// dari notifSelesai (pekerjaan kelar), ini pekerjaan yang tertahan.
+function notifKonfirmasi() {
+  bunyiLonceng();
+  ucapSuara('Izin mohon arahan');
+}
+
+function ucapSuara(teks) {
   if (!('speechSynthesis' in window)) return;
   try {
-    const u = new SpeechSynthesisUtterance('Izin, ' + (nama ? nama + ' ' : 'tugasnya ') + 'selesai');
+    const u = new SpeechSynthesisUtterance(teks);
     u.lang = 'id-ID';
     u.rate = 1.05;
-    u.volume = 0.85;
+    u.volume = 0.85 * VOL.notif;
     // suara id-ID kalau browsernya punya; kalau tidak, ya suara default —
     // getVoices() sering kosong di panggilan pertama, itu bukan galat
     const suara = speechSynthesis.getVoices().find((v) => v.lang.startsWith('id'));
@@ -3144,27 +3246,162 @@ function musikJadwal() {
   musikTimer = setTimeout(musikJadwal, 30);
 }
 
-musikBtn.onclick = () => {
-  musikNyala = !musikNyala;
-  musikBtn.classList.toggle('mati', !musikNyala);
-  musikBtn.title = 'musik lofi kantor: ' + (musikNyala ? 'nyala' : 'mati');
-  if (musikNyala) {
-    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
-    if (!musikGain) {
-      musikGain = audio.createGain();
-      musikGain.gain.value = 0;
-      musikGain.connect(audio.destination);
-    }
-    musikGain.gain.setTargetAtTime(1, audio.currentTime, 0.5);
-    if (!musikKresek) musikMulaiKresek();
-    musikLangkah = 0; musikBirama = 0; musikBerikut = audio.currentTime + 0.1;
-    musikJadwal();
-  } else {
-    if (musikGain) musikGain.gain.setTargetAtTime(0.0001, audio.currentTime, 0.15);
-    clearTimeout(musikTimer);
-    if (musikKresek) { musikKresek.stop(); musikKresek = null; }
+function musikNyalakan() {
+  pastikanAudio();
+  if (!musikGain) {
+    musikGain = audio.createGain();
+    musikGain.gain.value = 0;
+    musikGain.connect(busMusik);
   }
-};
+  musikGain.gain.setTargetAtTime(1, audio.currentTime, 0.5);
+  if (!musikKresek) musikMulaiKresek();
+  musikLangkah = 0; musikBirama = 0; musikBerikut = audio.currentTime + 0.1;
+  musikJadwal();
+}
+function musikMatikan() {
+  if (musikGain) musikGain.gain.setTargetAtTime(0.0001, audio.currentTime, 0.15);
+  clearTimeout(musikTimer);
+  if (musikKresek) { musikKresek.stop(); musikKresek = null; }
+}
+
+/* ---------- Indonesia Raya (lofi, terjadwal Selasa & Kamis jam 10) -------
+   Reff yang paling dihafal semua orang saja, ditranskrip dari ingatan (bukan
+   dari partitur resmi) sebagai tribute lofi — bukan rekaman acuan. Kalau ada
+   nada yang kedengaran meleset, tinggal ubah RAYA_MELODI di bawah.
+   Sengaja tanpa beat/drum seperti musik lofi kantor di atas: lagu kebangsaan
+   dibiarkan cuma pad + melodi + desis vinyl, biar tidak terdengar main-main. */
+const RAYA_SEMITON = [0, 2, 4, 5, 7, 9, 11];   // do re mi fa sol la ti (tangga mayor)
+
+// deg 1..7 = satu oktaf; 8..14 = oktaf berikutnya (do' seperti notasi angka); 0 = diam
+function rayaFreq(deg) {
+  if (!deg) return 0;
+  const oktaf = Math.floor((deg - 1) / 7);
+  const semiton = RAYA_SEMITON[(deg - 1) % 7] + oktaf * 12;
+  return 392.00 * Math.pow(2, semiton / 12);   // do = G4
+}
+function rayaAkor(root, dasarHz) {
+  const f0 = dasarHz * Math.pow(2, RAYA_SEMITON[(root - 1) % 7] / 12);
+  return [f0, f0 * Math.pow(2, 4 / 12), f0 * Math.pow(2, 7 / 12)];   // triad mayor
+}
+const RAYA_G = rayaAkor(1, 196.00), RAYA_C = rayaAkor(4, 196.00), RAYA_D = rayaAkor(5, 196.00);
+
+// [derajat, durasi dalam ketuk] -- "Indonesia Raya, merdeka merdeka, tanahku
+// negeriku yang kucinta, Indonesia Raya merdeka merdeka, hiduplah Indonesia Raya"
+const RAYA_MELODI = [
+  [5, 1], [5, 0.5], [5, 0.5], [8, 1], [0, 0.5], [7, 0.5], [6, 1],
+  [5, 1], [5, 1], [6, 0.5], [5, 0.5], [3, 2],
+  [3, 0.5], [3, 0.5], [4, 0.5], [5, 1.5], [3, 0.5], [1, 0.5],
+  [2, 0.5], [3, 0.5], [4, 0.5], [5, 2],
+  [5, 1], [5, 0.5], [5, 0.5], [8, 1], [0, 0.5], [7, 0.5], [6, 1],
+  [5, 1], [5, 1], [6, 0.5], [5, 0.5], [3, 2],
+  [4, 0.5], [5, 0.5], [6, 1], [5, 0.5], [4, 0.5], [3, 1], [2, 1], [1, 3],
+];
+
+function rayaPad(t, freqs, durasi, tujuan) {
+  freqs.forEach((f) => {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    o.detune.value = Math.random() * 8 - 4;
+    const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05, t + durasi * 0.2);
+    g.gain.linearRampToValueAtTime(0.0001, t + durasi);
+    o.connect(lp); lp.connect(g); g.connect(tujuan);
+    o.start(t); o.stop(t + durasi + 0.05);
+  });
+}
+
+// Vibrato kecil + serangan/luruh lembut supaya kedengaran "dinyanyikan",
+// bukan sekadar nada sintesis lurus.
+function rayaLead(t, freq, durasi, tujuan) {
+  if (!freq) return;
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  const vib = audio.createOscillator(), vibGain = audio.createGain();
+  vib.frequency.value = 5; vibGain.gain.value = freq * 0.006;
+  vib.connect(vibGain); vibGain.connect(o.frequency);
+  vib.start(t); vib.stop(t + durasi + 0.05);
+  const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200;
+  const susut = Math.min(0.08, durasi * 0.25);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.11, t + 0.04);
+  g.gain.setValueAtTime(0.11, t + Math.max(0.04, durasi - susut));
+  g.gain.linearRampToValueAtTime(0.0001, t + durasi);
+  o.connect(lp); lp.connect(g); g.connect(tujuan);
+  o.start(t); o.stop(t + durasi + 0.05);
+}
+
+function rayaKresek(durasi, tujuan) {
+  const len = Math.ceil(audio.sampleRate * durasi);
+  const buf = audio.createBuffer(1, len, audio.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    d[i] = Math.random() < 0.0015 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.1;
+  }
+  const src = audio.createBufferSource(); src.buffer = buf;
+  const hp = audio.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
+  const g = audio.createGain(); g.gain.value = 0.018;
+  src.connect(hp); hp.connect(g); g.connect(tujuan);
+  src.start();
+}
+
+let rayaSedangMain = false;
+
+// Dipanggil dari jadwal Selasa/Kamis di bawah, atau lewat konsol (`mainkanIndonesiaRaya()`)
+// untuk uji coba. Sama seperti tombol musik/notifikasi: butuh AudioContext yang
+// sudah pernah dibuka lewat klik pengguna sesi ini, kalau tidak browser membisukannya.
+function mainkanIndonesiaRaya() {
+  if (rayaSedangMain) return;
+  pastikanAudio();
+  if (audio.state === 'suspended') audio.resume().catch(() => {});
+  rayaSedangMain = true;
+
+  const gain = audio.createGain();
+  gain.gain.value = 0;
+  gain.connect(busMusik);
+
+  const BEAT = 60 / 76;   // tempo sama seperti musik lofi kantor, biar senada
+  const t0 = audio.currentTime + 0.15;
+  const totalBeat = RAYA_MELODI.reduce((s, [, d]) => s + d, 0);
+  const totalDur = totalBeat * BEAT;
+
+  gain.gain.linearRampToValueAtTime(0.55, t0 + 0.8);
+  gain.gain.setValueAtTime(0.55, t0 + totalDur - 0.8);
+  gain.gain.linearRampToValueAtTime(0.0001, t0 + totalDur + 1.2);
+
+  const akor = [RAYA_G, RAYA_C, RAYA_D, RAYA_G];
+  const perAkor = totalDur / akor.length;
+  akor.forEach((k, i) => rayaPad(t0 + i * perAkor, k, perAkor * 1.1, gain));
+
+  rayaKresek(totalDur + 1, gain);
+
+  let t = t0;
+  for (const [deg, dur] of RAYA_MELODI) {
+    const durSec = dur * BEAT;
+    rayaLead(t, rayaFreq(deg), durSec * 0.92, gain);
+    t += durSec;
+  }
+
+  setTimeout(() => { rayaSedangMain = false; }, (totalDur + 2.5) * 1000);
+}
+window.mainkanIndonesiaRaya = mainkanIndonesiaRaya;   // buat dites dari console
+
+// Dicek tiap 20 detik, bukan `ingatan` langsung waktu didefinisikan -- `ingatan`
+// baru didefinisikan lebih jauh di bawah, dan tanggal terakhir diputar dititip
+// di localStorage supaya tahan reload dan tidak diulang-ulang sepanjang jam 10.
+function cekJadwalRaya() {
+  const d = new Date();
+  const hari = d.getDay();   // 2 = Selasa, 4 = Kamis
+  if ((hari !== 2 && hari !== 4) || d.getHours() !== 10) return;
+  const tgl = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  if (ingatan.baca('rayaTerakhir', '') === tgl) return;
+  ingatan.tulis('rayaTerakhir', tgl);
+  mainkanIndonesiaRaya();
+}
+setTimeout(cekJadwalRaya, 0);
+setInterval(cekJadwalRaya, 20000);
 
 function blip(freq, dur) {
   if (!sound || !audio) return;
@@ -3173,7 +3410,7 @@ function blip(freq, dur) {
   o.frequency.value = freq;
   g.gain.value = 0.02;
   g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
-  o.connect(g); g.connect(audio.destination);
+  o.connect(g); g.connect(busEfek);
   o.start(); o.stop(audio.currentTime + dur);
 }
 
@@ -3193,7 +3430,7 @@ function aturSuaraHujan() {
     const lp = audio.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 850;
     const g = audio.createGain(); g.gain.value = 0;
-    src.connect(lp); lp.connect(g); g.connect(audio.destination);
+    src.connect(lp); lp.connect(g); g.connect(busEfek);
     src.start();
     hujanAudio = { g };
   }
@@ -3217,7 +3454,7 @@ function gemuruh(tundaMs) {
     const lp = audio.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 200;
     const g = audio.createGain(); g.gain.value = 0.18;
-    src.connect(lp); lp.connect(g); g.connect(audio.destination);
+    src.connect(lp); lp.connect(g); g.connect(busEfek);
     src.start();
   }, tundaMs || 0);
 }
@@ -3329,6 +3566,19 @@ function renderCrew() {
       bStop.onclick = () => hentikanTugas(a.id);
       row.appendChild(bStop);
     }
+    // Cuma masuk akal dihapus kalau lagi tidak dikerjakan dan tidak sedang
+    // menunggu keputusanmu — satu klik tidak boleh menghilangkan pekerjaan
+    // yang sebetulnya masih berjalan atau pertanyaan yang belum kamu jawab.
+    // Tidak menunggu kendali.izin: ini cuma melupakan tampilan, bukan perintah
+    // ke server, jadi berlaku juga untuk sesi terminal yang halaman ini tidak
+    // punya kendali untuk mematikannya.
+    if (a.state !== 'work' && !a.butuh) {
+      const bHapus = document.createElement('button');
+      bHapus.className = 'aksi'; bHapus.textContent = 'hapus';
+      bHapus.title = 'hapus dari daftar (cuma tampilan di halaman ini, bukan mematikan sesi)';
+      bHapus.onclick = () => hapusPegawai(a);
+      row.appendChild(bHapus);
+    }
     crewEl.appendChild(row);
   }
   for (const p of peserta) {
@@ -3336,8 +3586,13 @@ function renderCrew() {
     crewEl.appendChild(barisKru(p, 'crew-row sub', 'peserta', p.nama));
   }
   for (const b of standby) {
-    crewEl.appendChild(barisKru(b, 'crew-row standby', 'standby',
-      (STATIONS[b.station] || {}).name || ''));
+    const row = barisKru(b, 'crew-row standby', 'standby',
+      (STATIONS[b.station] || {}).name || '');
+    const bHapus = document.createElement('button');
+    bHapus.className = 'aksi'; bHapus.textContent = 'hapus'; bHapus.title = 'hapus dari daftar';
+    bHapus.onclick = () => hapusPegawai(b);
+    row.appendChild(bHapus);
+    crewEl.appendChild(row);
   }
   // Angka besar = sesi yang BENAR-BENAR jalan. Standby disebut terpisah supaya
   // ruangan yang ramai tidak dibaca sebagai banyak sesi.
@@ -3436,7 +3691,8 @@ function bukaKartu(a) {
   sel.onchange = () => gantiPeran(a, sel.value);
 
   const aksi = document.getElementById('kartuAksi');
-  if (jenisAgen(a) === 'sesi') {
+  const jenis = jenisAgen(a);
+  if (jenis === 'sesi') {
     const bNama = document.createElement('button');
     bNama.type = 'button';
     bNama.textContent = 'beri nama';
@@ -3449,6 +3705,16 @@ function bukaKartu(a) {
       bStop.onclick = () => hentikanTugas(a.id);
       aksi.appendChild(bStop);
     }
+  }
+  // Sama seperti di panel: standby selalu boleh dihapus, sesi nyata cuma
+  // kalau sedang idle dan tidak menunggu keputusanmu.
+  if (jenis === 'standby' || (jenis === 'sesi' && a.state !== 'work' && !a.butuh)) {
+    const bHapus = document.createElement('button');
+    bHapus.type = 'button';
+    bHapus.textContent = 'hapus dari daftar';
+    bHapus.title = jenis === 'sesi' ? 'cuma tampilan di halaman ini, bukan mematikan sesi' : '';
+    bHapus.onclick = () => hapusPegawai(a);
+    aksi.appendChild(bHapus);
   }
   perbaruiKartu();
   taruhKartu();
@@ -3730,6 +3996,7 @@ function handle(ev) {
        diam yang disimpan di orangnya; kartu yang membacanya kalau dibuka. */
     case 'token': {
       a.token = ev.token;
+      tambahTokenTotal(ev.session, ev.token);
       break;
     }
     /* Kalimat yang benar-benar dia tulis untuk kamu. Yang menutup giliran
@@ -3746,7 +4013,11 @@ function handle(ev) {
     case 'notify': {
       a.say('<b>!</b> ' + esc(ev.label || ''), 'say');
       pushLog(ev, 'mark', ['butuh perhatian', ev.label]);
-      if (ev.butuh) { nowDoing.textContent = 'menunggu jawaban kamu'; kabarMasuk(ev, a, 'tanya'); }
+      if (ev.butuh) {
+        nowDoing.textContent = 'menunggu jawaban kamu';
+        kabarMasuk(ev, a, 'tanya');
+        if (notifOn) notifKonfirmasi();
+      }
       blip(880, 0.08);
       break;
     }
@@ -3759,6 +4030,7 @@ function handle(ev) {
       kabarMasuk(ev, a, 'izin');
       nowDoing.textContent = 'menunggu izin kamu';
       blip(880, 0.08);
+      if (notifOn) notifKonfirmasi();
       break;
     }
     case 'izin-tolak': {
@@ -3820,7 +4092,7 @@ function handle(ev) {
     case 'tugas-selesai': {
       // Disimpan di orangnya, bukan cuma lewat di log: kartu yang dibuka
       // belakangan harus tetap bisa menjawab "sesi ini habis berapa".
-      if (ev.biaya) a.biaya = ev.biaya;
+      if (ev.biaya) { a.biaya = ev.biaya; tambahBiayaTotal(ev.biaya); }
       const ket = ev.biaya ? (ev.label || '') + ' · ' + formatBiaya(ev.biaya) : (ev.label || '');
       pushLog(ev, ev.ok ? 'mark' : 'err', [ev.ok ? 'tugas selesai' : 'tugas gagal', ket]);
       if (!ev.ok) nowDoing.textContent = 'tugas gagal — cek panel';
@@ -3866,18 +4138,10 @@ async function muatKendali() {
       namaPanggilan.set(j.sesi, j.nama);
       if (j.peran) peranAwal.set(j.sesi, j.peran);
     }
-    if (d.izin && d.siap) {
-      elKendaliMati.hidden = true;
-      elForm.hidden = false;
-      elCwd.value = d.cwdBawaan || '';
-      statusKredensial(d);
-    } else {
-      elKendaliMati.innerHTML = d.izin
-        ? 'Kendali web nyala, tapi ' + esc(d.alasan)
-        : 'Menugaskan pekerjaan &amp; menelusuri folder butuh kendali web. '
-          + 'Hentikan server lalu jalankan ulang dengan:'
-          + '<code>node agent-room/server.mjs --izinkan-perintah</code>';
-    }
+    // Fitur input tugas/prompt lewat web dimatikan — form maupun pesan
+    // statusnya sengaja tidak pernah ditampilkan, apa pun jawaban server.
+    elKendaliMati.hidden = true;
+    elForm.hidden = true;
   } catch (_) {
     elKendaliMati.textContent = 'server tidak menjawab';
   }
@@ -4286,7 +4550,6 @@ const kbr = {
   auto: document.getElementById('kabarAuto'),
   tombol: document.getElementById('kabarBtn'),
   lencana: document.getElementById('kabarLencana'),
-  pikirBtn: document.getElementById('pikirBtn'),
 };
 
 function kabarMasuk(ev, a, jenis) {
@@ -4398,22 +4661,171 @@ kbr.sebelum.onclick = () => kabarBuka(kabarIdx - 1);
 kbr.lanjut.onclick = () => kabarBuka(kabarIdx + 1);
 kbr.latar.onclick = (e) => { if (e.target === kbr.latar) kabarTutupDialog(); };
 kbr.auto.checked = kabarOtomatis;
-kbr.auto.onchange = () => {
-  kabarOtomatis = kbr.auto.checked;
-  ingatan.tulis('kabarOtomatis', kabarOtomatis ? '1' : '0');
-};
+kbr.auto.onchange = () => kabarOtomatisSet(kbr.auto.checked);
+// Checkbox kembarnya (panel Pengaturan, tombol ⚙️) dan balon pikiran
+// disambungkan di blok "pengaturan" lebih bawah, sesudah dlgStats — di situ
+// juga tempat elemen #setKabarOtomatis dan #setBalonPikir dibaca.
+kabarLencana();
 
-kbr.pikirBtn.classList.toggle('mati', !balonPikir);
-kbr.pikirBtn.title = balonPikir ? 'balon pikiran: nyala' : 'balon pikiran: mati';
-kbr.pikirBtn.onclick = () => {
-  balonPikir = !balonPikir;
+/* -------------------------------------------------------- statistik token */
+const dlgStats = document.getElementById('dlgStats');
+const statsBadan = document.getElementById('statsBadan');
+
+function statsGambar() {
+  const total = [
+    '<span class="kk">token</span><span class="vv">' + esc(formatToken(tokenTotal)) + '</span>',
+  ];
+  if (biayaCount) {
+    total.push('<span class="kk">biaya</span><span class="vv">'
+      + esc(formatBiaya({ usd: biayaTotal, resmi: false }))
+      + ' · ' + biayaCount + ' sesi headless</span>');
+  }
+  // Cuma sesi yang benar-benar sedang di ruangan yang dirinci — yang sudah
+  // pulang tetap ikut totalnya (lihat tambahTokenTotal), tapi barisnya tidak
+  // ada lagi orangnya untuk ditunjuk.
+  const aktif = [...agents.values()]
+    .filter((a) => a.token)
+    .sort((x, y) => (y.token.input + y.token.output) - (x.token.input + x.token.output));
+  const baris = aktif.length
+    ? aktif.map((a) => '<li><span class="t">' + esc(namaKru(a)) + '</span>'
+        + '<span>' + esc(formatToken(a.token))
+        + (a.biaya ? ' · ' + esc(formatBiaya(a.biaya)) : '') + '</span></li>').join('')
+    : '<li class="kosong">belum ada sesi aktif yang terpantau tokennya</li>';
+  statsBadan.innerHTML =
+    '<div class="kartu-info stat-total">' + total.join('') + '</div>'
+    + '<div class="stat-per"><h3>sesi aktif</h3><ul>' + baris + '</ul></div>';
+}
+
+function statsTutupDialog() {
+  dlgStats.hidden = true;
+  document.removeEventListener('keydown', statsTombol);
+}
+function statsTombol(e) { if (e.key === 'Escape') { e.preventDefault(); statsTutupDialog(); } }
+
+statsBtn.onclick = () => {
+  if (!dlgStats.hidden) { statsTutupDialog(); return; }
+  statsGambar();
+  dlgStats.hidden = false;
+  document.addEventListener('keydown', statsTombol);
+};
+document.getElementById('statsTutup').onclick = statsTutupDialog;
+dlgStats.onclick = (e) => { if (e.target === dlgStats) statsTutupDialog(); };
+
+/* ------------------------------------------------------------- pengaturan ---
+   Satu tombol ⚙️ menggantikan tombol-tombol toggle yang dulu berjejer di
+   bilah panggung (💭🔊🔔🎧) plus centang "buka sendiri" yang tadinya cuma
+   ada di kaki modal kabar — satu tempat, bukan disebar. Bagian "status
+   server" cuma ditampilkan, tidak bisa diubah dari sini: port/host/cuaca/isi
+   transkrip ditentukan sekali waktu server dinyalakan (lihat DESIGN.md §
+   Konfigurasi), jadi panel ini murni membaca `kendali` (dari /kendali) dan
+   `CUACA` yang sudah dimuat di tempat lain. */
+const dlgSetting = document.getElementById('dlgSetting');
+const settingBtn = document.getElementById('settingBtn');
+const settingInfo = document.getElementById('settingInfo');
+const setBalonPikir = document.getElementById('setBalonPikir');
+const setKabarOtomatis = document.getElementById('setKabarOtomatis');
+const setSuara = document.getElementById('setSuara');
+const setNotif = document.getElementById('setNotif');
+const setMusik = document.getElementById('setMusik');
+
+function balonPikirSet(v) {
+  balonPikir = v;
   ingatan.tulis('balonPikir', balonPikir ? '1' : '0');
-  kbr.pikirBtn.classList.toggle('mati', !balonPikir);
-  kbr.pikirBtn.title = balonPikir ? 'balon pikiran: nyala' : 'balon pikiran: mati';
+  setBalonPikir.checked = balonPikir;
   // yang terlanjur menggantung ikut dipadamkan saat itu juga
   if (!balonPikir) for (const a of penghuni()) { a.pikirUntil = 0; a.elPikir.style.display = 'none'; }
+}
+function kabarOtomatisSet(v) {
+  kabarOtomatis = v;
+  ingatan.tulis('kabarOtomatis', kabarOtomatis ? '1' : '0');
+  kbr.auto.checked = kabarOtomatis;
+  setKabarOtomatis.checked = kabarOtomatis;
+}
+setBalonPikir.checked = balonPikir;
+setBalonPikir.onchange = () => balonPikirSet(setBalonPikir.checked);
+setKabarOtomatis.checked = kabarOtomatis;
+setKabarOtomatis.onchange = () => kabarOtomatisSet(setKabarOtomatis.checked);
+
+// Tiga di bawah sengaja TIDAK diinisialisasi dari ingatan (localStorage) —
+// AudioContext baru boleh jalan sesudah klik pengguna, jadi menyalakan
+// otomatis dari setelan lama toh tidak akan kedengaran sampai ada klik lagi.
+setSuara.onchange = () => {
+  sound = setSuara.checked;
+  if (sound) pastikanAudio();
+  // derau hujan tidak boleh terus terdengar setelah dimatikan — redam cepat,
+  // jangan menunggu tick interval; unmute sebaliknya menyalakan lagi seketika
+  if (!sound && hujanAudio) hujanAudio.g.gain.setTargetAtTime(0.0001, audio.currentTime, 0.08);
+  if (sound) aturSuaraHujan();
 };
-kabarLencana();
+setNotif.onchange = () => {
+  notifOn = setNotif.checked;
+  if (notifOn) pastikanAudio();
+};
+setMusik.onchange = () => {
+  musikNyala = setMusik.checked;
+  if (musikNyala) musikNyalakan(); else musikMatikan();
+};
+
+/* Volume mixer per komponen — beda dari tiga checkbox di atas: angka 0..1 ini
+   BOLEH diingat lewat localStorage, karena cuma pengali relatif dan tidak
+   memaksa AudioContext menyala sendiri waktu halaman dibuka lagi (itu tetap
+   menunggu klik kamu di salah satu checkbox). Satu fungsi dipakai tiga kali
+   supaya baca-dari-ingatan/tulis-ke-ingatan/label persen-nya tidak bisa lupa
+   disamakan antar komponen. */
+function volumeBaris(komponen, kunci, elInput, elNilai, dapatBus) {
+  const terapkan = (v) => {
+    VOL[komponen] = v = Math.max(0, Math.min(1, v || 0));
+    const bus = dapatBus();
+    if (bus) bus.gain.setTargetAtTime(v, audio.currentTime, 0.05);
+    elInput.value = v;
+    elNilai.textContent = Math.round(v * 100) + '%';
+  };
+  terapkan(parseFloat(ingatan.baca(kunci, '1')));
+  elInput.oninput = () => { terapkan(parseFloat(elInput.value)); ingatan.tulis(kunci, String(VOL[komponen])); };
+}
+volumeBaris('efek', 'volEfek', document.getElementById('volEfek'),
+  document.getElementById('volEfekNilai'), () => busEfek);
+volumeBaris('notif', 'volNotif', document.getElementById('volNotif'),
+  document.getElementById('volNotifNilai'), () => busNotif);
+volumeBaris('musik', 'volMusik', document.getElementById('volMusik'),
+  document.getElementById('volMusikNilai'), () => busMusik);
+
+function settingGambarInfo() {
+  const baris = [
+    '<span class="kk">kendali web</span><span class="vv">'
+      + (kendali.izin ? (kendali.siap ? 'nyala' : 'nyala, biner claude belum ketemu') : 'mati')
+      + '</span>',
+    '<span class="kk">cuaca</span><span class="vv">' + esc(
+      CUACA.sumber.startsWith('cuaca') ? 'nyata' + (CUACA.sumber.length > 5 ? ' (' + CUACA.sumber.slice(6) + ')' : '')
+      : CUACA.sumber === 'paksa' ? 'dipaksa lewat URL'
+      : CUACA.sumber === 'sesekali' ? 'tebakan (cek cuaca gagal/mati)'
+      : 'menunggu') + '</span>',
+  ];
+  if ('isiAktif' in kendali) {
+    baris.push('<span class="kk">isi transkrip</span><span class="vv">'
+      + (kendali.isiAktif ? 'nyala' : 'mati (AGENT_ROOM_ISI=off)') + '</span>');
+  }
+  if (kendali.host && kendali.port) {
+    baris.push('<span class="kk">alamat</span><span class="vv"><code>'
+      + esc(kendali.host) + ':' + esc(String(kendali.port)) + '</code></span>');
+  }
+  settingInfo.innerHTML = baris.join('');
+}
+
+function settingTutupDialog() {
+  dlgSetting.hidden = true;
+  document.removeEventListener('keydown', settingTombol);
+}
+function settingTombol(e) { if (e.key === 'Escape') { e.preventDefault(); settingTutupDialog(); } }
+
+settingBtn.onclick = () => {
+  if (!dlgSetting.hidden) { settingTutupDialog(); return; }
+  settingGambarInfo();
+  dlgSetting.hidden = false;
+  document.addEventListener('keydown', settingTombol);
+};
+document.getElementById('settingTutup').onclick = settingTutupDialog;
+dlgSetting.onclick = (e) => { if (e.target === dlgSetting) settingTutupDialog(); };
 
 /* ------------------------------------------------------------------ stream */
 const params = new URLSearchParams(location.search);
