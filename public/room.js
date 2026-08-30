@@ -572,16 +572,16 @@ function drawWall() {
     ctx.globalAlpha = 1;
   }
 
-  // spanduk merah-putih
-  r(18, 7, 134, 15, P.red);
-  r(18, 7, 134, 2, '#f0ede2');
-  r(18, 20, 134, 2, '#f0ede2');
+  // papan nama dinas, biru navy — pelat resmi, bukan spanduk kain
+  r(18, 7, 134, 15, '#1c4e8a');
+  r(18, 7, 134, 2, '#4a7fc0');
+  r(18, 20, 134, 2, sh('#1c4e8a', 0.7));
   ctx.fillStyle = '#fdf6ec';
   ctx.font = '7px "Courier New", monospace';
   ctx.textBaseline = 'middle';
   // Huruf yang lepas (huruf-spanduk-lepas) dihapus permanen, satu per satu,
   // dan ditempel ulang 1px lebih tinggi & tetap miring — spanduknya menua.
-  const teksSpanduk = 'MELAYANI SEPENUH HATI';
+  const teksSpanduk = 'DINAS AI KLOD';
   if (!RUANGAN.spanduk) {
     ctx.fillText(teksSpanduk, 24, 15);
   } else {
@@ -836,10 +836,16 @@ function drawFiling(active) {
       r(x + 1, dy + 12, w - 2, RUANGAN.laciCelah, sh(P.metal, 1.2));
     }
   }
-  // bagan STRUKTUR ORGANISASI
-  r(104, 20, 56, 38, '#6d5535');
-  r(106, 22, 52, 34, P.paper);
-  r(108, 24, 48, 4, '#3565b0');
+  // bagan STRUKTUR ORGANISASI — bingkai+kertas ditinggikan 4px di dasar
+  // (bukan di atas: atasnya sudah nempel papan nama) supaya kotak tambahan
+  // RUANGAN.baganKotak muat penuh, sekalian memberi ruang judul di header.
+  r(104, 20, 56, 42, '#6d5535');
+  r(106, 22, 52, 38, P.paper);
+  r(108, 24, 48, 7, '#3565b0');
+  ctx.fillStyle = '#eaf1fb';
+  ctx.font = '5px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('STRUKTUR ORG.', 110, 28);
   const bx = (cx, cy) => { r(cx, cy, 9, 5, '#cfe0f2'); r(cx, cy, 9, 1, '#8ba8c8'); };
   bx(127, 31);
   r(131, 36, 1, 3, '#8b98a6');
@@ -1422,9 +1428,12 @@ function drawTunggu(active) {
   for (let g = 0; g < Math.min(6, RUANGAN.gelasDispenser); g++) {
     r(bx + 78, by - 4 - g * 2, 4, 3, g % 2 ? '#f2f0e6' : '#e4e0d2');
   }
-  // tong sampah hijau
-  r(bx + 106, by + 6, 9, 10, '#2c5c38');
-  r(bx + 105, by + 4, 11, 2, '#3e6b4f');
+  // tong sampah biru + goresan panah daur ulang (dulu hijau polos)
+  r(bx + 106, by + 6, 9, 10, '#2a4f8a');
+  r(bx + 105, by + 4, 11, 2, '#3f74c4');
+  r(bx + 109, by + 9, 1, 2, '#eef2f6');
+  r(bx + 110, by + 8, 2, 1, '#eef2f6');
+  r(bx + 108, by + 12, 3, 1, '#eef2f6');
   if (RUANGAN.tongPenuh > 0.05) {                          // isinya menyembul
     const n = Math.ceil(RUANGAN.tongPenuh * 5);
     for (let i = 0; i < n; i++) {
@@ -1502,6 +1511,14 @@ function drawMejaKerja() {
     }
     r(lx - 9, y + 7, 18, 2, '#b6bcc1');                   // badan keyboard
     r(lx - 10, y + 9, 20, 2, '#9aa1a6');
+
+    // lampu meja kecil, sudut kiri (x+0..x+4 — di luar nameplate/tumpukan
+    // berkas yang mulai x+6). Menyala kalau mejanya lagi dipakai, pakai
+    // ulang state `nyala` yang sudah dihitung di atas untuk layar laptop.
+    r(x, y - 7, 5, 3, '#2c3440');                         // kap
+    r(x + 2, y - 4, 1, 10, '#1d1712');                    // lengan
+    r(x + 1, y + 6, 4, 2, '#1d1712');                     // dudukan
+    if (nyala) { r(x + 1, y - 6, 3, 1, '#ffe9a0'); glow(x + 2, y - 6, 8, '#ffe9a0', 0.15); }
 
     // pot mini di celah kosong tengah meja (antara berkas dan laptop) — bagian
     // dari renovasi: dulu kosong melompong, sekarang mejanya kelihatan dirawat.
@@ -1589,13 +1606,21 @@ function drawRapat(active) {
     r(x + 2, R.yF + 4 + H, 5, 1, '#204a29');
   }
 
-  // papan nama meja di depan tiap kursi
+  // Layar mini di tepi belakang meja — dulu papan nama kosong, sekarang
+  // meniru baris monitor konsol data di gambar acuan. Footprint sama seperti
+  // papan nama lama; mic/gelas/botol/map di bawahnya tidak disentuh.
   for (let k = 0; k < KURSI_N; k++) {
     const nx = R.cx + slotKe(k);
-    r(nx - 7, R.yB + 6, 14, 5, '#fbf9f2');
-    r(nx - 7, R.yB + 6, 14, 1, '#ffffff');
-    r(nx - 7, R.yB + 11, 14, 1, '#b9b3a2');
-    r(nx - 5, R.yB + 8, 10, 1, '#5a6068');
+    r(nx - 7, R.yB + 5, 14, 8, '#20242c');
+    r(nx - 7, R.yB + 5, 14, 1, '#3a3f45');
+    r(nx - 6, R.yB + 6, 12, 6, active ? '#173a96' : '#141a20');
+    if (active) {
+      for (let p = 0; p < 3; p++) {
+        const hgt = 1 + Math.round(Math.abs(Math.sin(k * 1.7 + p * 1.3 + now / 900)) * 3);
+        r(nx - 5 + p * 4, R.yB + 12 - hgt, 2, hgt, ['#7ee787', '#4ec9b0', '#ffb454'][p]);
+      }
+    }
+    r(nx - 2, R.yB + 13, 4, 1, '#3a3f45');
   }
 
   const mic = (mx, my) => {
@@ -1812,6 +1837,44 @@ function drawXBanner() {
   r(x + 1, by, lebar, Math.round(8 * (1 - s * 0.5)), '#1c4e8a');
 }
 
+// Plakat nilai kerja — statis, tidak ada hook event. Diselipkan di celah
+// dinding kosong antara AC (berakhir ~x374) dan piagam/rambu larangan
+// merokok (mulai ~x418), jadi tidak butuh koordinat baru yang bentrok.
+function drawPlakatNilai() {
+  const x = 376, y = 6, w = 40, h = 30;
+  r(x, y, w, h, '#6d5535');
+  r(x + 2, y + 2, w - 4, h - 4, P.paper);
+  ctx.fillStyle = '#2c3440';
+  ctx.font = '5px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ['INOVASI', 'KOLABORASI', 'INTEGRITAS'].forEach((t, i) => {
+    r(x + 3, y + 10 + i * 7 - 1, 2, 2, P.gold);
+    ctx.fillText(t, x + 6, y + 11 + i * 7);
+  });
+}
+
+// Standee "VISI" — berdiri di celah lantai antara lemari arsip (berakhir
+// tepat x82) dan bagan/filing kabinet (mulai x104), gaya kaki-silang sama
+// seperti drawXBanner tapi statis (tidak ikut event zona-integritas itu).
+function drawVisi() {
+  const x = 84, y = 64, w = 22, h = 48;
+  ctx.strokeStyle = '#7c838a'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h); ctx.lineTo(x + w, y);
+  ctx.moveTo(x + w, y + h); ctx.lineTo(x, y);
+  ctx.stroke();
+  r(x + 1, y, w - 2, h, '#f0ede2');
+  r(x + 1, y, w - 2, 9, '#c9a03a');
+  ctx.fillStyle = '#3a2c05';
+  ctx.font = '6px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('VISI', x + 3, y + 5);
+  glow(x + w / 2, y + 17, 7, '#ffe9a0', 0.22);
+  r(x + w / 2 - 2, y + 15, 4, 4, '#e8d873');       // bohlam
+  r(x + w / 2 - 1, y + 19, 2, 2, '#8b98a6');        // dudukan bohlam
+  for (let l = 0; l < 4; l++) r(x + 3, y + 27 + l * 5, w - 6, 2, '#b9c0ca');   // baris teks abstrak
+}
+
 // props diurut belakang -> depan; sortY = garis kaki untuk depth sort
 const PROPS = [
   { sortY: 118, station: 'read',   draw: drawArsip },
@@ -1839,6 +1902,8 @@ const PROPS = [
   { sortY: 119, station: null,     draw: drawPropLantai },
   { sortY: 120, station: null,     draw: drawStiker },
   { sortY: 60,  station: null,     draw: drawCRT },
+  { sortY: 20,  station: null,     draw: drawPlakatNilai },
+  { sortY: 112, station: null,     draw: drawVisi },
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -4521,25 +4586,60 @@ function penggalPikir(teks) {
 const KABAR_MAX = 60;
 
 /* `auto` = boleh menyela. Cuma yang menutup giliran dan yang menahan sesinya
-   yang dapat hak itu; catatan di tengah jalan tidak. */
+   yang dapat hak itu; catatan di tengah jalan tidak.
+   `perihal` dan `sifat` dipakai kepala nota dinas di badan modal — bukan
+   `tajuk` (itu tetap yang dipakai lencana kecil di kepala modal, lebih
+   singkat buat sekali lirik). */
 const KABAR_JENIS = {
-  hasil:   { tajuk: 'hasil kerja',        cls: 'hasil',  auto: true },
-  lapor:   { tajuk: 'catatan',            cls: 'lapor',  auto: false },
-  tanya:   { tajuk: 'butuh jawaban',      cls: 'tunggu', auto: true },
-  izin:    { tajuk: 'minta izin',         cls: 'tunggu', auto: true },
-  rencana: { tajuk: 'mengajukan rencana', cls: 'tunggu', auto: true },
-  galat:   { tajuk: 'berhenti',           cls: 'galat',  auto: true },
+  hasil:   { tajuk: 'hasil kerja',        cls: 'hasil',  auto: true,
+             perihal: 'Laporan hasil pekerjaan',            sifat: 'BIASA'  },
+  lapor:   { tajuk: 'catatan',            cls: 'lapor',  auto: false,
+             perihal: 'Catatan pelaksanaan tugas',          sifat: 'BIASA'  },
+  tanya:   { tajuk: 'butuh jawaban',      cls: 'tunggu', auto: true,
+             perihal: 'Permohonan arahan',                  sifat: 'SEGERA' },
+  izin:    { tajuk: 'minta izin',         cls: 'tunggu', auto: true,
+             perihal: 'Permohonan izin',                    sifat: 'SEGERA' },
+  rencana: { tajuk: 'mengajukan rencana', cls: 'tunggu', auto: true,
+             perihal: 'Pengajuan rencana kerja',             sifat: 'SEGERA' },
+  galat:   { tajuk: 'berhenti',           cls: 'galat',  auto: true,
+             perihal: 'Laporan kendala pelaksanaan tugas',   sifat: 'PENTING' },
 };
+
+// Stempel di sudut kertas: satu kata per `cls`, warnanya dipakai ulang dari
+// lencana jenis yang sudah ada (hasil/tunggu/galat/dim) supaya kodenya cuma
+// satu tempat, bukan dua taksonomi warna yang bisa melenceng satu sama lain.
+const KABAR_STEMPEL = { hasil: 'SELESAI', lapor: 'DICATAT', tunggu: 'SEGERA', galat: 'TERHENTI' };
+
+const ROMAN_BULAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+// Format nomor surat dinas asli: urut/kode-jabatan/bulan-romawi/tahun.
+// Urutnya jalan terus (kabarSeq) walau kabar lama dibuang dari array (lihat
+// KABAR_MAX) -- nomor surat asli juga tidak mundur cuma karena arsipnya disortir.
+function nomorNota(k) {
+  const inisial = k.jab.split(/\s+/).map((w) => w[0]).join('').toUpperCase().slice(0, 4);
+  const d = new Date(k.ts);
+  return String(k.no).padStart(3, '0') + '/ND-' + inisial + '/'
+    + ROMAN_BULAN[d.getMonth()] + '/' + d.getFullYear();
+}
+const tanggalID = (ts) => new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+// Inisial 1-2 huruf buat avatar bulat di kepala modal -- nama panggilan bisa
+// "Budi Santoso" (dua suku kata) atau "agent-room·72db" (fallback proyek·id).
+function inisialNama(nama) {
+  const kata = String(nama).split(/[\s·]+/).filter(Boolean);
+  return kata.length > 1 ? (kata[0][0] + kata[1][0]).toUpperCase() : nama.slice(0, 2).toUpperCase();
+}
 
 const kabar = [];
 let kabarIdx = -1;
 let kabarBaru = 0;
+let kabarSeq = 0;
 let kabarOtomatis = ingatan.baca('kabarOtomatis', '1') !== '0';
 
 const kbr = {
   latar: document.getElementById('dlgKabar'),
-  chip: document.getElementById('kabarChip'),
+  avatar: document.getElementById('kabarAvatar'),
   judul: document.getElementById('kabarJudul'),
+  jab: document.getElementById('kabarJab'),
   jenis: document.getElementById('kabarJenis'),
   jam: document.getElementById('kabarJam'),
   badan: document.getElementById('kabarBadan'),
@@ -4556,12 +4656,13 @@ function kabarMasuk(ev, a, jenis) {
   const def = KABAR_JENIS[jenis] || KABAR_JENIS.lapor;
   const j = jabatanDari(a.peran);
   kabar.push({
+    no: ++kabarSeq,
     ts: ev.ts || Date.now(),
     sesi: ev.session || '',
     nama: namaKru(a),
     jab: j.singkat,
     warna: j.pal.main,
-    jenis, tajuk: def.tajuk, cls: def.cls,
+    jenis, tajuk: def.tajuk, cls: def.cls, perihal: def.perihal, sifat: def.sifat,
     teks: ev.teks || ev.alasan || ev.label || '',
     tanya: ev.tanya || null,
     tool: ev.tool || '',
@@ -4601,8 +4702,10 @@ function kabarTutupDialog() {
 function kabarGambar() {
   const k = kabar[kabarIdx];
   if (!k) return;
-  kbr.chip.style.background = k.warna;
+  kbr.avatar.style.background = k.warna;
+  kbr.avatar.textContent = inisialNama(k.nama);
   kbr.judul.textContent = k.nama;
+  kbr.jab.textContent = k.jab;
   kbr.jenis.textContent = k.tajuk;
   kbr.jenis.className = 'kbr-jenis ' + k.cls;
   kbr.jam.textContent = jam(k.ts);
@@ -4613,30 +4716,59 @@ function kabarGambar() {
   kbr.lanjut.disabled = kabarIdx >= kabar.length - 1;
 }
 
+// Badan modal dirender ala email yang meneruskan nota dinas: kertas krem
+// (kop + tabel Nomor/Sifat/Perihal/Kepada/Dari + isi + stempel sudut) duduk
+// di dalam badan modal yang gelap, sama seperti klien email menampilkan
+// lampiran dokumen resmi di tengah rangka UI-nya sendiri.
 function kabarIsi(k) {
-  const b = ['<div class="kbr-asal">' + esc(k.jab)
-    + (k.tool ? ' · ' + esc(k.tool) : '')
-    + (k.sesi ? ' · sesi <code>' + esc(k.sesi) + '</code>' : '') + '</div>'];
+  const isi = [];
   if (k.tanya && k.tanya.jenis === 'tanya') {
     for (const q of k.tanya.daftar || []) {
-      if (q.tanya) b.push('<p class="kbr-tanya">' + esc(q.tanya) + '</p>');
+      if (q.tanya) isi.push('<p class="kbr-tanya">' + esc(q.tanya) + '</p>');
       if (q.opsi && q.opsi.length) {
-        b.push('<ul class="kbr-opsi">' + q.opsi.map((o) => '<li>' + esc(o) + '</li>').join('') + '</ul>');
+        isi.push('<ol class="kbr-opsi">' + q.opsi.map((o) => '<li>' + esc(o) + '</li>').join('') + '</ol>');
       }
     }
   } else if (k.tanya && k.tanya.jenis === 'rencana') {
-    b.push('<div class="kbr-teks">' + esc(k.tanya.teks || k.teks) + '</div>');
+    isi.push('<div class="kbr-teks">' + esc(k.tanya.teks || k.teks) + '</div>');
   } else {
-    b.push('<div class="kbr-teks">' + esc(k.teks) + '</div>');
+    isi.push('<div class="kbr-teks">' + esc(k.teks) + '</div>');
   }
+
+  const field = (label, nilai) => nilai
+    ? '<dt>' + label + '</dt><dd>' + nilai + '</dd>' : '';
+
+  const kertas = '<div class="kbr-kertas">'
+    + '<div class="kbr-kop"><b>PEMERINTAH KANTOR DINAS</b><span>Sekretariat &amp; Tata Usaha</span></div>'
+    + '<h3 class="kbr-judulnota">NOTA DINAS</h3>'
+    + '<dl class="kbr-field">'
+      + field('Nomor', esc(nomorNota(k)))
+      + field('Sifat', '<span class="kbr-sifat ' + k.cls + '">' + esc(k.sifat) + '</span>')
+      + field('Perihal', '<b>' + esc(k.perihal) + '</b>')
+      + field('Tanggal', esc(tanggalID(k.ts)))
+      + field('Kepada', 'Yth. Pimpinan')
+      + field('Dari', esc(k.nama) + ', ' + esc(k.jab))
+    + '</dl>'
+    + '<div class="kbr-isi">' + isi.join('') + '</div>'
+    + '<div class="kbr-stempel ' + k.cls + '"><span>' + (KABAR_STEMPEL[k.cls] || 'DICATAT') + '</span></div>'
+  + '</div>';
+
+  const catatan = [];
   // Halaman ini menonton, tidak menjawab. Menyembunyikan itu bikin orang
   // menunggu tombol yang memang tidak akan pernah ada.
   if (k.cls === 'tunggu') {
-    b.push('<p class="kbr-nota">Sesinya berhenti di sini sampai dijawab, dan '
+    catatan.push('<p class="kbr-nota">Sesinya berhenti di sini sampai dijawab, dan '
       + 'jawabannya di tempat sesi itu jalan — terminal atau aplikasi Claude, '
       + 'bukan di halaman ini.</p>');
   }
-  return b.join('');
+  // Metadata teknis ditaruh DI LUAR kertas, seperti header mentah yang
+  // ditampilkan klien email terpisah dari isi pesannya sendiri.
+  const meta = [];
+  if (k.tool) meta.push('tool <code>' + esc(k.tool) + '</code>');
+  if (k.sesi) meta.push('sesi <code>' + esc(k.sesi) + '</code>');
+  if (meta.length) catatan.push('<p class="kbr-meta">' + meta.join(' · ') + '</p>');
+
+  return kertas + catatan.join('');
 }
 
 function kabarLencana() {
@@ -5058,7 +5190,7 @@ const RUANGAN = {
   gordenKanan: 6,          // lebar gorden kanan jendela, px; direset tiap pagi di tickRuangan
   sampahLantai: [],        // {x,y,jenis} daun/kertas kecil menetap di lantai, dipungut siapa saja
   kesetAda: false,         // keset baru terpasang di depan pintu kadis, permanen sekali sesi
-  spanduk: null,           // {huruf} indeks huruf yang lepas dari spanduk MELAYANI..., permanen
+  spanduk: null,           // {huruf} indeks huruf yang lepas dari papan nama DINAS AI KLOD, permanen
   geserKursi: [],          // offset px per slot kursi rapat (0..6), berdecit lalu diluruskan
   kursiBerderit: 0,        // penanda "sudah ada satu decitan" 20 detik terakhir (Date.now())
   kucingAda: false,        // entitas kucing kantor sedang di ruangan (event kucing-kantor)

@@ -5928,7 +5928,7 @@ daftarEvent(
   kelas: 'latar', bobot: B.jarang, cooldown: 3000, durasi: 4,
   syarat: () => !RUANGAN.spanduk,
   mulai() {
-    const teks = 'MELAYANI SEPENUH HATI';
+    const teks = 'DINAS AI KLOD';
     let idx = new Date().getHours() % teks.length;
     while (teks[idx] === ' ') idx = (idx + 1) % teks.length;
     RUANGAN.spanduk = { hilang: idx, tempel: -1 };
