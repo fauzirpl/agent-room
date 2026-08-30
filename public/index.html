@@ -54,27 +54,29 @@
         </div>
         <button type="submit" id="tugasKirim">Tugaskan</button>
         <div class="kendali-pesan" id="tugasPesan"></div>
-        <details class="kredensial">
-          <summary>token headless</summary>
-          <p class="kredensial-nota">
-            Dipakai sesi yang dilahirkan halaman ini, dan tidak pernah dikirim balik
-            ke halaman. Tanpa centang di bawah, tokennya cuma hidup di memori server
-            dan hilang saat server berhenti; dengan centang, ditulis apa adanya ke
-            berkas lokal — perlakukan berkas itu seperti kunci.
-          </p>
-          <input id="tokenNilai" type="password" autocomplete="off" spellcheck="false"
-                 placeholder="tempel token dari: claude setup-token">
-          <label class="kredensial-ingat">
-            <input type="checkbox" id="tokenIngat" checked>
-            ingat di berkas <code>.agent-room-token</code>
-          </label>
-          <div class="kredensial-aksi">
-            <button type="button" id="tokenSimpan">Simpan</button>
-            <button type="button" id="tokenHapus">Hapus</button>
-          </div>
-          <div class="kredensial-status" id="tokenStatus"></div>
-        </details>
       </form>
+      <!-- Independen dari formTugas: kelihatan begitu kendali web nyala di server,
+           walau fitur "tugaskan dari browser" di atas tetap sengaja disembunyikan. -->
+      <details class="kredensial" id="kredensialPanel" hidden>
+        <summary>token headless</summary>
+        <p class="kredensial-nota">
+          Dipakai sesi yang dilahirkan halaman ini, dan tidak pernah dikirim balik
+          ke halaman. Tanpa centang di bawah, tokennya cuma hidup di memori server
+          dan hilang saat server berhenti; dengan centang, ditulis apa adanya ke
+          berkas lokal — perlakukan berkas itu seperti kunci.
+        </p>
+        <input id="tokenNilai" type="password" autocomplete="off" spellcheck="false"
+               placeholder="tempel token dari: claude setup-token">
+        <label class="kredensial-ingat">
+          <input type="checkbox" id="tokenIngat" checked>
+          ingat di berkas <code>.agent-room-token</code>
+        </label>
+        <div class="kredensial-aksi">
+          <button type="button" id="tokenSimpan">Simpan</button>
+          <button type="button" id="tokenHapus">Hapus</button>
+        </div>
+        <div class="kredensial-status" id="tokenStatus"></div>
+      </details>
     </div>
     <div class="crew" id="crew"></div>
 
@@ -107,9 +109,12 @@
 </div>
 <div class="dlg-latar" id="dlgKabar" hidden>
   <div class="dlg kbr" role="dialog" aria-modal="true" aria-labelledby="kabarJudul">
-    <header class="dlg-kepala">
-      <span class="kbr-chip" id="kabarChip"></span>
-      <b id="kabarJudul">—</b>
+    <header class="dlg-kepala kbr-kepala">
+      <div class="kbr-avatar" id="kabarAvatar" aria-hidden="true"></div>
+      <div class="kbr-dari">
+        <b id="kabarJudul">—</b>
+        <span class="kbr-jab" id="kabarJab"></span>
+      </div>
       <span class="kbr-jenis" id="kabarJenis"></span>
       <span class="kbr-jam" id="kabarJam"></span>
       <button type="button" id="kabarTutup" title="tutup (Esc)">✕</button>

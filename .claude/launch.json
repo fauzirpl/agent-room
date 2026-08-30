@@ -4,6 +4,12 @@
     {
       "name": "agent-room",
       "url": "http://127.0.0.1:4517"
+    },
+    {
+      "name": "agent-room-kendali",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dinas.mjs", "--kendali", "--port", "4518"],
+      "port": 4518
     }
   ]
 }
