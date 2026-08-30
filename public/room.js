@@ -517,6 +517,7 @@ function drawClock(cx, cy) {
     // ruangan sepi: jarum detik MELOMPAT tiap detik, bukan meluncur mulus —
     // itu yang bikin satu-satunya benda bergerak di ruangan terasa berdetak
     sc = (d.getSeconds() + (MOD.jamDetak ? 0 : d.getMilliseconds() / 1000)) / 60;
+    if (MOD.jamOffset) { mn = (mn + MOD.jamOffset) % 1; hr = (hr + MOD.jamOffset / 12) % 1; }
   }
   const hand = (frac, len, col, wid) => {
     const a = frac * Math.PI * 2 - Math.PI / 2;
@@ -572,7 +573,19 @@ function drawWall() {
   ctx.fillStyle = '#fdf6ec';
   ctx.font = '7px "Courier New", monospace';
   ctx.textBaseline = 'middle';
-  ctx.fillText('MELAYANI SEPENUH HATI', 24, 15);
+  // Huruf yang lepas (huruf-spanduk-lepas) dihapus permanen, satu per satu,
+  // dan ditempel ulang 1px lebih tinggi & tetap miring — spanduknya menua.
+  const teksSpanduk = 'MELAYANI SEPENUH HATI';
+  if (!RUANGAN.spanduk) {
+    ctx.fillText(teksSpanduk, 24, 15);
+  } else {
+    const lebar = ctx.measureText('M').width;
+    for (let i = 0; i < teksSpanduk.length; i++) {
+      if (i === RUANGAN.spanduk.hilang) continue;
+      const naik = i === RUANGAN.spanduk.tempel ? 1 : 0;
+      ctx.fillText(teksSpanduk[i], 24 + i * lebar, 15 - naik);
+    }
+  }
 
   // Cat mengelupas di bidang dinding kosong antara jendela dan meja stempel.
   // Tidak pernah kembali rata sendiri — kantor ini tidak dicat tiap bulan.
@@ -620,6 +633,23 @@ function drawWall() {
   ctx.beginPath(); ctx.arc(430, 44, 5, 0, Math.PI * 2); ctx.stroke();
   r(427, 43, 6, 1, '#3a3f45');
   ctx.beginPath(); ctx.moveTo(427, 47); ctx.lineTo(433, 41); ctx.stroke();
+
+  // CCTV kubah pojok kiri-atas, sebelum spanduk mulai — LED merah tetap
+  // berkedip pelan di luar event, kerucut sapuannya cuma muncul saat event
+  r(4, 4, 10, 8, '#7c838a');
+  r(4, 4, 10, 2, '#9aa1a6');
+  r(7, 10, 4, 2, '#5a6068');
+  r(8, 11, 2, 1, Math.sin(now / 1000) > 0 ? P.red : '#5c2222');
+
+  // Piagam Zona Integritas — muncul sekali (penghargaan-zona-integritas),
+  // menetap permanen di celah dinding antara AC dan rambu larangan merokok
+  if (RUANGAN.piagamDinding) {
+    glow(423, 12, 20, P.gold, 0.06 + 0.03 * Math.sin(now / 500));
+    r(418, 8, 11, 8, '#8a6844');
+    r(419, 9, 9, 6, '#f0ede2');
+    r(420, 10, 7, 1, P.gold);
+    r(420, 13, 5, 1, '#9aa1a6');
+  }
 
   // lampu neon TL gantung
   NEON_X.forEach((cx, i) => {
@@ -725,8 +755,11 @@ function drawArsip(active) {
         bx += 6;
       }
     } else {
-      // tumpukan map + bundel arsip bertali
+      // tumpukan map + bundel arsip bertali. boksHilang: satu bundel dipinjam
+      // bidang lain, hilang dari rak sampai dikembalikan.
       for (let s = 0; s < 3; s++) {
+        const boksKe = row === 1 ? s : s + 3;
+        if (boksKe === RUANGAN.boksHilang) continue;
         const sx = x + 5 + s * 17;
         for (let l = 0; l < 6; l++) {
           r(sx + (l % 2), by - 3 - l * 2, 13, 2, l % 2 ? '#e4ddc8' : P.paper);
@@ -743,6 +776,28 @@ function drawArsip(active) {
   r(x + 6, y - 14, 18, 2, '#d9cba8');
   r(x + 10, y - 10, 10, 4, P.paper);
   r(x + 30, y - 9, 14, 7, '#b98d5e');
+  // Piala voli antar-OPD — muncul sekali (piala-voli-dipajang), permanen
+  if (RUANGAN.piala) {
+    glow(x + 49, y - 17, 7, '#d1a326', 0.2 + 0.06 * Math.sin(now / 420));
+    r(x + 47, y - 20, 4, 2, P.gold);
+    r(x + 46, y - 18, 6, 4, P.gold);
+    r(x + 48, y - 14, 2, 3, '#9a7a1a');
+    r(x + 46, y - 11, 6, 2, '#5f4530');
+  }
+  // Kepenuhan: rak ini terbuka (bukan lemari berpintu), jadi "tidak muat"
+  // digambar sebagai map yang menyembul miring dari tepi rak, bukan celah
+  // pintu yang tidak pernah ada.
+  if (RUANGAN.arsipPenuh) {
+    r(x + w - 6, y + 60, 3, 12, '#c98a5c');
+    r(x + w - 5, y + 58, 3, 12, '#e4ddc8');
+    for (let d = 0; d < RUANGAN.dusTambahanArsip; d++) {
+      const dx = x - 4 - d * 22, dy = y + h - 16;
+      r(dx, dy, 20, 16, '#a37b4e');
+      r(dx + 2, dy + 2, 16, 12, '#b98d5e');
+      r(dx + 8, dy + 2, 4, 12, '#d9cba8');
+    }
+    if (Math.random() < 0.04) spawn('dust', x + w - 6, y + 30);
+  }
   if (active) glow(x + w / 2, y + h - 24, 38, P.amber, 0.2);
 }
 
@@ -760,7 +815,7 @@ function drawFiling(active) {
     // laciKosong: tiga laci menganga sekaligus, semuanya kosong. Tiga laci
     // terbuka di satu kabinet adalah gambar keputusasaan yang bagus.
     const kosong = i < MOD.laciKosong;
-    const open = kosong || ((active || RUANGAN.laciBuka > 0) && i === 0);
+    const open = kosong || ((active || RUANGAN.laciBuka > 0) && i === 0) || i === RUANGAN.laciTerbuka;
     r(x + 3, dy, w - 6, 14, sh(P.metal, 1.12));
     r(x + 3, dy, w - 6, 1, P.metalL);
     r(x + w / 2 - 6, dy + 6, 12, 3, sh(P.metal, 0.8));     // handle
@@ -786,7 +841,34 @@ function drawFiling(active) {
   bx(110, 40); bx(127, 40); bx(144, 40);
   r(114, 45, 1, 3, '#8b98a6'); r(131, 45, 1, 3, '#8b98a6'); r(148, 45, 1, 3, '#8b98a6');
   bx(110, 48); bx(127, 48); bx(144, 48);
+  // Bagan diperbarui: satu kotak tambahan di baris paling bawah, jabatan baru
+  if (RUANGAN.baganKotak > 0) {
+    bx(118.5, 55); if (RUANGAN.baganKotak > 1) bx(135.5, 55);
+    r(114, 45, 1, 8, '#8b98a6');
+  }
   if (active) glow(x + w / 2, y + 20, 40, P.teal, 0.18);
+}
+
+// Monitor CRT tua di celah dinding antara filing dan jendela — dekorasi
+// permanen, biasanya diam; bar guling cuma jalan selama monitor-crt-bergaris.
+function drawCRT() {
+  const x = 160, y = 46, w = 16, h = 14;
+  r(x - 1, y - 1, w + 2, h + 2, '#3a3f45');
+  r(x, y, w, h, '#1d3a2a');
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  for (let i = 0; i < 7; i++) { ctx.globalAlpha = 0.12; r(x, y + i * 2, w, 1, '#0c1a12'); }
+  ctx.globalAlpha = 1;
+  if (MOD.crtAktif) {
+    const bar = (now / 8) % (h + 4) - 4;
+    ctx.globalAlpha = 0.18;
+    r(x, y + bar, w, 4, '#5fdc9a');
+    ctx.globalAlpha = 1;
+    if (Math.sin(now / 3000) > 0.92) ctx.translate(1, 0);   // lompat 1px tiap ~3s
+  }
+  ctx.restore();
+  r(x + w / 2 - 2, y + h, 4, 2, '#3a3f45');                // leher
+  r(x + w / 2 - 5, y + h + 2, 10, 2, '#2b2f34');           // dudukan
 }
 
 function drawWindow(active) {
@@ -910,16 +992,21 @@ function drawWindow(active) {
   r(x - 8, y - 8, w + 16, 6, '#3e6b4f');
   for (let i = 0; i < 9; i++) r(x - 8 + i * 8, y - 3, 4, 3, '#3e6b4f');
   r(x - 8, y - 3, w + 16, 1, P.gold);
-  for (const gx of [x - 8, x + w + 2]) {
-    r(gx, y - 2, 6, h + 6, '#3e6b4f');
+  // gorden kanan bisa ditarik lebih lebar (silau sore, matahari kena rak
+  // server) — lebarnya persisten di RUANGAN, kiri selalu 6
+  for (const [gx, lebar] of [[x - 8, 6], [x + w + 2, RUANGAN.gordenKanan]]) {
+    r(gx, y - 2, lebar, h + 6, '#3e6b4f');
     r(gx + 1, y - 2, 1, h + 6, '#5f9068');
-    r(gx + 4, y - 2, 1, h + 6, '#2c4e38');
-    r(gx, y + 26, 6, 3, P.gold);                           // ikat gorden
+    r(gx + lebar - 2, y - 2, 1, h + 6, '#2c4e38');
+    r(gx, y + 26, lebar, 3, P.gold);                       // ikat gorden
   }
   // meja kecil + printer
   r(198, 96, 30, 4, P.wood);
   r(200, 100, 3, 16, P.woodD);
   r(223, 100, 3, 16, P.woodD);
+  // stapler kosong — prop kecil permanen di ujung kiri meja printer
+  r(199, 91, 5, 3, '#3a3f45');
+  r(200, 90, 3, 1, '#5a6068');
   r(202, 84, 22, 12 - (MOD.printerMacet ? 3 : 0), '#ddd6c1');
   if (MOD.printerMacet) r(202, 78, 22, 3, '#ddd6c1');      // penutup terangkat
   r(204, 82, 16, 3, P.paper);
@@ -948,7 +1035,8 @@ function drawStempel(active) {
   // "roboh" tinggal mengubah jumlahnya, dan pembalikannya langsung terbaca
   // sebagai "dibereskan" tanpa gambar prop baru
   for (let l = 0; l < RUANGAN.tumpukanStempel; l++) {
-    r(x + 2 + (l % 3), y + 20 - l * 2, 13, 2, l % 2 ? '#e4ddc8' : P.paper);
+    // rapi = tepinya lurus (offset 0); berantakan = zig-zag l%3 seperti biasa
+    r(x + 2 + (RUANGAN.stempelRapi ? 0 : l % 3), y + 20 - l * 2, 13, 2, l % 2 ? '#e4ddc8' : P.paper);
   }
   r(x + 3, y + 1, 13, 2, '#e8a0a8');                       // map disposisi pink
   // Surat masuk yang diantar caraka menumpuk di sini sampai ada yang memakai
@@ -1121,14 +1209,26 @@ function drawServer(active) {
 function drawKadis(active) {
   active = active || MOD.pintuKadis;      // event bisa membuka pintunya sendiri
   const x = 440, y = 28, w = 34, h = 82;
-  // papan nama biru
-  r(x + 2, y - 20, 30, 14, '#1c4e8a');
-  r(x + 2, y - 20, 30, 1, '#4a7fc0');
-  ctx.fillStyle = '#f4f6fa';
-  ctx.font = '5px "Courier New", monospace';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('KEPALA', x + 7, y - 15);
-  ctx.fillText('DINAS', x + 9, y - 9);
+  if (RUANGAN.plangBaru) {
+    // plang kayu baru, lis emas — dan yang lama tersandar di dinding sebelah
+    // SELAMANYA, khas kantor yang tidak tega membuang barang lama
+    r(x + 1, y - 21, 32, 16, '#5f4530');
+    r(x + 1, y - 21, 32, 1, '#8a6844');
+    r(x + 3, y - 19, 28, 12, '#e9e2cb');
+    r(x + 1, y - 21, 32, 2, P.gold); r(x + 1, y - 6, 32, 1, P.gold);
+    r(x + 5, y - 16, 22, 1, '#3a3f45'); r(x + 5, y - 11, 16, 1, '#3a3f45');
+    r(x - 6, y + 8, 4, 14, '#1c4e8a');            // papan lama tersandar
+    r(x - 6, y + 8, 4, 1, '#4a7fc0');
+  } else {
+    // papan nama biru
+    r(x + 2, y - 20, 30, 14, '#1c4e8a');
+    r(x + 2, y - 20, 30, 1, '#4a7fc0');
+    ctx.fillStyle = '#f4f6fa';
+    ctx.font = '5px "Courier New", monospace';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('KEPALA', x + 7, y - 15);
+    ctx.fillText('DINAS', x + 9, y - 9);
+  }
   // kusen + daun pintu
   r(x, y, w, h, '#4a3626');
   r(x + 3, y + 4, w - 6, h - 4, '#7a5638');
@@ -1147,6 +1247,14 @@ function drawKadis(active) {
     r(x + 24, y + 46, 3, 3, P.gold);                       // gagang
   }
   r(x + 3, y + h - 6, w - 6, 4, '#9aa1a6');                // plat tendang
+  // keset baru — muncul sekali (keset-baru-dipasang), lalu menetap sepanjang
+  // sesi persis di ambang pintu, di atas plat tendang
+  if (RUANGAN.kesetAda) {
+    r(x - 3, y + h, w + 6, 7, '#3f4a3a');
+    r(x - 3, y + h, w + 6, 1, '#5a6a4a');
+    r(x - 3, y + h, 1, 7, '#7a2020'); r(x + w + 2, y + h, 1, 7, '#7a2020');
+    for (let i = 0; i < 6; i++) r(x - 1 + i * 6, y + h + 3, 4, 1, sh('#3f4a3a', 0.85));
+  }
   if (active) glow(x + w / 2, y + 50, 36, '#ffd88a', 0.2);
 }
 
@@ -1184,6 +1292,105 @@ function drawKabelLantai() {
   for (let i = 0; i < n; i++) {
     const t = i / 7, x = 322 + t * 30, y = 250 + Math.sin(t * Math.PI) * 6;
     r(x - 3, y - 1, 6, 3, i % 2 ? '#e8c33a' : '#20242c');
+  }
+}
+
+/* Mesin absen sidik jari — fixture permanen di dinding kanan dekat pintu
+   kadis, dipakai dua event berbeda (absensi-ngambek, absen-fingerprint) yang
+   TIDAK BOLEH masing-masing menggambar mesinnya sendiri: perangkat ini cuma
+   ada satu di kantor mana pun. y=100 (bukan 76 dari catatan aslinya) supaya
+   terjangkau dari LANE_UP tempat kepala pegawai berada (~y140). */
+function drawAbsensi() {
+  const x = 424, y = 100;
+  r(x, y, 9, 13, '#dfe2e6');
+  r(x, y, 9, 1, '#f2f4f6');
+  r(x + 2, y + 3, 5, 3, '#141a20');
+  const merah = RUANGAN.absensiMerah;
+  const hijau = Math.sin(now / 500) > 0 ? '#57d06a' : '#3e9450';   // berkedip pelan, menganggur
+  r(x + 3, y + 4, 3, 1, merah ? '#e8453f' : hijau);
+  r(x + 2, y + 7, 5, 4, merah ? '#e8a0a0' : '#5fb56a');    // bantalan jempol
+}
+
+/* Surat edaran ditempel — dinding kiri jauh, di atas lemari arsip, area yang
+   genuinely kosong (arsip sendiri baru mulai y30). Menetap sampai edaran
+   berikutnya menggantinya; permanen, jadi harus jadi prop sungguhan bukan
+   milik satu event. */
+function drawEdaran() {
+  RUANGAN.edaran.forEach((e, i) => {
+    const x = 4 + i * 3, y = 10;
+    ctx.globalAlpha = e.kusam ? 0.6 : 1;
+    r(x + (e.miring ? 1 : 0), y, 9, 11, P.paper);
+    r(x + (e.miring ? 1 : 0), y, 9, 2, P.red);
+    for (let l = 0; l < 3; l++) r(x + 2 + (e.miring ? 1 : 0), y + 4 + l * 2, 5, 1, '#b9c0ca');
+    ctx.globalAlpha = 1;
+  });
+}
+
+/* Buku tamu di ruang tunggu, terpisah dari cluster dispenser (bx=244) supaya
+   tidak menembus slot idle mana pun. */
+function drawBukuTamu() {
+  const x = 196, y = 294;
+  r(x, y, 14, 3, P.wood);
+  r(x + 2, y - 10, 4, 10, P.woodD); r(x + 10, y - 10, 4, 10, P.woodD);
+  r(x + 1, y - 1, 10, 5, '#f4f2ea');
+  r(x + 6, y - 1, 1, 5, '#c9c2ae');
+  for (let l = 0; l < Math.min(6, RUANGAN.bukuTamuBaris); l++) {
+    r(x + 2 + (l % 2) * 5, y + (l % 3), 3, 1, '#3a4658');
+  }
+}
+
+/* Papan nomor antrean loket — dinding di atas ruang tunggu, cukup jauh dari
+   APAR (330,94..118) dan dispenser (bx=244). */
+function drawNomorAntre() {
+  const x = 210, y = 30;
+  r(x, y, 16, 10, '#3a3f45');
+  r(x + 1, y + 1, 14, 8, '#141a20');
+  const digit = (dx, n) => {
+    // digit dari rect 1 px, bukan fillText — huruf 5px lumer jadi noda
+    const pola = {
+      0: [1, 1, 1, 1, 0, 1, 1, 1, 1], 1: [0, 1, 0, 0, 1, 0, 0, 1, 0],
+      2: [1, 1, 1, 0, 1, 1, 1, 0, 1], 3: [1, 1, 1, 0, 1, 1, 1, 1, 1],
+      4: [1, 0, 1, 1, 1, 1, 0, 0, 1], 5: [1, 1, 1, 1, 1, 0, 1, 1, 1],
+      6: [1, 1, 1, 1, 1, 0, 1, 1, 1], 7: [1, 1, 1, 0, 0, 1, 0, 0, 1],
+      8: [1, 1, 1, 1, 1, 1, 1, 1, 1], 9: [1, 1, 1, 1, 1, 1, 1, 1, 1],
+    }[n] || [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    pola.forEach((on, i) => { if (on) r(dx + (i % 3), y + 2 + ((i / 3) | 0) * 2, 1, 1, '#e8453f'); });
+  };
+  const s = String(Math.max(0, Math.min(99, RUANGAN.antre))).padStart(2, '0');
+  digit(x + 3, +s[0]); digit(x + 9, +s[1]);
+}
+
+/* Benda kecil yang menetap di lantai sampai ada yang memungutnya — map yang
+   ditolak kadis, map yang dititipkan menunggu paraf. Satu array generik,
+   bukan satu field per event, supaya event baru tidak perlu prop baru. */
+function drawPropLantai() {
+  for (const p of RUANGAN.propLantai) {
+    if (p.jenis === 'map-merah') {
+      r(p.x, p.y, 12, 5, '#c9a03a');
+      ctx.save(); ctx.translate(p.x + 9, p.y + 1); ctx.rotate(0.14);
+      r(-3, -1.5, 6, 3, '#c22b2b'); ctx.restore();
+    } else if (p.jenis === 'map-menunggu') {
+      r(p.x, p.y, 12, 5, '#e8a0a8');
+    } else if (p.jenis === 'daun') {
+      r(p.x, p.y, 2, 2, '#4f8a56');
+    } else if (p.jenis === 'kertas-bekas') {
+      r(p.x, p.y, 4, 3, '#e4ddc8');
+    }
+  }
+}
+
+// Stiker inventaris — satu titik per perabot, digambar dari SATU fungsi
+// supaya tujuh fungsi gambar perabot yang sudah ada tidak perlu disentuh.
+const STIKER_TITIK = {
+  arsip: [30, 114], filing: [110, 114], stempel: [258, 114],
+  server: [368, 114], kipas: [392, 288], tunggu: [246, 296], dus: [442, 226],
+};
+function drawStiker() {
+  for (const nama of RUANGAN.stikerTertempel) {
+    const t = STIKER_TITIK[nama];
+    if (!t) continue;
+    r(t[0], t[1], 4, 3, '#e8d873');
+    r(t[0], t[1] + 1, 3, 1, '#2c3038'); r(t[0], t[1] + 2, 2, 1, '#2c3038');
   }
 }
 
@@ -1234,7 +1441,8 @@ function drawMejaKerja() {
     const goyang = MOD.mejaGetar === i && terpakai.has(i) && Math.sin(now / 70) > 0 ? 1 : 0;
     const cx = cx0;
     const x = cx - 32, y = 306 + goyang, w = 64;
-    const nyala = terpakai.has(i) && MOD.mejaPadam !== i;
+    const nyala = (terpakai.has(i) || MOD.mejaHantu === i) && MOD.mejaPadam !== i;
+    const terkunci = MOD.slotTerkunci === i;
 
     r(x, y + 8, w, 6, P.wood);                            // papan meja
     r(x, y + 8, w, 2, sh(P.wood, 1.25));
@@ -1248,10 +1456,14 @@ function drawMejaKerja() {
     r(lx - 8, ly, 16, 14, '#9aa1a6');                     // punggung tutup layar
     r(lx - 8, ly, 16, 1, '#c2c8cd');
     // MOD.layarPucat menidurkan layar, MOD.layar melambatkan barisnya,
-    // MOD.layarPutih memutihkannya sekejap (kedip serempak / restart)
-    const napas = MOD.layarPucat ? 0.45 + 0.25 * Math.sin(now / 900 + i) : 1;
-    r(lx - 7, ly + 1, 14, 11, nyala ? lerpHex('#173a96', '#121a2c', MOD.layarPucat) : '#20242c');
-    if (nyala && MOD.layarPucat < 0.95) {
+    // MOD.layarPutih memutihkannya sekejap (kedip serempak / restart),
+    // MOD.sidak memaksa terang penuh (kadis lewat: semua kelihatan rajin)
+    const napas = MOD.sidak ? 1 : (MOD.layarPucat ? 0.45 + 0.25 * Math.sin(now / 900 + i) : 1);
+    r(lx - 7, ly + 1, 14, 11, terkunci ? '#141a20' : (nyala ? lerpHex('#173a96', '#121a2c', MOD.sidak ? 0 : MOD.layarPucat) : '#20242c'));
+    if (terkunci) {
+      // layar terkunci: empat titik, bukan baris teks — kelihatan langsung beda
+      for (const [dx, dy] of [[3, 4], [8, 4], [3, 8], [8, 8]]) r(lx - 6 + dx, ly + dy, 2, 2, '#5a6068');
+    } else if (nyala && (MOD.sidak || MOD.layarPucat < 0.95)) {
       ctx.globalAlpha = napas;
       for (let k = 0; k < 3; k++) {
         const lw = 2 + ((k * 5 + ((now * MOD.layar / 150) | 0) + i * 3) % 10);
@@ -1403,8 +1615,9 @@ function drawRapat(active) {
 function drawKursiJauh() {
   for (let k = 0; k < KURSI_N; k++) {
     const kx = RAPAT.cx + slotKe(k);
-    // tepi belakang meja lurus, jadi semua kursi sejajar
-    const ky = 169;
+    // tepi belakang meja lurus, jadi semua kursi sejajar — kecuali yang
+    // baru digeser berdecit (permanen sampai diluruskan lagi)
+    const ky = 169 - (RUANGAN.geserKursi[k] || 0);
     // Kursi rusak: kosmetik saja — slotnya TETAP bisa diduduki. Membuatnya
     // benar-benar dilarang berarti mengubah slotBebas(), yang dipakai bersama
     // peserta rapat sungguhan; risikonya (orang berdiri di udara) tidak
@@ -1478,10 +1691,18 @@ function drawKipas() {
   // rak-server-kepanasan mendorong kipas ke arah rak (base bergeser dari 400);
   // dikunci di sana sampai ada yang mengembalikannya, sapuan menoleh dimatikan
   const dasarCx = MOD.kipasCx || 400;
-  const cx = dasarCx + (MOD.kipasCx ? 0 : sapu)
+  // arah: -1/0/1 direbut lewat kipas-direbut-arah dan bertahan sampai
+  // direbut lagi — kalah dari kipasCx (rak kepanasan menang mutlak)
+  const arah = MOD.kipasCx ? 0 : RUANGAN.kipasArah * 6;
+  const cx = dasarCx + (MOD.kipasCx ? 0 : sapu) + arah
     + Math.round(Math.sin(now / 64) * MOD.kipasGoyang)
     + (MOD.kipasGetar ? (Math.sin(now / 42) > 0 ? 1 : -1) * MOD.kipasGetar : 0);
   const base = 292;
+  if (arah) {                                    // garis angin ke arah yang direbut
+    ctx.globalAlpha = 0.15;
+    for (let i = 0; i < 3; i++) r(cx - arah * 3, base - 44 + i * 6, -arah * 20, 1, '#eef0f2');
+    ctx.globalAlpha = 1;
+  }
   r(cx - 10, base, 20, 3, '#7c838a');
   r(cx - 6, base - 2, 12, 2, '#9aa1a6');
   r(cx - 1, base - 30, 2, 30, '#c9ced4');
@@ -1581,6 +1802,13 @@ const PROPS = [
   { sortY: 295, station: null,     draw: drawKipas },
   { sortY: 348, station: 'think',  draw: drawMejaKerja },
   { sortY: 112, station: null,     draw: drawKabelLantai },
+  { sortY: 152, station: null,     draw: drawAbsensi },
+  { sortY: 8,   station: null,     draw: drawEdaran },
+  { sortY: 291, station: null,     draw: drawBukuTamu },
+  { sortY: 45,  station: null,     draw: drawNomorAntre },
+  { sortY: 119, station: null,     draw: drawPropLantai },
+  { sortY: 120, station: null,     draw: drawStiker },
+  { sortY: 60,  station: null,     draw: drawCRT },
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -1710,7 +1938,8 @@ function drawHead(a, x, yFoot) {
   if (!back) {
     if (p.head !== 'peci') r(x - 4, yFoot - 5, 2, 2, p.hair);   // poni samping
     drawEyes(a, x, yFoot - 4, 0);
-    if (p.kumis) r(x - 1, yFoot - 2, 3, 1, '#2b2118');
+    if (a.masker || MOD.masker) r(x - 2, yFoot - 3, 5, 3, '#e8ece8');   // masker kabut asap
+    else if (p.kumis) r(x - 1, yFoot - 2, 3, 1, '#2b2118');
     if (a.mulut) r(x - 1, yFoot - 2, 2, 2, '#3a2a24');          // menguap
   }
 }
@@ -1848,6 +2077,9 @@ function posEvent(a) {
     case 'hidung':   return { l: -7, r: 0 };                             // menutup hidung
     case 'silang':   return { l: -6, r: -6 };                            // menyilang lengan
     case 'dudukLantai': return { l: -3, r: -3 };                         // laptop di pangkuan
+    case 'diam':     return { l: 0, r: 0 };                              // tangan lepas, tetap 'work'
+    case 'hormat':   return { l: 0, r: -9 };                             // hormat bendera
+    case 'mengipas': return { l: -1, r: Math.sin(t * 6) > 0 ? -7 : -4 }; // map dikibas ke wajah
     default:         return { l: 0, r: 0 };
   }
 }
@@ -1877,6 +2109,11 @@ function drawBawaan(a, x, yb) {
     case 'apar':      r(bx, yb - 15, 5, 9, '#b02a2a'); r(bx, yb - 15, 5, 1, '#d24545'); r(bx + 1, yb - 17, 2, 2, '#7c838a'); break;
     case 'ember':     r(bx, yb - 10, 7, 6, '#4a7fd0'); r(bx, yb - 10, 7, 1, '#79b0e8'); break;
     case 'lap':       r(bx, yb - 10, 6, 4, '#e8e4d4'); break;
+    case 'papan':     r(bx, yb - 14, 6, 8, '#8a6844'); r(bx + 1, yb - 13, 4, RUANGAN.papanJalan * 2, P.paper); break;
+    case 'boks':      r(bx, yb - 12, 8, 6, '#b98d5e'); r(bx, yb - 12, 8, 1, '#d9cba8'); break;
+    case 'map-kuning':r(bx, yb - 13, 8, 6, '#c9a03a'); r(bx + 1, yb - 11, 6, 1, P.paper); break;
+    case 'amplop-coklat': r(bx, yb - 12, 7, 5, '#a37b4e'); r(bx, yb - 12, 7, 1, '#c9a97a'); break;
+    case 'koper':     r(bx, yb - 12, 6, 5, '#4a3626'); r(bx + 1, yb - 13, 4, 1, '#6b4a2e'); break;
   }
 }
 
@@ -2010,6 +2247,12 @@ function spawn(kind, x, y, warna) {
     // yang perlu berhenti pelan-pelan alih-alih langsung berhenti/memantul)
     case 'pulpen': parts.push({ x, y, vx: rnd(6) + 10, vy: -6, g: 200, life: 3.5, c: '#1c4e8a', s: 1, k: 'gelinding' }); break;
     case 'asap':   parts.push({ x: x + rnd(16), y, vx: rnd(6), vy: -12, g: 0, life: 2.6, c: '#8b8f86', s: 2 }); break;
+    case 'hati':   parts.push({ x: x + rnd(6), y, vx: rnd(4), vy: -8, g: 0, life: 1.2, c: '#ff9aa8', s: 2 }); break;
+    // laron: mengorbit titik (x,y) alih-alih jatuh — dipakai kutu-lampu-neon.
+    // g dipakai belakangan sebagai penanda "gugur": >0 artinya sedang jatuh.
+    case 'laron':  parts.push({ x, y, vx: 0, vy: 0, g: 0, life: 2 + Math.random() * 2, c: '#e6d8a8', s: 1,
+      k: 'laron', cx: x, cy: y, ang: Math.random() * Math.PI * 2, rad: 4 + Math.random() * 10,
+      spin: (Math.random() > 0.5 ? 1 : -1) * (0.6 + Math.random()) }); break;
   }
   if (warna) for (let i = sebelum; i < parts.length; i++) parts[i].c = warna;
   return parts[parts.length - 1];
@@ -2038,6 +2281,13 @@ function updateParts(dt) {
         }
         continue;
       }
+    }
+    // Laron: mengorbit sampai "digugurkan" (p.g dipaksa >0 dari luar), abaikan
+    // integrasi lurus tadi selama masih g:0 — habis hujan mereka baru jatuh.
+    if (p.k === 'laron' && p.g === 0) {
+      p.ang += p.spin * dt;
+      p.x = p.cx + Math.cos(p.ang) * p.rad + Math.sin(now / 300 + p.ang) * 1.5;
+      p.y = p.cy + Math.sin(p.ang) * p.rad * 0.6;
     }
     // Pulpen jatuh: satu pantulan kecil, lalu vx-nya meluruh sampai berhenti
     // di lantai — bukan langsung diam seperti partikel lain. p.dasar dipasang
@@ -2170,6 +2420,8 @@ class Agent {
     this.doingEvent = '';    // keterangan kartu selama dipinjam event
     this.bawa = null;        // barang bawaan sementara (map, gelas, jerigen)
     this.pose = null;        // pose sesaat: 'angkat', 'nunjuk', 'ngantuk', ...
+    this.laju = 1;           // pengali kecepatan jalan sementara (event)
+    this.bekuSampai = 0;     // now-timestamp: jalan & efek kerja beku sampai lewat ini
     this.butuh = null;       // keadaan ketiga: berhenti menunggu keputusan kamu
 
     this.el = document.createElement('div');
@@ -2299,7 +2551,7 @@ class Agent {
     // barang bawaan berumur: gelas kopi hilang sendiri, tidak menempel selamanya
     if (this.bawaSampai && now > this.bawaSampai) { this.bawa = null; this.bawaSampai = 0; }
 
-    if (this.path.length) {
+    if (this.path.length && now >= this.bekuSampai) {
       const t = this.path[0];
       const dx = t.x - this.x, dy = t.y - this.y;
       const dist = Math.hypot(dx, dy);
@@ -2308,7 +2560,7 @@ class Agent {
         this.path.shift();
         if (!this.path.length) this.arrive();
       } else {
-        const step = Math.min(dist, SPEED * dt);
+        const step = Math.min(dist, SPEED * this.laju * (MOD.lajuGlobal || 1) * dt);
         this.x += (dx / dist) * step;
         this.y += (dy / dist) * step;
         this.face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
@@ -2340,8 +2592,8 @@ class Agent {
       }
     }
 
-    // efek kerja per stasiun
-    if (this.state === 'work') {
+    // efek kerja per stasiun — beku (kucing di keyboard, dsb) mematikannya juga
+    if (this.state === 'work' && now >= this.bekuSampai) {
       if (this.station === 'edit') {
         const up = Math.sin(this.phase * 7) > 0;
         if (this.stampUp && !up) hentakkanStempel(this);    // stempel MENGHANTAM meja
@@ -2429,13 +2681,22 @@ class Agent {
 let agenSeq = 0;
 const peranAwal = new Map();     // sesi -> jabatan yang sudah tercatat di server
 
+// Jembatan ke event lapor-diri-pegawai-baru: mulai()-nya tidak bisa menerima
+// parameter, jadi agen yang baru lahir dititipkan di sini dulu.
+const antrianLaporDiri = [];
+
 function agentFor(id) {
   let a = agents.get(id);
   if (!a) {
     a = new Agent(id);
     a.setPeran(peranAwal.get(id) || peranBawaan(agenSeq++));
+    const sudahAdaSebelumnya = agents.size >= 1;
     agents.set(id, a);
     jagaPopulasi();
+    if (sudahAdaSebelumnya && typeof picuEvent === 'function') {
+      antrianLaporDiri.push(a);
+      picuEvent('lapor-diri-pegawai-baru', false);
+    }
   }
   return a;
 }
@@ -2526,6 +2787,10 @@ const sedangRapat = (session) => rapatAktif.some((rp) => rp.sesi === session);
 // dibedakan di panel maupun di ruangan, supaya tidak ada yang mengira
 // jumlah pegawai di layar sama dengan jumlah sesi yang benar-benar jalan.
 const MIN_DI_LAYAR = 4;
+// hari-kejepit-nasional menekan ini ke 1 sementara; null = pakai bawaan.
+// Variabel terpisah, bukan mengubah MIN_DI_LAYAR langsung, supaya nilai
+// aslinya tidak pernah hilang kalau event dibatalkan di tengah jalan.
+let minDiLayarTimpa = null;
 // Standby lebih sering nongkrong di mejanya sendiri daripada di sudut tunggu —
 // itu yang bikin ruangan terbaca sibuk, bukan terbaca antre.
 const MAMPIR = ['think', 'think', 'think', 'server', 'read', 'search', 'web', 'rapat', 'idle'];
@@ -2550,7 +2815,7 @@ class Standby extends Agent {
 
 // standby = penambal, jumlahnya selalu (4 - sesi nyata), tidak pernah negatif
 function jagaPopulasi() {
-  const perlu = Math.max(0, MIN_DI_LAYAR - agents.size);
+  const perlu = Math.max(0, (minDiLayarTimpa == null ? MIN_DI_LAYAR : minDiLayarTimpa) - agents.size);
   while (standby.length > perlu) {
     const keluar = standby.pop();
     keluar.destroy();
@@ -3390,6 +3655,10 @@ function handle(ev) {
       if (ev.peserta) tutupRapat(ev);
       if (ev.ok === false) {
         a.gagal++;
+        // dipakai inspektorat-mendadak: pemicunya data nyata, bukan dadu.
+        // Disimpan sebagai timestamp Date.now(), BUKAN `now` (performance.now()) —
+        // dua jam yang berbeda basis, mencampurnya bikin selisihnya tidak berarti.
+        RUANGAN.gagalBeruntun.push(Date.now());
         // yang barusan dicatat itulah yang gagal: ditandai, bukan ditambah baris
         const akhir = a.riwayat[a.riwayat.length - 1];
         if (akhir) akhir.ok = false;
@@ -4281,6 +4550,14 @@ const MOD = {
   kipasSapu: 0,      // amplitudo menoleh (7 detik/putaran), px
   kipasCx: 0,        // >0 = kipas dikunci menghadap titik x ini (rak kepanasan)
   rakPanas: false,
+  // gelombang 2 — birokrasi
+  // 0..1 = pecahan jam ditambahkan ke jarum jam/menit (jam yang berbohong).
+  // Snap-back di akhir event terjadi GRATIS: MOD kembali 0 di frame berikutnya
+  // begitu tidak ada event yang menuliskannya lagi — tidak perlu animasi balik.
+  jamOffset: 0,
+  slotTerkunci: -1,   // indeks meja kerja yang layarnya "terkunci" (sandiman)
+  sidak: false,        // kadis sidak: laptop menyala penuh, badan tegak
+  absensiMerah: false, // mesin absen sidik jari (prop permanen) berkedip merah
   mejaGetar: -1,     // indeks meja kerja yang bergoyang
   mejaPadam: -1,     // indeks meja kerja yang laptopnya mati
   // gelombang 2
@@ -4290,6 +4567,11 @@ const MOD = {
   jamGetar: false,   // baterai sekarat: jarum detik gemetar sebelum diam
   gordenLepas: false,
   wifiLemahSlot: -1, // indeks meja kerja yang sinyalnya hilang
+  // gelombang 2 lanjutan
+  lajuGlobal: 1,     // pengali kecepatan jalan SEMUA penghuni (ramadan, lembur malam, senyap magrib)
+  masker: false,     // semua wajah digambar pakai masker (kabut asap)
+  crtAktif: false,   // layar CRT di atas filing menampilkan bar guling (bukan idle diam)
+  mejaHantu: -1,     // indeks meja kerja yang laptopnya "nyala" tanpa penghuni nyata
 };
 const MOD_AWAL = { ...MOD, neonMati: [0, 0] };
 function resetMod() {
@@ -4343,6 +4625,35 @@ const RUANGAN = {
   nodaKopi: [],            // {x, y, lebar} bekas kopi tumpah di meja rapat, permanen
   gelasGuling: null,       // x salah satu titik gelas di drawRapat, atau null
   xbanner: { sudut: 0, lipat: false },
+  // gelombang 2 — birokrasi
+  boksHilang: -1,          // indeks boks arsip yang sedang dipinjam, atau -1
+  arsipPenuh: false,       // lemari arsip kepenuhan (celah pintu tidak menutup)
+  dusTambahanArsip: 0,     // 0..2 dus ekstra di depan lemari saat arsipPenuh
+  stikerTertempel: new Set(),  // nama stasiun yang sudah ditempeli stiker inventaris
+  antre: 10,               // nomor antrean loket saat ini
+  edaran: [],              // {miring, kusam} surat edaran yang ditempel, maks 4
+  plangBaru: false,        // plang nama ruang kadis sudah diganti
+  bukuTamuBaris: 0,        // baris tinta di buku tamu, menumpuk sepanjang sesi
+  kertasPrinter: 20,       // stok kertas; 0 = habis
+  propLantai: [],          // {x, y, jenis, sampai} benda kecil menetap di lantai
+  gagalBeruntun: [],       // timestamp Date.now() tool call gagal 60 detik terakhir
+  inspeksiLog: [],         // timestamp Date.now() inspektorat-mendadak pernah jalan
+  stempelRapi: false,      // tumpukan berkas di meja stempel diketuk rata
+  papanJalan: 0,           // 0-3 baris catatan di papan jalan auditor
+  baganKotak: 0,           // 0-2 kotak tambahan di bagan struktur (drawFiling)
+  // gelombang 2 lanjutan
+  kipasArah: 0,            // -1/0/1, arah kepala kipas berdiri; bertahan sampai direbut lagi
+  gordenKanan: 6,          // lebar gorden kanan jendela, px; direset tiap pagi di tickRuangan
+  sampahLantai: [],        // {x,y,jenis} daun/kertas kecil menetap di lantai, dipungut siapa saja
+  kesetAda: false,         // keset baru terpasang di depan pintu kadis, permanen sekali sesi
+  spanduk: null,           // {huruf} indeks huruf yang lepas dari spanduk MELAYANI..., permanen
+  geserKursi: [],          // offset px per slot kursi rapat (0..6), berdecit lalu diluruskan
+  kursiBerderit: 0,        // penanda "sudah ada satu decitan" 20 detik terakhir (Date.now())
+  kucingAda: false,        // entitas kucing kantor sedang di ruangan (event kucing-kantor)
+  piala: false,            // piala voli terpajang di atas lemari arsip, permanen
+  piagamDinding: false,    // piagam zona integritas tergantung di dinding, permanen
+  laciTerbuka: -1,         // laci filing yang sedang dibuka (arsiparis mengajari magang)
+  tumpukanMap: [],         // {x,y,sisa} tumpukan map sementara (rangkap tiga dkk)
 };
 
 /* -------------------------------------------------------------- penjadwal */
@@ -4404,6 +4715,8 @@ function lepaskanAktor(a) {
   a.pose = null;
   a.mulut = false;
   a.doingEvent = '';
+  a.laju = 1;
+  a.bekuSampai = 0;
   if (!a.adaTugas) { a.busyUntil = 0; a.state = 'idle'; }
 }
 
@@ -4502,6 +4815,17 @@ function tickRuangan(dt) {
   // berganti, sementara "pernah > 0.6 dalam 15 menit terakhir" perlu jam yang
   // terus berjalan selama hujan derasnya bertahan.
   if (CUACA.hujan > 0.6) CUACA.hujanTinggiSejak = Date.now();
+  // Gorden yang ditarik menahan silau sore harus lepas sendiri esok pagi —
+  // tidak ada event yang "berjalan sepanjang malam" untuk membalikkannya.
+  if (RUANGAN.gordenKanan > 6 && ambien().jam < 8) RUANGAN.gordenKanan = 6;
+  // jendela bergulir 60 detik — dibuang dari depan karena array-nya selalu
+  // terurut waktu (push di ujung), jadi cukup potong prefiks yang basi
+  if (RUANGAN.gagalBeruntun.length) {
+    const batas = Date.now() - 60000;
+    let potong = 0;
+    while (potong < RUANGAN.gagalBeruntun.length && RUANGAN.gagalBeruntun[potong] < batas) potong++;
+    if (potong) RUANGAN.gagalBeruntun.splice(0, potong);
+  }
 }
 
 function tickEvent(dt) {
