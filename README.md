@@ -265,7 +265,7 @@ bertambah sesudah pemantauan mulai, itu yang disiarkan. Sesi yang sudah panjang
 tidak membanjiri ruangan dengan pikiran satu jam lalu.
 
 ```
-transkrip sesi (.jsonl)  ──ekornya diikuti──▶  server.mjs  ──SSE──▶  balon + modal
+transkrip sesi (.jsonl)  ──ekornya diikuti──▶  server.mjs  ──SSE──▶  balon + modal + kartu
 ```
 
 Kalau `transcript_path` suatu hari hilang dari payload, jalurnya ditebak dari
@@ -355,6 +355,35 @@ disposisi" — bukan di `SubagentStop`. Peserta rapat yang bubar satu-satu
 selama rapat masih jalan bukan momen yang perlu memanggil kamu balik; sesi
 utama yang selesai baru itu momennya.
 
+### Token sesi terminal
+
+Jalur yang sama yang membawa pikiran dan kalimat juga membawa **token** —
+`input_tokens`, `output_tokens`, `cache_creation_input_tokens`,
+`cache_read_input_tokens` dari `message.usage` tiap baris asisten. Ini satu-
+satunya cara sesi **terminal** (yang tidak dilahirkan halaman ini, jadi tidak
+punya stream-json) bisa punya angka token sama sekali — hook tidak pernah
+membawanya.
+
+Angkanya **resmi**, bukan perkiraan, jadi kartu pegawai tidak menulis "data
+sementara" untuknya seperti biaya. Ini langsung dari respons API,
+dijumlahkan apa adanya. Yang perlu jujur justru soal **cakupannya**: dihitung
+sejak transkripnya *mulai dipantau*, bukan sejak sesinya lahir — sesi yang
+sudah berjalan sejam sebelum halaman ini dibuka tidak punya token dari jam
+itu, cuma dari titik mulai memantau ke depan. Kartunya bilang begitu apa
+adanya: **"(sejak dipantau)"**.
+
+Sengaja **berhenti di token, tidak sampai ke dolar**. Transkrip tidak
+menyimpan `costUSD` — beda dari yang ditemukan di beberapa alat sejenis pada
+versi Claude Code lain. Menghitung dolarnya sendiri berarti tabel harga per
+model yang harus dipelihara manual dan basi begitu Anthropic mengubah harga.
+Kosong lebih baik daripada menebak.
+
+Dipublish sebagai baris asisten dilewati, bukan ditumpangkan ke balon pikiran
+atau kotak kabar: banyak giliran cuma berisi `tool_use` tanpa teks maupun
+pikiran sama sekali, dan giliran itu tetap makan token. Tidak masuk log
+kegiatan dan tidak menaikkan statistik — sama seperti balon pikiran, ini
+pembaruan diam yang cuma kelihatan kalau kartunya dibuka.
+
 ### Yang berubah soal privasi
 
 Sebelum ini server cuma menyiarkan **metadata**. Sekarang isi percakapan ikut
@@ -368,8 +397,11 @@ bukan cuma menyembunyikan balonnya di halaman:
 AGENT_ROOM_ISI=off node agent-room/server.mjs
 ```
 
-Dengan itu transkrip tidak dibuka sama sekali dan `pikir`/`ucap` tidak pernah
-lahir.
+Dengan itu transkrip tidak dibuka sama sekali — `pikir`, `ucap`, **dan token
+sesi terminal** tidak pernah lahir, karena ketiganya dibaca dari berkas yang
+sama. Mematikan isi percakapan ikut memadamkan angka token; tidak ada mode
+"baca token saja tanpa baca isinya", karena membaca satu baris berarti
+mengurainya, terlepas dari field mana yang akhirnya dipakai.
 
 ## Peserta rapat
 

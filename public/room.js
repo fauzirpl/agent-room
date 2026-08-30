@@ -770,6 +770,9 @@ function drawFiling(active) {
       r(x + 1, dy + 12, w - 2, 1, P.metalL);
       if (kosong) r(x + 3, dy + 13, w - 6, 6, '#1a1d21');  // rongga gelap, tanpa map
       else for (let f = 0; f < 5; f++) r(x + 5 + f * 8, dy + 13, 6, 2, ['#c9a03a', '#3e6b4f', '#b03030'][f % 3]);
+    } else if (i === 0 && RUANGAN.laciCelah > 0) {
+      // macet: tidak bisa tertutup rapat, celahnya menetap sampai event berikutnya
+      r(x + 1, dy + 12, w - 2, RUANGAN.laciCelah, sh(P.metal, 1.2));
     }
   }
   // bagan STRUKTUR ORGANISASI
@@ -941,8 +944,10 @@ function drawStempel(active) {
   r(x - 2, y + 22, w + 4, 8, P.wood);
   r(x - 2, y + 22, w + 4, 2, sh(P.wood, 1.25));
   r(x - 2, y + 30, w + 4, 1, sh(P.woodD, 0.7));
-  // tumpukan berkas menjulang
-  for (let l = 0; l < 9; l++) {
+  // tumpukan berkas menjulang — dijadikan data (bukan 9 tetap) supaya event
+  // "roboh" tinggal mengubah jumlahnya, dan pembalikannya langsung terbaca
+  // sebagai "dibereskan" tanpa gambar prop baru
+  for (let l = 0; l < RUANGAN.tumpukanStempel; l++) {
     r(x + 2 + (l % 3), y + 20 - l * 2, 13, 2, l % 2 ? '#e4ddc8' : P.paper);
   }
   r(x + 3, y + 1, 13, 2, '#e8a0a8');                       // map disposisi pink
@@ -996,7 +1001,15 @@ function drawServer(active) {
   const kedip = (i) => MOD.switchBadai > 0
     ? Math.sin(now / 55) > -0.2
     : active && Math.sin(now / (90 + i * 31) + i * 1.7) > -0.25;
-  const led = (lx, ly, i, warna) => r(lx, ly, 1, 1, kedip(i) ? warna : sh(warna, 0.3));
+  // rakPanas MEM-BYPASS gerbang active: kalau tidak ada siapa pun di rak,
+  // semua LED sudah gelap dan "berganti oranye" tidak akan pernah terlihat
+  const led = (lx, ly, i, warna) => {
+    if (MOD.rakPanas) {
+      r(lx, ly, 1, 1, Math.sin(now / 140 + i) > 0 ? '#ff8a4a' : '#c94a2a');
+      return;
+    }
+    r(lx, ly, 1, 1, kedip(i) ? warna : sh(warna, 0.3));
+  };
 
   ctx.globalAlpha = 0.16;                                  // bayangan di lantai
   r(x - 4, y + h - 2, w + 10, 4, '#20301f');
@@ -1079,25 +1092,30 @@ function drawServer(active) {
 
   // APAR merah menempel di dinding kiri rak — ruang server tanpa ini tidak
   // pernah lolos audit, sekalian mengisi bekas tempat meja komputer.
-  const ay = -RUANGAN.aparAngkat;                          // diangkat saat diperiksa
-  if (ay) { ctx.globalAlpha = 0.2; r(329, 118, 12, 2, '#20301f'); ctx.globalAlpha = 1; }
-  r(330, 100 + ay, 10, 18, '#b02a2a');
-  r(330, 100 + ay, 10, 2, '#d24545');
-  r(330, 106 + ay, 10, 4, '#f0ede2');
-  r(332, 107 + ay, 6, 1, '#8b1f1f');
-  r(333, 96 + ay, 4, 4, '#7c838a');
-  r(332, 94 + ay, 6, 2, '#9aa1a6');
-  r(338, 95 + ay, 4, 1, '#3a3f45');
-  if (!ay) r(329, 118, 12, 2, '#2c3038');
-  if (RUANGAN.kartuAPAR) {                                 // kartu inspeksi, permanen
-    r(341, 97 + ay, 1, 4, '#8b98a6');
-    r(339, 101 + ay, 6, 8, '#e8cf6a');
-    r(340, 103 + ay, 4, 1, '#8a6a1a');
-    r(340, 105 + ay, 4, 1, '#8a6a1a');
-    r(337, 104 + ay, 2, 2, '#3e6b4f');                     // manometer hijau
+  // Diangkat penuh (ups-ngebul): tidak digambar di dinding sama sekali,
+  // dipegang si pegawai lewat drawBawaan(bawa:'apar') — bukan dobel.
+  if (!RUANGAN.aparDiangkat) {
+    const ay = -RUANGAN.aparAngkat;                          // diperiksa: terangkat sebagian
+    if (ay) { ctx.globalAlpha = 0.2; r(329, 118, 12, 2, '#20301f'); ctx.globalAlpha = 1; }
+    r(330, 100 + ay, 10, 18, '#b02a2a');
+    r(330, 100 + ay, 10, 2, '#d24545');
+    r(330, 106 + ay, 10, 4, '#f0ede2');
+    r(332, 107 + ay, 6, 1, '#8b1f1f');
+    r(333, 96 + ay, 4, 4, '#7c838a');
+    r(332, 94 + ay, 6, 2, '#9aa1a6');
+    r(338, 95 + ay, 4, 1, '#3a3f45');
+    if (!ay) r(329, 118, 12, 2, '#2c3038');
+    if (RUANGAN.kartuAPAR) {                                 // kartu inspeksi, permanen
+      r(341, 97 + ay, 1, 4, '#8b98a6');
+      r(339, 101 + ay, 6, 8, '#e8cf6a');
+      r(340, 103 + ay, 4, 1, '#8a6a1a');
+      r(340, 105 + ay, 4, 1, '#8a6a1a');
+      r(337, 104 + ay, 2, 2, '#3e6b4f');                     // manometer hijau
+    }
   }
 
-  if (active) glow(x + w / 2, y + h / 2, 52, '#7ee787', 0.13);
+  if (MOD.rakPanas) glow(x + w / 2, y + h / 2, 52, '#ff8a4a', 0.2);
+  else if (active) glow(x + w / 2, y + h / 2, 52, '#7ee787', 0.13);
 }
 
 function drawKadis(active) {
@@ -1355,7 +1373,12 @@ function drawRapat(active) {
     r(bx, by - 5, 3, 2, '#e8f0f6');
   };
   mic(208, 206); mic(246, 204); mic(284, 206);
-  gelas(190, 214); gelas(226, 210); gelas(266, 210); gelas(302, 214);
+  const gelasTitik = [[190, 214], [226, 210], [266, 210], [302, 214]];
+  for (const [gx, gy] of gelasTitik) {
+    // gelas yang tergulingkan (tumpahan-kopi-rapat) digambar rebah, bukan berdiri
+    if (RUANGAN.gelasGuling === gx) { r(gx, gy - 4, 5, 4, '#eef2f6'); r(gx, gy - 4, 5, 1, '#c8d2dc'); }
+    else gelas(gx, gy);
+  }
   botol(198, 212); botol(292, 212);
   r(214, 216, 15, 5, '#c9a03a');                     // map rapat
   r(215, 217, 13, 1, P.paper);
@@ -1363,6 +1386,15 @@ function drawRapat(active) {
   r(259, 219, 13, 1, P.paper);
   r(238, 221, 13, 4, P.paper);                       // notulen
   r(239, 222, 11, 1, '#9aa7b4');
+
+  // Bekas kopi tumpah — permanen sampai ada event lain yang membersihkannya.
+  // Digambar sesudah taplak, sebelum props di atasnya, jadi taplaknya
+  // sungguh-sungguh terlihat ternoda, bukan cuma tempelan di atas segalanya.
+  for (const n of RUANGAN.nodaKopi) {
+    ctx.globalAlpha = 0.5;
+    r(n.x, n.y, n.lebar, 2, '#6b4a2a');
+    ctx.globalAlpha = 1;
+  }
 
   if (active) glow(R.cx, R.yB + 14, 66, '#ffe9b0', 0.1);
 }
@@ -1373,6 +1405,16 @@ function drawKursiJauh() {
     const kx = RAPAT.cx + slotKe(k);
     // tepi belakang meja lurus, jadi semua kursi sejajar
     const ky = 169;
+    // Kursi rusak: kosmetik saja — slotnya TETAP bisa diduduki. Membuatnya
+    // benar-benar dilarang berarti mengubah slotBebas(), yang dipakai bersama
+    // peserta rapat sungguhan; risikonya (orang berdiri di udara) tidak
+    // sepadan dengan lelucon kursi patah.
+    if (RUANGAN.kursiRusak.has(k)) {
+      r(kx - 8, ky + 3, 16, 14, '#8b8f86');     // rangka plastik polos, beda dari yang biru
+      r(kx - 7, ky + 4, 14, 10, '#c9ced4');
+      r(kx - 2, ky + 17, 4, 6, '#9aa1a6');
+      continue;
+    }
     r(kx - 8, ky, 16, 17, '#2a4f8a');       // rangka
     r(kx - 7, ky + 1, 14, 13, '#3f74c4');   // jok
     r(kx - 7, ky + 1, 14, 2, '#5b8ad4');
@@ -1433,7 +1475,10 @@ function drawKipas() {
   // oleng = seluruh kepala berayun cepat (gangguan); getar = motor macet;
   // sapu = kipas benar-benar MENOLEH, periode lambat 7 detik, amplitudo lebar
   const sapu = MOD.kipasSapu ? Math.sin(now / 1114) * MOD.kipasSapu : 0;
-  const cx = 400 + sapu
+  // rak-server-kepanasan mendorong kipas ke arah rak (base bergeser dari 400);
+  // dikunci di sana sampai ada yang mengembalikannya, sapuan menoleh dimatikan
+  const dasarCx = MOD.kipasCx || 400;
+  const cx = dasarCx + (MOD.kipasCx ? 0 : sapu)
     + Math.round(Math.sin(now / 64) * MOD.kipasGoyang)
     + (MOD.kipasGetar ? (Math.sin(now / 42) > 0 ? 1 : -1) * MOD.kipasGetar : 0);
   const base = 292;
@@ -1482,19 +1527,38 @@ function drawPlant() {
   leafP(x + 12, y + 18, -16, -9 + t, hijau('#356038'));
 }
 
-// X-banner berdiri "ZONA INTEGRITAS"
+// X-banner berdiri "ZONA INTEGRITAS" — miring bertahap lalu rebah, tanpa
+// rotasi canvas: cukup interpolasi lebar/tinggi kotak dan posisi kain,
+// tapi rangka silang di belakangnya tetap dua garis stroke sungguhan
+// (sudutnya dihitung, bukan kotak yang diputar).
 function drawXBanner() {
   const x = 16, y = 188;   // di bawah LANE_UP, supaya tidak menelan pejalan
+  const s = RUANGAN.xbanner.sudut;                          // 0 tegak .. 1 rebah
+  if (s < 0.02) {
+    ctx.strokeStyle = '#7c838a'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 52); ctx.lineTo(x + 26, y);
+    ctx.moveTo(x + 26, y + 52); ctx.lineTo(x, y);
+    ctx.stroke();
+    r(x + 1, y + 2, 24, 46, '#f0ede2');
+    r(x + 1, y + 2, 24, 8, '#1c4e8a');
+    r(x + 5, y + 14, 16, 12, P.gold);                      // logo bundar-ish
+    r(x + 9, y + 17, 8, 6, '#f0ede2');
+    for (let i = 0; i < 3; i++) r(x + 5, y + 30 + i * 5, 16 - i * 4, 2, '#8b98a6');
+    if (RUANGAN.xbanner.lipat) r(x + 1, y + 24, 24, 1, '#c9c2ae');  // lipatan permanen
+    return;
+  }
+  // makin miring: makin pendek dan makin lebar, dasarnya tetap di tempat
+  const tinggi = Math.round(52 * (1 - s * 0.6));
+  const lebar = Math.round(24 + s * 22);
+  const by = y + 52 - tinggi;
   ctx.strokeStyle = '#7c838a'; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x, y + 52); ctx.lineTo(x + 26, y);
-  ctx.moveTo(x + 26, y + 52); ctx.lineTo(x, y);
+  ctx.moveTo(x, y + 52); ctx.lineTo(x + lebar, by);
+  ctx.moveTo(x + lebar, y + 52); ctx.lineTo(x, by);
   ctx.stroke();
-  r(x + 1, y + 2, 24, 46, '#f0ede2');
-  r(x + 1, y + 2, 24, 8, '#1c4e8a');
-  r(x + 5, y + 14, 16, 12, P.gold);                        // logo bundar-ish
-  r(x + 9, y + 17, 8, 6, '#f0ede2');
-  for (let i = 0; i < 3; i++) r(x + 5, y + 30 + i * 5, 16 - i * 4, 2, '#8b98a6');
+  r(x + 1, by, lebar, tinggi - 4, '#f0ede2');
+  r(x + 1, by, lebar, Math.round(8 * (1 - s * 0.5)), '#1c4e8a');
 }
 
 // props diurut belakang -> depan; sortY = garis kaki untuk depth sort
@@ -1810,6 +1874,9 @@ function drawBawaan(a, x, yb) {
     case 'laptop':    r(bx, yb - 13, 9, 7, '#9aa1a6'); r(bx + 1, yb - 12, 7, 5, '#20242c'); break;
     case 'toner':     r(bx, yb - 13, 7, 6, '#20242c'); r(bx + 1, yb - 12, 5, 1, '#3a3f45'); break;
     case 'jerigen':   r(bx, yb - 13, 6, 8, '#d8b23a'); r(bx + 1, yb - 14, 4, 1, '#8a6a1a'); break;
+    case 'apar':      r(bx, yb - 15, 5, 9, '#b02a2a'); r(bx, yb - 15, 5, 1, '#d24545'); r(bx + 1, yb - 17, 2, 2, '#7c838a'); break;
+    case 'ember':     r(bx, yb - 10, 7, 6, '#4a7fd0'); r(bx, yb - 10, 7, 1, '#79b0e8'); break;
+    case 'lap':       r(bx, yb - 10, 6, 4, '#e8e4d4'); break;
   }
 }
 
@@ -1938,6 +2005,11 @@ function spawn(kind, x, y, warna) {
     case 'serbuk': parts.push({ x: x + rnd(6), y, vx: rnd(4), vy: 6, g: 90, life: 0.8, c: '#2c3038', s: 1 }); break;
     // kertas printer yang dibuang setelah dibersihkan/dirobek: melengkung ke tong
     case 'lempar': parts.push({ x, y, vx: rnd(10) + 26, vy: -18, g: 90, life: 1.1, c: P.paper, s: 2 }); break;
+    // pulpen jatuh: memantul lalu menggelinding — vx meluruh saat kena
+    // lantai, ditangani cabang khusus di updateParts (belum ada kind lain
+    // yang perlu berhenti pelan-pelan alih-alih langsung berhenti/memantul)
+    case 'pulpen': parts.push({ x, y, vx: rnd(6) + 10, vy: -6, g: 200, life: 3.5, c: '#1c4e8a', s: 1, k: 'gelinding' }); break;
+    case 'asap':   parts.push({ x: x + rnd(16), y, vx: rnd(6), vy: -12, g: 0, life: 2.6, c: '#8b8f86', s: 2 }); break;
   }
   if (warna) for (let i = sebelum; i < parts.length; i++) parts[i].c = warna;
   return parts[parts.length - 1];
@@ -1949,12 +2021,35 @@ function updateParts(dt) {
     p.vy += p.g * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    if (p.k === 'drip' && p.y >= 124) {                    // tetes AC kena ember
-      parts.splice(i, 1);
-      const penuh = RUANGAN.emberIsi >= 90;
-      for (let s = 0; s < (penuh ? 6 : 3); s++) spawn('splash', 347, 124);
-      if (!RUANGAN.emberDiangkat) RUANGAN.emberIsi = Math.min(90, RUANGAN.emberIsi + 1);
-      continue;
+    if (p.k === 'drip') {
+      // p.dasar: penadah lain (bocor arsip, bocor meja rapat) mendarat di
+      // ketinggiannya sendiri, bukan dipaksa ke y=124 milik ember AC utama.
+      // Tanpa ini tetesan dari plafon lain "mendarat" duluan di udara.
+      const dasar = p.dasar == null ? 124 : p.dasar;
+      if (p.y >= dasar) {
+        parts.splice(i, 1);
+        if (p.dasar == null) {                             // tetes AC ke ember utama
+          const penuh = RUANGAN.emberIsi >= 90;
+          for (let s = 0; s < (penuh ? 6 : 3); s++) spawn('splash', 347, 124);
+          if (!RUANGAN.emberDiangkat) RUANGAN.emberIsi = Math.min(90, RUANGAN.emberIsi + 1);
+        } else {
+          for (let s = 0; s < 3; s++) spawn('splash', p.x, dasar);
+          if (p.onDrip) p.onDrip();
+        }
+        continue;
+      }
+    }
+    // Pulpen jatuh: satu pantulan kecil, lalu vx-nya meluruh sampai berhenti
+    // di lantai — bukan langsung diam seperti partikel lain. p.dasar dipasang
+    // pemanggilnya (lantai tempat dia jatuh); tanpa itu dia jatuh selamanya.
+    if (p.k === 'gelinding' && p.dasar != null && p.y >= p.dasar) {
+      p.y = p.dasar;
+      if (!p.pantul) { p.pantul = 1; p.vy = -40; }
+      else {
+        p.vy = 0; p.g = 0;
+        p.vx *= Math.max(0, 1 - dt * 3);
+        if (Math.abs(p.vx) < 1) p.vx = 0;
+      }
     }
     if (p.life <= 0) parts.splice(i, 1);
   }
@@ -2047,6 +2142,7 @@ class Agent {
     this.calls = 0;
     this.gagal = 0;
     this.biaya = null;      // { usd, resmi } — cuma ada buat sesi lewat halaman
+    this.token = null;      // { input, output, cacheTulis, cacheBaca } — sejak transkripnya dipantau
     this.perStasiun = Object.create(null);
     this.riwayat = [];
     this.x = -14;          // masuk dari luar layar
@@ -2882,6 +2978,20 @@ function formatBiaya(b) {
   return b.resmi ? usd : usd + ' (data sementara)';
 }
 
+const angkaID = (n) => Math.round(n).toLocaleString('id-ID');
+
+/* Beda perlakuan dari formatBiaya() dengan sengaja: token ini angka RESMI —
+   langsung dari respons API, dijumlahkan, tanpa tabel harga yang bisa basi —
+   jadi tidak diberi keterangan "data sementara". Yang perlu jujur di sini
+   soal cakupannya, bukan soal keakuratannya: dihitung sejak transkripnya
+   MULAI dipantau, bukan sejak sesinya lahir. */
+function formatToken(t) {
+  const cache = t.cacheTulis || t.cacheBaca
+    ? ' · cache ' + angkaID(t.cacheTulis) + ' tulis / ' + angkaID(t.cacheBaca) + ' baca' : '';
+  return angkaID(t.input) + ' masuk · ' + angkaID(t.output) + ' keluar'
+    + cache + ' (sejak dipantau)';
+}
+
 /* Nama yang dipakai baris panel DAN kepala modal kabar: nama panggilan kalau
    sudah diberi, kalau belum nama project + potongan id sesinya. Satu tempat
    saja, supaya orang yang sama tidak muncul dengan dua nama berbeda. */
@@ -3165,6 +3275,7 @@ function perbaruiKartu() {
       .sort((x, y) => y[1] - x[1]).slice(0, 2)
       .map(([id, n]) => ((STATIONS[id] || {}).name || id) + ' ×' + n).join(', ');
     if (sering) baris.push(['sering di', sering]);
+    if (a.token) baris.push(['token', formatToken(a.token)]);
     if (a.biaya) baris.push(['biaya', formatBiaya(a.biaya)]);
   }
   document.getElementById('kartuInfo').innerHTML = baris
@@ -3344,6 +3455,12 @@ function handle(ev) {
        kegiatan akan tenggelam kalau tiap tarikan napas ikut dicatat. */
     case 'pikir': {
       a.berpikir(ev);
+      break;
+    }
+    /* Bukan pekerjaan, jadi bukan log — sama seperti pikir. Cuma pembaruan
+       diam yang disimpan di orangnya; kartu yang membacanya kalau dibuka. */
+    case 'token': {
+      a.token = ev.token;
       break;
     }
     /* Kalimat yang benar-benar dia tulis untuk kamu. Yang menutup giliran
@@ -4162,6 +4279,8 @@ const MOD = {
   kipasGoyang: 0,    // amplitudo oleng, px
   kipasGetar: 0,     // getar motor macet, px
   kipasSapu: 0,      // amplitudo menoleh (7 detik/putaran), px
+  kipasCx: 0,        // >0 = kipas dikunci menghadap titik x ini (rak kepanasan)
+  rakPanas: false,
   mejaGetar: -1,     // indeks meja kerja yang bergoyang
   mejaPadam: -1,     // indeks meja kerja yang laptopnya mati
   // gelombang 2
@@ -4215,6 +4334,15 @@ const RUANGAN = {
   // tetap beku LEWAT durasi eventnya sendiri kalau tidak ada yang membetulkan
   // — MOD kembali ke bawaan tiap frame begitu tidak ada event yang menuliskannya.
   jamBeku: null,           // null = ikut jam nyata, atau {hr,mn,sc} beku
+  // gelombang 2 — insiden
+  tumpukanStempel: 9,      // lapis berkas di meja stempel; 9 = penuh normal
+  laciCelah: 0,            // 0..2 px, laci filing yang macet tidak bisa tertutup rapat
+  benderaBelit: false,
+  kursiRusak: new Set(),   // indeks slot kursi rapat yang digambar rusak (kosmetik)
+  aparDiangkat: false,     // APAR sedang dibawa keliling, tidak di dinding
+  nodaKopi: [],            // {x, y, lebar} bekas kopi tumpah di meja rapat, permanen
+  gelasGuling: null,       // x salah satu titik gelas di drawRapat, atau null
+  xbanner: { sudut: 0, lipat: false },
 };
 
 /* -------------------------------------------------------------- penjadwal */

@@ -545,6 +545,15 @@ function jalurTranskrip(raw) {
   return path.join(dasar, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'), sesi + '.jsonl');
 }
 
+/* Token, bukan biaya. Transkrip TIDAK punya `costUSD` — cuma angka mentah
+   dari respons API (`input_tokens`, `output_tokens`,
+   `cache_creation_input_tokens`, `cache_read_input_tokens`). Itu bedanya
+   dengan `macetSesi`/biaya sesi: token ini RESMI, bukan perkiraan — angka apa
+   adanya dari Anthropic, dijumlahkan di sini, tanpa tabel harga yang bisa
+   basi. Menghitung dolarnya sendiri berarti memelihara tabel harga per model
+   yang berubah tiap Anthropic mengubah harga — sengaja belum dilakukan. */
+const tokenSesi = new Map();                // sesi 12-char -> { input, output, cacheTulis, cacheBaca }
+
 /** Rangka event untuk sesi yang identitasnya sudah tercatat di server. */
 const dasarSesi = (sesi, cwd, ts) => ({
   id: ++seq,
@@ -690,8 +699,23 @@ function serapTranskrip(sesi, rec, o) {
   if (o.message?.is_api_error_message) return;        // galat API punya jalurnya sendiri
   rec.sentuh = Date.now();
   const ts = Date.parse(o.timestamp);
-  for (const b of isiAgen(o.message)) {
-    publish({ ...dasarSesi(sesi, o.cwd, Number.isFinite(ts) ? ts : 0), ...b });
+  const dasar = () => dasarSesi(sesi, o.cwd, Number.isFinite(ts) ? ts : 0);
+  for (const b of isiAgen(o.message)) publish({ ...dasar(), ...b });
+
+  /* Dijumlahkan dari SETIAP baris asisten yang punya usage, dedup uuid di atas
+     sudah menjamin tidak ada baris yang dihitung dua kali. Dipublish sebagai
+     kind sendiri, bukan ditumpangkan ke pikir/ucap: banyak giliran cuma
+     berisi tool_use tanpa teks maupun pikiran sama sekali, dan giliran itu
+     tetap makan token — kalau menunggu tumpangan, angkanya telat nongol. */
+  const u = o.message?.usage;
+  if (u) {
+    const t = tokenSesi.get(sesi) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+    t.input += Number(u.input_tokens) || 0;
+    t.output += Number(u.output_tokens) || 0;
+    t.cacheTulis += Number(u.cache_creation_input_tokens) || 0;
+    t.cacheBaca += Number(u.cache_read_input_tokens) || 0;
+    tokenSesi.set(sesi, t);
+    publish({ ...dasar(), kind: 'token', token: { ...t } });
   }
 }
 
