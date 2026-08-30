@@ -28,6 +28,9 @@ const crewEl = document.getElementById('crew');
 
 let now = performance.now();
 let scale = 2, offX = 0, offY = 0;
+// lebar panggung, dicatat waktu fit(): balon pikiran dijaga supaya tidak
+// separuh keluar layar waktu orangnya berdiri di tepi ruangan
+let panggungW = 0;
 
 function fit() {
   const availW = stageInner.clientWidth - 36;
@@ -40,6 +43,7 @@ function fit() {
   const pr = stageInner.getBoundingClientRect();
   offX = cr.left - pr.left;
   offY = cr.top - pr.top;
+  panggungW = pr.width;
 }
 new ResizeObserver(fit).observe(stageInner);
 
@@ -1995,6 +1999,17 @@ class Agent {
     overlay.appendChild(this.el);
     this.bubbleUntil = 0;
 
+    // Balon pikiran punya elemen sendiri, bukan menumpang balon ucap: dua-duanya
+    // bisa muncul bersamaan (mikir sambil melapor) dan umurnya beda jauh.
+    this.elPikir = document.createElement('div');
+    this.elPikir.className = 'pikir';
+    this.elPikir.style.display = 'none';
+    overlay.appendChild(this.elPikir);
+    this.pikirBagian = [];
+    this.pikirIdx = 0;
+    this.pikirGanti = 0;
+    this.pikirUntil = 0;
+
     this.goTo(stasiunPulang(this));
   }
 
@@ -2061,6 +2076,25 @@ class Agent {
     this.el.innerHTML = text;
     this.el.style.display = '';
     this.bubbleUntil = now + 4200;
+  }
+
+  /* Isi kepalanya. Ditampilkan sepenggal-sepenggal, bukan sekaligus: satu blok
+     pikiran gampang lebih panjang dari yang muat di atas kepala orang, dan
+     membacanya berganti kalimat justru yang bikin dia terbaca sebagai proses,
+     bukan sebagai papan pengumuman. */
+  berpikir(ev) {
+    if (!balonPikir) return;
+    const bagian = ev.teks ? penggalPikir(ev.teks).map(esc) : [];
+    // Pikiran tersegel: yang jujur cuma "dia memang lagi mikir". Jumlah
+    // tokennya ikut supaya jelas ada isinya, cuma tidak dibagi.
+    if (!bagian.length) bagian.push(TITIK + (ev.token ? ' <b>' + ev.token + '</b> token' : ''));
+    this.pikirBagian = bagian;
+    this.pikirIdx = 0;
+    this.elPikir.className = 'pikir' + (ev.teks ? '' : ' tersegel');
+    this.elPikir.innerHTML = bagian[0];
+    this.elPikir.style.display = '';
+    this.pikirGanti = now + PIKIR_GANTI;
+    this.pikirUntil = now + Math.min(PIKIR_UMUR, PIKIR_GANTI * bagian.length + 1400);
   }
 
   update(dt) {
@@ -2135,6 +2169,30 @@ class Agent {
       this.el.style.left = Math.round(offX + this.x * scale) + 'px';
       this.el.style.top = Math.round(offY + (this.y - 30) * scale) + 'px';
     }
+
+    // Balon pikiran menggantung DI ATAS balon ucap, bukan menimpanya. Tingginya
+    // tetap dalam piksel CSS (bukan piksel kanvas) karena teksnya juga begitu.
+    if (now > this.pikirUntil) {
+      if (this.elPikir.style.display !== 'none') this.elPikir.style.display = 'none';
+    } else {
+      if (this.pikirIdx < this.pikirBagian.length - 1 && now > this.pikirGanti) {
+        this.pikirIdx++;
+        this.pikirGanti = now + PIKIR_GANTI;
+        this.elPikir.innerHTML = this.pikirBagian[this.pikirIdx];
+      }
+      const naik = now < this.bubbleUntil ? TINGGI_UCAP : 0;
+      // separuh lebar balon + sedikit jarak; tanpa ini pegawai di tepi kiri
+      // ruangan memikirkan sesuatu yang kalimatnya terpotong bingkai
+      const tepi = Math.min(118, panggungW / 2);
+      const tengah = offX + this.x * scale;
+      const kiri = Math.max(tepi, Math.min(panggungW - tepi, tengah));
+      // balon yang digeser masuk bingkai ekornya ikut bergeser balik, supaya
+      // gelembungnya tetap menunjuk kepala orangnya
+      this.elPikir.style.setProperty('--geser',
+        Math.max(-92, Math.min(92, tengah - kiri)) + 'px');
+      this.elPikir.style.left = Math.round(kiri) + 'px';
+      this.elPikir.style.top = Math.round(offY + (this.y - 31) * scale) - naik + 'px';
+    }
   }
 
   arrive() {
@@ -2152,6 +2210,7 @@ class Agent {
   destroy() {
     lepaskanAktor(this);                   // event tidak boleh memegang hantu
     this.el.remove();
+    this.elPikir.remove();
     if (terpilih === this) tutupKartu();   // kartunya tidak boleh jadi hantu
   }
 }
@@ -2516,6 +2575,12 @@ const TUNGGU_TEKS = {
   tanya: 'menunggu jawaban kamu',
 };
 
+/* Nama yang dipakai baris panel DAN kepala modal kabar: nama panggilan kalau
+   sudah diberi, kalau belum nama project + potongan id sesinya. Satu tempat
+   saja, supaya orang yang sama tidak muncul dengan dua nama berbeda. */
+const namaKru = (a) => namaPanggilan.get(a.id)
+  || ((a.project ? a.project.slice(0, 12) + '·' : '') + a.id.slice(0, 4));
+
 function pushLog(ev, kindClass, frasa) {
   const [v, o] = frasa || kegiatan(ev.tool, ev.label);
   const li = document.createElement('li');
@@ -2564,7 +2629,7 @@ function renderCrew() {
   crewEl.innerHTML = '';
   for (const a of agents.values()) {
     const panggilan = namaPanggilan.get(a.id);
-    const who = panggilan || ((a.project ? a.project.slice(0, 12) + '·' : '') + a.id.slice(0, 4));
+    const who = namaKru(a);
     // Yang menunggu keputusan kamu tidak boleh terbaca sedang bekerja — kegiatan
     // terakhirnya memang belum berubah, tapi kegiatan itu justru yang tertahan.
     const apa = a.butuh ? TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin
@@ -2882,6 +2947,9 @@ function handle(ev) {
       if (a.station !== st) a.goTo(st);
       else if (!a.path.length) a.state = 'work';
       a.say(esc(v) + (o ? ' <b>' + esc(o) + '</b>' : ''));
+      // dua tool yang menahan sesinya sampai kamu menjawab membawa isi
+      // pertanyaan/rencananya sendiri — itu yang naik ke modal
+      if (ev.tanya) kabarMasuk(ev, a, ev.tanya.jenis === 'rencana' ? 'rencana' : 'tanya');
       toolCount++;
       statTools.textContent = toolCount;
       nowDoing.textContent = a.doing;
@@ -2954,10 +3022,28 @@ function handle(ev) {
       blip(420, 0.1);
       break;
     }
+    /* Isi kepalanya. Cuma balon: tidak masuk log dan tidak menaikkan statistik
+       apa pun. Berpikir memang bukan pekerjaan yang bisa dihitung, dan log
+       kegiatan akan tenggelam kalau tiap tarikan napas ikut dicatat. */
+    case 'pikir': {
+      a.berpikir(ev);
+      break;
+    }
+    /* Kalimat yang benar-benar dia tulis untuk kamu. Yang menutup giliran
+       (`akhir`) itu jawabannya, jadi dia yang berhak memunculkan modal;
+       sisanya kalimat pengantar sebelum tool berikutnya — cukup lewat sebagai
+       balon lalu menumpuk di kotak kabar. */
+    case 'ucap': {
+      a.say(esc(satuBaris(ev.teks, 84)), 'say');
+      kabarMasuk(ev, a, ev.akhir ? 'hasil' : 'lapor');
+      pushLog(ev, 'mark',
+        [ev.akhir ? 'menyampaikan hasil' : 'melapor', satuBaris(ev.teks, 120)]);
+      break;
+    }
     case 'notify': {
       a.say('<b>!</b> ' + esc(ev.label || ''), 'say');
       pushLog(ev, 'mark', ['butuh perhatian', ev.label]);
-      if (ev.butuh) nowDoing.textContent = 'menunggu jawaban kamu';
+      if (ev.butuh) { nowDoing.textContent = 'menunggu jawaban kamu'; kabarMasuk(ev, a, 'tanya'); }
       blip(880, 0.08);
       break;
     }
@@ -2967,6 +3053,7 @@ function handle(ev) {
     case 'izin-minta': {
       a.say('minta izin: <b>' + esc(ev.label || ev.tool || '') + '</b>', 'say');
       pushLog(ev, 'mark', ['minta izin', [ev.tool, ev.label].filter(Boolean).join(' ')]);
+      kabarMasuk(ev, a, 'izin');
       nowDoing.textContent = 'menunggu izin kamu';
       blip(880, 0.08);
       break;
@@ -2987,6 +3074,7 @@ function handle(ev) {
       a.fx = null;
       a.say('berhenti — <b>' + esc(ev.label || 'galat') + '</b>', 'err');
       pushLog(ev, 'err', ['giliran berhenti', ev.label || '']);
+      kabarMasuk(ev, a, 'galat');
       nowDoing.textContent = 'berhenti: ' + (ev.label || 'galat');
       blip(180, 0.12);
       break;
@@ -3405,6 +3493,222 @@ if (elBukaFolder) {
 
 muatKendali();
 
+/* ============================================================ pikiran & kabar
+   Dua hal yang selama ini tidak pernah kelihatan di ruangan: apa yang sedang
+   DIPIKIRKAN agen, dan apa yang sebenarnya DIA KATAKAN. Hook tidak pernah
+   membawa keduanya; yang membawanya transkrip sesi (lihat server.mjs).
+
+   Tempatnya sengaja dibedakan:
+
+   - pikiran  -> balon awan di atas kepala. Hilang sendiri, tidak menahan
+                 siapa pun, tidak masuk log.
+   - kalimat  -> kotak kabar. Yang menutup giliran atau menahan sesi memunculkan
+                 modal sendiri; sisanya menumpuk dengan lencana angka di bilah
+                 bawah, tinggal dibuka kalau memang mau dibaca.
+
+   Alasannya satu: modal yang muncul tiap agen berdehem bukan alat pantau,
+   tapi gangguan. Yang berhak menyela cuma dua — hasil akhir, dan sesi yang
+   berhenti menunggu kamu.                                                   */
+
+/* localStorage bisa melempar (mode privat, site data diblokir), dan halaman ini
+   tidak boleh mati cuma gara-gara tidak boleh mengingat setelan tombol. */
+const ingatan = {
+  baca(k, b) { try { const v = localStorage.getItem(k); return v == null ? b : v; } catch { return b; } },
+  tulis(k, v) { try { localStorage.setItem(k, v); } catch { /* tidak diingat, ya sudah */ } },
+};
+
+const PIKIR_GANTI = 3200;      // ms per penggal kalimat di balon pikiran
+const PIKIR_UMUR = 11000;      // ms maksimum satu balon pikiran bertahan
+const TINGGI_UCAP = 27;        // tinggi balon ucap dalam px CSS, untuk menumpuk
+const TITIK = '<span class="titik"><i></i><i></i><i></i></span>';
+
+let balonPikir = ingatan.baca('balonPikir', '1') !== '0';
+
+const satuBaris = (t, n) => {
+  const s = String(t || '').replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+};
+
+/* Pikiran dipecah per kalimat, lalu kalimat pendek digabung sampai sepanjang
+   satu balon. Yang dipotong paksa cuma kalimat yang memang kepanjangan. */
+function penggalPikir(teks) {
+  const bersih = String(teks).replace(/\s+/g, ' ').trim();
+  const kalimat = bersih.match(/[^.!?…]+[.!?…]*/g) || [bersih];
+  const keluar = [];
+  let buf = '';
+  for (const k of kalimat) {
+    const calon = (buf ? buf + ' ' : '') + k.trim();
+    if (calon.length > 128 && buf) { keluar.push(buf); buf = k.trim(); }
+    else buf = calon;
+    while (buf.length > 150) { keluar.push(buf.slice(0, 149) + '…'); buf = buf.slice(149).trim(); }
+    if (keluar.length >= 4) break;
+  }
+  if (buf && keluar.length < 4) keluar.push(buf);
+  return keluar.slice(0, 4);
+}
+
+/* ---------------------------------------------------------- kotak kabar --- */
+const KABAR_MAX = 60;
+
+/* `auto` = boleh menyela. Cuma yang menutup giliran dan yang menahan sesinya
+   yang dapat hak itu; catatan di tengah jalan tidak. */
+const KABAR_JENIS = {
+  hasil:   { tajuk: 'hasil kerja',        cls: 'hasil',  auto: true },
+  lapor:   { tajuk: 'catatan',            cls: 'lapor',  auto: false },
+  tanya:   { tajuk: 'butuh jawaban',      cls: 'tunggu', auto: true },
+  izin:    { tajuk: 'minta izin',         cls: 'tunggu', auto: true },
+  rencana: { tajuk: 'mengajukan rencana', cls: 'tunggu', auto: true },
+  galat:   { tajuk: 'berhenti',           cls: 'galat',  auto: true },
+};
+
+const kabar = [];
+let kabarIdx = -1;
+let kabarBaru = 0;
+let kabarOtomatis = ingatan.baca('kabarOtomatis', '1') !== '0';
+
+const kbr = {
+  latar: document.getElementById('dlgKabar'),
+  chip: document.getElementById('kabarChip'),
+  judul: document.getElementById('kabarJudul'),
+  jenis: document.getElementById('kabarJenis'),
+  jam: document.getElementById('kabarJam'),
+  badan: document.getElementById('kabarBadan'),
+  hitung: document.getElementById('kabarHitung'),
+  sebelum: document.getElementById('kabarSebelum'),
+  lanjut: document.getElementById('kabarLanjut'),
+  tutup: document.getElementById('kabarTutup'),
+  auto: document.getElementById('kabarAuto'),
+  tombol: document.getElementById('kabarBtn'),
+  lencana: document.getElementById('kabarLencana'),
+  pikirBtn: document.getElementById('pikirBtn'),
+};
+
+function kabarMasuk(ev, a, jenis) {
+  const def = KABAR_JENIS[jenis] || KABAR_JENIS.lapor;
+  const j = jabatanDari(a.peran);
+  kabar.push({
+    ts: ev.ts || Date.now(),
+    sesi: ev.session || '',
+    nama: namaKru(a),
+    jab: j.singkat,
+    warna: j.pal.main,
+    jenis, tajuk: def.tajuk, cls: def.cls,
+    teks: ev.teks || ev.alasan || ev.label || '',
+    tanya: ev.tanya || null,
+    tool: ev.tool || '',
+  });
+  while (kabar.length > KABAR_MAX) { kabar.shift(); if (kabarIdx > 0) kabarIdx--; }
+  kabarBaru++;
+  kabarLencana();
+  /* Yang boleh menyela cuma kabar yang BARU. Waktu halaman dibuka ulang, server
+     mengirim ulang 60 event terakhir supaya ruangannya terisi lagi — tanpa
+     saringan ini, sekadar menekan F5 memunculkan modal berisi kabar setengah
+     jam lalu. Yang lama tetap masuk kotak, cuma tidak menodong. */
+  const segar = Date.now() - (ev.ts || 0) < 20000;
+  if (def.auto && kabarOtomatis && segar) { kabarBuka(kabar.length - 1); return; }
+  if (kbr.latar.hidden) return;
+  // yang sedang membaca kabar terakhir ikut dibawa maju; yang lagi menengok ke
+  // belakang tidak diseret pergi dari yang sedang dibacanya
+  if (kabarIdx >= kabar.length - 2) kabarBuka(kabar.length - 1);
+  else kabarGambar();
+}
+
+function kabarBuka(i) {
+  if (!kabar.length) return;
+  kabarIdx = Math.max(0, Math.min(kabar.length - 1, i));
+  const pertama = kbr.latar.hidden;
+  kbr.latar.hidden = false;
+  if (pertama) document.addEventListener('keydown', kabarTombol);
+  kabarBaru = 0;
+  kabarLencana();
+  kabarGambar();
+}
+
+function kabarTutupDialog() {
+  kbr.latar.hidden = true;
+  document.removeEventListener('keydown', kabarTombol);
+}
+
+function kabarGambar() {
+  const k = kabar[kabarIdx];
+  if (!k) return;
+  kbr.chip.style.background = k.warna;
+  kbr.judul.textContent = k.nama;
+  kbr.jenis.textContent = k.tajuk;
+  kbr.jenis.className = 'kbr-jenis ' + k.cls;
+  kbr.jam.textContent = jam(k.ts);
+  kbr.badan.innerHTML = kabarIsi(k);
+  kbr.badan.scrollTop = 0;
+  kbr.hitung.textContent = (kabarIdx + 1) + ' / ' + kabar.length;
+  kbr.sebelum.disabled = kabarIdx <= 0;
+  kbr.lanjut.disabled = kabarIdx >= kabar.length - 1;
+}
+
+function kabarIsi(k) {
+  const b = ['<div class="kbr-asal">' + esc(k.jab)
+    + (k.tool ? ' · ' + esc(k.tool) : '')
+    + (k.sesi ? ' · sesi <code>' + esc(k.sesi) + '</code>' : '') + '</div>'];
+  if (k.tanya && k.tanya.jenis === 'tanya') {
+    for (const q of k.tanya.daftar || []) {
+      if (q.tanya) b.push('<p class="kbr-tanya">' + esc(q.tanya) + '</p>');
+      if (q.opsi && q.opsi.length) {
+        b.push('<ul class="kbr-opsi">' + q.opsi.map((o) => '<li>' + esc(o) + '</li>').join('') + '</ul>');
+      }
+    }
+  } else if (k.tanya && k.tanya.jenis === 'rencana') {
+    b.push('<div class="kbr-teks">' + esc(k.tanya.teks || k.teks) + '</div>');
+  } else {
+    b.push('<div class="kbr-teks">' + esc(k.teks) + '</div>');
+  }
+  // Halaman ini menonton, tidak menjawab. Menyembunyikan itu bikin orang
+  // menunggu tombol yang memang tidak akan pernah ada.
+  if (k.cls === 'tunggu') {
+    b.push('<p class="kbr-nota">Sesinya berhenti di sini sampai dijawab, dan '
+      + 'jawabannya di tempat sesi itu jalan — terminal atau aplikasi Claude, '
+      + 'bukan di halaman ini.</p>');
+  }
+  return b.join('');
+}
+
+function kabarLencana() {
+  kbr.lencana.textContent = kabarBaru > 99 ? '99+' : String(kabarBaru);
+  kbr.lencana.hidden = kabarBaru === 0;
+  kbr.tombol.classList.toggle('ada', kabarBaru > 0);
+}
+
+function kabarTombol(e) {
+  if (e.key === 'Escape') { e.preventDefault(); kabarTutupDialog(); return; }
+  if (e.key === 'ArrowLeft' && kabarIdx > 0) { e.preventDefault(); kabarBuka(kabarIdx - 1); }
+  if (e.key === 'ArrowRight' && kabarIdx < kabar.length - 1) { e.preventDefault(); kabarBuka(kabarIdx + 1); }
+}
+
+kbr.tombol.onclick = () => {
+  if (!kbr.latar.hidden) { kabarTutupDialog(); return; }
+  if (!kabar.length) { kbr.tombol.classList.add('kosong'); setTimeout(() => kbr.tombol.classList.remove('kosong'), 500); return; }
+  kabarBuka(kabar.length - 1);
+};
+kbr.tutup.onclick = kabarTutupDialog;
+kbr.sebelum.onclick = () => kabarBuka(kabarIdx - 1);
+kbr.lanjut.onclick = () => kabarBuka(kabarIdx + 1);
+kbr.latar.onclick = (e) => { if (e.target === kbr.latar) kabarTutupDialog(); };
+kbr.auto.checked = kabarOtomatis;
+kbr.auto.onchange = () => {
+  kabarOtomatis = kbr.auto.checked;
+  ingatan.tulis('kabarOtomatis', kabarOtomatis ? '1' : '0');
+};
+
+kbr.pikirBtn.classList.toggle('mati', !balonPikir);
+kbr.pikirBtn.title = balonPikir ? 'balon pikiran: nyala' : 'balon pikiran: mati';
+kbr.pikirBtn.onclick = () => {
+  balonPikir = !balonPikir;
+  ingatan.tulis('balonPikir', balonPikir ? '1' : '0');
+  kbr.pikirBtn.classList.toggle('mati', !balonPikir);
+  kbr.pikirBtn.title = balonPikir ? 'balon pikiran: nyala' : 'balon pikiran: mati';
+  // yang terlanjur menggantung ikut dipadamkan saat itu juga
+  if (!balonPikir) for (const a of penghuni()) { a.pikirUntil = 0; a.elPikir.style.display = 'none'; }
+};
+kabarLencana();
+
 /* ------------------------------------------------------------------ stream */
 const params = new URLSearchParams(location.search);
 if (params.get('demo') === '1') {
@@ -3427,6 +3731,31 @@ if (params.get('demo') === '1') {
   };
   setTimeout(() => handle({ id: 0, ts: Date.now(), kind: 'prompt', session: 'demo-a', label: 'bikin visualisasi agent yang lagi kerja', ok: true }), 400);
   setTimeout(tick, 1800);
+  // isi kepala + isi mulut, supaya balon pikiran dan kotak kabar ikut kelihatan
+  const PIKIRAN = [
+    'Sebelum menyentuh room.js, saya cek dulu bentuk event-nya di server. Kalau kind-nya belum ada di sana, halaman tidak akan pernah menerima apa-apa.',
+    'Dua kemungkinan: hook-nya memang tidak terpasang, atau terpasang tapi port-nya beda. Yang kedua lebih gampang dibuktikan — tinggal lihat balasan /riwayat.',
+    'Ini kelihatannya cuma soal urutan. Balonnya digambar sebelum posisinya diperbarui, jadi satu frame pertama selalu meleset.',
+  ];
+  const UCAPAN = [
+    'Saya cek dulu isi server.mjs biar tahu event mana yang sudah ada sebelum menambah yang baru.',
+    'Ketemu: label-nya kosong karena describe() jatuh ke cabang default. Saya tambahkan case-nya.',
+  ];
+  let pk = 0;
+  const tickPikir = () => {
+    handle({ id: 800 + pk, ts: Date.now(), kind: 'pikir', session: Math.random() < 0.3 ? 'demo-b' : 'demo-a',
+             teks: PIKIRAN[pk % PIKIRAN.length], ok: true });
+    pk++;
+    setTimeout(tickPikir, 7000 + Math.random() * 5000);
+  };
+  setTimeout(tickPikir, 2600);
+  setTimeout(() => handle({ id: 880, ts: Date.now(), kind: 'ucap', session: 'demo-a', teks: UCAPAN[0], ok: true }), 9000);
+  setTimeout(() => handle({ id: 881, ts: Date.now(), kind: 'ucap', session: 'demo-a', akhir: true, ok: true,
+    teks: 'Beres. Tiga hal yang berubah:\n\n1. server.mjs mengikuti berkas transkrip tiap sesi, jadi isi pikiran dan kalimat agen ikut disiarkan.\n2. room.js menggambar balon pikiran di atas kepala pegawainya.\n3. Kalimat yang menutup giliran memunculkan modal ini.\n\nSesi terminal maupun sesi yang dilahirkan halaman ini sama-sama kebaca.' }), 21000);
+  setTimeout(() => handle({ id: 882, ts: Date.now(), kind: 'pre', session: 'demo-b', tool: 'AskUserQuestion', ok: true,
+    label: 'Port', butuh: { sebab: 'tanya', alasan: '', label: 'Port' },
+    tanya: { jenis: 'tanya', daftar: [{ tanya: 'Server ruangannya mau dijalankan di port berapa?',
+                                        opsi: ['4517 (bawaan)', '4600', 'ikut AGENT_ROOM_PORT'] }] } }), 33000);
   // satu workflow tiga fase, biar meja rapatnya kelihatan terisi di mode demo
   const wf = { kind: 'pre', session: 'demo-a', tool: 'Workflow', label: 'rancang-ruang',
                peserta: ['Rancang', 'Kritik', 'Padu'], ok: true, cwd: 'proyek-demo' };

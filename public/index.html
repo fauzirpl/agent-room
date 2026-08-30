@@ -21,6 +21,8 @@
       <span id="connText">menyambung…</span>
       <span class="sep">/</span>
       <span id="nowDoing">kantor masih sepi</span>
+      <button id="pikirBtn" class="ghost" title="balon pikiran">💭</button>
+      <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
       <button id="soundBtn" class="ghost" title="efek suara">🔇</button>
     </div>
   </section>
@@ -100,6 +102,26 @@
       <input id="dlgJalur" type="text" spellcheck="false" placeholder="atau tempel path di sini">
       <button type="button" id="dlgBatal">Batal</button>
       <button type="button" id="dlgPakai" class="utama">Pakai folder ini</button>
+    </footer>
+  </div>
+</div>
+<div class="dlg-latar" id="dlgKabar" hidden>
+  <div class="dlg kbr" role="dialog" aria-modal="true" aria-labelledby="kabarJudul">
+    <header class="dlg-kepala">
+      <span class="kbr-chip" id="kabarChip"></span>
+      <b id="kabarJudul">—</b>
+      <span class="kbr-jenis" id="kabarJenis"></span>
+      <span class="kbr-jam" id="kabarJam"></span>
+      <button type="button" id="kabarTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="kbr-badan" id="kabarBadan"></div>
+    <footer class="dlg-kaki kbr-kaki">
+      <label class="kbr-auto" title="modal muncul sendiri untuk hasil kerja dan sesi yang menunggu kamu">
+        <input type="checkbox" id="kabarAuto" checked> buka sendiri
+      </label>
+      <span class="kbr-hitung" id="kabarHitung"></span>
+      <button type="button" id="kabarSebelum" title="kabar sebelumnya (←)">‹</button>
+      <button type="button" id="kabarLanjut" class="utama" title="kabar berikutnya (→)">›</button>
     </footer>
   </div>
 </div>

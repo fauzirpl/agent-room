@@ -163,8 +163,12 @@ berhenti menunggu keputusan kamu.** Bedanya nyata — yang menganggur sudah
 selesai, yang ini tidak bisa lanjut sampai ada orang yang menjawab. Tanpa
 tanda sendiri, dua-duanya terlihat sama: berdiri diam di ruangan.
 
-Pemicunya tiga: `PermissionRequest`, `PermissionDenied`, dan `Notification`
-yang `notification_type`-nya `permission_prompt` atau `agent_needs_input`.
+Pemicunya lima. Tiga dari hook: `PermissionRequest`, `PermissionDenied`, dan
+`Notification` yang `notification_type`-nya `permission_prompt` atau
+`agent_needs_input`. Dua lagi dari tool yang memang tidak mengerjakan apa pun
+sampai kamu menjawab — `AskUserQuestion` dan `ExitPlanMode` — dan untuk
+keduanya isi pertanyaan atau rencananya ikut naik ke kotak kabar, bukan cuma
+nama tool-nya (lihat **Balon pikiran & kotak kabar**).
 Sembilan `notification_type` sisanya cuma kabar lewat — `auth_success`
 memberitahu login berhasil, `agent_completed` memberitahu subagent kelar,
 `quota_*` memberitahu kuota — dan tidak satu pun menahan sesinya.
@@ -220,6 +224,115 @@ ditentukan **isi perintahnya**, bukan nama tool-nya:
 Pembungkus di depan perintah dibuang dulu, jadi `rtk git push` dan `sudo git pull`
 tetap terbaca git. `cat .git/config` tidak: yang dibaca programnya, bukan
 kata "git" di mana pun.
+
+## Balon pikiran & kotak kabar
+
+Sampai di sini ruangan cuma menunjukkan **perbuatan**: tool apa yang dipakai,
+berkas mana yang disentuh, berhasil atau tidak. Yang tidak pernah kelihatan
+justru dua hal yang paling ingin dibaca orang — apa yang sedang **dipikirkan**
+agennya, dan apa yang sebenarnya **dia katakan**.
+
+Keduanya tidak ada di payload hook. Hook memang tidak pernah membawa isi. Yang
+membawanya cuma satu berkas: **transkrip sesi** yang ditulis Claude Code
+sendiri, satu baris JSON per pesan, dan jalurnya dititipkan di tiap payload
+hook lewat `transcript_path`. Server mengikutinya dari **ekor** — yang
+bertambah sesudah pemantauan mulai, itu yang disiarkan. Sesi yang sudah panjang
+tidak membanjiri ruangan dengan pikiran satu jam lalu.
+
+```
+transkrip sesi (.jsonl)  ──ekornya diikuti──▶  server.mjs  ──SSE──▶  balon + modal
+```
+
+Kalau `transcript_path` suatu hari hilang dari payload, jalurnya ditebak dari
+`cwd` + `session_id` dengan aturan penyimpanan Claude Code
+(`~/.claude/projects/<cwd disandikan>/<id>.jsonl`, dan `CLAUDE_CONFIG_DIR`
+dihormati). Yang mati cuma jalan pintasnya, bukan fiturnya.
+
+### Pikiran jadi balon awan
+
+Bentuknya sengaja dibedakan dari balon ucap: **awan bersudut bulat dengan dua
+gelembung menurun** ke arah kepala, bukan ekor segitiga. Itu satu-satunya
+penanda yang langsung terbaca sebagai "ini yang dipikirkan, bukan yang
+diucapkan" tanpa perlu label.
+
+Isinya ditampilkan **sepenggal-sepenggal**, berganti tiap 3,2 detik, maksimal
+empat penggal. Satu blok pikiran gampang lebih panjang dari yang muat di atas
+kepala orang, dan membacanya berganti kalimat justru yang bikin dia terbaca
+sebagai proses — bukan sebagai papan pengumuman.
+
+Balon pikiran **tidak masuk log kegiatan dan tidak menaikkan statistik apa
+pun.** Berpikir bukan pekerjaan yang bisa dihitung, dan log kegiatan akan
+tenggelam kalau tiap tarikan napas ikut dicatat.
+
+Kalau balon ucapnya kebetulan sedang tampil, balon pikiran naik ke atasnya.
+Dua-duanya boleh muncul bersamaan: mikir sambil melapor itu wajar.
+
+**Isi pikiran tidak selalu ada.** Sebagian permintaan mengembalikan blok
+`thinking` yang teksnya kosong — tersegel, cuma tanda tangannya yang ikut.
+Waktu itu terjadi yang muncul tiga titik berkedip plus jumlah tokennya: "dia
+memang sedang mikir, isinya tidak dibagi" lebih jujur daripada balon kosong,
+dan jauh lebih jujur daripada mengarang isi.
+
+Pikiran dari **subagent** (`isSidechain`) sengaja dilewati. Tidak ada apa pun
+di barisnya yang bisa dipakai memastikan dia peserta rapat yang mana, dan
+menempelkan pikiran ke orang yang salah lebih buruk daripada tidak
+menampilkannya.
+
+### Kalimatnya jadi kotak kabar
+
+Kalimat yang benar-benar ditulis agen masuk **kotak kabar**, dan cuma sebagian
+yang berhak memunculkan modal sendiri:
+
+| Kabar | Muncul sendiri? | Dari mana |
+|---|---|---|
+| **hasil kerja** — teks yang menutup giliran | ya | blok teks pada pesan ber-`stop_reason: end_turn` |
+| **catatan** — kalimat pengantar sebelum tool berikutnya | tidak | blok teks pada pesan yang masih berlanjut |
+| **butuh jawaban** — `AskUserQuestion`, notifikasi yang menahan sesi | ya | `tool_input` / `Notification` |
+| **mengajukan rencana** — `ExitPlanMode` | ya | `tool_input.plan` |
+| **minta izin** — `PermissionRequest` | ya | payload hook |
+| **berhenti** — giliran putus di tengah jalan | ya | `StopFailure` |
+
+Aturannya satu kalimat: **modal yang muncul tiap agen berdehem bukan alat
+pantau, tapi gangguan.** Yang berhak menyela cuma dua — hasil akhir, dan sesi
+yang berhenti menunggu kamu. Sisanya menumpuk dengan lencana angka di tombol
+💬 pada bilah bawah, tinggal dibuka kalau memang mau dibaca.
+
+Untuk `AskUserQuestion` yang ditampilkan **pertanyaannya beserta pilihannya**,
+bukan cuma nama tool-nya — itu yang sebenarnya perlu dibaca orang. Kabar yang
+menahan sesi selalu ditutup satu catatan: jawabannya di tempat sesi itu jalan,
+terminal atau aplikasi Claude, **bukan di halaman ini.** Halaman ini menonton,
+tidak menjawab; menyembunyikan itu cuma bikin orang menunggu tombol yang memang
+tidak akan pernah ada.
+
+Kotak kabar menyimpan 60 kabar terakhir, bisa dibolak-balik dengan `←` `→`,
+ditutup dengan `Esc`.
+
+### Dua tombol di bilah bawah
+
+| Tombol | Guna |
+|---|---|
+| 💭 | balon pikiran nyala/mati |
+| 💬 | buka kotak kabar; lencananya jumlah kabar yang belum dibaca |
+
+Centang **buka sendiri** di kaki modal mematikan hak menyela tadi tanpa
+mematikan kotak kabarnya. Ketiga setelan diingat peramban (`localStorage`), dan
+halaman tetap jalan kalau peramban memang tidak mengizinkannya.
+
+### Yang berubah soal privasi
+
+Sebelum ini server cuma menyiarkan **metadata**. Sekarang isi percakapan ikut
+lewat — masih tetap di localhost, masih tanpa lalu lintas keluar, tapi bedanya
+nyata dan tidak pantas disembunyikan di catatan kaki.
+
+Kalau ruangannya mau dikembalikan jadi metadata saja, matikan di **server**,
+bukan cuma menyembunyikan balonnya di halaman:
+
+```bash
+AGENT_ROOM_ISI=off node agent-room/server.mjs
+```
+
+Dengan itu transkrip tidak dibuka sama sekali dan `pikir`/`ucap` tidak pernah
+lahir.
 
 ## Peserta rapat
 
@@ -572,6 +685,7 @@ Dua hal yang bikin ini aman buat sesi kamu:
 | `AGENT_ROOM_CLAUDE` | hasil `where claude` | tunjuk biner claude tertentu, kalau PATH menemukan instalasi yang salah |
 | `AGENT_ROOM_TOKEN_FILE` | `.agent-room-token` | tempat token headless diingat, kalau centangnya dinyalakan |
 | `AGENT_ROOM_CUACA` | *(nyala, tebak dari IP)* | `off` mematikan cek cuaca; `lat,lon` menetapkan lokasi |
+| `AGENT_ROOM_ISI` | *(nyala)* | `off` menutup transkrip sesi: ruangan kembali cuma menyiarkan metadata, tanpa pikiran dan kalimat agen |
 
 ## Isi
 
@@ -589,7 +703,9 @@ Dua hal yang bikin ini aman buat sesi kamu:
 
 Server cuma bind ke localhost dan nyimpen 400 event terakhir di memori.
 Lalu lintas keluar satu-satunya adalah cek cuaca lewat geojs.io +
-open-meteo.com (matikan dengan `AGENT_ROOM_CUACA=off`); disk hanya disentuh
+open-meteo.com (matikan dengan `AGENT_ROOM_CUACA=off`). Disk **dibaca** untuk
+mengikuti transkrip sesi yang sedang jalan — itu sumber balon pikiran dan kotak
+kabar, dan bisa dimatikan dengan `AGENT_ROOM_ISI=off` — dan **ditulis** hanya
 kalau centang **ingat di berkas** pada token headless dinyalakan.
 
 

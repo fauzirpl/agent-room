@@ -220,6 +220,27 @@ const butuhManusia = new Map();             // sesi 12-char -> { sebab, alasan }
    memberitahu kuota. Tidak satu pun menahan sesinya. */
 const NOTIFY_BUTUH = new Set(['permission_prompt', 'agent_needs_input']);
 
+/* Dua tool yang tidak mengerjakan apa pun sampai kamu menjawab: yang satu
+   bertanya, yang satu mengajukan rencana. Hook cuma bilang "PreToolUse
+   AskUserQuestion" — pertanyaannya sendiri ada di `tool_input`, dan justru itu
+   yang perlu dibaca orang. Jadi keduanya masuk keadaan "butuh manusia" sama
+   seperti permintaan izin, lengkap dengan isi pertanyaannya. */
+const TOOL_TANYA = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
+function ringkasTanya(tool, input) {
+  const i = input && typeof input === 'object' ? input : {};
+  if (tool === 'ExitPlanMode') return { jenis: 'rencana', teks: potong(i.plan || '', UCAP_MAX) };
+  const daftar = [];
+  for (const q of Array.isArray(i.questions) ? i.questions.slice(0, 4) : []) {
+    daftar.push({
+      tanya: clip((q && (q.question || q.header)) || '', 240),
+      opsi: (Array.isArray(q && q.options) ? q.options.slice(0, 6) : [])
+        .map((o) => clip((o && o.label) || '', 60)).filter(Boolean),
+    });
+  }
+  return { jenis: 'tanya', daftar };
+}
+
 /** Human-readable one-liner for what the agent is doing. */
 function describe(tool, input) {
   const i = input && typeof input === 'object' ? input : {};
@@ -257,6 +278,14 @@ function describe(tool, input) {
       return Array.isArray(i.todos) ? `${i.todos.length} item` : 'todo';
     case 'Skill':
       return clip(i.skill);
+    case 'AskUserQuestion': {
+      const q = Array.isArray(i.questions) ? i.questions[0] : null;
+      return clip((q && (q.header || q.question)) || 'pertanyaan', 50);
+    }
+    case 'ExitPlanMode':
+      // baris pertama rencana biasanya judulnya; nama tool-nya sendiri sudah
+      // jadi kegiatan ("mengajukan rencana"), jadi jangan diulang di objeknya
+      return clip(String(i.plan || '').split('\n')[0].replace(/^#+\s*/, ''), 50);
     default: {
       // jangan pernah jatuh ke nama tool: itu bahasa Inggris dan bikin label
       // seperti "menunggu arahan AskUserQuestion". Kosong lebih baik.
@@ -377,6 +406,7 @@ function normalize(raw) {
     ev.label = ev.agen || '';
   }
   if (kind === 'izin-tolak') ev.alasan = clip(raw.reason || '', 120);
+  if (kind === 'pre' && TOOL_TANYA.has(tool)) ev.tanya = ringkasTanya(tool, raw.tool_input);
   if (kind === 'compact' || kind === 'compact-selesai') {
     const p = String(raw.trigger || '');
     ev.label = clip(PEMICU_COMPACT[p] || p, 40);
@@ -389,6 +419,7 @@ function normalize(raw) {
   const sebab = kind === 'izin-minta' ? 'izin'
     : kind === 'izin-tolak' ? 'tolak'
     : kind === 'notify' && NOTIFY_BUTUH.has(String(raw.notification_type || '')) ? 'tanya'
+    : kind === 'pre' && TOOL_TANYA.has(tool) ? 'tanya'
     : '';
   if (sebab) {
     const keadaan = { sebab, alasan: ev.alasan || '', label: ev.label || '' };
@@ -417,6 +448,230 @@ function publish(ev) {
     try { res.write(frame); } catch { clients.delete(res); }
   }
 }
+
+/* ————— transkrip: isi kepala dan isi mulut agen —————
+
+   Hook membawa PERBUATAN — tool apa, berkas mana, berhasil atau tidak — tapi
+   tidak pernah membawa ISI: kalimat yang ditulis agen untuk kamu, apalagi
+   pikirannya. Keduanya cuma ada di satu tempat, yaitu berkas transkrip sesi
+   yang ditulis Claude Code sendiri: satu baris JSON per pesan. Jalurnya
+   dititipkan di tiap payload hook (`transcript_path`), jadi tinggal diikuti
+   dari ujungnya — apa yang bertambah SESUDAH kita mulai memantau, itu yang
+   disiarkan.
+
+   Dibaca dari EKOR, bukan dari pangkal. Sesi yang sudah panjang tidak boleh
+   membanjiri ruangan dengan pikiran satu jam lalu; yang menarik selalu yang
+   baru saja terjadi.
+
+   Baris dari subagent (`isSidechain`) dilewati. Tidak ada apa pun di barisnya
+   yang bisa dipakai memastikan dia peserta rapat yang mana, dan menempelkan
+   pikiran ke orang yang salah lebih buruk daripada tidak menampilkannya.
+
+   Isi pikiran TIDAK SELALU ADA. Sebagian permintaan mengembalikan blok
+   `thinking` yang teksnya kosong — tersegel, cuma tanda tangannya yang ikut.
+   Waktu itu terjadi yang dikirim jumlah tokennya saja: "dia memang sedang
+   mikir, isinya tidak dibagi" lebih jujur daripada balon kosong.            */
+
+const PIKIR_MAX = 520;                    // teks yang muat di balon pikiran
+const UCAP_MAX = 4000;                    // teks yang dibaca orang di modal
+const TRANSKRIP_MAX = 24;                 // berkas yang dipantau bersamaan
+const TRANSKRIP_JEDA = 350;               // ms antar cek ukuran berkas
+const TRANSKRIP_SEPI = 30 * 60 * 1000;    // sesi sesenyap ini dilepas pemantaunya
+const BARIS_MAX = 256 * 1024;             // baris lebih panjang dari ini tidak diurai
+const SUSUL_MAX = 4 * 1024 * 1024;        // maksimal yang dibaca sekali cek
+
+const transkrip = new Map();              // sesi 12-char -> pemantau berkas
+
+/* Saklar mati. Sampai fitur ini ada, server cuma menyiarkan METADATA — tool
+   apa, berkas mana, berhasil atau tidak. Sekarang isi percakapan ikut lewat,
+   dan walau semuanya tetap di localhost, yang mau ruangannya kembali cuma
+   metadata harus punya cara mematikannya di SERVER, bukan cuma menyembunyikan
+   balonnya di halaman: AGENT_ROOM_ISI=off. */
+const ISI_MATI = String(process.env.AGENT_ROOM_ISI || '').trim().toLowerCase() === 'off';
+if (ISI_MATI) console.log('[agent-room] AGENT_ROOM_ISI=off — pikiran dan kalimat agen tidak dibaca');
+
+/* Seperti clip(), tapi GANTI BARIS DIPERTAHANKAN: yang ini dibaca manusia
+   sebagai paragraf di modal, bukan dipadatkan jadi satu baris label. */
+function potong(v, n) {
+  const s = String(v ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+/* Jalur transkrip kalau payload-nya kebetulan tidak membawanya. Claude Code
+   menyimpan satu berkas per sesi di ~/.claude/projects/<cwd disandikan>/<id>.jsonl,
+   dan penyandiannya cuma "semua yang bukan huruf/angka jadi tanda hubung".
+   Tebakan ini sengaja ada: kalau suatu hari `transcript_path` hilang dari
+   payload, yang mati cuma jalan pintasnya, bukan fiturnya. */
+function jalurTranskrip(raw) {
+  const bawaan = raw.transcript_path;
+  if (typeof bawaan === 'string' && bawaan) return bawaan;
+  const sesi = String(raw.session_id || '');
+  const cwd = String(raw.cwd || '');
+  if (!sesi || !cwd) return '';
+  const dasar = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+  return path.join(dasar, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'), sesi + '.jsonl');
+}
+
+/** Rangka event untuk sesi yang identitasnya sudah tercatat di server. */
+const dasarSesi = (sesi, cwd, ts) => ({
+  id: ++seq,
+  ts: ts || Date.now(),
+  session: sesi,
+  cwd: baseName(cwd || ''),
+  tool: null,
+  label: '',
+  ok: true,
+  ...(namaSesi.has(sesi) ? { nama: namaSesi.get(sesi) } : {}),
+  ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
+  ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
+});
+
+/* Satu pesan asisten -> event yang layak disiarkan. Dipakai DUA jalur
+   (transkrip dan stream-json) supaya aturannya cuma ditulis sekali. */
+function isiAgen(msg) {
+  const keluar = [];
+  if (!msg || !Array.isArray(msg.content)) return keluar;
+  /* `end_turn` berarti giliran ini memang berhenti di sini, jadi teksnya
+     jawaban akhir — bukan kalimat pengantar sebelum tool berikutnya. Bedanya
+     yang menentukan mana yang pantas memunculkan modal sendiri dan mana yang
+     cukup lewat sebagai balon. */
+  const akhir = msg.stop_reason === 'end_turn';
+  const tokenPikir = msg.usage?.output_tokens_details?.thinking_tokens;
+  for (const b of msg.content) {
+    if (b?.type === 'thinking' || b?.type === 'redacted_thinking') {
+      const teks = potong(b.thinking || '', PIKIR_MAX);
+      const ev = { kind: 'pikir', teks, label: clip(teks || 'mikir', 90) };
+      if (!teks) ev.tersegel = true;
+      if (Number.isFinite(tokenPikir) && tokenPikir > 0) ev.token = tokenPikir;
+      keluar.push(ev);
+    } else if (b?.type === 'text') {
+      const teks = potong(b.text || '', UCAP_MAX);
+      if (teks) keluar.push({ kind: 'ucap', teks, akhir, label: clip(teks, 120) });
+    }
+  }
+  return keluar;
+}
+
+function pantauTranskrip(sesi, jalur) {
+  if (!jalur || ISI_MATI) return;
+  const ada = transkrip.get(sesi);
+  if (ada) {
+    ada.sentuh = Date.now();
+    if (ada.file === jalur) return;
+    lepasTranskrip(sesi);                 // sesinya pindah berkas (resume/fork)
+  }
+  if (transkrip.size >= TRANSKRIP_MAX) {
+    // yang paling lama tidak bersuara yang dilepas, bukan yang paling dulu masuk
+    let tua = '';
+    for (const [k, v] of transkrip) {
+      if (!tua || v.sentuh < transkrip.get(tua).sentuh) tua = k;
+    }
+    if (tua) lepasTranskrip(tua);
+  }
+  let awal = 0;
+  try { awal = fs.statSync(jalur).size; } catch { awal = 0; }   // belum ada: mulai dari 0
+  const rec = {
+    file: jalur, offset: awal, sisa: Buffer.alloc(0),
+    sibuk: false, sentuh: Date.now(), lihat: new Set(),
+  };
+  rec.pantau = () => { bacaSusulan(sesi, rec); };
+  try {
+    fs.watchFile(jalur, { interval: TRANSKRIP_JEDA }, rec.pantau);
+  } catch (err) {
+    console.warn('[agent-room] transkrip tidak bisa dipantau: ' + err.message);
+    return;
+  }
+  transkrip.set(sesi, rec);
+}
+
+function lepasTranskrip(sesi) {
+  const rec = transkrip.get(sesi);
+  if (!rec) return;
+  transkrip.delete(sesi);
+  try { fs.unwatchFile(rec.file, rec.pantau); } catch { /* memang sudah lepas */ }
+}
+
+async function bacaSusulan(sesi, rec) {
+  if (rec.sibuk || !transkrip.has(sesi)) return;
+  rec.sibuk = true;
+  try {
+    const st = await fs.promises.stat(rec.file);
+    // berkasnya menyusut = ditulis ulang; ikuti lagi dari pangkalnya
+    if (st.size < rec.offset) { rec.offset = 0; rec.sisa = Buffer.alloc(0); }
+    while (rec.offset < st.size) {
+      const n = Math.min(st.size - rec.offset, SUSUL_MAX);
+      const fh = await fs.promises.open(rec.file, 'r');
+      let dibaca = 0;
+      const buf = Buffer.allocUnsafe(n);
+      try { dibaca = (await fh.read(buf, 0, n, rec.offset)).bytesRead; }
+      finally { await fh.close(); }
+      if (!dibaca) break;
+      rec.offset += dibaca;
+      cernaPotongan(sesi, rec, buf.subarray(0, dibaca));
+      if (dibaca < n) break;
+    }
+  } catch (err) {
+    // berkasnya belum sempat lahir itu wajar; sisanya tidak, dan pemantaunya
+    // dilepas supaya galat yang sama tidak diulang tiap 350 ms
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] transkrip ' + sesi + ': ' + err.message);
+      lepasTranskrip(sesi);
+    }
+  } finally {
+    rec.sibuk = false;
+  }
+}
+
+/* Potongan byte -> baris utuh. Sisanya disimpan sebagai Buffer, bukan string:
+   satu huruf UTF-8 bisa terpotong di batas pembacaan, dan menyambungnya
+   sesudah terlanjur jadi string berarti hurufnya sudah rusak. */
+function cernaPotongan(sesi, rec, buf) {
+  const semua = rec.sisa.length ? Buffer.concat([rec.sisa, buf]) : buf;
+  let mulai = 0;
+  for (let i = 0; i < semua.length; i++) {
+    if (semua[i] !== 10) continue;                    // '\n'
+    const baris = semua.subarray(mulai, i);
+    mulai = i + 1;
+    // baris raksasa selalu hasil tool (satu berkas besar yang dibaca), bukan
+    // yang kita cari — melewatinya menghemat urai JSON yang percuma
+    if (!baris.length || baris.length > BARIS_MAX) continue;
+    let o = null;
+    try { o = JSON.parse(baris.toString('utf8')); } catch { continue; }
+    serapTranskrip(sesi, rec, o);
+  }
+  rec.sisa = semua.subarray(mulai);
+  // satu baris yang tidak selesai-selesai tidak boleh menumpuk di memori; yang
+  // dibuang cuma penggalannya, baris sesudahnya tetap terbaca utuh
+  if (rec.sisa.length > BARIS_MAX) rec.sisa = Buffer.alloc(0);
+}
+
+function serapTranskrip(sesi, rec, o) {
+  if (!o || o.type !== 'assistant' || o.isSidechain) return;
+  const uuid = typeof o.uuid === 'string' ? o.uuid : '';
+  if (uuid) {
+    // sesudah resume atau pemadatan, baris lama bisa ditulis ulang apa adanya
+    if (rec.lihat.has(uuid)) return;
+    rec.lihat.add(uuid);
+    if (rec.lihat.size > 400) rec.lihat.delete(rec.lihat.values().next().value);
+  }
+  if (o.message?.is_api_error_message) return;        // galat API punya jalurnya sendiri
+  rec.sentuh = Date.now();
+  const ts = Date.parse(o.timestamp);
+  for (const b of isiAgen(o.message)) {
+    publish({ ...dasarSesi(sesi, o.cwd, Number.isFinite(ts) ? ts : 0), ...b });
+  }
+}
+
+/* `SessionEnd` tidak selalu datang — terminal ditutup paksa, mesin di-restart.
+   Tanpa penyapu ini pemantau berkasnya hidup terus sampai server mati. */
+setInterval(() => {
+  const batas = Date.now() - TRANSKRIP_SEPI;
+  for (const [sesi, rec] of transkrip) if (rec.sentuh < batas) lepasTranskrip(sesi);
+}, 5 * 60 * 1000).unref?.();
 
 /* ————— stream-json: sumber kedua untuk sesi yang dilahirkan halaman ini —————
 
@@ -473,6 +728,14 @@ function serapStream(rec, sid, m) {
     publish(dasar({ kind: 'stop-gagal', ok: false,
       label: clip(GALAT_STOP[m.error] || String(m.error || 'galat API'), 60) }));
     return;
+  }
+
+  /* Pikiran dan kalimat agen tetap diserap walau hook yang pegang kendali —
+     hook memang tidak pernah membawanya. Yang dijaga cuma jangan sampai dobel
+     dengan transkrip: kalau berkas sesi ini sudah dipantau, biarkan transkrip
+     yang bicara, karena dia juga melayani sesi terminal. */
+  if (m.type === 'assistant' && !ISI_MATI && !transkrip.has(sesi)) {
+    for (const b of isiAgen(m.message)) publish(dasar(b));
   }
 
   if (rec.hidup) return;                      // hook sudah pegang kendali
@@ -677,9 +940,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const ev = normalize(JSON.parse(body.teks || '{}'));
+      const raw = JSON.parse(body.teks || '{}');
+      const ev = normalize(raw);
       tandaiHidup(ev.session);
       publish(ev);
+      /* Jalur transkrip cuma diketahui dari sini. Waktu sesinya habis
+         pemantauannya tidak langsung dicabut: kalimat penutup agen sering baru
+         mendarat di berkas beberapa saat sesudah hook terakhir. */
+      if (ev.kind === 'session-end') setTimeout(() => lepasTranskrip(ev.session), 3000).unref?.();
+      else pantauTranskrip(ev.session, jalurTranskrip(raw));
     } catch (err) {
       // payload rusak: jangan pernah bikin agent-nya ikut gagal
       console.warn('[agent-room] payload diabaikan:', err.message);
