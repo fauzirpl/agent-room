@@ -2602,6 +2602,8 @@ const statTools = document.getElementById('statTools');
 const statAgents = document.getElementById('statAgents');
 const statTime = document.getElementById('statTime');
 const soundBtn = document.getElementById('soundBtn');
+const notifBtn = document.getElementById('notifBtn');
+const musikBtn = document.getElementById('musikBtn');
 
 let toolCount = 0;
 // Kapan tool call terakhir masuk — dipakai event yang menggambarkan MENUNGGU
@@ -2619,6 +2621,188 @@ soundBtn.onclick = () => {
   // menunggu tick interval; unmute sebaliknya menyalakan lagi seketika
   if (!sound && hujanAudio) hujanAudio.g.gain.setTargetAtTime(0.0001, audio.currentTime, 0.08);
   if (sound) aturSuaraHujan();
+};
+
+/* Notifikasi "tugas selesai" — tombol terpisah dari efek suara di atas, sengaja:
+   orang bisa mau dikabari begitu sesi kelar tanpa mau dengar blip tiap tool
+   call. Nyala/mati tidak diingat browser, sama seperti `sound` — dua-duanya
+   sama-sama butuh AudioContext yang baru boleh jalan sesudah klik pengguna. */
+let notifOn = false;
+notifBtn.onclick = () => {
+  notifOn = !notifOn;
+  notifBtn.classList.toggle('mati', !notifOn);
+  notifBtn.title = 'notifikasi tugas selesai: ' + (notifOn ? 'nyala' : 'mati');
+  if (notifOn && !audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+};
+
+/* Lonceng sinus 3 nada naik — beda timbre dan bentuk dari blip persegi biasa,
+   supaya "sesi ini kelar" kedengaran lain dari sekadar tool call berikutnya.
+   Disusul suara ngomong beneran kalau browsernya punya Web Speech API: itu
+   realisasi "Izin.." yang diminta — bukan efek bunyi, tapi benar disuarakan. */
+function notifSelesai(nama) {
+  if (audio) {
+    const t0 = audio.currentTime;
+    [523.25, 659.25, 783.99].forEach((freq, i) => {   // C5 E5 G5
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      const mulai = t0 + i * 0.1;
+      g.gain.setValueAtTime(0.0001, mulai);
+      g.gain.exponentialRampToValueAtTime(0.1, mulai + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, mulai + 0.55);
+      o.connect(g); g.connect(audio.destination);
+      o.start(mulai); o.stop(mulai + 0.6);
+    });
+  }
+  ucapSelesai(nama);
+}
+
+function ucapSelesai(nama) {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    const u = new SpeechSynthesisUtterance('Izin, ' + (nama ? nama + ' ' : 'tugasnya ') + 'selesai');
+    u.lang = 'id-ID';
+    u.rate = 1.05;
+    u.volume = 0.85;
+    // suara id-ID kalau browsernya punya; kalau tidak, ya suara default —
+    // getVoices() sering kosong di panggilan pertama, itu bukan galat
+    const suara = speechSynthesis.getVoices().find((v) => v.lang.startsWith('id'));
+    if (suara) u.voice = suara;
+    speechSynthesis.speak(u);
+  } catch { /* Web Speech API kadang absen atau ditolak browser headless */ }
+}
+
+/* ---------- musik lofi kantor ---------- */
+/* Sama sekali tanpa file audio, sama seperti derau hujan/guntur di atas: chord
+   jazzy pelan-pelan, beat lembut, dan desis vinyl, semua disintesis langsung.
+   `musikGain` cuma jadi fader on/off supaya nyala/mati halus, bukan patah —
+   volume tiap instrumen diatur sendiri-sendiri di bawah. */
+const LOFI_KORD = [
+  [174.61, 220.00, 261.63, 329.63],   // Fmaj7  (F3 A3 C4 E4)
+  [164.81, 196.00, 246.94, 293.66],   // Em7    (E3 G3 B3 D4)
+  [146.83, 174.61, 220.00, 261.63],   // Dm7    (D3 F3 A3 C4)
+  [130.81, 164.81, 196.00, 246.94],   // Cmaj7  (C3 E3 G3 B3)
+];
+const LOFI_LANGKAH_DUR = 60 / 76 / 4;   // 76 BPM, 16 langkah per birama
+
+let musikNyala = false;
+let musikGain = null;
+let musikKresek = null;
+let musikTimer = null;
+let musikLangkah = 0;
+let musikBirama = 0;
+let musikBerikut = 0;
+
+function musikKick(t) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(130, t);
+  o.frequency.exponentialRampToValueAtTime(42, t + 0.1);
+  g.gain.setValueAtTime(0.22, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  o.connect(g); g.connect(musikGain);
+  o.start(t); o.stop(t + 0.24);
+}
+
+function musikSnare(t) {
+  const len = (audio.sampleRate * 0.15) | 0;
+  const buf = audio.createBuffer(1, len, audio.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.7);
+  const src = audio.createBufferSource(); src.buffer = buf;
+  const bp = audio.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = 0.6;
+  const g = audio.createGain(); g.gain.value = 0.1;
+  src.connect(bp); bp.connect(g); g.connect(musikGain);
+  src.start(t);
+}
+
+function musikHat(t, aksen) {
+  const len = (audio.sampleRate * 0.045) | 0;
+  const buf = audio.createBuffer(1, len, audio.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  const src = audio.createBufferSource(); src.buffer = buf;
+  const hp = audio.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6500;
+  const g = audio.createGain(); g.gain.value = aksen ? 0.07 : 0.035;
+  src.connect(hp); hp.connect(g); g.connect(musikGain);
+  src.start(t);
+}
+
+// Pad chord: triangle sedikit sumbang (detune acak) + lowpass, khas kualitas
+// rekaman lofi yang tidak steril. Durasinya melewati satu birama supaya
+// chord berikutnya masuk sebelum yang lama benar-benar habis (menyatu).
+function musikPad(t, freqs, durasi) {
+  freqs.forEach((f) => {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    o.detune.value = Math.random() * 12 - 6;
+    const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 950;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.045, t + durasi * 0.25);
+    g.gain.linearRampToValueAtTime(0.0001, t + durasi);
+    o.connect(lp); lp.connect(g); g.connect(musikGain);
+    o.start(t); o.stop(t + durasi + 0.05);
+  });
+}
+
+function musikMulaiKresek() {
+  const len = audio.sampleRate * 2;
+  const buf = audio.createBuffer(1, len, audio.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    d[i] = Math.random() < 0.0015 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.12;
+  }
+  const src = audio.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const hp = audio.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
+  const g = audio.createGain(); g.gain.value = 0.02;
+  src.connect(hp); hp.connect(g); g.connect(musikGain);
+  src.start();
+  musikKresek = src;
+}
+
+function musikLangkahBunyi(birama, langkah, t) {
+  if (langkah === 0) musikPad(t, LOFI_KORD[birama], LOFI_LANGKAH_DUR * 16 * 1.15);
+  if (langkah === 0 || langkah === 10) musikKick(t);
+  if (langkah === 4 || langkah === 12) musikSnare(t);
+  if (langkah % 2 === 0) musikHat(t, langkah % 4 === 0);
+}
+
+// Scheduler look-ahead standar: dicek tiap 30ms, tapi jadwal ditulis lewat
+// audio.currentTime supaya waktunya presisi walau tick timer-nya meleset.
+function musikJadwal() {
+  while (musikBerikut < audio.currentTime + 0.12) {
+    musikLangkahBunyi(musikBirama, musikLangkah, musikBerikut);
+    const ganjil = musikLangkah % 2 === 1;
+    musikLangkah++;
+    if (musikLangkah >= 16) { musikLangkah = 0; musikBirama = (musikBirama + 1) % LOFI_KORD.length; }
+    musikBerikut += LOFI_LANGKAH_DUR * (ganjil ? 0.85 : 1.15);   // ayunan halus
+  }
+  musikTimer = setTimeout(musikJadwal, 30);
+}
+
+musikBtn.onclick = () => {
+  musikNyala = !musikNyala;
+  musikBtn.classList.toggle('mati', !musikNyala);
+  musikBtn.title = 'musik lofi kantor: ' + (musikNyala ? 'nyala' : 'mati');
+  if (musikNyala) {
+    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (!musikGain) {
+      musikGain = audio.createGain();
+      musikGain.gain.value = 0;
+      musikGain.connect(audio.destination);
+    }
+    musikGain.gain.setTargetAtTime(1, audio.currentTime, 0.5);
+    if (!musikKresek) musikMulaiKresek();
+    musikLangkah = 0; musikBirama = 0; musikBerikut = audio.currentTime + 0.1;
+    musikJadwal();
+  } else {
+    if (musikGain) musikGain.gain.setTargetAtTime(0.0001, audio.currentTime, 0.15);
+    clearTimeout(musikTimer);
+    if (musikKresek) { musikKresek.stop(); musikKresek = null; }
+  }
 };
 
 function blip(freq, dur) {
@@ -3152,6 +3336,7 @@ function handle(ev) {
       nowDoing.textContent = 'selesai — menunggu arahan';
       pushLog(ev, 'mark', ['selesai, menunggu arahan', '']);
       blip(420, 0.1);
+      if (notifOn) notifSelesai(namaPanggilan.get(a.id));
       break;
     }
     /* Isi kepalanya. Cuma balon: tidak masuk log dan tidak menaikkan statistik

@@ -332,16 +332,28 @@ tidak akan pernah ada.
 Kotak kabar menyimpan 60 kabar terakhir, bisa dibolak-balik dengan `←` `→`,
 ditutup dengan `Esc`.
 
-### Dua tombol di bilah bawah
+### Tombol di bilah bawah
 
 | Tombol | Guna |
 |---|---|
 | 💭 | balon pikiran nyala/mati |
 | 💬 | buka kotak kabar; lencananya jumlah kabar yang belum dibaca |
+| 🔇/🔊 | efek suara (blip tiap event) nyala/mati |
+| 🔔 | notifikasi "tugas selesai" — lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
+| 🎧 | musik lofi kantor nyala/mati — chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio |
 
 Centang **buka sendiri** di kaki modal mematikan hak menyela tadi tanpa
-mematikan kotak kabarnya. Ketiga setelan diingat peramban (`localStorage`), dan
-halaman tetap jalan kalau peramban memang tidak mengizinkannya.
+mematikan kotak kabarnya. Tiga setelan pertama diingat peramban
+(`localStorage`), dan halaman tetap jalan kalau peramban memang tidak
+mengizinkannya. Tiga tombol suara (🔇 🔔 🎧) sengaja **tidak** diingat — selalu
+mati waktu halaman dibuka lagi, karena `AudioContext` baru boleh jalan sesudah
+klik pengguna; menyalakannya otomatis dari `localStorage` toh tidak akan
+kedengaran sampai ada klik lagi.
+
+Notifikasi 🔔 memicu di event `Stop` — giliran sesinya kelar, "beres, siap
+disposisi" — bukan di `SubagentStop`. Peserta rapat yang bubar satu-satu
+selama rapat masih jalan bukan momen yang perlu memanggil kamu balik; sesi
+utama yang selesai baru itu momennya.
 
 ### Yang berubah soal privasi
 
