@@ -98,11 +98,19 @@ function box3(x, y, w, h, d, c) {
 }
 
 /* --------------------------------------------------------------- stations */
-// Empat meja kerja di baris paling depan — tempat pegawai duduk saat berpikir.
+// Meja kerja di baris paling depan — tempat pegawai duduk saat berpikir.
 // Titik x-nya BUKAN dipilih supaya rapi, tapi diambil dari koridor turun yang
-// benar-benar bebas perabot (54..118, 159..194, 369..381, 419..471). Jarak yang
-// rapi akan memaksa pegawai menembus ruang tunggu atau kipas menuju mejanya.
-const MEJA_KERJA_X = [176, 374, 86, 444];   // urut prioritas pemakaian
+// benar-benar bebas perabot (54..118, 159..194, 369..381, 419..471, lalu
+// 225..267 dan 289..322 — dua celah sempit di antara kursi rapat sisi dekat
+// dan dispenser yang baru ketahuan longgar). Jarak yang rapi akan memaksa
+// pegawai menembus ruang tunggu atau kipas menuju mejanya.
+// 242 & 308 SENGAJA mepet (papan meja lebar 64px, jarak keduanya cuma 66px):
+// itu memang batas paling longgar yang muat di antara meja-176 dan meja-374
+// tanpa papannya tumpang tindih — sudah dicek piksel demi piksel di browser.
+// Dua entri ini SENGAJA ditaruh di ujung array, bukan disisipkan di tengah:
+// wifi-sudut-lemah (event-acak.js) mengunci slotIdx===3 sebagai meja pojok
+// (444) — menyisipkan di tengah akan menggeser indeks itu ke meja yang salah.
+const MEJA_KERJA_X = [176, 374, 86, 444, 242, 308];   // urut prioritas pemakaian
 // Dulu 316 (di tengah kaki meja, jadi tertutup papan & kaki meja -> kebaca
 // "duduk"). Sekarang 350: sedikit LEBIH BESAR dari sortY meja (348, garis kaki
 // meja itu sendiri) supaya pegawai kalah-urut belakangan dan digambar DI ATAS
@@ -120,7 +128,7 @@ const STATIONS = {
             face: 'up', name: 'PC server',      fx: 'data'  },
   agent:  { x: 452, y: 140, lane: LANE_UP,   face: 'up',   name: 'ruang kadis',    fx: 'paper' },
   rapat:  { x: 246, y: 192, lane: LANE_UP,   face: 'down', name: 'meja rapat',     fx: 'talk'  },
-  // empat meja kerja; slotsX dipakai karena jaraknya tidak seragam.
+  // meja kerja; slotsX dipakai karena jaraknya tidak seragam.
   // face 'up': berdiri membelakangi penonton, menghadap laptop di mejanya —
   // bukan menghadap kamera seperti stasiun lain yang orangnya mengobrol.
   think:  { x: 176, y: MEJA_KERJA_Y, lane: LANE_DOWN, slotsX: MEJA_KERJA_X,
@@ -1444,6 +1452,22 @@ function drawTunggu(active) {
   if (active) glow(bx + 91, by - 12, 20, '#ffffff', 0.08);
 }
 
+/* Pantry kecil di sebelah dispenser: kabinet mini + toples kue, berdiri
+   sendiri (bukan bagian drawTunggu) di sela x372..385 yang masih longgar
+   antara tong sampah (ujungnya ~368 saat penuh) dan kipas (mulai ~389). */
+function drawPantryKecil() {
+  const x = 372, y = 300;
+  r(x, y - 15, 13, 15, P.wood);                    // badan kabinet
+  r(x, y - 15, 13, 1, sh(P.wood, 1.25));            // atas kena cahaya
+  r(x + 1, y - 13, 11, 9, P.woodD);                 // panel pintu
+  r(x + 1, y - 5, 11, 1, '#3f2f21');                // celah pintu bawah
+  r(x + 9, y - 9, 1, 2, '#e8d873');                 // gagang pintu
+  r(x + 2, y - 20, 9, 6, '#f2f0e6');                // toples kaca
+  r(x + 2, y - 20, 9, 1, '#ffffff');
+  r(x + 3, y - 21, 7, 1, '#c9cdd1');                // tutup toples
+  r(x + 4, y - 18, 2, 2, '#d9b96a'); r(x + 7, y - 17, 2, 2, '#c9a03a');  // kue
+}
+
 function drawMejaKerja() {
   // tiap meja menyala sendiri-sendiri: laptop hanya hidup di meja yang ditempati
   const terpakai = new Set();
@@ -1890,6 +1914,7 @@ const PROPS = [
   { sortY: 250, station: null,     draw: drawDus },
   { sortY: 260, station: null,     draw: drawKursiDekat },
   { sortY: 300, station: 'idle',   draw: drawTunggu },
+  { sortY: 300, station: null,     draw: drawPantryKecil },
   { sortY: 274, station: null,     draw: drawBendera },
   { sortY: 294, station: null,     draw: drawPlant },
   { sortY: 295, station: null,     draw: drawKipas },
@@ -1996,6 +2021,59 @@ const PERAN_BAWAAN = [
 const PERAN_STANDBY = ['magang', 'arsiparis', 'statistisi', 'teknisi'];
 const PERAN_PESERTA = ['analis_kebijakan', 'auditor', 'analis_sistem', 'statistisi', 'humas'];
 const peranBawaan = (i) => PERAN_BAWAAN[i % PERAN_BAWAAN.length];
+
+/* --------------------------------------------------------- seragam harian ---
+   Bukan bagian dari katalog event acak (event-acak.js) -- ini aturan tetap,
+   dicek dari hari asli (new Date().getDay()), bukan waktu simulasi. Menimpa
+   main/pants/pattern di OBJEK pal milik tiap JABATAN, bukan mengganti
+   objeknya: a.pal, kartu detail, dan chip di panel kru semuanya menunjuk ke
+   objek yang sama (this.pal = j.pal di constructor Agent dan di setPeran),
+   jadi sekali ditimpa di sini langsung ikut ke mana-mana tanpa perlu
+   melacak tiap sesi yang sedang hidup. Aksesori kepala (peci/jilbab/rambut)
+   sengaja tidak disentuh -- itu bukan "baju", dan tetap jadi pembeda wajah
+   antar jabatan biar kartu detail tidak kelihatan seperti kloningan.
+   Senin/Selasa/Kamis putih polos, Rabu batik biru serentak, Jumat batik
+   bebas -- warna atasannya diundi PER JABATAN (bukan satu warna buat
+   seluruh kantor) karena justru itu yang membedakan "bebas" dari hari
+   seragam wajib. Bawahan Jumat juga diundi sendiri, TERPISAH dari
+   atasannya dan sengaja tidak pernah jatuh ke navy -- kalau ikut navy
+   bawaan, "bebas"-nya cuma di atas, padahal yang diminta bebas dua-duanya.
+   Sabtu/Minggu tidak diminta user; dipulangkan ke putih polos juga supaya
+   tidak ada hari yang jatuh ke pal bawaan lama (sudah tidak valid karena
+   main/pants/pattern-nya ditimpa permanen oleh fungsi ini). */
+const SERAGAM_PUTIH = { main: '#f0ede2', pants: '#22293a', pattern: null };
+const SERAGAM_BATIK_RABU = { main: '#2f4470', pants: '#22293a', pattern: '#8fa8d8' };
+const SERAGAM_BATIK_JUMAT = [
+  { main: '#6b4a2a', pattern: '#d9ab5e' },   // coklat klasik
+  { main: '#2c4468', pattern: '#8fa8d8' },   // biru
+  { main: '#5b2430', pattern: '#e5a3ad' },   // marun
+  { main: '#3c5c3a', pattern: '#a8c98a' },   // hijau
+  { main: '#4a3d70', pattern: '#c9b8e8' },   // ungu
+];
+// Bukan navy, dan diundi lepas dari daftar atasan di atas -- lihat catatan
+// "bawahan Jumat" pada komentar blok ini.
+const CELANA_JUMAT = ['#3a2f22', '#39352f', '#2b2420', '#3a3226', '#302a3d'];
+
+// Hari (0-6) yang terakhir diterapkan -- dicek ulang tiap poll (bukan cuma
+// sekali muat) supaya tab yang dibiarkan terbuka lewat tengah malam ikut
+// pindah seragam sendiri, seperti cekJadwalRaya di bawah.
+let seragamHariTerpasang = null;
+
+function terapkanSeragamHarian() {
+  const hari = new Date().getDay();
+  if (hari === seragamHariTerpasang) return;
+  seragamHariTerpasang = hari;
+  for (const j of JABATAN) {
+    const seragam = hari === 3 ? SERAGAM_BATIK_RABU
+      : hari === 5 ? SERAGAM_BATIK_JUMAT[(Math.random() * SERAGAM_BATIK_JUMAT.length) | 0]
+      : SERAGAM_PUTIH;
+    j.pal.main = seragam.main;
+    j.pal.pants = hari === 5 ? CELANA_JUMAT[(Math.random() * CELANA_JUMAT.length) | 0] : seragam.pants;
+    j.pal.pattern = seragam.pattern || null;
+  }
+}
+terapkanSeragamHarian();
+setInterval(terapkanSeragamHarian, 30000);
 
 /* -------------------------------------------------------------- model ----
    Pilihan model untuk sesi yang dilahirkan dari halaman ini. Id-nya dikirim
@@ -2473,7 +2551,7 @@ function slotBebas(id, diri) {
 /* Tempat pulang pegawai yang lagi tidak dapat tugas adalah MEJA KERJANYA,
    bukan sudut tunggu: yang enak dilihat itu ruangan yang orangnya sibuk di
    mejanya masing-masing, bukan yang antre. Sudut tunggu tinggal jadi limpahan,
-   dipakai cuma kalau empat meja sudah terisi semua. */
+   dipakai cuma kalau semua meja sudah terisi. */
 function stasiunPulang(diri) {
   return slotBebas('think', diri) >= 0 ? 'think' : 'idle';
 }
@@ -4181,6 +4259,7 @@ let kendali = { izin: false, token: null };
 
 const elKendaliMati = document.getElementById('kendaliMati');
 const elForm = document.getElementById('formTugas');
+const elKredensial = document.getElementById('kredensialPanel');
 const elNama = document.getElementById('tugasNama');
 const elPrompt = document.getElementById('tugasPrompt');
 const elCwd = document.getElementById('tugasCwd');
@@ -4207,6 +4286,12 @@ async function muatKendali() {
     // statusnya sengaja tidak pernah ditampilkan, apa pun jawaban server.
     elKendaliMati.hidden = true;
     elForm.hidden = true;
+    // Panel token headless tetap independen: /kredensial hanya menyala kalau
+    // kendali web (izin) nyala, jadi itu satu-satunya syarat kelihatan di sini.
+    if (elKredensial) {
+      elKredensial.hidden = !d.izin;
+      if (d.izin) statusKredensial(d);
+    }
   } catch (_) {
     elKendaliMati.textContent = 'server tidak menjawab';
   }

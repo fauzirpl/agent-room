@@ -332,6 +332,21 @@ terminal atau aplikasi Claude, **bukan di halaman ini.** Halaman ini menonton,
 tidak menjawab; menyembunyikan itu cuma bikin orang menunggu tombol yang memang
 tidak akan pernah ada.
 
+Modalnya sendiri berlagak **email yang meneruskan nota dinas**: kepala modal
+gaya kepala email (avatar bulat + inisial, nama & jabatan pengirim, lencana
+jenis, jam kirim), badannya panel gelap yang menaruh satu kertas krem di
+tengah — kop **PEMERINTAH KANTOR DINAS**, judul **NOTA DINAS**, lalu tabel
+Nomor/Sifat/Perihal/Tanggal/Kepada/Dari sebelum isi pesannya sendiri. Nomor
+suratnya (`nomorNota()`) format asli `urut/ND-inisial-jabatan/bulan-romawi/
+tahun`, urutnya jalan terus (`kabarSeq`) walau kabar lama sudah dibuang dari
+larik `kabar` (lihat `KABAR_MAX`). Sifat (BIASA/SEGERA/PENTING) dan stempel
+sudut kertas (`SELESAI`/`DICATAT`/`SEGERA`/`TERHENTI`, `mix-blend-mode:
+multiply` biar nempel seperti tinta) dua-duanya dipakaikan ulang dari
+taksonomi `cls` yang sama dipakai lencana jenis — satu sumber warna, tiga
+tempat pakai. Metadata teknis (nama tool, id sesi) sengaja ditaruh **di luar**
+kertas, di bawahnya — seperti header mentah yang klien email tampilkan
+terpisah dari isi pesan yang diformat.
+
 Kotak kabar menyimpan 60 kabar terakhir, bisa dibolak-balik dengan `←` `→`,
 ditutup dengan `Esc`.
 
@@ -508,8 +523,10 @@ memutar lewat lajur depan meja dinding atau lajur depan meja rapat, tersambung d
 sisi kiri (dekat bendera) dan kanan.
 
 Stasiun yang paling sering dipakai dibuat berkapasitas banyak: **meja rapat**
-punya 9 kursi, **meja kerja** 4 meja dengan titik berdiri yang didaftar manual
-(koridor turun yang benar-benar bebas perabot), dan **PC server** 4 slot dengan
+punya 9 kursi, **meja kerja** 6 meja dengan titik berdiri yang didaftar manual
+(koridor turun yang benar-benar bebas perabot — dua di antaranya sengaja mepet,
+cuma berjarak 66px, karena itu batas paling longgar yang masih muat di celah
+tersisa), dan **PC server** 4 slot dengan
 langkah 20 px. Slot kelima di rak sengaja tidak ada: titiknya jatuh tepat di atas
 ember penadah tetesan AC. Ruang tunggu ikut aturan yang sama, langkah slotnya 23.
 Kalau sesi yang berkumpul melebihi itu, slot yang keluar kanvas dilewati, bukan
@@ -725,6 +742,16 @@ ruangan. Tiga aturan menjaga urutan itu:
 setengah jadi — kalau tidak, `tick()`-nya ikut meledak tiap frame sampai
 durasinya habis.
 
+### Pantry
+
+Sudut dispenser kedatangan tetangga: kabinet mini + toples kue
+(`drawPantryKecil`, di sela x372..385, antara tong sampah dan kipas). Event
+`ngerumpi-di-pantry` memakai pojok kosong tepat di atasnya (y226..250, kanan
+meja rapat) buat mengumpulkan 2-3 pegawai standby berkerumun ngobrol —
+beda dari `ngobrol-di-dispenser` yang orangnya kebetulan sudah di situ, di
+sini mereka sengaja dipanggil dari mana pun lewat `pinjamAktor`. Isinya
+gosip kantor (rotasi, mutasi), bukan obrolan kopi biasa.
+
 ### Kenapa hujan tidak ada di daftar itu
 
 Rapat desainnya mengusulkan `hujan-deras` dan `hujan-petir-kedip` sebagai event
@@ -849,6 +876,15 @@ dipakai ulang.
 | `POST /peran` | tetapkan jabatan sesi mana pun; id yang tidak dikenal ditolak |
 | `POST /kredensial` | pasang atau hapus token headless; nilainya tidak pernah bisa dibaca kembali |
 
+**Formulir tugasnya sendiri sengaja disembunyikan di halaman ini**, apa pun
+jawaban `/kendali` — `muatKendali()` di [public/room.js](public/room.js)
+memaksa `elForm.hidden = true` tanpa syarat, jadi menyalakan
+`--izinkan-perintah` tidak lagi memunculkan kotak nama/prompt/folder di
+sidebar. Endpoint di tabel atas tetap hidup dan bisa dipanggil langsung kalau
+kamu punya jalan lain ke token per-jalannya; yang hilang cuma jalan pintas
+lewat formulir bawaan. Panel **token headless** (di bawah) dikecualikan dari
+penyembunyian ini — lihat kenapa di bagiannya sendiri.
+
 ### Model yang dipakai
 
 Dropdown kedua di formulir tugas menentukan `--model` sesi yang dilahirkan
@@ -885,6 +921,15 @@ Env yang dipakai ditentukan bentuk tokennya:
 |---|---|
 | `sk-ant-api…` | `ANTHROPIC_API_KEY` |
 | selainnya, mis. `sk-ant-oat…` dari `claude setup-token` | `CLAUDE_CODE_OAUTH_TOKEN` |
+
+Panelnya **berdiri sendiri**, lepas dari formulir tugas yang disembunyikan di
+atas — `id="kredensialPanel"` di [public/index.html](public/index.html),
+ditampilkan/disembunyikan sendiri oleh `muatKendali()`. Syaratnya cuma `izin`
+dari `GET /kendali`, bukan `siap`: `POST /kredensial` di server memang cuma
+mensyaratkan kendali web menyala, tidak peduli biner `claude`-nya sudah
+ketemu atau belum, jadi panelnya ikut syarat yang sama persis. Kendali web
+mati sama sekali → panelnya juga tidak pernah muncul, karena `/kredensial`
+toh akan menolak semuanya (tidak ada token per-jalan buat dikirim).
 
 Tiga batasan yang berlaku apa pun pilihanmu:
 

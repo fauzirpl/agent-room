@@ -818,7 +818,9 @@ daftarEvent(
 
 {
   id: 'nota-dinas-keliling',
-  kelas: 'panggung', bobot: B.sedang, cooldown: 600, durasi: 40,
+  // durasi dilonggarkan dari 40: rutenya keliling SEMUA meja di MEJA_KERJA_X
+  // (kini 6, bukan 4), dan dua meja baru (242, 308) menambah jarak tempuh.
+  kelas: 'panggung', bobot: B.sedang, cooldown: 600, durasi: 52,
   perluAktor: true,
   syarat: (S) => S.orang.filter((o) => o.station === 'think').length >= 2,
   mulai(E) {
@@ -1309,6 +1311,37 @@ daftarEvent(
       spawn('talk', o.x, o.y - 26);
     }
     pada(E, 3, () => a.say('eh, sudah dengar belum...'));
+  },
+},
+
+{
+  id: 'ngerumpi-di-pantry',
+  kelas: 'latar', bobot: B.sedang, cooldown: 260, durasi: 20,
+  perluAktor: true,
+  syarat: (S) => S.orang.filter(bisaDipinjam).length >= 2,
+  mulai(E) {
+    const dipinjam = pinjamAktor(E, 3);
+    if (dipinjam.length < 2) { E.selesaiCepat = true; return; }
+    // Pojok y226..250 masih longgar: di atas dispenser + kabinet pantry
+    // (drawPantryKecil, x372..385 -- keduanya berhenti di y300) dan di
+    // kanan meja rapat (xFR 322). Orangnya berkerumun DI SINI, bukan
+    // menempel kabinetnya sendiri yang cuma muat satu badan.
+    dipinjam.forEach((a, i) => {
+      a.doingEvent = 'ngerumpi di pantry';
+      a.goToXY(330 + i * 15, 236, 'down');
+    });
+  },
+  tick(E) {
+    const siap = E.aktor.filter((a) => a.diam);
+    if (siap.length >= 2) {
+      const giliran = Math.floor(E.umur / 1.1) % siap.length;
+      if (Math.floor(E.umur / 1.1) !== E.data.g) {
+        E.data.g = Math.floor(E.umur / 1.1);
+        spawn('talk', siap[giliran].x, siap[giliran].y - 26);
+      }
+    }
+    pada(E, 3, () => { const a = E.aktor[0]; if (a) a.say('psst, katanya ada rotasi bulan depan'); });
+    pada(E, 13, () => { const a = E.aktor[1] || E.aktor[0]; if (a) a.say('jangan bilang siapa-siapa, ya'); });
   },
 },
 
@@ -4904,7 +4937,9 @@ daftarEvent(
 
 {
   id: 'sandiman-razia-sandi',
-  kelas: 'panggung', bobot: B.jarang, cooldown: 900, durasi: 30,
+  // durasi dilonggarkan dari 30 — alasan sama seperti nota-dinas-keliling:
+  // keliling semua meja di MEJA_KERJA_X, sekarang 6 meja bukan 4.
+  kelas: 'panggung', bobot: B.jarang, cooldown: 900, durasi: 42,
   syarat: (S) => S.orang.some((o) => o.peran === 'sandiman') && kursiKosong() > 0,
   mulai(E, S) {
     const sandiman = S.orang.find((o) => o.peran === 'sandiman' && bisaDipinjam(o));
@@ -4984,7 +5019,8 @@ daftarEvent(
 
 {
   id: 'statistisi-keliling-tagih-data',
-  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 24,
+  // durasi dilonggarkan dari 24 — alasan sama: 6 meja sekarang, bukan 4.
+  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 34,
   syarat: (S) => S.orang.some((o) => o.peran === 'statistisi') && S.orang.filter((o) => o.station === 'think').length >= 2,
   mulai(E, S) {
     const statistisi = S.orang.find((o) => o.peran === 'statistisi' && bisaDipinjam(o));
@@ -7084,7 +7120,8 @@ daftarEvent(
 
 {
   id: 'kasi-inspeksi-meja-staf',
-  kelas: 'latar', bobot: B.sering, cooldown: 360, durasi: 19,
+  // durasi dilonggarkan dari 19 — alasan sama: 6 meja sekarang, bukan 4.
+  kelas: 'latar', bobot: B.sering, cooldown: 360, durasi: 27,
   syarat: (S) => S.orang.some((o) => o.peran === 'kasi') && S.orang.filter((o) => o.station === 'think').length >= 2,
   mulai(E, S) {
     const kasi = S.orang.find((o) => o.peran === 'kasi' && bisaDipinjam(o));
@@ -7318,6 +7355,34 @@ daftarEvent(
 },
 
 {
+  id: 'makan-siang-bareng',
+  kelas: 'panggung', bobot: B.sering, cooldown: 420, durasi: 26,
+  perluAktor: true,
+  syarat: (S) => S.orang.length >= 3 && S.jam >= 11.5 && S.jam < 13.5,
+  mulai(E) {
+    pinjamAktor(E, 3).forEach((a, i) => {
+      a.doingEvent = 'makan siang bareng';
+      a.goToXY(RAPAT.cx + slotKe(i), 190, 'up');
+    });
+  },
+  tick(E) {
+    if (Math.random() < 0.03) spawn('steam', RAPAT.cx, 188);
+    pada(E, 5, () => { const a = E.aktor[0]; if (a) a.say('makan siang dulu, ya'); });
+    pada(E, 16, () => { const a = E.aktor[1]; if (a) a.say('nasi kotaknya itu-itu lagi'); });
+  },
+  gambarProp(E) {
+    const y = 194;
+    for (let i = 0; i < 3; i++) {
+      const x = 228 + i * 13;
+      r(x, y, 8, 6, '#c9a86a');      // kotak nasi
+      r(x, y, 8, 2, '#f2ece0');      // tutup putih
+      r(x + 2, y + 3, 2, 2, '#5f8a42'); // lalapan/sambal
+    }
+  },
+  sortY: 202,
+},
+
+{
   id: 'papasan-di-lorong-minggir',
   kelas: 'latar', bobot: B.sering, cooldown: 3, durasi: 2,
   mulai(E, S) {
@@ -7424,6 +7489,29 @@ daftarEvent(
     if (E.data.rambuSampai && E.umur < E.data.rambuSampai && Math.sin(now / 90) > 0) r(428, 42, 4, 4, '#ffffff');
   },
   selesai(E) { if (E.data.a) E.data.a.pose = null; },
+},
+
+{
+  // Bukan dari katalog EVENT-ACAK.md — permintaan langsung: kerjaan yang
+  // tetap jalan di jam istirahat (12.00-13.00 waktu mesin penonton) bikin
+  // pegawainya ngomel2 sendiri, tanpa berhenti dari stasiunnya. Sengaja
+  // TIDAK lewat pinjamAktor/pemeranStasiun: target harus sesi yang beneran
+  // S.bekerja (lagi ada tool call jalan), bukan yang dipinjam dari nganggur.
+  id: 'ngomel-jam-istirahat',
+  kelas: 'latar', bobot: B.sering, cooldown: 180, durasi: 13,
+  syarat: (S) => S.jam >= 12 && S.jam < 13 && S.bekerja.some((o) => !o.eventKerja),
+  mulai(E, S) {
+    const calon = S.bekerja.filter((o) => !o.eventKerja);
+    if (!calon.length) { E.selesaiCepat = true; return; }
+    E.data.a = pilih(calon);
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    pada(E, 0.4, () => a.say('sudah jam istirahat ini...'));
+    pada(E, 4.8, () => a.say('perut keroncongan, kerjaan jalan terus'));
+    pada(E, 9.2, () => a.say('nasi bungkusnya dingin duluan'));
+  },
 },
 
 );
