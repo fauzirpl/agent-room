@@ -192,6 +192,31 @@ Keadaan ini **tidak pernah muncul untuk pegawai standby** — standby tidak puny
 sesi, jadi tidak pernah menerima event ini — dan **tidak menaikkan statistik apa
 pun**. Yang terjadi bukan pekerjaan; justru pekerjaan yang tertahan.
 
+### Berhenti karena galat
+
+Ini keadaan **keempat**, dan gampang tertukar dengan yang di atas kalau tidak
+dibedakan: *menunggu manusia* berarti kamu yang ditunggu — jawabanmu langsung
+melanjutkannya. **Berhenti karena galat** berarti bukan kamu — sesinya tidak
+bisa lanjut sampai keadaannya sendiri berubah (kuota reset, server pulih) atau
+kamu yang memutuskan menyuruhnya lanjut lagi. Sebelum ini dua-duanya terlihat
+sama persis begitu balon "berhenti — ..." yang sesaat itu hilang: berdiri diam
+di ruangan, tidak ada bedanya dari yang benar-benar sudah selesai.
+
+Pemicunya `StopFailure` dari hook — `error` (mis. `rate_limit`, `overloaded`,
+`authentication_failed`) diterjemahkan lewat kamus yang sama dipakai untuk
+`api_retry`. Sesi yang dilahirkan halaman ini (lewat `/perintah`) punya jalur
+sendiri: galat API datang sebagai pesan asisten biasa yang ditandai
+`is_api_error_message` di stream-json-nya, dibaca **selagi sesinya masih
+jalan** — bukan menunggu proses itu mati dulu.
+
+Tandanya sengaja **bukan pose**, melainkan lencana merah kecil `!` yang
+menggantung tetap di atas kepala, tidak peduli pegawainya menghadap ke mana.
+Alasannya: pose menghadap kamera + map disposisi sudah dipakai untuk "lihat
+saya, saya butuh kamu" — memakainya lagi di sini bikin dua keadaan yang
+maknanya berlawanan terlihat sama. Lencana tidak menua dan tidak berganti isi;
+dia padam serentak begitu ada event lain dari sesi yang sama, sama seperti
+aturan pembatalan **butuh manusia**.
+
 ### Berpikir mengikuti tempatnya
 
 Menyusun agenda, menyusun atau mengajukan rencana, dan menunggu arahan

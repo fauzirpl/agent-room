@@ -117,6 +117,25 @@ body {
 .pikir b { font-style: normal; color: #2d4a7a; font-weight: 700; }
 .pikir.tersegel { color: #5b6c85; }
 
+/* ---------- lencana galat ----------
+   Sengaja BUKAN bentuk balon: balon berarti "ada isi untuk dibaca", lencana
+   ini cuma bendera "berhenti di sini" — tidak menua, tidak berganti isi,
+   padam serentak begitu server bilang cukup. */
+.macet {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #2a0d0d;
+  font-weight: 800;
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 3px 8px -2px #000b, 0 0 0 2px #1b1310;
+  animation: pop .2s ease-out;
+}
+
 /* tiga titik yang menyala bergantian: dipakai waktu isi pikirannya tersegel */
 .titik { display: inline-flex; gap: 3px; vertical-align: middle; }
 .titik i {

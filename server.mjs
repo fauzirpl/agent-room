@@ -214,6 +214,25 @@ const PEMICU_COMPACT = { manual: 'diminta', auto: 'otomatis' };
    mengikuti apa yang dikirim, tidak perlu menebak sendiri. */
 const butuhManusia = new Map();             // sesi 12-char -> { sebab, alasan }
 
+/* Keadaan keempat, dan yang paling gampang disalahbaca sebagai "menunggu
+   manusia" padahal beda: giliran ini BERHENTI PAKSA karena galat, bukan
+   berhenti untuk menunggu jawabanmu. Kamu tidak sedang ditunggu — sesinya
+   tidak bisa lanjut sampai kondisinya sendiri berubah (kuota reset, server
+   pulih) atau kamu yang memutuskan menyuruhnya lanjut. Dipisah dari
+   `butuhManusia` supaya dua hal itu tidak pernah tercampur di satu Map,
+   walau keduanya sama-sama "berhenti di tempat" secara visual. */
+const macetSesi = new Map();                // sesi 12-char -> { jenis, label, galat }
+
+/* Dipakai dari DUA jalur — hook lewat normalize(), dan stream-json lewat
+   serapStream() — supaya sesi yang dilahirkan halaman ini pun dapat tanda
+   yang sama waktu galat API menghentikannya, bukan cuma balon sesaat yang
+   hilang begitu `rec.hasil` datang. */
+function tandaiMacet(sesi, jenis, label, galat) {
+  const keadaan = { jenis, label, galat: galat || '' };
+  macetSesi.set(sesi, keadaan);
+  return keadaan;
+}
+
 /* Dari 12 nilai `notification_type`, cuma dua yang benar-benar berarti
    gilirannya ada di kamu. Sisanya kabar lewat: `auth_success` memberitahu
    login berhasil, `agent_completed` memberitahu subagent kelar, `quota_*`
@@ -427,6 +446,16 @@ function normalize(raw) {
     ev.butuh = keadaan;
   } else if (butuhManusia.delete(ev.session)) {
     ev.butuh = false;
+  }
+
+  /* Sama persis alasannya dengan blok di atas, cuma untuk keadaan yang
+     berbeda: `stop-gagal` menyalakannya, dan giliran BERIKUTNYA dari sesi
+     yang sama — apa pun bentuknya, tool baru atau prompt baru — berarti
+     sesinya sudah lanjut lagi, jadi tandanya dicabut. */
+  if (kind === 'stop-gagal') {
+    ev.macet = tandaiMacet(ev.session, String(raw.error || 'unknown'), ev.label || '', ev.galat);
+  } else if (macetSesi.delete(ev.session)) {
+    ev.macet = false;
   }
   return ev;
 }
@@ -725,8 +754,9 @@ function serapStream(rec, sid, m) {
      sesi terbaca selagi sesinya masih jalan — hook tidak pernah membawanya, dan
      menunggu `result` berarti ruangannya diam dulu tanpa alasan. */
   if (m.type === 'assistant' && m.is_api_error_message) {
-    publish(dasar({ kind: 'stop-gagal', ok: false,
-      label: clip(GALAT_STOP[m.error] || String(m.error || 'galat API'), 60) }));
+    const label = clip(GALAT_STOP[m.error] || String(m.error || 'galat API'), 60);
+    const macet = tandaiMacet(sesi, String(m.error || 'unknown'), label, '');
+    publish(dasar({ kind: 'stop-gagal', ok: false, label, macet }));
     return;
   }
 

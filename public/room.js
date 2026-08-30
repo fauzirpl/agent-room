@@ -504,12 +504,20 @@ function drawClock(cx, cy) {
   ctx.strokeStyle = MOD.jamSorot ? '#1c2228' : '#3a3f45';
   ctx.lineWidth = 1.4 + MOD.jamSorot * 0.4;
   ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.stroke();
-  const d = new Date();
-  const mn = (d.getMinutes() + d.getSeconds() / 60) / 60;
-  const hr = ((d.getHours() % 12) + mn) / 12;
-  // ruangan sepi: jarum detik MELOMPAT tiap detik, bukan meluncur mulus —
-  // itu yang bikin satu-satunya benda bergerak di ruangan terasa berdetak
-  const sc = (d.getSeconds() + (MOD.jamDetak ? 0 : d.getMilliseconds() / 1000)) / 60;
+  let hr, mn, sc;
+  if (RUANGAN.jamBeku) {
+    // baterai habis: sudutnya dibekukan pada nilai yang disimpan event, bukan
+    // dari Date() — jam ini benar-benar berhenti, bukan cuma digambar lambat
+    ({ hr, mn, sc } = RUANGAN.jamBeku);
+    if (MOD.jamGetar) sc += Math.sin(now / 55) * 0.006;   // gemetar sebelum diam
+  } else {
+    const d = new Date();
+    mn = (d.getMinutes() + d.getSeconds() / 60) / 60;
+    hr = ((d.getHours() % 12) + mn) / 12;
+    // ruangan sepi: jarum detik MELOMPAT tiap detik, bukan meluncur mulus —
+    // itu yang bikin satu-satunya benda bergerak di ruangan terasa berdetak
+    sc = (d.getSeconds() + (MOD.jamDetak ? 0 : d.getMilliseconds() / 1000)) / 60;
+  }
   const hand = (frac, len, col, wid) => {
     const a = frac * Math.PI * 2 - Math.PI / 2;
     ctx.strokeStyle = col; ctx.lineWidth = wid;
@@ -544,6 +552,17 @@ function drawWall() {
   for (let x = 96; x < W; x += 96) {             // garis pilar samar
     r(x, 4, 1, 66, P.creamD);
     r(x, 72, 1, 28, P.mintD);
+  }
+
+  // Noda plafon rembes hujan, di atas lemari arsip. Permanen begitu muncul,
+  // dan melebar tiap kali hujan deras terjadi lagi — dinding ini memang
+  // tidak pernah benar-benar diperbaiki.
+  for (const n of RUANGAN.nodaPlafon) {
+    ctx.globalAlpha = 0.4;
+    r(n.x, 0, n.w, 7, '#a89870');
+    ctx.globalAlpha = 0.22;
+    r(n.x - 2, 0, n.w + 4, 9, '#8a7a54');
+    ctx.globalAlpha = 1;
   }
 
   // spanduk merah-putih
@@ -629,6 +648,17 @@ function drawFloor() {
         ctx.lineTo(x + 19, y + 12); ctx.stroke();
       }
     }
+  }
+  // Retakan tambahan dari event ubin-retak-nambah, gaya sama dengan yang
+  // prosedural di atas tapi posisinya tersimpan — jadi permanen dan bisa
+  // dihindari, bukan cuma dekorasi yang muncul ulang tiap frame di tempat baru.
+  for (const k of RUANGAN.retakExtra) {
+    const x = k.gx * 24, y = FLOOR_TOP + k.gy * 24;
+    ctx.strokeStyle = P.grout; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 12, y + 12);
+    ctx.lineTo(x + 12 + Math.round(k.t * 8) - 8, y + 12 - Math.round(k.t * 6));
+    ctx.lineTo(x + 12 + Math.round(k.t * 5), y + 12 + Math.round(k.t * 7));
+    ctx.stroke();
   }
   for (let y = FLOOR_TOP; y < H; y += 24) r(0, y, W, 1, P.grout);          // nat
   for (let x = 0; x < W; x += 24) r(x, FLOOR_TOP, 1, H - FLOOR_TOP, P.grout);
@@ -897,7 +927,8 @@ function drawWindow(active) {
     r(206 + g, 93, 10, 1, '#d9d4c2');
   }
   r(219, 87, 2, 2, MOD.printerMacet
-    ? (Math.sin(now / 140) > 0 ? '#e8453f' : '#5c2222')
+    ? (Math.sin(now / 140) > 0 ? '#e8453f' : '#5c2222')      // macet: kedip cepat
+    : MOD.internetMati ? '#c22b2b'                            // putus: merah tetap
     : (Math.sin(now / 500) > 0 ? '#57d06a' : '#2c5c38'));
   if (active) glow(x + w / 2, y + h / 2, 44, P.blueL, 0.2);
 }
@@ -1103,9 +1134,39 @@ function drawKadis(active) {
 
 function drawEmber() {
   r(341, 122, 14, 2, '#4a7fd0');
-  r(342, 124, 12, 8, P.blue);
-  r(343, 130, 10, 2, sh(P.blue, 0.7));
-  r(345, 126, 4, 1, '#9fd0ee');
+  if (RUANGAN.emberDiangkat) {
+    // diangkat mengikuti pegawai yang membawanya: alasnya kosong sebentar
+    r(342, 130, 12, 2, sh(P.blue, 0.55));
+    return;
+  }
+  // permukaan naik dari isi 0..90, dan makin keruh mendekati penuh
+  const tinggi = Math.round((RUANGAN.emberIsi / 90) * 7);
+  const keruh = lerpHex(P.blue, '#4a7a90', RUANGAN.emberIsi / 90);
+  r(342, 124, 12, 8, sh(P.blue, 0.85));
+  r(342, 131 - tinggi, 12, tinggi + 1, keruh);
+  if (tinggi > 1) r(345, 131 - tinggi, 4, 1, '#9fd0ee');
+  if (RUANGAN.emberIsi >= 90) {                             // genangan di lantai
+    ctx.globalAlpha = 0.5;
+    r(340, 133, 16, 2, '#3a5a70');
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* Kabel gulung yang melintang di lantai — bekas kantor yang belum sempat
+   dirapikan, bukan bekas event. Ada sejak halaman dibuka; RUANGAN.lakban cuma
+   menentukan sudah berapa banyak yang ditempeli lakban. Persis memotong
+   LANE_DOWN (y=252) di x322..352, jadi kesandungnya beralasan. */
+function drawKabelLantai() {
+  ctx.strokeStyle = '#3a3f45'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(322, 250);
+  ctx.quadraticCurveTo(337, 258, 352, 254);
+  ctx.stroke();
+  const n = RUANGAN.lakban;
+  for (let i = 0; i < n; i++) {
+    const t = i / 7, x = 322 + t * 30, y = 250 + Math.sin(t * Math.PI) * 6;
+    r(x - 3, y - 1, 6, 3, i % 2 ? '#e8c33a' : '#20242c');
+  }
 }
 
 function drawTunggu(active) {
@@ -1369,18 +1430,23 @@ let putarKipas = 0;
 
 // kipas angin berdiri, baling-balingnya ikut berputar
 function drawKipas() {
-  // oleng = seluruh kepala berayun; getar = motor macet bergetar cepat
-  const cx = 400
+  // oleng = seluruh kepala berayun cepat (gangguan); getar = motor macet;
+  // sapu = kipas benar-benar MENOLEH, periode lambat 7 detik, amplitudo lebar
+  const sapu = MOD.kipasSapu ? Math.sin(now / 1114) * MOD.kipasSapu : 0;
+  const cx = 400 + sapu
     + Math.round(Math.sin(now / 64) * MOD.kipasGoyang)
     + (MOD.kipasGetar ? (Math.sin(now / 42) > 0 ? 1 : -1) * MOD.kipasGetar : 0);
   const base = 292;
   r(cx - 10, base, 20, 3, '#7c838a');
   r(cx - 6, base - 2, 12, 2, '#9aa1a6');
   r(cx - 1, base - 30, 2, 30, '#c9ced4');
+  // grill menyusut di ujung sapuan: itu yang bikin perputaran kepalanya
+  // terbaca sebagai menoleh, bukan cuma bergeser mendatar
+  const rx = 11 - Math.abs(sapu) * 0.5;
   ctx.fillStyle = '#dde1e4';
-  ctx.beginPath(); ctx.arc(cx, base - 38, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, base - 38, rx, 11, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#aeb4ba';
-  ctx.beginPath(); ctx.arc(cx, base - 38, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, base - 38, rx - 2, 9, 0, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#eef0f2'; ctx.lineWidth = 2;
   for (let i = 0; i < 3; i++) {
     // MOD.kipas: 0 = berhenti (macet), <1 = melambat (tegangan turun)
@@ -1450,6 +1516,7 @@ const PROPS = [
   { sortY: 294, station: null,     draw: drawPlant },
   { sortY: 295, station: null,     draw: drawKipas },
   { sortY: 348, station: 'think',  draw: drawMejaKerja },
+  { sortY: 112, station: null,     draw: drawKabelLantai },
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -1711,6 +1778,9 @@ function posEvent(a) {
     case 'lap':      return { l: -2, r: Math.sin(t * 8) > 0 ? -6 : -2 };
     case 'jongkok':  return { l: -1, r: -1 };
     case 'ngantuk':  return { l: -1, r: -1 };
+    case 'hidung':   return { l: -7, r: 0 };                             // menutup hidung
+    case 'silang':   return { l: -6, r: -6 };                            // menyilang lengan
+    case 'dudukLantai': return { l: -3, r: -3 };                         // laptop di pangkuan
     default:         return { l: 0, r: 0 };
   }
 }
@@ -1734,6 +1804,9 @@ function drawBawaan(a, x, yb) {
     case 'kertas':    r(bx + 1, yb - 13, 7, 8, P.paper); r(bx + 2, yb - 11, 5, 1, '#b9c0ca'); break;
     case 'sapu':      r(bx + 3, yb - 18, 1, 14, '#8a6844'); r(bx + 1, yb - 5, 5, 3, '#c9a03a'); break;
     case 'amplop':    r(bx + 1, yb - 12, 8, 5, '#f2f0e6'); r(bx + 1, yb - 12, 8, 1, '#c9b07a'); break;
+    case 'laptop':    r(bx, yb - 13, 9, 7, '#9aa1a6'); r(bx + 1, yb - 12, 7, 5, '#20242c'); break;
+    case 'toner':     r(bx, yb - 13, 7, 6, '#20242c'); r(bx + 1, yb - 12, 5, 1, '#3a3f45'); break;
+    case 'jerigen':   r(bx, yb - 13, 6, 8, '#d8b23a'); r(bx + 1, yb - 14, 4, 1, '#8a6a1a'); break;
   }
 }
 
@@ -1859,6 +1932,9 @@ function spawn(kind, x, y, warna) {
       c: ['#c22b2b', '#d1a326', '#7ee787', '#79c0ff', '#d2a8ff'][(Math.random() * 5) | 0] }); break;
     // kantuk: kotak yang naik miring sambil melebar — bukan asap, tapi 'zzz'
     case 'kantuk': parts.push({ x, y, vx: 9, vy: -8, g: 0, life: 2.4, c: '#dfe4ec', s: 2 }); break;
+    case 'serbuk': parts.push({ x: x + rnd(6), y, vx: rnd(4), vy: 6, g: 90, life: 0.8, c: '#2c3038', s: 1 }); break;
+    // kertas printer yang dibuang setelah dibersihkan/dirobek: melengkung ke tong
+    case 'lempar': parts.push({ x, y, vx: rnd(10) + 26, vy: -18, g: 90, life: 1.1, c: P.paper, s: 2 }); break;
   }
   if (warna) for (let i = sebelum; i < parts.length; i++) parts[i].c = warna;
   return parts[parts.length - 1];
@@ -1872,8 +1948,9 @@ function updateParts(dt) {
     p.y += p.vy * dt;
     if (p.k === 'drip' && p.y >= 124) {                    // tetes AC kena ember
       parts.splice(i, 1);
-      spawn('splash', 347, 124);
-      spawn('splash', 347, 124);
+      const penuh = RUANGAN.emberIsi >= 90;
+      for (let s = 0; s < (penuh ? 6 : 3); s++) spawn('splash', 347, 124);
+      if (!RUANGAN.emberDiangkat) RUANGAN.emberIsi = Math.min(90, RUANGAN.emberIsi + 1);
       continue;
     }
     if (p.life <= 0) parts.splice(i, 1);
@@ -1881,7 +1958,9 @@ function updateParts(dt) {
 }
 function drawParts() {
   for (const p of parts) {
-    ctx.globalAlpha = Math.min(1, p.life * 1.6);
+    // p.a: plafon opsional dari event (kertas pudar karena toner tipis).
+    // Dikalikan, bukan ditimpa, supaya peluruhan life tetap terlihat di akhir hidupnya.
+    ctx.globalAlpha = Math.min(1, p.life * 1.6) * (p.a == null ? 1 : p.a);
     r(p.x, p.y, p.s, p.s, p.c);
   }
   ctx.globalAlpha = 1;
@@ -2010,6 +2089,15 @@ class Agent {
     this.pikirGanti = 0;
     this.pikirUntil = 0;
 
+    // Lencana galat: tidak berganti isi, tidak menua sendiri — nyala persis
+    // selama this.macet ada isinya, padam sendiri begitu server bilang cukup.
+    this.macet = null;
+    this.elMacet = document.createElement('div');
+    this.elMacet.className = 'macet';
+    this.elMacet.style.display = 'none';
+    this.elMacet.textContent = '!';
+    overlay.appendChild(this.elMacet);
+
     this.goTo(stasiunPulang(this));
   }
 
@@ -2069,6 +2157,15 @@ class Agent {
     this.face = this.butuh
       ? 'down'
       : this.hadap || (STATIONS[this.station] || {}).face || 'down';
+  }
+
+  /* Berhenti PAKSA karena galat — beda dari setButuh(): itu menunggu KAMU,
+     ini menunggu keadaannya sendiri berubah. Tidak memaksa arah hadap:
+     lencananya sendiri yang menandakan, bukan posenya, jadi pegawainya tetap
+     menghadap ke mana pun dia terakhir berdiri saat giliran itu putus. */
+  setMacet(m) {
+    this.macet = m || null;
+    this.elMacet.style.display = this.macet ? '' : 'none';
   }
 
   say(text, cls) {
@@ -2153,8 +2250,11 @@ class Agent {
         const fx = this.fx || (STATIONS[this.station] && STATIONS[this.station].fx);
         // hening: semua berhenti mengeluarkan apa pun (iuran duka cita).
         // lemot: lajunya dikurangi, tidak dihentikan — masih bekerja, cuma
-        // menunggu. Keduanya kosmetik; tool call-nya sendiri tetap jalan.
-        if (fx && !MOD.hening && Math.random() < 0.3 * (1 - MOD.lemot)) {
+        // menunggu. internetMati: cuma 'ping'/'scan' (web/search) yang mati —
+        // orang di rak server atau meja stempel tidak butuh jaringan untuk
+        // bekerja. Semuanya kosmetik; tool call-nya sendiri tetap jalan.
+        const putusInternet = MOD.internetMati && (fx === 'ping' || fx === 'scan');
+        if (fx && !MOD.hening && !putusInternet && Math.random() < 0.3 * (1 - MOD.lemot)) {
           spawn(fx, this.x, this.y - 24);
         }
       }
@@ -2193,6 +2293,13 @@ class Agent {
       this.elPikir.style.left = Math.round(kiri) + 'px';
       this.elPikir.style.top = Math.round(offY + (this.y - 31) * scale) - naik + 'px';
     }
+
+    // Lencana galat: kecil, jadi tidak perlu digeser masuk bingkai seperti
+    // balon pikiran — yang penting selalu tepat di atas kepala orangnya.
+    if (this.macet) {
+      this.elMacet.style.left = Math.round(offX + this.x * scale) + 'px';
+      this.elMacet.style.top = Math.round(offY + (this.y - 34) * scale) + 'px';
+    }
   }
 
   arrive() {
@@ -2211,6 +2318,7 @@ class Agent {
     lepaskanAktor(this);                   // event tidak boleh memegang hantu
     this.el.remove();
     this.elPikir.remove();
+    this.elMacet.remove();
     if (terpilih === this) tutupKartu();   // kartunya tidak boleh jadi hantu
   }
 }
@@ -2633,6 +2741,7 @@ function renderCrew() {
     // Yang menunggu keputusan kamu tidak boleh terbaca sedang bekerja — kegiatan
     // terakhirnya memang belum berubah, tapi kegiatan itu justru yang tertahan.
     const apa = a.butuh ? TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin
+      : a.macet ? 'berhenti — ' + (a.macet.label || a.macet.jenis || 'galat')
       : a.doing || (STATIONS[a.station] || {}).name || '';
     const row = barisKru(a, 'crew-row', who, apa);
     if (panggilan) row.classList.add('tugas');
@@ -2837,6 +2946,12 @@ function perbaruiKartu() {
     baris.push(['tertahan', TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin]);
     const ket = a.butuh.alasan || a.butuh.label;
     if (ket) baris.push([a.butuh.sebab === 'tolak' ? 'alasan' : 'perkara', ket]);
+  } else if (a.macet) {
+    // Beda judul dari yang di atas dengan sengaja: "tertahan" berarti kamu
+    // yang ditunggu, "berhenti" berarti bukan kamu — pembacanya harus langsung
+    // tahu tidak ada yang perlu dijawab, cuma perlu ditunggu atau diulang.
+    baris.push(['berhenti', a.macet.label || a.macet.jenis || 'galat']);
+    if (a.macet.galat) baris.push(['detail', a.macet.galat]);
   }
   // Kegiatan event ditulis apa adanya sebagai suasana, tidak dicampur dengan
   // kegiatan tool: yang membaca kartu harus tahu mana laporan, mana ruangan.
@@ -2919,6 +3034,7 @@ function handle(ev) {
   // cuma mengikuti. `false` berarti tunggunya sudah lewat, `undefined` berarti
   // event ini tidak mengubah apa-apa soal itu.
   if (ev.butuh !== undefined) a.setButuh(ev.butuh);
+  if (ev.macet !== undefined) a.setMacet(ev.macet);
   a.lastEvent = now;
   toolTerakhir = now;
   if (ev.cwd) a.project = ev.cwd;
@@ -3841,8 +3957,16 @@ const MOD = {
   laciKosong: 0,     // berapa laci filing digambar terbuka dan kosong
   kipasGoyang: 0,    // amplitudo oleng, px
   kipasGetar: 0,     // getar motor macet, px
+  kipasSapu: 0,      // amplitudo menoleh (7 detik/putaran), px
   mejaGetar: -1,     // indeks meja kerja yang bergoyang
   mejaPadam: -1,     // indeks meja kerja yang laptopnya mati
+  // gelombang 2
+  getar: 0,          // px, seluruh kanvas digeser naik-turun (genset, gempa kecil)
+  acMati: false,
+  internetMati: false,
+  jamGetar: false,   // baterai sekarat: jarum detik gemetar sebelum diam
+  gordenLepas: false,
+  wifiLemahSlot: -1, // indeks meja kerja yang sinyalnya hilang
 };
 const MOD_AWAL = { ...MOD, neonMati: [0, 0] };
 function resetMod() {
@@ -3875,6 +3999,18 @@ const RUANGAN = {
   kalenderBulan: 0,       // indeks warna kepala kalender
   kertasLantai: [],       // lembaran yang jatuh dan belum dipungut
   bulanKalenderTanggal: new Date().getDate(),
+  // gelombang 2
+  emberIsi: 0,            // 0..90, dihitung dari tetesan yang mendarat
+  emberDiangkat: false,
+  nodaPlafon: [],          // {x,y} bercak rembes air, permanen
+  lakban: 0,               // 0..8, kabel lantai yang sudah dilakban
+  retakExtra: [],          // {gx,gy} retakan tambahan, maks 6, permanen
+  toner: 1,                // 0..1, sisa toner printer
+  kabinetSlot: -1,         // meja kerja yang laptopnya digotong ke pojok (wifi lemah)
+  // Baterai jam habis: sudutnya dibekukan di sini, bukan di MOD, karena harus
+  // tetap beku LEWAT durasi eventnya sendiri kalau tidak ada yang membetulkan
+  // — MOD kembali ke bawaan tiap frame begitu tidak ada event yang menuliskannya.
+  jamBeku: null,           // null = ikut jam nyata, atau {hr,mn,sc} beku
 };
 
 /* -------------------------------------------------------------- penjadwal */
@@ -4125,6 +4261,12 @@ function frame(ts) {
   const busy = [...agents.values(), ...peserta, ...standby].filter((a) => a.state === 'work');
   const activeStations = new Set(busy.map((a) => a.station));
 
+  // Getaran genset/gempa: seluruh kanvas digeser, bukan tiap prop satu-satu.
+  // ctx.restore() ada SEBELUM taruhKartu() — kartu itu div DOM yang diposisikan
+  // lewat offX/scale, jadi harus tidak ikut bergeser atau akan meleset dari orangnya.
+  ctx.save();
+  if (MOD.getar) ctx.translate(0, Math.round(Math.sin(now / 40) * MOD.getar));
+
   drawWall();
   gambarLapis('gambarDinding');
   drawFloor();
@@ -4158,14 +4300,15 @@ function frame(ts) {
   drawParts();
   drawAmbien();
   gambarLapis('gambarAtas');
-  taruhKartu();
 
   const g = ctx.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, 'rgba(30,40,30,' + MOD.vignette.toFixed(3) + ')');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+  ctx.restore();
 
+  taruhKartu();
   requestAnimationFrame(frame);
 }
 
