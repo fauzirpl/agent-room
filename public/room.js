@@ -1298,23 +1298,6 @@ function drawEmber() {
   }
 }
 
-/* Kabel gulung yang melintang di lantai — bekas kantor yang belum sempat
-   dirapikan, bukan bekas event. Ada sejak halaman dibuka; RUANGAN.lakban cuma
-   menentukan sudah berapa banyak yang ditempeli lakban. Persis memotong
-   LANE_DOWN (y=252) di x322..352, jadi kesandungnya beralasan. */
-function drawKabelLantai() {
-  ctx.strokeStyle = '#3a3f45'; ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(322, 250);
-  ctx.quadraticCurveTo(337, 258, 352, 254);
-  ctx.stroke();
-  const n = RUANGAN.lakban;
-  for (let i = 0; i < n; i++) {
-    const t = i / 7, x = 322 + t * 30, y = 250 + Math.sin(t * Math.PI) * 6;
-    r(x - 3, y - 1, 6, 3, i % 2 ? '#e8c33a' : '#20242c');
-  }
-}
-
 /* Mesin absen sidik jari — fixture permanen di dinding kanan dekat pintu
    kadis, dipakai dua event berbeda (absensi-ngambek, absen-fingerprint) yang
    TIDAK BOLEH masing-masing menggambar mesinnya sendiri: perangkat ini cuma
@@ -1344,19 +1327,6 @@ function drawEdaran() {
     for (let l = 0; l < 3; l++) r(x + 2 + (e.miring ? 1 : 0), y + 4 + l * 2, 5, 1, '#b9c0ca');
     ctx.globalAlpha = 1;
   });
-}
-
-/* Buku tamu di ruang tunggu, terpisah dari cluster dispenser (bx=244) supaya
-   tidak menembus slot idle mana pun. */
-function drawBukuTamu() {
-  const x = 196, y = 294;
-  r(x, y, 14, 3, P.wood);
-  r(x + 2, y - 10, 4, 10, P.woodD); r(x + 10, y - 10, 4, 10, P.woodD);
-  r(x + 1, y - 1, 10, 5, '#f4f2ea');
-  r(x + 6, y - 1, 1, 5, '#c9c2ae');
-  for (let l = 0; l < Math.min(6, RUANGAN.bukuTamuBaris); l++) {
-    r(x + 2 + (l % 2) * 5, y + (l % 3), 3, 1, '#3a4658');
-  }
 }
 
 /* Papan nomor antrean loket — dinding di atas ruang tunggu, cukup jauh dari
@@ -1965,10 +1935,8 @@ const PROPS = [
   { sortY: 294, station: null,     draw: drawPlant },
   { sortY: 295, station: null,     draw: drawKipas },
   { sortY: 348, station: 'think',  draw: drawMejaKerja },
-  { sortY: 112, station: null,     draw: drawKabelLantai },
   { sortY: 152, station: null,     draw: drawAbsensi },
   { sortY: 8,   station: null,     draw: drawEdaran },
-  { sortY: 291, station: null,     draw: drawBukuTamu },
   { sortY: 45,  station: null,     draw: drawNomorAntre },
   { sortY: 119, station: null,     draw: drawPropLantai },
   { sortY: 120, station: null,     draw: drawStiker },
@@ -5375,7 +5343,6 @@ const RUANGAN = {
   emberIsi: 0,            // 0..90, dihitung dari tetesan yang mendarat
   emberDiangkat: false,
   nodaPlafon: [],          // {x,y} bercak rembes air, permanen
-  lakban: 0,               // 0..8, kabel lantai yang sudah dilakban
   retakExtra: [],          // {gx,gy} retakan tambahan, maks 6, permanen
   toner: 1,                // 0..1, sisa toner printer
   kabinetSlot: -1,         // meja kerja yang laptopnya digotong ke pojok (wifi lemah)
@@ -5400,7 +5367,6 @@ const RUANGAN = {
   antre: 10,               // nomor antrean loket saat ini
   edaran: [],              // {miring, kusam} surat edaran yang ditempel, maks 4
   plangBaru: false,        // plang nama ruang kadis sudah diganti
-  bukuTamuBaris: 0,        // baris tinta di buku tamu, menumpuk sepanjang sesi
   kertasPrinter: 20,       // stok kertas; 0 = habis
   propLantai: [],          // {x, y, jenis, sampai} benda kecil menetap di lantai
   gagalBeruntun: [],       // timestamp Date.now() tool call gagal 60 detik terakhir
@@ -5707,9 +5673,13 @@ function frame(ts) {
     if (E.def.gambarProp) layers.push({ y: E.def.sortY == null ? 118 : E.def.sortY, fn: () => E.def.gambarProp(E, S) });
   }
   // Pegawai di pita lajur bawah melintas DI DEPAN kursi rapat sisi dekat —
-  // tanpa ini mereka tertelan perabot, bukan lewat.
+  // tanpa ini mereka tertelan perabot, bukan lewat. Batas bawahnya 230, bukan
+  // 240: event yang memarkir orang berdiri DIAM di depan meja (gorengan-di-
+  // meja-rapat, oleh-oleh-dinas-luar di y=240; hari-korpri di y=234) jatuh
+  // tepat di bawah 240 lama — sandaran kursi jauh ke depan/atas dan menelan
+  // separuh badannya, cuma kaki yang tersisa kelihatan.
   for (const a of [...agents.values(), ...peserta, ...standby]) {
-    const diPitaBawah = a.y > 240 && a.y < 266;
+    const diPitaBawah = a.y >= 230 && a.y < 266;
     // Yang sudah duduk di kursi rapat sisi dekat justru harus tenggelam DI
     // BELAKANG sandarannya — itu yang bikin dia terbaca duduk, bukan berdiri.
     // Yang menunggu keputusan kamu dikecualikan: dia memang BERDIRI dari

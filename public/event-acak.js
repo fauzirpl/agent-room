@@ -3342,33 +3342,6 @@ daftarEvent(
 },
 
 {
-  id: 'kabel-lantai-dilakban',
-  kelas: 'latar', bobot: B.jarang, cooldown: 1200, durasi: 28,
-  syarat: () => RUANGAN.lakban < 8,
-  perluAktor: true,
-  mulai(E) {
-    const a = pemeranDekat(E, 337, LANE_DOWN, 220);
-    if (!a) return;
-    a.doingEvent = 'tersandung kabel';
-    a.miring = 1;
-    a.goToXY(337, LANE_DOWN, 'down');
-  },
-  tick(E) {
-    const a = E.aktor[0];
-    if (!a) return;
-    pada(E, 0.6, () => { a.miring = 0; a.say('sudah tiga orang kesandung di situ'); });
-    pada(E, 2, () => { a.pose = 'jongkok'; });
-    // delapan potong lakban, satu tiap 1,5 detik — makin lambat makin terlihat berat
-    if (E.umur > 2) {
-      const target = Math.min(8, Math.floor((E.umur - 2) / 1.5));
-      if (target > RUANGAN.lakban) { RUANGAN.lakban = target; spawn('step', a.x, a.y); }
-    }
-    pada(E, 14, () => { a.pose = null; });
-  },
-  selesai(E) { if (E.aktor[0]) { E.aktor[0].pose = null; E.aktor[0].miring = 0; } },
-},
-
-{
   id: 'kedipan-listrik',
   kelas: 'panggung', bobot: B.sedang, cooldown: 360, durasi: 9,
   bentrokDengan: ['mati-lampu-sekejap', 'genset-uji-bulanan'],
