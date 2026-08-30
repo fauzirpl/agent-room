@@ -13,7 +13,55 @@ Tanpa dependency. Cuma butuh Node dan `curl` (bawaan Windows 10+, macOS, Linux).
 
 ## Jalanin
 
-Cuma mau menonton ruangannya:
+Cara pendeknya lewat **Dinas Claude**, pelaksana hariannya:
+
+```bash
+node agent-room/dinas.mjs
+```
+
+Di Windows ada pembungkusnya, jadi cukup `dinas` (atau `./dinas.sh` di
+macOS/Linux). Dia melapor dulu sebelum kantornya dibuka:
+
+```
+  +----------------------------------------------------+
+  |   DINAS CLAUDE                                     |
+  |   pemantau sesi Claude Code                        |
+  +----------------------------------------------------+
+
+  status kantor
+  ----------------------------------------------------
+  pelaksana    claude 2.1.247  (aplikasi Claude)
+               C:\Users\...\Claude\claude-code\2.1.247\claude.exe
+               PATH menunjuk 2.1.25 — dilewati, yang dipakai 2.1.247
+  hook         15 event terpasang  (15 global)
+  kredensial   tersimpan  (.agent-room-token)
+  kendali web  mati  (nyalakan: dinas --kendali)
+  alamat       http://127.0.0.1:4517
+  ----------------------------------------------------
+```
+
+Tiga baris pertama itu alasan dia ada. Ketiganya tidak kelihatan kalau
+`server.mjs` dijalankan langsung, dan justru ketiganya yang paling sering bikin
+orang bingung: biner claude mana yang sebenarnya akan dipanggil, hook-nya sudah
+terpasang atau belum, dan kredensial headless-nya ada atau tidak.
+
+Baris `PATH menunjuk ...` itu **jebakan dua instalasi** yang dibereskan sendiri:
+semua kandidat biner dikumpulkan, versinya ditanya satu per satu, dan yang
+tertinggi yang dipakai — bukan yang kebetulan pertama di PATH. Tidak perlu lagi
+mengingat `AGENT_ROOM_CLAUDE`.
+
+| Perintah | Guna |
+|---|---|
+| `dinas` | buka kantornya |
+| `dinas --kendali` | sekalian izinkan halaman menugaskan pekerjaan |
+| `dinas --pasang` | pasang hook dulu, baru buka kantor (`-g` untuk semua project) |
+| `dinas --lepas` | lepas hook, tidak membuka kantor |
+| `dinas --periksa` | cuma tampilkan status, tidak menjalankan apa pun |
+| `dinas --port 4600` | pakai port lain |
+| `dinas --buka` | sekalian buka peramban |
+
+Kalau lebih suka menjalankan servernya langsung, itu tetap jalan dan tidak akan
+dihapus. Cuma mau menonton ruangannya:
 
 ```bash
 node agent-room/server.mjs
@@ -529,6 +577,8 @@ Dua hal yang bikin ini aman buat sesi kamu:
 
 | File | Guna |
 |---|---|
+| `dinas.mjs` | pelaksana harian: periksa biner/hook/kredensial, lalu jalankan server |
+| `dinas.cmd`, `dinas.sh` | pembungkus supaya cukup mengetik `dinas` |
 | `server.mjs` | HTTP + SSE, normalisasi payload hook |
 | `hook.mjs` | forwarder cadangan kalau `curl` tidak ada |
 | `install.mjs` | pasang/lepas hook di `settings.json` |
@@ -724,9 +774,12 @@ sekali dari hook, sekali dari stream.
 Tiga hal yang memang cuma bisa datang dari stream, karena payload hook tidak
 pernah membawanya:
 
-- **biaya sesi**, dari `total_cost_usd` di pesan `result`. Ditulis dengan `±`
-  di depan karena dokumentasinya sendiri menyebutnya perkiraan sisi klien, bukan
-  tagihan
+- **biaya setara sesi**, dari `total_cost_usd` di pesan `result`. Ditulis
+  `setara $0,0298`, bukan `$0,0298`, dan itu disengaja: sesi headless yang
+  memakai token dari `claude setup-token` berautentikasi lewat **langganan**,
+  jadi yang terpakai kuota paket, bukan saldo API. Angkanya perkiraan sisi klien
+  soal berapa pemakaian itu kalau ditagih lewat API. Tanpa kata "setara",
+  pengguna langganan akan mengira baru saja dicharge padahal tidak
 - **percobaan ulang API** (`api_retry`), lengkap dengan sebabnya — kena batas
   pemakaian, server penuh, tagihan
 - **galat API** yang menghentikan giliran. Dia datang sebagai pesan asisten
@@ -804,7 +857,10 @@ Karena itu server sekarang mencetak versi biner yang dipakainya saat start:
 [agent-room] biner lain bisa ditunjuk lewat AGENT_ROOM_CLAUDE
 ```
 
-Kalau versinya jauh tertinggal, perbarui instalasinya, atau tunjuk yang benar:
+Cara termudah menghindarinya: jalankan lewat `dinas`, yang memilih biner
+tertinggi sendiri dan memberitahu kalau PATH menunjuk yang lain. Kalau tetap
+mau menjalankan `server.mjs` langsung, perbarui instalasinya atau tunjuk yang
+benar:
 
 ```bash
 AGENT_ROOM_CLAUDE="C:\Users\…\claude-code\2.1.247\claude.exe" node server.mjs --izinkan-perintah

@@ -1076,11 +1076,14 @@ const server = http.createServer(async (req, res) => {
       // Jangan diam kalau gagal: sesi yang tidak pernah lahir tidak akan
       // memunculkan pegawai apa pun, jadi kegagalannya harus terlihat.
       const gagal = kode !== 0;
-      // Biaya cuma ada kalau pesan `result` sempat lewat, dan angkanya diakui
-      // dokumentasi sebagai perkiraan sisi klien — jadi ditulis apa adanya di
-      // label, bukan disajikan sebagai tagihan.
+      /* Angka ini SETARA, bukan tagihan — dan bedanya penting. Sesi headless
+         yang dijalankan dengan token dari `claude setup-token` berautentikasi
+         lewat langganan: yang terpakai kuota paket, bukan saldo API. Yang
+         dikirim Claude Code di `total_cost_usd` adalah perkiraan sisi klien
+         soal berapa pemakaian itu KALAU ditagih lewat API. Menulisnya sebagai
+         "$0,0298" saja bikin orang mengira baru saja dicharge padahal tidak. */
       const biaya = typeof rec.biaya === 'number'
-        ? ' · ±$' + rec.biaya.toFixed(4).replace('.', ',') : '';
+        ? ' · setara $' + rec.biaya.toFixed(4).replace('.', ',') : '';
       publish({
         id: ++seq, ts: Date.now(), kind: 'tugas-selesai',
         session: sid.slice(0, 12), nama, tool: null, ok: !gagal,
