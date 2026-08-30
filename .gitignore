@@ -1,2 +1,5 @@
 # token headless: kunci mentah, jangan pernah ikut di-commit
 .agent-room-token
+
+# riwayat token: data pemakaian pribadi, bukan kode
+token-riwayat.jsonl

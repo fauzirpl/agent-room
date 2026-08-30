@@ -624,17 +624,40 @@ body {
    Rangka sama seperti kabar, isinya cuma angka: total sejak halaman ini
    dibuka, lalu rincian per sesi yang masih aktif. Bukan pembukuan resmi —
    lihat catatan di formatToken()/formatBiaya() soal cakupannya. */
-.dlg.stat { height: min(420px, 100%); width: min(400px, 100%); }
+.dlg.stat { height: min(560px, 100%); width: min(400px, 100%); }
 .stat-total { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 4px; }
-.stat-per h3 {
+.stat-per h3, .stat-blok h3 {
   margin: 0; padding: 10px 0 5px; font-size: 9.5px; letter-spacing: .12em;
   text-transform: uppercase; color: var(--dim); border-top: 1px solid var(--line);
 }
-.stat-per ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.stat-per li { display: flex; gap: 6px; font-size: 10.5px; color: var(--ink); }
-.stat-per li .t { color: var(--amber); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stat-per li span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
-.stat-per li.kosong { color: var(--dim); font-style: italic; }
+.stat-per ul, .stat-blok ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.stat-per li, .stat-blok li { display: flex; gap: 6px; font-size: 10.5px; color: var(--ink); }
+.stat-per li .t, .stat-blok li .t { color: var(--amber); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-per li span:last-child, .stat-blok li span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.stat-per li.kosong, .stat-blok li.kosong { color: var(--dim); font-style: italic; }
+
+/* Ringkasan riwayat lintas sesi (lihat muatRiwayatToken() di room.js): batang
+   cache, dua angka ringkas, grafik 14 hari, proyek teratas — semuanya data
+   yang bertahan lewat restart server, beda dari "sesi aktif" di bawahnya yang
+   cuma hidup selama halaman ini terbuka. */
+.stat-ket { margin: 6px 0 0; font-size: 9px; line-height: 1.5; color: var(--dim); }
+
+.stat-cache { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.stat-cache .kk { flex: none; color: var(--dim); font-size: 9.5px; letter-spacing: .04em; width: 78px; }
+.stat-bar { flex: 1; height: 6px; background: #0c1219; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.stat-bar-isi { height: 100%; background: var(--amber); }
+.stat-cache-pct { flex: none; font-size: 10.5px; color: var(--amber); width: 32px; text-align: right; }
+
+.stat-ringkas { display: flex; gap: 8px; margin: 10px 0 0; }
+.stat-ringkas > div { flex: 1; background: #0c1219; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; text-align: center; }
+.stat-ringkas b { display: block; font-size: 14px; color: var(--amber); }
+.stat-ringkas span { font-size: 9px; color: var(--dim); letter-spacing: .04em; }
+
+.stat-grafik { display: flex; align-items: flex-end; gap: 3px; height: 52px; padding: 6px 0 0; }
+.stat-batang { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+.stat-batang-isi { width: 100%; min-height: 1px; background: var(--amber); opacity: .4; border-radius: 2px 2px 0 0; }
+.stat-batang.hari-ini .stat-batang-isi { opacity: 1; }
+.stat-grafik-sumbu { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--dim); margin-top: 2px; }
 .kbr-kaki button:disabled { opacity: .35; cursor: default; }
 .kbr-kaki button:disabled:hover { border-color: var(--line); }
 

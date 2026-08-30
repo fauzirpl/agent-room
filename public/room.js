@@ -1414,58 +1414,119 @@ function drawStiker() {
   }
 }
 
-function drawTunggu(active) {
-  // (bx, by) = titik acuan sudut tunggu; seluruh perabotnya relatif ke situ,
-  // jadi kalau mau digeser lagi cukup ubah dua angka. Deret kursinya sengaja
-  // tidak ada: di baris depan dia bertabrakan dengan meja kerja, jadi yang
-  // menganggur berdiri saja di dekat dispenser.
-  const bx = 244, by = 284;
-  // dispenser + galon biru
-  r(bx + 82, by - 18, 18, 34, '#eef0ea');
-  r(bx + 82, by - 18, 18, 1, '#ffffff');
-  r(bx + 98, by - 18, 2, 34, '#c9cdd1');
-  r(bx + 85, by - 6, 3, 3, '#c03030');
-  r(bx + 91, by - 6, 3, 3, P.blue);
-  r(bx + 84, by - 1, 11, 2, '#c9cdd1');
-  r(bx + 82, by + 4, 18, 1, '#c9cdd1');
-  r(bx + 89, by + 8, 4, 1, '#c9cdd1');
-  r(bx + 84, by - 30, 14, 12, '#7db8e8');
-  r(bx + 86, by - 28, 2, 7, '#b8dcf4');
-  r(bx + 89, by - 34, 4, 4, '#5f9fd4');
-  // menara gelas kertas di samping dispenser; makin tipis makin sering diambil
-  for (let g = 0; g < Math.min(6, RUANGAN.gelasDispenser); g++) {
-    r(bx + 78, by - 4 - g * 2, 4, 3, g % 2 ? '#f2f0e6' : '#e4e0d2');
+
+/* Ruangan pantry: sekat kayu (dinding atas + kiri) di bekas tempat kardus
+   arsip -- kanan rak server, bawah pintu kadis. Muat di x414..478 (canvas
+   berhenti di 480) supaya tidak mepet kipas (dasarnya cx 400, lihat
+   drawKipas) dan tidak menutup jalur ke meja kerja pojok (444, lihat
+   MEJA_KERJA_X). Sekatnya cuma dua sisi -- atas & kiri -- sengaja tidak
+   ditutup penuh: orang yang lewat ke meja 444 tetap jalan lurus, bukan
+   muter cari pintu yang tidak ada. */
+function drawPantry() {
+  const px = 414, py = 196, pw = 64, ph = 92;
+
+  // sekat: panel kayu rendah, dua sisi
+  r(px, py, pw, 7, P.wood);
+  r(px, py, pw, 1, sh(P.wood, 1.3));
+  r(px, py, 6, ph, P.wood);
+  r(px, py, 1, ph, sh(P.wood, 1.3));
+
+  // papan nama gantung, tulisan tangan -- gaya sama dengan plang/spanduk lain
+  r(px + 14, py - 9, 26, 9, P.paper);
+  r(px + 14, py - 9, 26, 1, '#ffffff');
+  ctx.fillStyle = '#2c3440';
+  ctx.font = '6px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PANTRI', px + 17, py - 4);
+
+  // counter nempel sekat atas: wastafel + oven kecil berjajar
+  const cy = py + 7;
+  r(px + 8, cy, 52, 15, '#c9cdd1');
+  r(px + 8, cy, 52, 2, '#e4e7ea');
+
+  r(px + 11, cy + 1, 17, 11, '#4a5560');             // wastafel, kontur -- biar lepas dari counter
+  r(px + 12, cy + 2, 15, 9, '#f4f6f8');              // bibir, putih terang
+  r(px + 14, cy + 4, 11, 6, '#20242c');              // cekungan, gelap pekat
+  r(px + 18, py - 2, 2, 9, '#565d66');               // pipa naik
+  r(px + 15, py, 8, 2, '#565d66');                   // kepala keran
+  r(px + 16, py, 2, 1, '#a8b1ba');                   // kilau logam
+  if (Math.sin(now / 260) > 0.85) r(px + 18, cy + 6, 1, 3, '#7ec8f0');  // tetes sesekali
+
+  r(px + 32, cy + 1, 16, 15, '#33383e');             // oven, badan
+  r(px + 34, cy + 4, 12, 9, '#191c21');              // jendela
+  r(px + 35, cy + 5, 10, 7, '#2a4f8a');
+  r(px + 35, cy - 1, 2, 2, '#c9cdd1'); r(px + 44, cy - 1, 2, 2, '#c9cdd1'); // dial
+  r(px + 33, cy + 16, 14, 1, '#7c838a');             // pegangan pintu
+
+  // rak piring digantung di sekat atas, sisi kanan
+  r(px + 52, py + 1, 11, 2, P.woodD);
+  for (let i = 0; i < 3; i++) {
+    r(px + 53 + i * 3, py - 2 - i * 2, 3, 7, '#eef0ea');
+    r(px + 53 + i * 3, py - 2 - i * 2, 3, 1, P.blue);
   }
-  // tong sampah biru + goresan panah daur ulang (dulu hijau polos)
-  r(bx + 106, by + 6, 9, 10, '#2a4f8a');
-  r(bx + 105, by + 4, 11, 2, '#3f74c4');
-  r(bx + 109, by + 9, 1, 2, '#eef2f6');
-  r(bx + 110, by + 8, 2, 1, '#eef2f6');
-  r(bx + 108, by + 12, 3, 1, '#eef2f6');
+
+  // kardus arsip pindahan, ditumpuk di sudut sekat -- bekas yang dulu di
+  // depan pintu kadis, sekarang jadi stok pantry
+  r(px + 8, py + 34, 11, 11, '#a37b4e');
+  r(px + 9, py + 35, 9, 4, '#b98d5e');
+  r(px + 10, py + 26, 9, 9, '#b98d5e');
+  r(px + 11, py + 27, 7, 3, '#a37b4e');
+  r(px + 14, py + 27, 2, 8, '#d9cba8');
+
+  // meja makan kecil, satu kaki tengah -- meja kafe, beda siluet dari
+  // meja rapat/meja kerja yang semuanya berkaki empat
+  const tx = px + 28, ty = py + 56;
+  r(tx - 10, ty, 20, 3, P.wood);
+  r(tx - 10, ty, 20, 1, sh(P.wood, 1.3));
+  r(tx - 2, ty + 3, 4, 9, P.woodD);
+  r(tx - 5, ty + 11, 10, 2, P.woodD);
+  r(tx - 18, ty + 4, 7, 6, P.woodD);                 // stul kiri
+  r(tx + 13, ty + 4, 7, 6, P.woodD);                 // stul kanan
+}
+
+/* Dispenser pindah ke sini dari ruang tunggu -- pojok kanan pantry, x462..480
+   (stul kanan drawPantry berhenti di 462, kanvas berhenti di 480, jadi pas-pasan
+   tanpa nabrak). Desain badannya sama seperti dulu, cuma titik acuan baru
+   (dx,dy) menggantikan (bx,by) lama; formula konversi buat siapa pun yang
+   nyesuaikan koordinat lama di event-acak.js: x baru = x lama + 136,
+   y baru = y lama - 12. Menara gelas numpuk ke ATAS tutup galon, bukan di
+   samping seperti dulu -- di kiri sudah kepakai stul kafe. */
+function drawDispenserPantry() {
+  const dx = 462, dy = 272;
+  r(dx, dy - 18, 18, 34, '#eef0ea');
+  r(dx, dy - 18, 18, 1, '#ffffff');
+  r(dx + 16, dy - 18, 2, 34, '#c9cdd1');
+  r(dx + 3, dy - 6, 3, 3, '#c03030');
+  r(dx + 9, dy - 6, 3, 3, P.blue);
+  r(dx + 2, dy - 1, 11, 2, '#c9cdd1');
+  r(dx, dy + 4, 18, 1, '#c9cdd1');
+  r(dx + 7, dy + 8, 4, 1, '#c9cdd1');
+  r(dx + 2, dy - 30, 14, 12, '#7db8e8');
+  r(dx + 4, dy - 28, 2, 7, '#b8dcf4');
+  r(dx + 7, dy - 34, 4, 4, '#5f9fd4');
+  for (let g = 0; g < Math.min(6, RUANGAN.gelasDispenser); g++) {
+    r(dx + 7, dy - 40 - g * 2, 4, 3, g % 2 ? '#f2f0e6' : '#e4e0d2');
+  }
+}
+
+/* Tong sampah menyusul ke pantry juga -- disusupkan di bawah meja kafe
+   (kaki mejanya di tx-2..+2 = 440..444, kardus arsip di atasnya berhenti
+   di y241), formula konversi dari titik lama: x baru = x lama + 87,
+   y baru = y lama - 12. */
+function drawTongSampah() {
+  const tx = 437, ty = 278;
+  r(tx, ty, 9, 10, '#2a4f8a');
+  r(tx - 1, ty - 2, 11, 2, '#3f74c4');
+  r(tx + 3, ty + 3, 1, 2, '#eef2f6');
+  r(tx + 4, ty + 2, 2, 1, '#eef2f6');
+  r(tx + 2, ty + 6, 3, 1, '#eef2f6');
   if (RUANGAN.tongPenuh > 0.05) {                          // isinya menyembul
     const n = Math.ceil(RUANGAN.tongPenuh * 5);
     for (let i = 0; i < n; i++) {
-      r(bx + 105 + (i * 3) % 9, by + 1 - (i % 2) * 2, 3, 3,
+      r(tx - 1 + (i * 3) % 9, ty - 5 - (i % 2) * 2, 3, 3,
         ['#f2f0e6', '#d9b96a', '#c9cdd1'][i % 3]);
     }
   }
-  if (active) glow(bx + 91, by - 12, 20, '#ffffff', 0.08);
-}
-
-/* Pantry kecil di sebelah dispenser: kabinet mini + toples kue, berdiri
-   sendiri (bukan bagian drawTunggu) di sela x372..385 yang masih longgar
-   antara tong sampah (ujungnya ~368 saat penuh) dan kipas (mulai ~389). */
-function drawPantryKecil() {
-  const x = 372, y = 300;
-  r(x, y - 15, 13, 15, P.wood);                    // badan kabinet
-  r(x, y - 15, 13, 1, sh(P.wood, 1.25));            // atas kena cahaya
-  r(x + 1, y - 13, 11, 9, P.woodD);                 // panel pintu
-  r(x + 1, y - 5, 11, 1, '#3f2f21');                // celah pintu bawah
-  r(x + 9, y - 9, 1, 2, '#e8d873');                 // gagang pintu
-  r(x + 2, y - 20, 9, 6, '#f2f0e6');                // toples kaca
-  r(x + 2, y - 20, 9, 1, '#ffffff');
-  r(x + 3, y - 21, 7, 1, '#c9cdd1');                // tutup toples
-  r(x + 4, y - 18, 2, 2, '#d9b96a'); r(x + 7, y - 17, 2, 2, '#c9a03a');  // kue
 }
 
 function drawMejaKerja() {
@@ -1742,21 +1803,6 @@ function drawBendera() {
   }
 }
 
-function drawDus() {
-  const x = 440, y = 208;
-  r(x, y + 18, 32, 24, '#a37b4e');
-  r(x + 2, y + 20, 28, 20, '#b98d5e');
-  r(x + 2, y + 28, 28, 3, '#a37b4e');
-  r(x + 14, y + 20, 4, 20, '#d9cba8');                     // lakban
-  r(x + 5, y + 32, 12, 5, P.paper);                        // label ARSIP
-  r(x + 7, y + 34, 8, 1, '#8b98a6');
-  r(x + 5, y - 2, 24, 20, '#a37b4e');
-  r(x + 7, y, 20, 16, '#b98d5e');
-  r(x + 7, y + 6, 20, 3, '#a37b4e');
-  r(x + 15, y, 4, 16, '#d9cba8');
-  r(x + 10, y + 9, 10, 4, P.paper);
-}
-
 /* Sudut baling kipas diakumulasi, bukan dihitung dari `now` langsung: kalau
    dari now, mengubah kecepatan bikin sudutnya meloncat — kipas yang melambat
    malah terlihat tersentak balik. */
@@ -1911,10 +1957,10 @@ const PROPS = [
   { sortY: 168, station: null,     draw: drawKursiJauh },
   { sortY: 242, station: null,     draw: drawXBanner },
   { sortY: 249, station: 'rapat',  draw: drawRapat },
-  { sortY: 250, station: null,     draw: drawDus },
   { sortY: 260, station: null,     draw: drawKursiDekat },
-  { sortY: 300, station: 'idle',   draw: drawTunggu },
-  { sortY: 300, station: null,     draw: drawPantryKecil },
+  { sortY: 270, station: null,     draw: drawPantry },
+  { sortY: 288, station: null,     draw: drawDispenserPantry },
+  { sortY: 288, station: null,     draw: drawTongSampah },
   { sortY: 274, station: null,     draw: drawBendera },
   { sortY: 294, station: null,     draw: drawPlant },
   { sortY: 295, station: null,     draw: drawKipas },
@@ -3630,11 +3676,14 @@ const angkaID = (n) => Math.round(n).toLocaleString('id-ID');
    jadi tidak diberi keterangan "data sementara". Yang perlu jujur di sini
    soal cakupannya, bukan soal keakuratannya: dihitung sejak transkripnya
    MULAI dipantau, bukan sejak sesinya lahir. */
-function formatToken(t) {
+function formatToken(t, ket) {
   const cache = t.cacheTulis || t.cacheBaca
     ? ' · cache ' + angkaID(t.cacheTulis) + ' tulis / ' + angkaID(t.cacheBaca) + ' baca' : '';
+  // ket=undefined -> keterangan bawaan (angka per-sesi); ket='' -> tanpa keterangan
+  // (dipakai angka riwayat lintas sesi, yang cakupannya sudah dijelaskan terpisah).
+  const label = ket === undefined ? ' (sejak dipantau)' : (ket ? ' (' + ket + ')' : '');
   return angkaID(t.input) + ' masuk · ' + angkaID(t.output) + ' keluar'
-    + cache + ' (sejak dipantau)';
+    + cache + label;
 }
 
 /* Nama yang dipakai baris panel DAN kepala modal kabar: nama panggilan kalau
@@ -4888,15 +4937,103 @@ kabarLencana();
 const dlgStats = document.getElementById('dlgStats');
 const statsBadan = document.getElementById('statsBadan');
 
-function statsGambar() {
-  const total = [
-    '<span class="kk">token</span><span class="vv">' + esc(formatToken(tokenTotal)) + '</span>',
-  ];
-  if (biayaCount) {
-    total.push('<span class="kk">biaya</span><span class="vv">'
-      + esc(formatBiaya({ usd: biayaTotal, resmi: false }))
-      + ' · ' + biayaCount + ' sesi headless</span>');
+/* tokenTotal (di atas) cuma hidup selama HALAMAN INI terbuka. Ini beda: snapshot
+   dari /token-riwayat, yang SERVER tulis ke disk lintas sesi dan lintas restart
+   (lihat riwayatCatat() di server.mjs) — jawaban buat "riwayatnya kemana kalau
+   halaman ditutup". Diambil ulang tiap modal ini dibuka supaya tidak basi. */
+let riwayatToken = null;
+async function muatRiwayatToken() {
+  try {
+    const r = await fetch('/token-riwayat');
+    riwayatToken = await r.json();
+  } catch { /* server lokal lagi restart — modal berikutnya coba lagi */ }
+  if (!dlgStats.hidden) statsGambar();
+}
+muatRiwayatToken();
+
+const tanggalLokal = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+  + '-' + String(d.getDate()).padStart(2, '0');
+const labelTanggal = (tgl) => new Date(tgl + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+
+// 14 hari kalender terakhir TERMASUK yang tanpa aktivitas — barisnya harus
+// kontinu supaya "sepi 3 hari lalu" ikut terbaca di grafik, bukan cuma yang ada datanya.
+function riwayatBelakangan(harian, n) {
+  const peta = new Map((harian || []).map((h) => [h.tanggal, h]));
+  const keluar = [];
+  const acuan = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(acuan);
+    d.setDate(d.getDate() - i);
+    const tgl = tanggalLokal(d);
+    const h = peta.get(tgl);
+    keluar.push({ tanggal: tgl, input: h?.input || 0, output: h?.output || 0 });
   }
+  return keluar;
+}
+
+function statsGambar() {
+  const blok = [];
+  const r = riwayatToken;
+
+  if (r && (r.total.input || r.total.output)) {
+    const sejak = r.sejak
+      ? new Date(r.sejak).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '';
+    blok.push('<div class="kartu-info stat-total">'
+      + '<span class="kk">sepanjang waktu</span><span class="vv">' + esc(formatToken(r.total, '')) + '</span>'
+      + (sejak ? '<span class="kk">tercatat sejak</span><span class="vv">' + esc(sejak) + '</span>' : '')
+      + '</div>');
+
+    // Efisiensi cache: dari token masukan yang dibaca, berapa persen datang dari
+    // cache (murah, cepat) alih-alih diproses ulang. Metrik yang tidak kelihatan
+    // dari angka mentah, tapi paling langsung menjawab "sudah efisien belum".
+    const dibaca = r.total.cacheBaca || 0;
+    const basis = (r.total.input || 0) + dibaca;
+    if (basis > 0) {
+      const pct = Math.round((dibaca / basis) * 100);
+      blok.push('<div class="stat-cache"><span class="kk">efisiensi cache</span>'
+        + '<div class="stat-bar"><div class="stat-bar-isi" style="width:' + pct + '%"></div></div>'
+        + '<span class="stat-cache-pct">' + pct + '%</span></div>'
+        + '<p class="stat-ket">dari token masukan yang dibaca, ' + pct + '% diambil dari cache — bukan diproses ulang</p>');
+    }
+
+    const belakangan = riwayatBelakangan(r.harian, 14);
+    const hariIni = belakangan[belakangan.length - 1];
+    const totalBelakangan = belakangan.reduce((s, h) => s + h.input + h.output, 0);
+    const rata = Math.round(totalBelakangan / belakangan.length);
+    const puncak = Math.max(1, ...belakangan.map((h) => h.input + h.output));
+    blok.push('<div class="stat-ringkas">'
+      + '<div><b>' + angkaID(hariIni.input + hariIni.output) + '</b><span>hari ini</span></div>'
+      + '<div><b>' + angkaID(rata) + '</b><span>rata² / hari (14 hari)</span></div>'
+      + '</div>');
+    blok.push('<div class="stat-blok"><h3>14 hari terakhir</h3><div class="stat-grafik">'
+      + belakangan.map((h) => {
+          const total = h.input + h.output;
+          const tinggi = total ? Math.max(3, Math.round((total / puncak) * 48)) : 1;
+          const kelas = h.tanggal === hariIni.tanggal ? ' hari-ini' : '';
+          return '<div class="stat-batang' + kelas + '" title="' + labelTanggal(h.tanggal) + ': '
+            + angkaID(total) + ' token"><div class="stat-batang-isi" style="height:' + tinggi + 'px"></div></div>';
+        }).join('')
+      + '</div><div class="stat-grafik-sumbu"><span>' + esc(labelTanggal(belakangan[0].tanggal))
+      + '</span><span>hari ini</span></div></div>');
+
+    if (r.proyek && r.proyek.length) {
+      blok.push('<div class="stat-blok"><h3>proyek teratas</h3><ul>'
+        + r.proyek.slice(0, 5).map((p) => '<li><span class="t">' + esc(p.nama) + '</span>'
+            + '<span>' + esc(formatToken(p, '')) + '</span></li>').join('')
+        + '</ul></div>');
+    }
+  } else {
+    blok.push('<p class="stat-ket">belum ada riwayat token yang tersimpan — mulai tercatat begitu'
+      + ' ada giliran asisten yang membawa usage.</p>');
+  }
+
+  if (biayaCount) {
+    blok.push('<div class="kartu-info"><span class="kk">biaya</span><span class="vv">'
+      + esc(formatBiaya({ usd: biayaTotal, resmi: false }))
+      + ' · ' + biayaCount + ' sesi headless (sejak halaman ini dibuka)</span></div>');
+  }
+
   // Cuma sesi yang benar-benar sedang di ruangan yang dirinci — yang sudah
   // pulang tetap ikut totalnya (lihat tambahTokenTotal), tapi barisnya tidak
   // ada lagi orangnya untuk ditunjuk.
@@ -4908,9 +5045,9 @@ function statsGambar() {
         + '<span>' + esc(formatToken(a.token))
         + (a.biaya ? ' · ' + esc(formatBiaya(a.biaya)) : '') + '</span></li>').join('')
     : '<li class="kosong">belum ada sesi aktif yang terpantau tokennya</li>';
-  statsBadan.innerHTML =
-    '<div class="kartu-info stat-total">' + total.join('') + '</div>'
-    + '<div class="stat-per"><h3>sesi aktif</h3><ul>' + baris + '</ul></div>';
+  blok.push('<div class="stat-per"><h3>sesi aktif (sejak halaman ini dibuka)</h3><ul>' + baris + '</ul></div>');
+
+  statsBadan.innerHTML = blok.join('');
 }
 
 function statsTutupDialog() {
@@ -4922,6 +5059,7 @@ function statsTombol(e) { if (e.key === 'Escape') { e.preventDefault(); statsTut
 statsBtn.onclick = () => {
   if (!dlgStats.hidden) { statsTutupDialog(); return; }
   statsGambar();
+  muatRiwayatToken();
   dlgStats.hidden = false;
   document.addEventListener('keydown', statsTombol);
 };

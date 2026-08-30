@@ -429,6 +429,34 @@ pikiran sama sekali, dan giliran itu tetap makan token. Tidak masuk log
 kegiatan dan tidak menaikkan statistik — sama seperti balon pikiran, ini
 pembaruan diam yang cuma kelihatan kalau kartunya dibuka.
 
+### Riwayat lintas sesi
+
+Token di atas cuma hidup selama **satu sesi** ada di memori server — restart
+server atau tutup halamannya, angkanya hilang. Supaya bisa dipantau dari hari
+ke hari, tiap delta token (baris `usage` yang sama dipakai di atas) juga
+ditulis ke `token-riwayat.jsonl` di folder `agent-room`: satu baris JSON per
+giliran asisten, `{ ts, proyek, model, input, output, cacheTulis, cacheBaca }`.
+Sengaja **delta, bukan kumulatif** — supaya bisa dijumlah ulang per hari atau
+per proyek kapan saja tanpa perlu menyimpan turunannya, dan supaya baris lama
+tidak pernah perlu diubah waktu baris baru datang.
+
+Server membacanya sekali waktu start (`riwayatMuat()`), merangkumnya jadi tiga
+peta di memori — total sepanjang waktu, per hari, per proyek — dan
+melayaninya lewat `GET /token-riwayat`. Endpoint ini **tanpa token**, sama
+seperti `/cuaca`: angka yang sama toh sudah lewat `/stream` tanpa autentikasi
+juga, jadi merahasiakannya di sini tidak menutup apa pun.
+
+Halaman memanggilnya sekali waktu dimuat dan tiap kali modal **Statistik
+token** (tombol 📊) dibuka lagi, lalu menggambar total sepanjang waktu,
+efisiensi cache, grafik 14 hari terakhir, dan proyek teratas — di atas rincian
+sesi aktif yang sudah ada (yang tetap terbatas pada "sejak halaman ini
+dibuka", karena itu memang butuh peta sesi yang cuma ada di sisi halaman).
+Mau pindah lokasi berkasnya: `AGENT_ROOM_TOKEN_LOG=/path/berkas.jsonl`.
+
+Berkasnya tumbuh terus tanpa rotasi — satu baris sekitar 100-150 byte, jadi
+bahkan ribuan tool call sehari masih dalam orde kilobyte. Tidak di-commit ke
+git (lihat `.gitignore`), sama seperti `.agent-room-token`.
+
 ### Yang berubah soal privasi
 
 Sebelum ini server cuma menyiarkan **metadata**. Sekarang isi percakapan ikut
@@ -744,13 +772,20 @@ durasinya habis.
 
 ### Pantry
 
-Sudut dispenser kedatangan tetangga: kabinet mini + toples kue
-(`drawPantryKecil`, di sela x372..385, antara tong sampah dan kipas). Event
-`ngerumpi-di-pantry` memakai pojok kosong tepat di atasnya (y226..250, kanan
-meja rapat) buat mengumpulkan 2-3 pegawai standby berkerumun ngobrol —
-beda dari `ngobrol-di-dispenser` yang orangnya kebetulan sudah di situ, di
-sini mereka sengaja dipanggil dari mana pun lewat `pinjamAktor`. Isinya
-gosip kantor (rotasi, mutasi), bukan obrolan kopi biasa.
+Ruangan sendiri, bersekat (`drawPantry`, x414..478 — dua panel kayu rendah
+di sisi atas & kiri, bukan dinding penuh), menempati bekas tempat kardus
+arsip di kanan rak server, bawah pintu kadis. Isinya kabinet+wastafel+oven
+mini berjajar di counter nempel sekat atas, rak piring digantung di
+sisinya, kardus arsipnya sendiri pindah jadi tumpukan stok di sudut, dan
+satu meja kafe kaki-tunggal (beda siluet dari meja rapat/kerja yang semua
+berkaki empat) buat tempat berkumpul. Sekatnya sengaja cuma dua sisi:
+lajur ke meja kerja pojok (444, lihat `MEJA_KERJA_X`) lewat tepat di sisi
+terbuka, jadi tidak perlu pintu.
+
+Event `ngerumpi-di-pantry` memanggil 2-3 pegawai standby dari mana pun
+lewat `pinjamAktor` untuk berkumpul di depan meja kafenya — beda dari
+`ngobrol-di-dispenser` yang orangnya kebetulan sudah berdiri di situ.
+Isinya gosip kantor (rotasi, mutasi), bukan obrolan kopi biasa.
 
 ### Kenapa hujan tidak ada di daftar itu
 
@@ -810,6 +845,7 @@ Dua hal yang bikin ini aman buat sesi kamu:
 | `AGENT_ROOM_HOST` | `127.0.0.1` | alamat bind |
 | `AGENT_ROOM_CLAUDE` | hasil `where claude` | tunjuk biner claude tertentu, kalau PATH menemukan instalasi yang salah |
 | `AGENT_ROOM_TOKEN_FILE` | `.agent-room-token` | tempat token headless diingat, kalau centangnya dinyalakan |
+| `AGENT_ROOM_TOKEN_LOG` | `token-riwayat.jsonl` | tempat riwayat token lintas sesi ditulis (lihat **Riwayat lintas sesi**) |
 | `AGENT_ROOM_CUACA` | *(nyala, tebak dari IP)* | `off` mematikan cek cuaca; `lat,lon` menetapkan lokasi |
 | `AGENT_ROOM_ISI` | *(nyala)* | `off` menutup transkrip sesi: ruangan kembali cuma menyiarkan metadata, tanpa pikiran dan kalimat agen |
 
@@ -831,8 +867,10 @@ Server cuma bind ke localhost dan nyimpen 400 event terakhir di memori.
 Lalu lintas keluar satu-satunya adalah cek cuaca lewat geojs.io +
 open-meteo.com (matikan dengan `AGENT_ROOM_CUACA=off`). Disk **dibaca** untuk
 mengikuti transkrip sesi yang sedang jalan — itu sumber balon pikiran dan kotak
-kabar, dan bisa dimatikan dengan `AGENT_ROOM_ISI=off` — dan **ditulis** hanya
-kalau centang **ingat di berkas** pada token headless dinyalakan.
+kabar, dan bisa dimatikan dengan `AGENT_ROOM_ISI=off`. Disk **ditulis** di dua
+keadaan: kredensial headless kalau centang **ingat di berkas** dinyalakan, dan
+riwayat token (`token-riwayat.jsonl`) tiap ada delta token baru — yang kedua
+ini tanpa syarat, lihat **Riwayat lintas sesi** di atas.
 
 
 ## Pegawai standby

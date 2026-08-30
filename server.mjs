@@ -554,6 +554,76 @@ function jalurTranskrip(raw) {
    yang berubah tiap Anthropic mengubah harga — sengaja belum dilakukan. */
 const tokenSesi = new Map();                // sesi 12-char -> { input, output, cacheTulis, cacheBaca }
 
+/* ------------------------------------------------------ riwayat token -----
+   tokenSesi di atas cuma hidup di memori selama SATU sesi — restart server
+   atau tutup halaman, angkanya hilang. Ini bedanya: tiap delta token ditulis
+   ke disk (satu baris JSON per giliran asisten), jadi bisa dipantau lintas
+   sesi dan lintas restart. Sengaja DELTA, bukan kumulatif, supaya bisa
+   dijumlah ulang per hari/per proyek kapan saja tanpa menyimpan turunannya. */
+const BERKAS_RIWAYAT_TOKEN = process.env.AGENT_ROOM_TOKEN_LOG
+  || path.join(__dirname, 'token-riwayat.jsonl');
+const riwayatHarian = new Map();   // 'YYYY-MM-DD' (waktu lokal server) -> { input, output, cacheTulis, cacheBaca }
+const riwayatProyek = new Map();   // nama folder -> { input, output, cacheTulis, cacheBaca, terakhir }
+const riwayatTotal = { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+let riwayatSejak = 0;               // ts baris pertama yang pernah tercatat, buat "tercatat sejak ..."
+
+const tanggalLokal = (ts) => {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+};
+
+function riwayatTambah(ts, proyek, d) {
+  if (!riwayatSejak || ts < riwayatSejak) riwayatSejak = ts;
+  riwayatTotal.input += d.input; riwayatTotal.output += d.output;
+  riwayatTotal.cacheTulis += d.cacheTulis; riwayatTotal.cacheBaca += d.cacheBaca;
+
+  const hari = tanggalLokal(ts);
+  const h = riwayatHarian.get(hari) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+  h.input += d.input; h.output += d.output; h.cacheTulis += d.cacheTulis; h.cacheBaca += d.cacheBaca;
+  riwayatHarian.set(hari, h);
+
+  const nama = proyek || '(tanpa proyek)';
+  const p = riwayatProyek.get(nama) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0, terakhir: 0 };
+  p.input += d.input; p.output += d.output; p.cacheTulis += d.cacheTulis; p.cacheBaca += d.cacheBaca;
+  p.terakhir = Math.max(p.terakhir, ts);
+  riwayatProyek.set(nama, p);
+}
+
+/* Ditulis async (bukan Sync) karena ini jalan tiap giliran asisten yang punya
+   usage — bisa belasan kali semenit kalau beberapa sesi jalan bersamaan, dan
+   tidak boleh menahan pemrosesan hook. Satu baris JSON jauh di bawah ukuran
+   yang bikin write() terpecah, jadi append bersamaan dari beberapa sesi tetap
+   aman tanpa perlu antrean sendiri. */
+function riwayatCatat(ts, proyek, model, d) {
+  if (!d.input && !d.output && !d.cacheTulis && !d.cacheBaca) return;
+  riwayatTambah(ts, proyek, d);
+  const baris = JSON.stringify({ ts, proyek, model: model || undefined, ...d });
+  fs.appendFile(BERKAS_RIWAYAT_TOKEN, baris + '\n', (err) => {
+    if (err) console.warn('[agent-room] gagal menulis riwayat token: ' + err.message);
+  });
+}
+
+function riwayatMuat() {
+  let teks = '';
+  try { teks = fs.readFileSync(BERKAS_RIWAYAT_TOKEN, 'utf8'); }
+  catch { return; }                 // belum ada berkasnya: wajar, riwayat baru mulai
+  let baik = 0;
+  for (const baris of teks.split('\n')) {
+    if (!baris) continue;
+    let o;
+    try { o = JSON.parse(baris); } catch { continue; }
+    if (!o || !Number.isFinite(o.ts)) continue;
+    riwayatTambah(o.ts, o.proyek || '', {
+      input: Number(o.input) || 0, output: Number(o.output) || 0,
+      cacheTulis: Number(o.cacheTulis) || 0, cacheBaca: Number(o.cacheBaca) || 0,
+    });
+    baik++;
+  }
+  if (baik) console.log('[agent-room] riwayat token dimuat: ' + baik + ' baris dari ' + BERKAS_RIWAYAT_TOKEN);
+}
+riwayatMuat();
+
 /** Rangka event untuk sesi yang identitasnya sudah tercatat di server. */
 const dasarSesi = (sesi, cwd, ts) => ({
   id: ++seq,
@@ -709,13 +779,17 @@ function serapTranskrip(sesi, rec, o) {
      tetap makan token — kalau menunggu tumpangan, angkanya telat nongol. */
   const u = o.message?.usage;
   if (u) {
+    const d = {
+      input: Number(u.input_tokens) || 0,
+      output: Number(u.output_tokens) || 0,
+      cacheTulis: Number(u.cache_creation_input_tokens) || 0,
+      cacheBaca: Number(u.cache_read_input_tokens) || 0,
+    };
     const t = tokenSesi.get(sesi) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
-    t.input += Number(u.input_tokens) || 0;
-    t.output += Number(u.output_tokens) || 0;
-    t.cacheTulis += Number(u.cache_creation_input_tokens) || 0;
-    t.cacheBaca += Number(u.cache_read_input_tokens) || 0;
+    t.input += d.input; t.output += d.output; t.cacheTulis += d.cacheTulis; t.cacheBaca += d.cacheBaca;
     tokenSesi.set(sesi, t);
     publish({ ...dasar(), kind: 'token', token: { ...t } });
+    riwayatCatat(Number.isFinite(ts) ? ts : Date.now(), baseName(o.cwd || ''), modelSesi.get(sesi), d);
   }
 }
 
@@ -1461,6 +1535,23 @@ const server = http.createServer(async (req, res) => {
     catch { body = { gagal: true }; }
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
     res.end(JSON.stringify(body));
+    return;
+  }
+
+  /* Riwayat token sepanjang waktu — tanpa token/Origin check, sama seperti
+     /cuaca: angkanya toh sudah lewat /stream tanpa autentikasi juga, cuma
+     dirangkum di sini supaya halaman tidak perlu menjumlahkan ulang seluruh
+     riwayat sendiri tiap modal Statistik token dibuka. */
+  if (url.pathname === '/token-riwayat') {
+    const harian = [...riwayatHarian.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([tanggal, v]) => ({ tanggal, ...v }));
+    const proyek = [...riwayatProyek.entries()]
+      .map(([nama, v]) => ({ nama, ...v }))
+      .sort((a, b) => (b.input + b.output) - (a.input + a.output))
+      .slice(0, 20);
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify({ total: riwayatTotal, sejak: riwayatSejak || null, harian, proyek }));
     return;
   }
 
