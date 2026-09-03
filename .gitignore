@@ -4,3 +4,6 @@
 # riwayat token: data pemakaian pribadi, bukan kode
 token-riwayat.jsonl
 token-riwayat.arsip.jsonl
+
+# buku agenda: log event harian (metadata), data lokal, bukan kode
+agenda/

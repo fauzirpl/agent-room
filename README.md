@@ -37,6 +37,12 @@ Belum mau pasang hook? `node dinas.mjs` lalu buka
 `http://127.0.0.1:4517/?demo=1` — ruangannya jalan sendiri pakai event acak,
 tanpa perlu sesi Claude Code sungguhan.
 
+Malas clone? `npx github:fauzirpl/agent-room` menjalankan kantornya langsung
+dari GitHub tanpa perlu dipublikasikan ke npm (argumen seperti `--pasang -g`
+atau `--periksa` ditaruh di belakangnya seperti biasa). Supaya kantornya nyala
+sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
+(`--lepas` mencabut, `--coba` cuma memperlihatkan yang akan dijalankan).
+
 ### Yang ada
 
 - Setiap tool call Claude Code jadi gerakan di ruangan, bukan cuma baris log
@@ -83,6 +89,12 @@ Then open <http://127.0.0.1:4517>.
 Not ready to install a hook yet? Run `node dinas.mjs` and open
 `http://127.0.0.1:4517/?demo=1` — the room animates on its own with random
 events, no real Claude Code session required.
+
+Don't want to clone? `npx github:fauzirpl/agent-room` runs the office straight
+from GitHub, no npm publish needed (put arguments like `--pasang -g` or
+`--periksa` after it as usual). To have it start on every login,
+`dinas --layanan` registers it with the OS's own login scheduler (`--lepas`
+removes it, `--coba` only shows what would be run).
 
 ### What's in it
 

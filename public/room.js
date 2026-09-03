@@ -1708,6 +1708,17 @@ function drawRapat(active) {
   r(259, 219, 13, 1, P.paper);
   r(238, 221, 13, 4, P.paper);                       // notulen
   r(239, 222, 11, 1, '#9aa7b4');
+  // Notulen sisa rapat (RUANGAN.notulen): tiap peserta yang permisi
+  // meninggalkan selembar, ditumpuk di sudut kiri depan taplak — celah antara
+  // tepi kiri meja (x≈175 di baris ini) dan gelas 190, jauh dari kursi 214.
+  // 2 px per lapis, maks 10 lapis (NOTULEN_MAKS), tiap lapis ketiga digeser
+  // 1 px supaya terbaca tumpukan sembarang, bukan bundel rapi. Digambar di
+  // dalam drawRapat sendiri, jadi ikut sortY meja — tidak ada urutan baru.
+  for (let k = 0; k < Math.min(NOTULEN_MAKS, RUANGAN.notulen); k++) {
+    const ny = 223 - k * 2;
+    r(177 + (k % 3 === 1 ? 1 : 0), ny, 8, 2, k % 2 ? '#d9d4c3' : P.paper);
+    if (k === Math.min(NOTULEN_MAKS, RUANGAN.notulen) - 1) r(179, ny, 4, 1, '#9aa7b4');   // coretan di lembar teratas
+  }
 
   // Bekas kopi tumpah — permanen sampai ada event lain yang membersihkannya.
   // Digambar sesudah taplak, sebelum props di atasnya, jadi taplaknya
@@ -2793,6 +2804,48 @@ function stasiunPulang(diri) {
   return slotBebas('think', diri) >= 0 ? 'think' : 'idle';
 }
 
+/* ---------------------------------------------------------- kongsi seproyek
+   Dua sesi nyata yang mengerjakan proyek (cwd) yang sama — cabangnya boleh
+   beda — duduk bersebelahan: waktu salah satunya dapat meja kerja, yang
+   dipilih bukan urutan prioritas MEJA_KERJA_X, melainkan meja kosong yang
+   PALING DEKAT (sumbu x) ke meja rekannya. Keputusannya cuma diambil saat
+   penugasan slot; meja yang sudah ditempati tidak pernah digeser, jadi
+   kursinya stabil. Tanpa rekan seproyek, perilaku lama. Beda proyek tetap
+   asing: tidak ada interaksi apa pun. */
+const KONGSI_SAPA = ['gimana branch-mu?', 'udah di-push?', 'itu error kemarin beres?', 'nanti tolong review ya'];
+const KONGSI_JEDA_MIN = 20000, KONGSI_JEDA_MAX = 40000;
+const KONGSI_TOLEH_MS = 1200;
+const jedaKongsi = () => (typeof window !== 'undefined' && window.KONGSI_UJI_MS)
+  || KONGSI_JEDA_MIN + Math.random() * (KONGSI_JEDA_MAX - KONGSI_JEDA_MIN);
+const sesiNyata = (a) => agents.get(a.id) === a;     // bukan standby, bukan peserta
+// menganggur di meja kerjanya: bukan sedang kerja, bukan sedang jadi pemeran event
+const kongsiDiam = (a) => a.station === 'think' && !a.path.length && a.state !== 'work'
+  && !a.eventKerja && !a.butuh && sesiNyata(a);
+function rekanSeproyek(diri, harusDiam) {
+  if (!diri.project) return null;
+  let rekan = null;
+  for (const o of agents.values()) {
+    if (o === diri || o.project !== diri.project || o.station !== 'think') continue;
+    if (harusDiam && !kongsiDiam(o)) continue;
+    if (!rekan || o.sejak < rekan.sejak) rekan = o;   // yang paling lama di kantor jadi acuan
+  }
+  return rekan;
+}
+function slotKongsi(diri) {
+  const rekan = sesiNyata(diri) ? rekanSeproyek(diri, false) : null;
+  if (!rekan) return slotBebas('think', diri);
+  const dipakai = new Set();
+  for (const o of penghuni()) if (o !== diri && o.station === 'think') dipakai.add(o.slotIdx);
+  const xr = MEJA_KERJA_X[rekan.slotIdx];
+  let k = -1, jarak = Infinity;
+  MEJA_KERJA_X.forEach((x, i) => {
+    if (dipakai.has(i)) return;
+    const d = Math.abs(x - xr);
+    if (d < jarak) { jarak = d; k = i; }
+  });
+  return k;
+}
+
 class Agent {
   constructor(id) {
     this.id = id;
@@ -2839,6 +2892,9 @@ class Agent {
     this.terkatungJenis = '';   // 'butuh' | 'macet' | '' — keadaan terkatung yang terakhir dipantau
     this.legaSampai = 0;     // now-timestamp: wajah 'lega' sesudah menyerahkan hasil / selesai giliran
     this.gagalBerturut = 0;  // tool call gagal berturut-turut yang SEDANG berlangsung; nol begitu ada yang berhasil
+    this.kongsiCek = 0;      // now-timestamp: kapan berikutnya melirik rekan seproyek (0 = belum dijadwalkan)
+    this.tolehSampai = 0;    // now-timestamp: sedang menoleh ke rekan seproyek sampai lewat ini
+    this.tolehRekan = null;  // rekan yang sedang ditoleh
 
     this.el = document.createElement('div');
     this.el.className = 'bubble';
@@ -2873,7 +2929,8 @@ class Agent {
   // sadar — lebih baik dua orang berimpit daripada satu orang keluar kanvas.
   slotOffset(id) {
     const s = STATIONS[id];
-    const k = slotBebas(id, this);
+    // meja kerja: rekan seproyek jadi tetangga (slotKongsi), selebihnya urut prioritas
+    const k = id === 'think' ? slotKongsi(this) : slotBebas(id, this);
     this.slotIdx = k < 0 ? 0 : k;
     return s.slotsX ? s.slotsX[this.slotIdx] - s.x : slotKe(this.slotIdx, s.step);
   }
@@ -2966,6 +3023,7 @@ class Agent {
     this.phase += dt;
     // barang bawaan berumur: gelas kopi hilang sendiri, tidak menempel selamanya
     if (this.bawaSampai && now > this.bawaSampai) { this.bawa = null; this.bawaSampai = 0; }
+    this.tickKongsi();
 
     if (this.path.length && now >= this.bekuSampai) {
       const t = this.path[0];
@@ -3070,6 +3128,37 @@ class Agent {
     }
   }
 
+  /* Kongsi seproyek: dua rekan yang sama-sama menganggur di mejanya sesekali
+     saling menoleh (±20–40 detik sekali, ±1,2 detik), tanpa berpindah — cuma
+     `face`, bukan `hadap`, jadi arah hadap stasiunnya tidak berubah. Bukan
+     event acak: tidak masuk log, tidak menaikkan statistik, dan tidak pernah
+     menahan langkah — begitu state/path berubah (tool call datang), tolehnya
+     batal saat itu juga. Standby & peserta rapat tidak ikut (sesiNyata). */
+  tickKongsi() {
+    const diam = kongsiDiam(this);
+    if (this.tolehSampai) {
+      const r = this.tolehRekan;
+      if (!diam || now > this.tolehSampai || !r || !kongsiDiam(r)) {
+        this.tolehSampai = 0;
+        this.tolehRekan = null;
+        // balik menghadap laptop — kecuali sudah berjalan (face diatur langkah)
+        // atau sedang menunggu kamu (setButuh sudah memasang 'down')
+        if (!this.path.length && !this.butuh) this.face = this.hadap || STATIONS.think.face;
+      }
+      return;
+    }
+    if (!diam) { this.kongsiCek = 0; return; }
+    if (!this.kongsiCek) { this.kongsiCek = now + jedaKongsi(); return; }
+    if (now < this.kongsiCek) return;
+    this.kongsiCek = now + jedaKongsi();
+    const r = rekanSeproyek(this, true);
+    if (!r) return;
+    this.face = r.x > this.x ? 'right' : 'left';
+    this.tolehSampai = now + KONGSI_TOLEH_MS;
+    this.tolehRekan = r;
+    if (Math.random() < 0.2) this.say(esc(KONGSI_SAPA[(Math.random() * KONGSI_SAPA.length) | 0]));
+  }
+
   arrive() {
     this.arrivedAt = now;
     this.face = this.butuh
@@ -3138,6 +3227,21 @@ function agentFor(id) {
    atau hook-nya belum dipasang ulang), kursi sementara itu yang bertahan. */
 let pesertaSeq = 0;
 
+/* Siapa yang pernah bubar dari rapat: kunci "<sesi induk>|<agent_type>".
+   Dibatasi 200 entri (yang paling lama dibuang) supaya halaman yang terbuka
+   berhari-hari tidak menimbun; Map dipakai karena urut sisipannya terjaga. */
+const pernahHadir = new Map();
+const PERNAH_HADIR_MAKS = 200;
+function catatPernahHadir(kunci) {
+  pernahHadir.delete(kunci);
+  pernahHadir.set(kunci, Date.now());
+  while (pernahHadir.size > PERNAH_HADIR_MAKS) pernahHadir.delete(pernahHadir.keys().next().value);
+}
+// Tumpukan notulen sisa rapat di sudut meja rapat (RUANGAN.notulen): tampilan
+// maupun datanya dibatasi 10 lapis — bekas ruangan tidak pernah direset, jadi
+// batasnya harus ada di data, bukan cuma di gambar.
+const NOTULEN_MAKS = 10;
+
 class Peserta extends Agent {
   constructor(nama, pemilik) {
     super('undangan-' + ++pesertaSeq);
@@ -3149,6 +3253,7 @@ class Peserta extends Agent {
     this.busyUntil = Infinity;
     this.keluar = false;
     this.agenId = '';          // diisi SubagentStart; kursi sementara kosong
+    this.jenis = '';           // agent_type — kunci "hadir lagi" bersama sesi induknya
   }
 
   /* Kursi sementara diambil alih oleh agen yang sebenarnya. Namanya diganti
@@ -3158,7 +3263,20 @@ class Peserta extends Agent {
     this.agenId = agenId;
     if (agen) {
       this.nama = agen;
-      this.say('<b>' + esc(agen) + '</b> hadir');
+      this.jenis = agen;
+      this.sapa();
+    }
+  }
+
+  /* Salam waktu tiba. Peserta yang `agent_type`-nya pernah bubar dari rapat
+     sesi induk yang sama dikenali sebagai orang lama — kalimatnya "hadir lagi",
+     bukan perkenalan ulang. Sekali per kedatangan: dipanggil dari masuk()
+     dan jadikan(), keduanya cuma sekali seumur peserta. */
+  sapa() {
+    if (this.jenis && pernahHadir.has(this.pemilik + '|' + this.jenis)) {
+      this.say('<b>' + esc(this.nama) + '</b> ' + (Math.random() < 0.5 ? 'hadir lagi' : 'izin, lanjut yang tadi'));
+    } else {
+      this.say('<b>' + esc(this.nama) + '</b> hadir');
     }
   }
 
@@ -3166,11 +3284,18 @@ class Peserta extends Agent {
   // dengan undangan lain dari panggilan tool yang sama
   masuk() {
     this.goTo('rapat');
-    this.say('<b>' + esc(this.nama) + '</b> hadir');
+    this.sapa();
   }
 
   bubar() {
     if (this.keluar) return;
+    // Notulen sisa rapat: tiap peserta yang sempat duduk meninggalkan
+    // selembar catatan di sudut meja (RUANGAN.notulen, dibatasi NOTULEN_MAKS).
+    // Sekalian dicatat siapa yang pernah hadir, buat salam "hadir lagi".
+    if (this.station === 'rapat') {
+      RUANGAN.notulen = Math.min(NOTULEN_MAKS, RUANGAN.notulen + 1);
+      if (this.jenis) catatPernahHadir(this.pemilik + '|' + this.jenis);
+    }
     this.keluar = true;
     this.betah = false;
     this.busyUntil = 0;
@@ -3229,12 +3354,69 @@ class Standby extends Agent {
   }
   update(dt) {
     super.update(dt);
+    if (this.tugasNotulen) { this.tickNotulen(); return; }
+    if (RUANGAN.notulen >= NOTULEN_MIN_BERES && !petugasNotulen) {
+      if (!notulenBerikut) notulenBerikut = now + jedaNotulen();   // jam mulai berjalan begitu ada yang bisa diberesi
+      else if (now > notulenBerikut && calonPetugasNotulen() === this) {
+        notulenBerikut = now + jedaNotulen();
+        petugasNotulen = this;
+        this.tugasNotulen = 'pergi';
+        this.adaTugas = true;           // event tidak boleh meminjamnya di tengah jalan (bisaDipinjam)
+        this.doingEvent = 'membereskan notulen rapat';
+        this.goToXY(NOTULEN_X + 4, 238, 'up');   // y 238: pita bawah, digambar DI DEPAN meja & kursi dekat
+        return;
+      }
+    }
     if (!this.path.length && now > this.nextMove) {
       this.goTo(MAMPIR[(Math.random() * MAMPIR.length) | 0]);
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
   }
+  /* Membereskan notulen: sampai di sudut meja, berhenti ±2 detik (arrive()
+     memberi 1,8 detik pose kerja karena adaTugas), tumpukannya lenyap — dibawa
+     sebagai kertas ke lemari arsip, lalu kembali mondar-mandir seperti biasa. */
+  tickNotulen() {
+    if (this.tugasNotulen === 'pergi') {
+      if (!this.path.length) { this.tugasNotulen = 'tunggu'; this.tungguNotulen = now + 2000; }
+    } else if (this.tugasNotulen === 'tunggu' && now > this.tungguNotulen) {
+      RUANGAN.notulen = 0;
+      this.bawa = 'kertas';
+      this.bawaSampai = now + 9000;
+      this.tugasNotulen = '';
+      this.adaTugas = false;
+      this.busyUntil = 0;
+      this.state = 'idle';
+      this.doingEvent = '';
+      petugasNotulen = null;
+      this.goTo('read');
+      this.nextMove = now + 11000 + Math.random() * 15000;
+    }
+  }
+  destroy() {
+    if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
+    super.destroy();
+  }
   say() {}                              // dibungkam: standby bukan sesi nyata
+}
+
+/* Notulen sisa rapat dibereskan pegawai standby — arsiparis kalau ada, standby
+   mana pun kalau tidak — tiap ±10 menit selama tumpukannya ≥3 lembar. Ini
+   bukan event acak (tidak lewat penjadwal, tidak masuk log), cuma rutinitas
+   kecil di class Standby. Standby yang sedang jadi pemeran event tidak dipilih
+   (bisaDipinjam), dan petugas yang kebetulan dihapus jagaPopulasi melepas
+   tugasnya lewat destroy(). window.NOTULEN_UJI_MS mempercepat jedanya (uji). */
+const NOTULEN_MIN_BERES = 3;
+const NOTULEN_X = 177;                  // sudut kiri depan taplak, sama seperti di drawRapat
+const NOTULEN_JEDA_MS = 600000;
+let notulenBerikut = 0;                 // now-timestamp percobaan beres berikutnya; 0 = jam belum jalan
+let petugasNotulen = null;              // standby yang sedang membawa tumpukan
+const jedaNotulen = () => (typeof window !== 'undefined' && window.NOTULEN_UJI_MS) || NOTULEN_JEDA_MS;
+function calonPetugasNotulen() {
+  // arsiparis boleh dipanggil walau sedang mondar-mandir (jalan santai MAMPIR
+  // bukan pekerjaan); standby lain diambil kalau tidak ada arsiparis, yang
+  // sedang berdiri diam didahulukan supaya tidak memotong langkah orang.
+  const bisa = standby.filter((b) => bisaDipinjam(b));
+  return bisa.find((b) => b.peran === 'arsiparis') || bisa.find((b) => !b.path.length) || bisa[0] || null;
 }
 
 // standby = penambal, jumlahnya selalu (4 - sesi nyata - yang sudah dihapus
@@ -3332,6 +3514,7 @@ function pesertaMasuk(ev) {
   const p = new Peserta(ev.agen || 'agen', ev.session);
   peserta.push(p);
   p.jadikan(agenId, '');
+  p.jenis = ev.agen || '';       // namanya sudah dari agent_type; salamnya di masuk()
   p.masuk();
   rapatAktif.push({
     tag: ev.session + '|SubagentStart',
@@ -3908,6 +4091,183 @@ function blip(freq, dur) {
   o.start(); o.stop(audio.currentTime + dur);
 }
 
+/* ---------- foley per stasiun ----------
+   blip() di atas memberi bunyi yang sama untuk semua tool call, jadi telinga
+   tidak bisa membedakan pegawai yang membaca arsip dari yang mengetuk stempel
+   — padahal matanya bisa, karena tiap tool punya mejanya sendiri (Peta
+   stasiun). Kamus di bawah memberi tiap meja bunyi kerjanya: bunyi yang
+   dikeluarkan BENDA di meja itu, bukan nada abstrak. Semua disintesis dari
+   oscillator + satu buffer derau putih yang dibuat sekali, pendek (≤250 ms),
+   dan pelan — ini latar, bukan lonceng. Lonceng notifikasi (notifSelesai,
+   bunyiLoncengPengingat) sengaja tidak lewat sini: itu kabar untuk kamu,
+   bukan suara ruangan.
+
+   Tiga rem supaya sesi yang deras (Read beruntun, 20 tool call/detik) tidak
+   berubah jadi derau: jeda minimum per nama bunyi, pagu total per detik untuk
+   seluruh ruangan (yang lebih dibuang, bukan diantrekan — bunyi yang telat
+   sudah tidak lagi menceritakan apa-apa), dan ducking: selama foley berbunyi,
+   musik lofi turun ke 60% sebentar lalu naik lagi, supaya bunyi pelan ini
+   tidak tenggelam di bawah beat tanpa harus dibikin keras.
+
+   Panning stereo mengikuti posisi x pegawainya (dibatasi ±0,7 supaya tidak
+   pernah sepenuhnya satu telinga): lemari arsip di kiri kedengaran di kiri,
+   rak server di kanan kedengaran di kanan — telinga jadi ikut tahu siapa yang
+   lagi bekerja di mana tanpa melirik kanvas. */
+const FOLEY_JEDA_STASIUN = 220;   // ms minimum antar bunyi bernama sama
+const FOLEY_MAKS_PER_DETIK = 6;   // pagu seluruh ruangan
+const FOLEY_PAN_MAKS = 0.7;
+const foleyTerakhir = {};         // nama -> performance.now() bunyi terakhir
+let foleyDetik = -1, foleyHitung = 0;
+
+// Satu detik derau putih, dibuat sekali; tiap bunyi cuma bikin BufferSource
+// baru yang membaca buffer yang sama (murah), lalu diwarnai lewat filter.
+let foleyDerauBuf = null;
+function foleyDerau() {
+  if (!foleyDerauBuf) {
+    const len = audio.sampleRate | 0;
+    foleyDerauBuf = audio.createBuffer(1, len, audio.sampleRate);
+    const d = foleyDerauBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const src = audio.createBufferSource();
+  src.buffer = foleyDerauBuf;
+  return src;
+}
+
+// Simpul keluaran untuk satu bunyi: panner mengikuti x pegawai, atau langsung
+// ke busEfek kalau browsernya tidak punya StereoPannerNode / tidak ada pegawai.
+function foleyKeluaran(a) {
+  if (!a || typeof audio.createStereoPanner !== 'function') return busEfek;
+  const p = audio.createStereoPanner();
+  const pan = (a.x / W) * 2 - 1;
+  p.pan.value = Math.max(-FOLEY_PAN_MAKS, Math.min(FOLEY_PAN_MAKS, pan || 0));
+  p.connect(busEfek);
+  return p;
+}
+
+// Dua bahan dasar kamus: nada (oscillator, frekuensi boleh meluncur f0->f1)
+// dan derau berwarna (buffer derau lewat filter) — keduanya dengan envelope
+// naik cepat lalu luruh eksponensial, mulai di waktu-audio t.
+function foleyNada(keluar, t, tipe, f0, f1, puncak, dur) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = tipe;
+  o.frequency.setValueAtTime(f0, t);
+  if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(puncak, t + Math.min(0.005, dur / 4));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(keluar);
+  o.start(t); o.stop(t + dur + 0.01);
+}
+function foleyDerauNada(keluar, t, tipe, freq, q, puncak, dur, naik) {
+  const src = foleyDerau();
+  const f = audio.createBiquadFilter();
+  f.type = tipe; f.frequency.value = freq;
+  if (q) f.Q.value = q;
+  const g = audio.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(puncak, t + dur * (naik || 0.1));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f); f.connect(g); g.connect(keluar);
+  src.start(t); src.stop(t + dur + 0.01);
+}
+
+/* Kamus bunyi. Kuncinya nama BENDA/gerak, bukan nama tool — tool dipetakan ke
+   sini lewat foleyUntuk() di bawah. (keluar = simpul keluaran, t = waktu
+   audio mulai.) */
+const FOLEY = {
+  // stempel dinas: thud karet ke meja, disusul klik pegas gagangnya balik
+  stempel(k, t) {
+    foleyNada(k, t, 'sine', 90, 60, 0.12, 0.08);
+    foleyDerauNada(k, t + 0.09, 'bandpass', 3000, 6, 0.05, 0.025, 0.2);
+  },
+  // lemari arsip: laci logam digeser (derau rendah naik-turun), "tok" mentok
+  arsip(k, t) {
+    foleyDerauNada(k, t, 'lowpass', 600, 0, 0.04, 0.18, 0.5);
+    foleyNada(k, t + 0.17, 'sine', 220, 180, 0.05, 0.03);
+  },
+  // rak server: desis kipas sekilas, sangat pelan, plus bip HDD
+  server(k, t) {
+    foleyDerauNada(k, t, 'bandpass', 250, 2, 0.02, 0.2, 0.3);
+    foleyNada(k, t + 0.05, 'sine', 1000, 1000, 0.03, 0.02);
+  },
+  // kursi digeser di lantai: derau rendah pendek
+  kursi(k, t) {
+    foleyDerauNada(k, t, 'lowpass', 300, 0, 0.05, 0.12, 0.4);
+  },
+  // ketukan pena dua kali di meja rapat
+  pena(k, t) {
+    foleyNada(k, t, 'triangle', 1800, 1200, 0.04, 0.02);
+    foleyNada(k, t + 0.09, 'triangle', 1800, 1200, 0.03, 0.02);
+  },
+  // meja rapat: kadang kursi, kadang pena — biar tidak monoton
+  rapat(k, t) { (Math.random() < 0.5 ? FOLEY.kursi : FOLEY.pena)(k, t); },
+  // berpikir: satu "tik" nyaris tak terdengar
+  pikir(k, t) {
+    foleyNada(k, t, 'sine', 4000, 4000, 0.015, 0.01);
+  },
+  // laptop/browser: dua klik tuts, jarak keduanya acak supaya tidak mekanis
+  ketik(k, t) {
+    foleyDerauNada(k, t, 'highpass', 2000, 0, 0.04, 0.012, 0.15);
+    foleyDerauNada(k, t + 0.06 + Math.random() * 0.06, 'highpass', 2000, 0, 0.035, 0.012, 0.15);
+  },
+  // gagal: "deng" persegi pendek yang turun — beda dari lonceng galat
+  // (bunyiLonceng sinus tiga nada) yang jauh lebih panjang dan naik
+  gagal(k, t) {
+    foleyNada(k, t, 'square', 300, 200, 0.03, 0.12);
+  },
+  // butuh perhatian kamu (izin/tanya): dua ping sinus pendek — cuma isyarat
+  // di kanal efek, loncengnya sendiri urusan notifKonfirmasi kalau 🔔 nyala
+  panggil(k, t) {
+    foleyNada(k, t, 'sine', 880, 880, 0.03, 0.04);
+    foleyNada(k, t + 0.08, 'sine', 880, 880, 0.025, 0.04);
+  },
+};
+
+// stasiun -> nama bunyi. Perintah shell non-git jatuh ke 'think' (dikerjakan
+// di laptop meja kerjanya, lihat stationFor), tapi menjalankan perintah itu
+// mengetik, bukan berpikir — jadi dibedakan di sini.
+const FOLEY_STASIUN = {
+  edit: 'stempel', read: 'arsip', search: 'arsip', server: 'server',
+  rapat: 'rapat', think: 'pikir', web: 'ketik', agent: 'ketik',
+};
+function foleyUntuk(tool, st) {
+  if (tool && SHELL_TOOL.test(tool)) return st === 'server' ? 'server' : 'ketik';
+  return FOLEY_STASIUN[st] || 'ketik';
+}
+
+// Musik lofi menyingkir 300 ms tiap foley berbunyi. Cuma kalau musiknya
+// memang nyala — kalau mati, busMusik dibiarkan (jangan-jangan slidernya
+// sedang digeser).
+function foleyDucking(t) {
+  if (!musikNyala || !busMusik) return;
+  const g = busMusik.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(VOL.musik * 0.6, t + 0.03);
+  g.linearRampToValueAtTime(VOL.musik, t + 0.3);
+}
+
+// Pintu masuknya: nama dari kamus di atas, a = pegawai (untuk panning; boleh
+// kosong). Menghormati centang 🔊 dan tidak berbunyi sebelum AudioContext
+// dibuka klik pengguna, sama seperti blip().
+function foley(nama, a) {
+  if (!sound || !audio) return false;
+  const buat = FOLEY[nama];
+  if (!buat) return false;
+  const kini = performance.now();
+  if (kini - (foleyTerakhir[nama] || -1e9) < FOLEY_JEDA_STASIUN) return false;
+  const detik = Math.floor(kini / 1000);
+  if (detik !== foleyDetik) { foleyDetik = detik; foleyHitung = 0; }
+  if (foleyHitung >= FOLEY_MAKS_PER_DETIK) return false;
+  foleyHitung++;
+  foleyTerakhir[nama] = kini;
+  const t = audio.currentTime;
+  buat(foleyKeluaran(a), t);
+  foleyDucking(t);
+  return true;
+}
+
 /* Suara hujan: derau putih di-loop lewat lowpass, volumenya mengikuti deras.
    Node-nya dibuat sekali saat suara menyala DAN memang hujan; sesudahnya
    volumenya tinggal digeser halus, termasuk turun ke nyaris nol saat reda. */
@@ -4092,6 +4452,7 @@ function renderCrew() {
     row.appendChild(bHapus);
     crewEl.appendChild(row);
   }
+  renderAntrean();       // loket disposisi: yang menunggu slot, di bawah standby
   // Angka besar = sesi yang BENAR-BENAR jalan. Standby disebut terpisah supaya
   // ruangan yang ramai tidak dibaca sebagai banyak sesi.
   statAgents.textContent = agents.size;
@@ -4366,6 +4727,24 @@ function handle(ev) {
     return;
   }
 
+  // Loket disposisi: bukan kejadian milik satu pegawai (session kosong), jadi
+  // jangan sampai melahirkan pegawai hantu lewat agentFor(). Daftarnya
+  // diganti utuh dari potret yang dibawa event — tidak ada polling /kendali.
+  if (ev.kind === 'antre') {
+    // Potret hanya diganti kalau event-nya memang membawa potret: event yang
+    // diputar ulang dari buku agenda bisa datang tanpa `antrean`/`aksi`, dan
+    // itu tidak boleh mengosongkan loket yang baru saja dimuat dari /kendali.
+    if (Array.isArray(ev.antrean)) antrean = ev.antrean;
+    const judul = ev.aksi === 'masuk' ? 'antre disposisi'
+      : ev.aksi === 'lahir' ? 'giliran antrean tiba'
+      : ev.aksi === 'batal' ? 'antrean ditarik'
+      : ev.aksi === 'gagal' ? 'antrean gagal lahir'
+      : 'loket disposisi';
+    pushLog(ev, ev.aksi === 'gagal' ? 'err' : 'mark', [judul, ev.label || '']);
+    renderCrew();
+    return;
+  }
+
   const a = agentFor(ev.session);
   // Tool call selalu menang atas event acak. Kalau pegawainya sedang jadi
   // pemeran, dia dilepas saat itu juga — halaman ini melaporkan pekerjaan
@@ -4416,7 +4795,7 @@ function handle(ev) {
       nowDoing.textContent = a.doing;
       pushLog(ev);
       bukaRapat(ev);
-      blip(560, 0.05);
+      foley(foleyUntuk(ev.tool, st), a);
       break;
     }
     case 'post': {
@@ -4444,7 +4823,7 @@ function handle(ev) {
         // itu satu-satunya keterangan kenapa. Kegiatannya sudah ada di baris atas.
         pushLog(ev, 'err', [sebab, ev.galat || apa]);
         for (let i = 0; i < 12; i++) spawn('ink', a.x, a.y - 16);
-        blip(180, 0.12);
+        foley('gagal', a);
       }
       break;
     }
@@ -4458,7 +4837,7 @@ function handle(ev) {
       a.say('<b>arahan:</b> ' + esc(ev.label || ''), 'say');
       nowDoing.textContent = 'menerima arahan di meja rapat';
       pushLog(ev, 'mark', ['arahan dari kamu', ev.label]);
-      blip(720, 0.07);
+      foley('kursi', a);   // menarik kursi ke meja rapat
       break;
     }
     // Subagent mulai: kursinya diisi identitas agen yang sebenarnya. Pegawainya
@@ -4467,6 +4846,7 @@ function handle(ev) {
       const pm = pesertaMasuk(ev);
       pushLog(ev, 'mark',
         ['peserta rapat masuk', pm ? pm.nama : (ev.agen || '') + ' (ikut daring)']);
+      foley('kursi', a);
       break;
     }
     // Subagent selesai bukan berarti sesinya selesai: yang bubar cuma satu
@@ -4474,7 +4854,7 @@ function handle(ev) {
     case 'subagent-stop': {
       const pb = pesertaKeluar(ev);
       pushLog(ev, 'mark', ['peserta rapat selesai', pb ? pb.nama : (ev.agen || '')]);
-      blip(420, 0.1);
+      foley('kursi', a);
       break;
     }
     case 'stop': {
@@ -4488,7 +4868,7 @@ function handle(ev) {
       a.legaSampai = now + 2000;          // wajah lega sebentar: gilirannya tuntas
       nowDoing.textContent = 'selesai — menunggu arahan';
       pushLog(ev, 'mark', ['selesai, menunggu arahan', '']);
-      blip(420, 0.1);
+      foley('kursi', a);   // bangkit dari meja, pulang ke meja kerjanya
       if (notifOn) notifSelesai(namaPanggilan.get(a.id));
       break;
     }
@@ -4526,7 +4906,7 @@ function handle(ev) {
         kabarMasuk(ev, a, 'tanya');
         if (notifOn) notifKonfirmasi();
       }
-      blip(880, 0.08);
+      foley('panggil', a);
       break;
     }
     /* Minta izin: sesinya berhenti sampai kamu menjawab. Tidak menaikkan
@@ -4537,7 +4917,7 @@ function handle(ev) {
       pushLog(ev, 'mark', ['minta izin', [ev.tool, ev.label].filter(Boolean).join(' ')]);
       kabarMasuk(ev, a, 'izin');
       nowDoing.textContent = 'menunggu izin kamu';
-      blip(880, 0.08);
+      foley('panggil', a);
       if (notifOn) notifKonfirmasi();
       break;
     }
@@ -4545,7 +4925,7 @@ function handle(ev) {
       a.say('izin ditolak: <b>' + esc(ev.alasan || ev.tool || '') + '</b>', 'err');
       pushLog(ev, 'err', ['izin ditolak', ev.alasan || [ev.tool, ev.label].filter(Boolean).join(' ')]);
       nowDoing.textContent = 'izin ditolak — cek panel';
-      blip(200, 0.1);
+      foley('gagal', a);
       break;
     }
     // Giliran agennya berhenti di tengah jalan, bukan selesai. Bedanya penting:
@@ -4559,7 +4939,7 @@ function handle(ev) {
       pushLog(ev, 'err', ['giliran berhenti', ev.label || '']);
       kabarMasuk(ev, a, 'galat');
       nowDoing.textContent = 'berhenti: ' + (ev.label || 'galat');
-      blip(180, 0.12);
+      foley('gagal', a);
       break;
     }
     case 'compact': {
@@ -4621,6 +5001,7 @@ function handle(ev) {
    tokennya tidak bisa mereka pungut. */
 const namaPanggilan = new Map();     // sesi 12-char -> nama yang kamu berikan
 let kendali = { izin: false, token: null };
+let antrean = [];                    // loket disposisi: [{ id, nama, cwd, sejak, sifat, posisi }]
 
 const elKendaliMati = document.getElementById('kendaliMati');
 const elForm = document.getElementById('formTugas');
@@ -4647,6 +5028,9 @@ async function muatKendali() {
       namaPanggilan.set(j.sesi, j.nama);
       if (j.peran) peranAwal.set(j.sesi, j.peran);
     }
+    // potret awal loket; selanjutnya diikuti lewat event `antre` di stream
+    antrean = Array.isArray(d.antrean) ? d.antrean : [];
+    renderCrew();
     // Fitur input tugas/prompt lewat web dimatikan — form maupun pesan
     // statusnya sengaja tidak pernah ditampilkan, apa pun jawaban server.
     elKendaliMati.hidden = true;
@@ -4782,6 +5166,50 @@ if (elTokenSimpan) {
   elToken.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); elTokenSimpan.click(); }
   });
+}
+
+/* ------------------------------------------------------ loket disposisi ----
+   Tugas yang dikirim waktu keempat slot penuh tidak ditolak, tapi menunggu di
+   loket dan dilahirkan server sendiri begitu ada yang selesai. Barisnya
+   ditaruh di daftar kru, di bawah standby: dia belum jadi pegawai, cuma map
+   yang menunggu paraf. Tombol batal menariknya kembali dari loket. */
+function renderAntrean() {
+  for (const t of antrean) {
+    const segera = t.sifat === 'SEGERA';
+    const row = document.createElement('div');
+    row.className = 'crew-row antre' + (segera ? ' segera' : '');
+    const sejak = t.sejak ? new Date(t.sejak).toLocaleTimeString('id-ID', { hour12: false }).slice(0, 8) : '';
+    row.title = 'menunggu slot kosong' + (sejak ? ' sejak ' + sejak : '')
+      + (segera ? ' · sifat SEGERA: didahulukan' : ' · sifat biasa');
+    row.innerHTML =
+      '<span class="chip"></span>' +
+      '<span class="who">antre #' + Number(t.posisi || 0) + '</span>' +
+      '<span class="nama">' + esc(t.nama || 'tugas') + '</span>' +
+      '<span class="what">' + esc(t.cwd || '') + ' · ' + (segera ? 'SEGERA' : 'biasa') + '</span>';
+    if (kendali.izin) {
+      const bBatal = document.createElement('button');
+      bBatal.className = 'aksi'; bBatal.textContent = 'batal';
+      bBatal.title = 'tarik dari loket disposisi (belum jalan, jadi tidak ada yang dihentikan)';
+      bBatal.onclick = () => batalAntre(t.id);
+      row.appendChild(bBatal);
+    }
+    crewEl.appendChild(row);
+  }
+}
+
+async function batalAntre(id) {
+  if (!kendali.token) return;
+  try {
+    const res = await fetch('/perintah/batal', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: kendali.token, id }),
+    });
+    const d = await res.json();
+    if (d.ok) pesan('antrean ' + (d.nama || id) + ' ditarik dari loket', 'ok');
+    else pesan(d.pesan || 'gagal membatalkan antrean', 'err');
+  } catch (err) {
+    pesan('gagal membatalkan antrean: ' + err.message, 'err');
+  }
 }
 
 async function hentikanTugas(sesi) {
@@ -5593,10 +6021,25 @@ if (params.get('demo') === '1') {
   setTimeout(() => handle({ ...wf, id: 900, ts: Date.now() }), 5200);
   setTimeout(() => handle({ ...wf, id: 901, ts: Date.now(), kind: 'post' }), 26000);
 } else {
-  const es = new EventSource('/stream');
-  es.onopen = () => { connDot.classList.add('on'); connText.textContent = 'tersambung'; };
+  // ?ulang=YYYY-MM-DD[&laju=60]: putar ulang buku agenda hari itu, bukan live
+  const ulang = /^\d{4}-\d{2}-\d{2}$/.test(params.get('ulang') || '') ? params.get('ulang') : '';
+  const laju = Math.min(600, Math.max(1, Number(params.get('laju')) || 60));
+  const es = new EventSource(ulang ? `/stream?ulang=${ulang}&laju=${laju}` : '/stream');
+  const labelUlang = ulang ? `putar ulang ${ulang} · ${laju}×` : 'tersambung';
+  es.onopen = () => { connDot.classList.add('on'); connText.textContent = labelUlang; };
   es.onerror = () => { connDot.classList.remove('on'); connText.textContent = 'putus — mencoba lagi…'; };
-  es.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch (_) {} };
+  es.onmessage = (e) => {
+    try {
+      const ev = JSON.parse(e.data);
+      if (ev.kind === 'ulang-selesai' || ev.kind === 'ulang-kosong') {
+        es.close();                       // server sudah menutup; jangan sambung ulang dari awal
+        connText.textContent = ev.kind === 'ulang-selesai' ? 'putar ulang selesai'
+          : `putar ulang ${ulang}: tidak ada catatan`;
+        return;
+      }
+      handle(ev);
+    } catch (_) {}
+  };
 }
 
 /* ==================================================================== event
@@ -5777,6 +6220,10 @@ const RUANGAN = {
   piagamDinding: false,    // piagam zona integritas tergantung di dinding, permanen
   laciTerbuka: -1,         // laci filing yang sedang dibuka (arsiparis mengajari magang)
   tumpukanMap: [],         // {x,y,sisa} tumpukan map sementara (rangkap tiga dkk)
+  // Lembar notulen yang ditinggal peserta rapat di sudut meja rapat, 0..10
+  // (NOTULEN_MAKS). Naik tiap Peserta bubar; dibawa arsiparis standby ke
+  // lemari arsip tiap ±10 menit kalau ≥3 (lihat class Standby).
+  notulen: 0,
 };
 
 /* -------------------------------------------------------------- penjadwal */

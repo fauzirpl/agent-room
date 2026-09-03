@@ -8,6 +8,10 @@
 //   dinas --periksa       -> cuma tampilkan status, tidak menjalankan apa pun
 //   dinas --port 4600     -> pakai port lain
 //   dinas --buka          -> sekalian buka peramban
+//   dinas --versi         -> cetak versi paket saja
+//   dinas --layanan       -> daftarkan supaya kantornya nyala sendiri tiap login
+//   dinas --layanan --lepas -> cabut pendaftaran itu
+//   dinas --layanan --coba  -> cuma cetak yang akan dijalankan, tidak mendaftar
 //
 // Gunanya bukan menghemat ketikan. Ada tiga hal yang tidak bisa dilihat
 // `node server.mjs` sendirian dan justru itu yang paling sering bikin orang
@@ -34,6 +38,24 @@ const KENDALI = ada('--kendali', '-k');
 const GLOBAL = ada('--global', '-g');
 const BUKA = ada('--buka', '-b');
 
+/* ————— versi paket —————
+   Dibaca dari package.json di sebelah berkas ini, bukan ditulis ulang di sini,
+   supaya cuma ada satu tempat yang perlu dinaikkan. Kalau berkasnya tidak ada
+   (salinan lepas tanpa package.json), kop tetap tampil — tanpa angka. */
+function versiPaket() {
+  try {
+    const p = JSON.parse(fs.readFileSync(path.join(DIR, 'package.json'), 'utf8'));
+    return typeof p.version === 'string' ? p.version : '';
+  } catch { return ''; }
+}
+const VERSI = versiPaket();
+
+if (ada('--versi', '--version')) {
+  if (!VERSI) { console.error('package.json tidak ketemu di ' + DIR); process.exit(1); }
+  console.log(VERSI);
+  process.exit(0);
+}
+
 /* ————— warna ————— */
 const pakaiWarna = process.stdout.isTTY && !process.env.NO_COLOR;
 const w = (kode) => (t) => (pakaiWarna ? `\x1b[${kode}m${t}\x1b[0m` : String(t));
@@ -49,7 +71,8 @@ function kop() {
   const baris = (isi) => '|' + isi.padEnd(52) + '|';
   console.log();
   console.log('  ' + merah(garis));
-  console.log('  ' + merah('|') + putih(tebal('   DINAS CLAUDE').padEnd(52)) + merah('|'));
+  const judul = '   DINAS CLAUDE' + (VERSI ? '  v' + VERSI : '');
+  console.log('  ' + merah('|') + putih(tebal(judul.padEnd(52))) + merah('|'));
   console.log('  ' + merah('|') + abu('   pemantau sesi Claude Code').padEnd(
     52 + (pakaiWarna ? 9 : 0)) + merah('|'));
   console.log('  ' + merah(garis));
@@ -152,6 +175,8 @@ function laporan(bin, hook, token) {
   console.log(tebal('  status kantor'));
   console.log(abu('  ' + '-'.repeat(52)));
 
+  baris('versi', VERSI ? putih('agent-room ' + VERSI) : abu('tidak diketahui  (package.json tidak ada)'));
+
   if (bin.terbaik) {
     baris('pelaksana', hijau('claude ' + bin.terbaik.versi.teks) + abu('  (' + bin.terbaik.asal + ')'));
     baris('', abu(bin.terbaik.path));
@@ -190,10 +215,145 @@ function bukaPeramban(url) {
   catch { /* tidak bisa buka sendiri, biarkan — alamatnya sudah dicetak */ }
 }
 
+/* ————— layanan latar —————
+   Mendaftarkan kantor supaya nyala sendiri tiap login, memakai penjadwal bawaan
+   tiap OS: Task Scheduler di Windows, systemd --user di Linux, launchd di macOS
+   (yang terakhir baru petunjuk, belum ditulis otomatis). Tidak ada daemon
+   buatan sendiri — yang sudah ada di OS lebih bisa dipercaya, dan pengguna bisa
+   melihat/mencabutnya lewat alat yang sudah mereka kenal.
+
+   Yang diteruskan ke layanan cuma --port dan --kendali. --buka sengaja tidak:
+   layanan latar tidak punya urusan membuka peramban. --coba mencetak semua
+   perintah dan isi berkas persis seperti yang akan dijalankan, tanpa menyentuh
+   apa pun; itu juga satu-satunya jalur yang boleh dipakai di mesin uji. */
+function layanan() {
+  const COBA = ada('--coba');
+  const LEPAS = ada('--lepas');
+  // --os hanya dihormati bersama --coba: untuk melihat keluaran platform lain
+  const plat = COBA ? ambil('--os', process.platform) : process.platform;
+  const node = process.execPath;
+  const skrip = path.join(DIR, 'dinas.mjs');
+  const argLayanan = [];
+  if (String(PORT) !== '4517') argLayanan.push('--port', String(PORT));
+  if (KENDALI) argLayanan.push('--kendali');
+
+  const q = (t) => (/[\s"]/.test(t) ? '"' + t.replace(/"/g, '\\"') + '"' : t);
+  const perintahKantor = [q(node), q(skrip), ...argLayanan].join(' ');
+  const cetak = (t) => console.log('  ' + t);
+  const jalankan = (cmd, argv) => {
+    cetak(abu('$ ') + [cmd, ...argv].map(q).join(' '));
+    if (COBA) return;
+    execFileSync(cmd, argv, { stdio: 'inherit' });
+  };
+  const tulis = (berkas, isi) => {
+    cetak(abu((COBA ? 'akan menulis ' : 'menulis ') + berkas));
+    console.log();
+    for (const b of isi.split('\n')) console.log('    ' + abu(b));
+    if (COBA) return;
+    fs.mkdirSync(path.dirname(berkas), { recursive: true });
+    fs.writeFileSync(berkas, isi, 'utf8');
+  };
+  const hapus = (berkas) => {
+    cetak(abu((COBA ? 'akan menghapus ' : 'menghapus ') + berkas));
+    if (COBA) return;
+    fs.rmSync(berkas, { force: true });
+  };
+
+  console.log(tebal('  layanan latar') + abu(COBA ? '  (--coba: cuma dicetak, tidak dijalankan)' : ''));
+  console.log(abu('  ' + '-'.repeat(52)));
+  cetak(abu('perintah'.padEnd(13)) + perintahKantor);
+  console.log();
+
+  try {
+    if (plat === 'win32') {
+      const TN = 'AgentRoom';
+      if (LEPAS) {
+        jalankan('schtasks', ['/Delete', '/TN', TN, '/F']);
+      } else {
+        jalankan('schtasks', ['/Create', '/F', '/SC', 'ONLOGON', '/TN', TN, '/TR', perintahKantor]);
+        console.log();
+        cetak(abu('task "' + TN + '" jalan tiap login (jendela konsolnya tampil) — cek: schtasks /Query /TN ' + TN));
+      }
+    } else if (plat === 'linux') {
+      const nama = 'agent-room.service';
+      const berkas = path.join(os.homedir(), '.config', 'systemd', 'user', nama);
+      if (LEPAS) {
+        jalankan('systemctl', ['--user', 'disable', '--now', nama]);
+        hapus(berkas);
+        jalankan('systemctl', ['--user', 'daemon-reload']);
+      } else {
+        const unit = [
+          '[Unit]',
+          'Description=Agent Room - kantor dinas pemantau sesi Claude Code',
+          'After=default.target',
+          '',
+          '[Service]',
+          'ExecStart=' + perintahKantor,
+          'WorkingDirectory=' + DIR,
+          'Restart=on-failure',
+          'RestartSec=3',
+          '',
+          '[Install]',
+          'WantedBy=default.target',
+          '',
+        ].join('\n');
+        tulis(berkas, unit);
+        console.log();
+        jalankan('systemctl', ['--user', 'daemon-reload']);
+        jalankan('systemctl', ['--user', 'enable', '--now', nama]);
+        console.log();
+        cetak(abu('cek: systemctl --user status ' + nama + '  |  log: journalctl --user -u ' + nama));
+      }
+    } else if (plat === 'darwin') {
+      const label = 'id.agent-room.dinas';
+      const berkas = path.join(os.homedir(), 'Library', 'LaunchAgents', label + '.plist');
+      const xml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const plist = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+        '<plist version="1.0"><dict>',
+        '  <key>Label</key><string>' + label + '</string>',
+        '  <key>ProgramArguments</key><array>',
+        ...[node, skrip, ...argLayanan].map((a) => '    <string>' + xml(a) + '</string>'),
+        '  </array>',
+        '  <key>WorkingDirectory</key><string>' + xml(DIR) + '</string>',
+        '  <key>RunAtLoad</key><true/>',
+        '  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>',
+        '</dict></plist>',
+        '',
+      ].join('\n');
+      cetak(kuning('macOS belum didaftarkan otomatis — lakukan sendiri:'));
+      console.log();
+      if (LEPAS) {
+        cetak(abu('$ launchctl unload -w ' + q(berkas)));
+        cetak(abu('$ rm ' + q(berkas)));
+      } else {
+        cetak(abu('1. simpan isi berikut ke ' + berkas));
+        console.log();
+        for (const b of plist.split('\n')) console.log('    ' + abu(b));
+        cetak(abu('2. $ launchctl load -w ' + q(berkas)));
+      }
+    } else {
+      cetak(kuning('platform ' + plat + ' belum didukung; jalankan ' + perintahKantor + ' lewat penjadwal login milikmu sendiri.'));
+    }
+  } catch (e) {
+    console.log();
+    cetak(merah('gagal: ') + (e && e.message ? e.message : e));
+    console.log(abu('  ' + '-'.repeat(52)));
+    console.log();
+    process.exit(1);
+  }
+  console.log(abu('  ' + '-'.repeat(52)));
+  console.log();
+  process.exit(0);
+}
+
 /* ————— jalan ————— */
 kop();
 
-if (ada('--lepas')) {
+if (ada('--layanan')) {
+  layanan();
+} else if (ada('--lepas')) {
   const a = ['install.mjs', '--remove']; if (GLOBAL) a.push('--global');
   const r = spawn(process.execPath, a.map((x, i) => (i ? x : path.join(DIR, x))),
                   { stdio: 'inherit', cwd: process.cwd() });

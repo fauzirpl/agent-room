@@ -36,6 +36,32 @@ const TIMEOUT_MS = 15 * 60 * 1000;
 const BISU_MS = 25 * 1000;
 const jalan = new Map();                    // uuid -> { anak, nama, mulai, cwd }
 
+/* ----------------------------------------------------- antrean disposisi ---
+   Tugas ke-5 dan seterusnya tidak lagi ditolak 429 lalu hilang: dia menunggu di
+   loket sampai satu slot kosong, lalu dilahirkan sendiri oleh server lewat
+   jalur spawn yang sama. Isinya persis parameter spawn (prompt, cwd, nama…),
+   dan sengaja HANYA DI MEMORI — perintah eksekusi tidak pernah dipersist ke
+   disk; server mati berarti antreannya ikut hangus, dan itu disengaja.
+   `sifat` SEGERA masuk ke depan, di belakang SEGERA lain yang lebih dulu.   */
+const ANTRE_MAKS = 12;
+const antrean = [];                         // [{ id, prompt, cwd, nama, peran, model, mode, pagu, sifat, sejak }]
+const SIFAT_SAH = new Set(['BIASA', 'SEGERA']);
+
+/* ------------------------------------------------ nota dinas keluar (webhook)
+   Lalu lintas keluar kedua setelah /cuaca, dan sama-sama mati secara bawaan.
+   Diisi URL (Slack/Discord/Telegram-gateway) lewat AGENT_ROOM_LAPOR, server
+   mem-POST satu JSON kecil tiap sesi masuk keadaan tertahan: minta paraf
+   (butuh manusia), macet (stop-gagal), atau bisu (tugas-bisu). Yang dikirim
+   METADATA saja — nama, proyek, cabang, sebab — tidak pernah pikir, ucap,
+   maupun prompt. Dijeda 30 detik per sesi+jenis supaya izin beruntun tidak
+   jadi rentetan notifikasi. */
+const LAPOR_URL = (process.env.AGENT_ROOM_LAPOR || '').trim();
+const LAPOR_SELESAI = String(process.env.AGENT_ROOM_LAPOR_SELESAI || '').trim() === '1';
+const LAPOR_JEDA_MS = 30 * 1000;
+const LAPOR_TIMEOUT_MS = 5 * 1000;
+const laporTerakhir = new Map();            // "sesi|jenis" -> ts kiriman terakhir
+let laporWarnTs = 0;                        // console.warn gagal kirim: maks 1/menit
+
 /* Kredensial untuk sesi yang dilahirkan halaman ini. Boleh ditempel dari web
    supaya tidak perlu mengatur env di terminal, dengan empat batasan yang
    sengaja dipasang dan tidak ditawar:
@@ -295,6 +321,86 @@ function tandaiMacet(sesi, jenis, label, galat) {
   return keadaan;
 }
 
+/* ------------------------------------------------ nota dinas keluar (webhook)
+   Dipanggil SETELAH publish() di tiap jalur yang bisa menahan sesi: hook
+   (/event), stream-json (galat API), penjaga bisu, dan — kalau diminta lewat
+   AGENT_ROOM_LAPOR_SELESAI=1 — giliran selesai. Membaca event yang sudah
+   dinormalisasi, jadi yang ikut keluar cuma field yang memang sudah metadata:
+   nama, proyek (basename), cabang, sebab, label tool. `pikir`/`ucap`/`prompt`
+   tidak pernah lewat sini — kind-nya sengaja tidak ada di daftar di bawah.
+
+   `text` dan `content` berisi satu kalimat yang sama supaya URL Slack
+   (text), Discord (content), maupun gateway bot Telegram langsung bisa
+   menampilkannya tanpa mengurai field lain. Gagal kirim tidak pernah
+   mengganggu ruangan: satu baris peringatan per menit, sisanya diam. */
+function laporKeluar(ev) {
+  if (!LAPOR_URL) return;
+  let jenis = '';
+  let sebab = '';
+  let alasan = '';
+  if (ev.butuh) {
+    jenis = 'izin-minta';
+    sebab = ev.butuh.sebab || 'izin';
+    alasan = ev.butuh.alasan || ev.butuh.label || ev.label || '';
+  } else if (ev.macet) {
+    jenis = 'stop-gagal';
+    sebab = ev.macet.jenis || 'unknown';
+    alasan = [ev.macet.label, ev.macet.galat].filter(Boolean).join(' — ');
+  } else if (ev.kind === 'tugas-bisu') {
+    jenis = 'tugas-bisu';
+    sebab = 'bisu';
+    alasan = ev.label || '';
+  } else if (LAPOR_SELESAI && (ev.kind === 'stop' || ev.kind === 'tugas-selesai')) {
+    jenis = 'selesai';
+    sebab = ev.kind;
+    alasan = ev.kind === 'tugas-selesai' && ev.ok === false ? ev.label || '' : '';
+  } else {
+    return;
+  }
+
+  const kini = Date.now();
+  const kunci = ev.session + '|' + jenis;
+  const lalu = laporTerakhir.get(kunci) || 0;
+  if (kini - lalu < LAPOR_JEDA_MS) return;
+  laporTerakhir.set(kunci, kini);
+  // Map ini tidak boleh tumbuh tanpa batas mengikuti sesi yang sudah lewat.
+  if (laporTerakhir.size > 500) {
+    for (const [k, t] of laporTerakhir) if (kini - t > LAPOR_JEDA_MS) laporTerakhir.delete(k);
+  }
+
+  const nama = ev.nama || namaSesi.get(ev.session) || ev.session;
+  const proyek = ev.cwd || '';
+  const cabang = ev.cabang || '';
+  const tempat = proyek ? ' (' + proyek + (cabang ? '@' + cabang : '') + ')' : '';
+  const ekor = alasan ? ' — ' + clip(alasan, 200) : '';
+  const kalimat = jenis === 'izin-minta' ? '🙏 Menunggu paraf: ' + nama + tempat + ekor
+    : jenis === 'stop-gagal' ? '⛔ Sesi tertahan: ' + nama + tempat + ekor
+    : jenis === 'tugas-bisu' ? '🔇 Tugas tidak pernah mulai: ' + nama + tempat + ekor
+    : (ev.ok === false ? '❌ Tugas gagal: ' : '✅ Selesai: ') + nama + tempat + ekor;
+
+  const nota = {
+    jenis, sesi: ev.session, nama, proyek, cabang, sebab,
+    alasan: clip(alasan, 200),
+    model: ev.model || modelSesi.get(ev.session) || '',
+    ts: ev.ts || kini,
+    alamat: 'http://127.0.0.1:' + PORT,
+    text: kalimat, content: kalimat,
+  };
+  fetch(LAPOR_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(nota),
+    signal: AbortSignal.timeout(LAPOR_TIMEOUT_MS),
+  }).then((r) => {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  }).catch((err) => {
+    if (kini - laporWarnTs < 60 * 1000) return;
+    laporWarnTs = kini;
+    console.warn('[agent-room] nota dinas keluar gagal dikirim ke ' + LAPOR_URL + ': '
+      + (err && err.name === 'TimeoutError' ? 'lewat ' + (LAPOR_TIMEOUT_MS / 1000) + ' dtk' : err.message));
+  });
+}
+
 /* Dari 12 nilai `notification_type`, cuma dua yang benar-benar berarti
    gilirannya ada di kamu. Sisanya kabar lewat: `auth_success` memberitahu
    login berhasil, `agent_completed` memberitahu subagent kelar, `quota_*`
@@ -536,6 +642,7 @@ function tandaiHidup(sesi) {
 function publish(ev) {
   ring.push(ev);
   if (ring.length > RING_SIZE) ring.shift();
+  agendaCatat(ev);                          // buku agenda: metadata saja, lihat agendaBaris()
   const frame = `id: ${ev.id}\ndata: ${JSON.stringify(ev)}\n\n`;
   for (const res of clients) {
     try { res.write(frame); } catch { clients.delete(res); }
@@ -764,6 +871,160 @@ function riwayatMuat() {
   }
 }
 riwayatMuat();
+
+/* -------------------------------------------------------- buku agenda ----
+   Ring di atas cuma 400 event terakhir DI MEMORI: restart server, ruangan
+   hari ini hilang; buka halaman jam empat sore, yang kelihatan cuma sisa
+   setengah jam terakhir. Buku agenda ini catatan append-only yang bertahan:
+   satu berkas per HARI (agenda/YYYY-MM-DD.jsonl), satu baris per event.
+
+   Yang dicatat METADATA SAJA — tool apa, berkas mana, berhasil atau tidak,
+   berapa lama. `pikir`/`ucap`/`token` tidak pernah masuk, dan tidak ada
+   field isi transkrip (`teks`, `tanya`, `token`) yang ikut ditulis walau
+   menumpang di event lain. Ring/SSE boleh membawa isi karena umurnya sebatas
+   memori; berkas di disk umurnya 30 hari, jadi ambangnya sengaja lebih
+   rendah. Kalau AGENT_ROOM_ISI=off, `label` pun tidak ditulis.
+
+   Per hari, bukan satu berkas panjang: rotasi & pembersihan jadi cuma soal
+   nama berkas, `/agenda?dari=..&sampai=..` cuma perlu membuka berkas yang
+   diminta, dan putar ulang (`/stream?ulang=YYYY-MM-DD`) membaca tepat satu
+   berkas. appendFileSync: satu baris ~200 byte per tool call, jauh lebih
+   murah daripada risiko baris terakhir hilang waktu server dimatikan.     */
+const AGENDA_DIR = process.env.AGENT_ROOM_AGENDA_DIR || path.join(__dirname, 'agenda');
+const AGENDA_HARI = Math.max(1, Number(process.env.AGENT_ROOM_AGENDA_HARI) || 30);
+const AGENDA_LABEL_MAX = 120;
+const AGENDA_KIND_TOLAK = new Set(['pikir', 'ucap', 'token']);
+const AGENDA_TANGGAL_RX = /^\d{4}-\d{2}-\d{2}$/;
+let agendaGalatTerakhir = 0;        // peringatan tulis dibatasi 1x/menit, bukan tiap event
+
+const agendaBerkas = (tanggal) => path.join(AGENDA_DIR, tanggal + '.jsonl');
+
+/* Daftar putih, bukan daftar hitam: field baru yang suatu hari ditambah ke
+   event tidak otomatis bocor ke disk. */
+function agendaBaris(ev) {
+  if (!ev || AGENDA_KIND_TOLAK.has(ev.kind)) return null;
+  const b = { id: ev.id, ts: ev.ts, kind: ev.kind, session: ev.session };
+  if (ev.cwd) b.cwd = ev.cwd;
+  if (ev.cabang) b.cabang = ev.cabang;
+  if (ev.tool) b.tool = ev.tool;
+  if (!ISI_MATI && ev.label) b.label = clip(ev.label, AGENDA_LABEL_MAX);
+  b.ok = ev.ok !== false;
+  if (ev.galat) b.galat = clip(ev.galat, AGENDA_LABEL_MAX);
+  if (ev.interupsi) b.interupsi = true;
+  if (ev.alasan) b.alasan = clip(ev.alasan, AGENDA_LABEL_MAX);
+  if (Number.isFinite(ev.durasi)) b.durasi = ev.durasi;
+  if (ev.model) b.model = ev.model;
+  if (ev.nama) b.nama = ev.nama;
+  if (ev.peran) b.peran = ev.peran;
+  if (ev.jenis) b.jenis = ev.jenis;
+  if (ev.agen) b.agen = ev.agen;
+  if (ev.agenId) b.agenId = ev.agenId;
+  if (ev.panggilan) b.panggilan = ev.panggilan;
+  if (Array.isArray(ev.peserta)) b.peserta = ev.peserta.slice(0, 12).map((p) => clip(p, 40));
+  for (const k of ['butuh', 'macet']) {
+    const v = ev[k];
+    if (v === false) b[k] = false;
+    else if (v && typeof v === 'object') {
+      const s = { sebab: v.sebab || v.jenis || '', alasan: clip(v.alasan || '', AGENDA_LABEL_MAX) };
+      if (!ISI_MATI && v.label) s.label = clip(v.label, AGENDA_LABEL_MAX);
+      b[k] = s;
+    }
+  }
+  return b;
+}
+
+function agendaCatat(ev) {
+  const b = agendaBaris(ev);
+  if (!b) return;
+  try {
+    fs.appendFileSync(agendaBerkas(tanggalLokal(b.ts)), JSON.stringify(b) + '\n');
+  } catch (err) {
+    const kini = Date.now();
+    if (kini - agendaGalatTerakhir > 60000) {
+      agendaGalatTerakhir = kini;
+      console.warn('[agent-room] gagal menulis buku agenda: ' + err.message);
+    }
+  }
+}
+
+/* Baris satu hari, kronologis naik. Berkas tidak ada → []. Baris rusak
+   (append terpotong) dilewati, tidak menggagalkan seluruh hari. */
+function agendaBacaHari(tanggal) {
+  let teks = '';
+  try { teks = fs.readFileSync(agendaBerkas(tanggal), 'utf8'); } catch { return []; }
+  const keluar = [];
+  for (const t of teks.split('\n')) {
+    if (!t.trim()) continue;
+    try {
+      const o = JSON.parse(t);
+      if (o && Number.isFinite(o.ts) && o.kind && !AGENDA_KIND_TOLAK.has(o.kind)) {
+        if (ISI_MATI) { delete o.label; if (o.butuh) delete o.butuh.label; if (o.macet) delete o.macet.label; }
+        keluar.push(o);
+      }
+    } catch { /* baris terpotong */ }
+  }
+  return keluar;
+}
+
+function agendaMuat() {
+  try { fs.mkdirSync(AGENDA_DIR, { recursive: true }); }
+  catch (err) { console.warn('[agent-room] folder agenda tidak bisa dibuat: ' + err.message); return; }
+  // bersih-bersih: nama berkasnya sudah tanggal, jadi cukup bandingkan string
+  const batas = tanggalLokal(Date.now() - AGENDA_HARI * 24 * 3600 * 1000);
+  let dibuang = 0;
+  try {
+    for (const nama of fs.readdirSync(AGENDA_DIR)) {
+      const m = nama.match(/^(\d{4}-\d{2}-\d{2})\.jsonl$/);
+      if (!m || m[1] >= batas) continue;
+      try { fs.unlinkSync(path.join(AGENDA_DIR, nama)); dibuang++; } catch {}
+    }
+  } catch {}
+  // ring diisi ulang dari hari ini supaya halaman yang dibuka SESUDAH restart
+  // tetap melihat ruangan hari ini, dan seq lanjut dari id terbesar supaya
+  // Last-Event-ID milik halaman yang sudah terbuka tidak bertabrakan.
+  const hariIni = agendaBacaHari(tanggalLokal(Date.now())).slice(-RING_SIZE);
+  for (const o of hariIni) {
+    ring.push(o);
+    if (Number.isFinite(o.id) && o.id > seq) seq = o.id;
+  }
+  if (hariIni.length || dibuang) {
+    console.log('[agent-room] buku agenda: ' + hariIni.length + ' event hari ini dimuat ke ring'
+      + (dibuang ? ', ' + dibuang + ' berkas lebih tua dari ' + AGENDA_HARI + ' hari dibuang' : '')
+      + ' (' + AGENDA_DIR + ')');
+  }
+}
+agendaMuat();
+
+/* Putar ulang satu hari lewat SSE. Koneksi ini TIDAK didaftarkan ke
+   `clients`: tidak menerima event live, tidak dihitung viewer. Jeda antar
+   event = selisih ts asli / laju, dipangkas 5 detik supaya malam sepi tidak
+   ditunggu; tiap event diberi `ulang: true`, ditutup `ulang-selesai`.       */
+let pemutarUlang = 0;
+function putarUlang(req, res, tanggal, laju) {
+  const baris = agendaBacaHari(tanggal).sort((a, b) => a.ts - b.ts);
+  const kirim = (o) => { try { res.write(`data: ${JSON.stringify(o)}\n\n`); } catch {} };
+  if (!baris.length) {
+    kirim({ kind: 'ulang-kosong', ulang: true, tanggal, ts: Date.now() });
+    res.end();
+    return;
+  }
+  pemutarUlang++;
+  let i = 0, timer = null, putus = false;
+  const langkah = () => {
+    if (putus) return;
+    kirim({ ...baris[i], ulang: true });
+    i++;
+    if (i >= baris.length) {
+      kirim({ kind: 'ulang-selesai', ulang: true, tanggal, jumlah: baris.length, ts: Date.now() });
+      res.end();
+      return;
+    }
+    const jeda = Math.min(5000, Math.max(0, (baris[i].ts - baris[i - 1].ts) / laju));
+    timer = setTimeout(langkah, jeda);
+  };
+  req.on('close', () => { putus = true; clearTimeout(timer); pemutarUlang = Math.max(0, pemutarUlang - 1); });
+  langkah();
+}
 
 /** Rangka event untuk sesi yang identitasnya sudah tercatat di server. */
 const dasarSesi = (sesi, cwd, ts) => ({
@@ -997,7 +1258,9 @@ function serapStream(rec, sid, m) {
   if (m.type === 'assistant' && m.is_api_error_message) {
     const label = clip(GALAT_STOP[m.error] || String(m.error || 'galat API'), 60);
     const macet = tandaiMacet(sesi, String(m.error || 'unknown'), label, '');
-    publish(dasar({ kind: 'stop-gagal', ok: false, label, macet }));
+    const evMacet = dasar({ kind: 'stop-gagal', ok: false, label, macet });
+    publish(evMacet);
+    laporKeluar(evMacet);
     return;
   }
 
@@ -1189,6 +1452,259 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
+/* ------------------------------------------------------ antrean disposisi ---
+   Ringkasan satu tugas yang antre, untuk /kendali dan event `antre`. Prompt-nya
+   sengaja TIDAK ikut: yang beredar di stream cukup nama, proyek, dan sifat. */
+function ringkasAntre(t, i) {
+  return { id: t.id, nama: t.nama, cwd: baseName(t.cwd), sejak: t.sejak, sifat: t.sifat, posisi: i + 1 };
+}
+
+/* Satu event ringan tiap antrean berubah — masuk, lahir, batal — membawa
+   potret seluruh antrean supaya halaman tinggal mengganti daftarnya, tanpa
+   polling /kendali. `session` kosong: ini bukan kejadian milik satu pegawai. */
+function siarAntre(aksi, t, posisi, pesan) {
+  const kepala = aksi === 'masuk' ? 'antre #' + posisi
+    : aksi === 'lahir' ? 'giliran tiba'
+    : aksi === 'batal' ? 'batal antre'
+    : 'gagal lahir';
+  publish({
+    id: ++seq, ts: Date.now(), kind: 'antre', aksi, session: '', tool: null, ok: aksi !== 'gagal',
+    tugas: ringkasAntre(t, (posisi || 1) - 1),
+    antrean: antrean.map(ringkasAntre),
+    label: clip(kepala + ' · ' + t.nama + ' · ' + baseName(t.cwd)
+      + (t.sifat === 'SEGERA' ? ' · SEGERA' : '') + (pesan ? ' — ' + pesan : ''), 220),
+  });
+}
+
+/* SEGERA menyalip semua BIASA, tapi antre di belakang SEGERA yang lebih dulu:
+   loket tetap adil di antara yang sama-sama mendesak. */
+function masukAntrean(t) {
+  let i = antrean.length;
+  if (t.sifat === 'SEGERA') {
+    i = antrean.findIndex((x) => x.sifat !== 'SEGERA');
+    if (i < 0) i = antrean.length;
+  }
+  antrean.splice(i, 0, t);
+  console.log('[agent-room] tugas "' + t.nama + '" antre #' + (i + 1)
+    + (t.sifat === 'SEGERA' ? ' (SEGERA)' : '') + ' — ' + jalan.size + '/' + MAKS_JALAN + ' slot terpakai');
+  siarAntre('masuk', t, i + 1);
+  return i + 1;
+}
+
+function batalAntre(id) {
+  const i = antrean.findIndex((x) => x.id === id);
+  if (i < 0) return null;
+  const [t] = antrean.splice(i, 1);
+  console.log('[agent-room] antrean "' + t.nama + '" dibatalkan');
+  siarAntre('batal', t, i + 1);
+  return t;
+}
+
+/* Dipanggil tiap satu slot kosong (selesai/timeout/proses keluar). Yang gagal
+   lahir tidak menyumbat: dilaporkan sebagai tugas-selesai gagal, lalu lanjut ke
+   berikutnya — persis seperti kalau dia gagal waktu dikirim langsung. */
+function lahirkanAntrean() {
+  while (antrean.length && jalan.size < MAKS_JALAN) {
+    const t = antrean.shift();
+    siarAntre('lahir', t, 1);
+    const hasil = lahirkanTugas(t);
+    if (!hasil.ok) {
+      console.warn('[agent-room] antrean "' + t.nama + '" gagal lahir: ' + hasil.pesan);
+      siarAntre('gagal', t, 1, hasil.pesan);
+    }
+  }
+}
+
+/* Jalur lahir yang SATU-SATUNYA: dipakai /perintah waktu slot masih ada, dan
+   lahirkanAntrean() waktu giliran tiba. `t` adalah bahan yang sudah disaring
+   di /perintah — di sini tidak ada lagi keputusan soal apa yang boleh. */
+function lahirkanTugas(t) {
+  const sid = crypto.randomUUID();
+  const nama = t.nama;
+  const kerja = t.cwd;
+  const model = t.model;
+  namaSesi.set(sid.slice(0, 12), nama);
+  // Jabatannya dipasang SEBELUM prosesnya lahir, memakai trik yang sama
+  // dengan nama: sesi id sudah kita tentukan sendiri lewat --session-id,
+  // jadi event hook pertamanya langsung datang dengan seragam yang benar.
+  if (t.peran) peranSesi.set(sid.slice(0, 12), t.peran);
+  if (model) modelSesi.set(sid.slice(0, 12), model);
+
+  // Prompt masuk sebagai satu elemen argv, BUKAN lewat shell: itu yang
+  // bikin teks bebas dari halaman tidak bisa jadi perintah shell.
+  const args = [
+    '-p', t.prompt,
+    '--session-id', sid,
+    // stream-json, bukan json: yang dibaca bukan cuma hasil akhirnya, tapi
+    // jalannya sesi — dan `-p` mensyaratkan --verbose untuk bentuk ini.
+    '--output-format', 'stream-json', '--verbose',
+    '--permission-mode', t.mode || 'bypassPermissions',
+    '--add-dir', kerja,
+  ];
+  if (model) args.push('--model', model);
+  if (t.pagu) args.push('--max-budget-usd', t.pagu);
+
+  let anak;
+  try {
+    // Kredensial lewat env, tidak pernah lewat argv: baris perintah proses
+    // bisa dibaca proses lain di mesin yang sama, isi env-nya tidak.
+    const lingkungan = { ...process.env };
+    if (kredensial) lingkungan[kredensial.envKey] = kredensial.nilai;
+    anak = spawn(CLAUDE, args, {
+      cwd: kerja, shell: false, windowsHide: true, env: lingkungan,
+      // stdin ditutup sejak awal. Kalau dibiarkan berupa pipa yang tidak
+      // pernah diisi, CLI menunggunya dulu ("no stdin data received in 3s")
+      // — tiga detik terbuang tiap tugas, plus peringatan yang menyesatkan
+      // karena menutupi sebab gagal yang sebenarnya.
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (err) {
+    namaSesi.delete(sid.slice(0, 12));
+    return { ok: false, pesan: 'gagal menjalankan claude: ' + err.message };
+  }
+
+  const rec = {
+    anak, nama, mulai: Date.now(), cwd: kerja, keluar: '', galat: '', hidup: false,
+    streamMasuk: 0,          // berapa pesan stream-json yang sudah terbaca
+    hasil: null,             // pesan `result` terakhir — sumber sebab gagal & biaya
+    biaya: null,
+    alat: new Map(),         // tool_use_id -> { tool, label }
+    rapat: new Map(),        // tool_use_id panggilan Task/Agent -> nama pesertanya
+  };
+  jalan.set(sid, rec);
+
+  // Prosesnya lahir bukan berarti sesinya jalan. Kalau tidak ada satu pun
+  // hook dalam BISU_MS, bilang sekarang — jangan biarkan halaman menampilkan
+  // pegawai yang tampak sehat padahal sesinya tidak pernah mulai.
+  /* Sejak stream-json ikut dibaca, "tidak ada hook" dan "tidak ada apa-apa"
+     jadi dua hal yang berbeda — dan cuma yang kedua pantas dituduh gagal
+     autentikasi. Dulu keduanya dilaporkan sama, jadi sesi yang sebenarnya
+     sehat tapi hook-nya tidak terpasang ikut kena tuduhan yang salah. */
+  rec.bisu = setTimeout(() => {
+    if (rec.hidup) return;
+    if (rec.streamMasuk > 0) {
+      console.log('[agent-room] sesi ' + sid.slice(0, 12) + ' jalan tanpa hook — '
+        + 'ruangannya digerakkan dari stream-json (' + rec.streamMasuk + ' pesan). '
+        + 'Itu yang terjadi di mode --bare, dan memang tidak apa-apa.');
+      return;
+    }
+    console.warn('[agent-room] sesi ' + sid.slice(0, 12) + ' belum mengirim apa pun '
+      + (BISU_MS / 1000) + ' detik setelah lahir — hook maupun stream-json. '
+      + 'Sesi headless butuh kredensial sendiri: jalankan server ini dari terminal '
+      + 'biasa tempat perintah claude normal jalan, atau siapkan token lewat: '
+      + 'claude setup-token');
+    const evBisu = {
+      id: ++seq, ts: Date.now(), kind: 'tugas-bisu', session: sid.slice(0, 12),
+      nama, tool: null, ok: false, cwd: baseName(kerja), cabang: cabangGit(kerja),
+      label: 'nihil ' + (BISU_MS / 1000) + ' dtk, hook maupun stream — sesinya tidak pernah mulai',
+    };
+    publish(evBisu);
+    laporKeluar(evBisu);
+  }, BISU_MS);
+
+  /* stdout sekarang NDJSON, bukan satu JSON di akhir: dibaca baris per baris
+     supaya ruangannya bergerak selagi sesinya jalan, bukan menunggu selesai. */
+  let sisa = '';
+  anak.stdout.on('data', (c) => {
+    const teks = String(c);
+    // Mentahnya tetap disimpan sebagai cadangan pembaca sebab gagal, tapi
+    // ekornya saja: stream satu sesi panjang bisa puluhan MB, dan yang
+    // dibutuhkan cuma bagian akhir.
+    rec.keluar = (rec.keluar + teks).slice(-64 * 1024);
+    sisa += teks;
+    if (sisa.length > 8 * 1024 * 1024) {     // satu baris raksasa tanpa newline
+      console.warn('[agent-room] baris stream-json > 8 MB dibuang (sesi '
+                   + sid.slice(0, 12) + ')');
+      sisa = '';
+      return;
+    }
+    const baris = sisa.split('\n');
+    sisa = baris.pop();
+    for (const b of baris) {
+      const tb = b.trim();
+      if (!tb) continue;
+      let m;
+      // Baris yang tidak bisa diurai dilewati, bukan bikin meledak: satu
+      // pesan rusak tidak boleh mematikan seluruh sesi.
+      try { m = JSON.parse(tb); } catch { continue; }
+      try { serapStream(rec, sid, m); }
+      catch (err) {
+        console.warn('[agent-room] stream-json ' + sid.slice(0, 12) + ': ' + err.message);
+      }
+    }
+  });
+  anak.stderr.on('data', (c) => { rec.galat = (rec.galat + c).slice(-16 * 1024); });
+
+  const batas = setTimeout(() => {
+    rec.galat += '\n[dihentikan: lewat batas waktu]';
+    try { anak.kill(); } catch { /* sudah mati */ }
+  }, TIMEOUT_MS);
+
+  /* Sebab gagal yang benar-benar terbaca. Dua jebakan yang dihindari:
+     - stderr sering cuma berisi peringatan, sementara sebab sebenarnya ada
+       di stdout sebagai JSON hasil (mis. "Not logged in · Please run /login")
+     - JSON itu panjang; yang dibaca orang cuma field result/error-nya */
+  const sebabGagal = () => {
+    // Pesan `result` terakhir dari stream sudah terurai waktu ia lewat, jadi
+    // tidak perlu mengurai ulang ekor stdout yang mungkin terpotong di tengah.
+    if (rec.hasil) {
+      const inti = rec.hasil.result || rec.hasil.error;
+      if (inti) return String(inti);
+    }
+    const err = rec.galat.split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !/^warning:/i.test(l))
+      .join(' ');
+    return err || rec.keluar || '';
+  };
+
+  let sudahSelesai = false;
+  const selesai = (kode, sinyal) => {
+    // 'error' dan 'close' bisa dua-duanya menyala untuk satu proses; slotnya
+    // cuma boleh dilepas — dan antrean dilahirkan — sekali.
+    if (sudahSelesai) return;
+    sudahSelesai = true;
+    clearTimeout(batas);
+    clearTimeout(rec.bisu);
+    jalan.delete(sid);
+    // Jangan diam kalau gagal: sesi yang tidak pernah lahir tidak akan
+    // memunculkan pegawai apa pun, jadi kegagalannya harus terlihat.
+    const gagal = kode !== 0;
+    /* Angka ini SETARA, bukan tagihan — dan bedanya penting. Sesi headless
+       yang dijalankan dengan token dari `claude setup-token` berautentikasi
+       lewat langganan: yang terpakai kuota paket, bukan saldo API. Yang
+       dikirim Claude Code di `total_cost_usd` adalah perkiraan sisi klien
+       soal berapa pemakaian itu KALAU ditagih lewat API. Dikirim sebagai
+       field sendiri, bukan digabung ke label — supaya halaman yang
+       memutuskan cara memberi taunya, bukan server yang sudah merangkai
+       kalimatnya. `resmi:false` di sini bukan hiasan: itu yang membuat
+       halaman menuliskannya sebagai "data sementara", bukan angka pasti. */
+    const biaya = typeof rec.biaya === 'number' ? { usd: rec.biaya, resmi: false } : null;
+    const evSelesai = {
+      id: ++seq, ts: Date.now(), kind: 'tugas-selesai',
+      session: sid.slice(0, 12), nama, tool: null, ok: !gagal,
+      cwd: baseName(kerja), cabang: cabangGit(kerja),
+      label: gagal
+        ? clip('gagal (kode ' + kode + (sinyal ? '/' + sinyal : '') + ') '
+               + sebabGagal(), 220)
+        : nama,
+      ...(biaya ? { biaya } : {}),
+    };
+    publish(evSelesai);
+    laporKeluar(evSelesai);
+    // Slot baru kosong: yang paling depan di loket langsung dilahirkan.
+    lahirkanAntrean();
+  };
+  anak.on('error', (err) => { rec.galat += err.message; selesai(-1, null); });
+  anak.on('close', selesai);
+
+  publish({ id: ++seq, ts: Date.now(), kind: 'tugas-mulai',
+            session: sid.slice(0, 12), nama, tool: null, label: nama, ok: true,
+            peran: peranSesi.get(sid.slice(0, 12)) || '', model });
+
+  return { ok: true, sesi: sid.slice(0, 12) };
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
@@ -1215,6 +1731,7 @@ const server = http.createServer(async (req, res) => {
       const ev = normalize(raw);
       tandaiHidup(ev.session);
       publish(ev);
+      laporKeluar(ev);          // nota dinas keluar: hanya kalau AGENT_ROOM_LAPOR diisi
       /* Jalur transkrip cuma diketahui dari sini. Waktu sesinya habis
          pemantauannya tidak langsung dicabut: kalimat penutup agen sering baru
          mendarat di berkas beberapa saat sesudah hook terakhir. */
@@ -1235,6 +1752,12 @@ const server = http.createServer(async (req, res) => {
       'x-accel-buffering': 'no',
     });
     res.write('retry: 1500\n\n');
+    const ulang = url.searchParams.get('ulang');
+    if (ulang) {
+      if (!AGENDA_TANGGAL_RX.test(ulang)) { res.end(); return; }
+      putarUlang(req, res, ulang, Math.min(600, Math.max(1, Number(url.searchParams.get('laju')) || 60)));
+      return;
+    }
     const since = Number(req.headers['last-event-id'] || url.searchParams.get('since') || 0);
     for (const ev of ring.filter((e) => e.id > since).slice(-60)) {
       res.write(`id: ${ev.id}\ndata: ${JSON.stringify(ev)}\n\n`);
@@ -1276,6 +1799,11 @@ const server = http.createServer(async (req, res) => {
         peran: peranSesi.get(id.slice(0, 12)) || '',
         model: modelSesi.get(id.slice(0, 12)) || '',
       })),
+      // Loket disposisi: yang menunggu slot. Prompt-nya tidak ikut — cukup
+      // nama, proyek, sifat, dan posisinya.
+      antrean: antrean.map(ringkasAntre),
+      antreMaks: ANTRE_MAKS,
+      maksJalan: MAKS_JALAN,
     }));
     return;
   }
@@ -1466,7 +1994,6 @@ const server = http.createServer(async (req, res) => {
     if (!IZIN) return tolak(403, 'kendali web mati — jalankan dengan --izinkan-perintah');
     if (p.token !== TOKEN) return tolak(403, 'token tidak cocok');
     if (!CLAUDE) return tolak(500, 'biner claude tidak ketemu di PATH');
-    if (jalan.size >= MAKS_JALAN) return tolak(429, `sudah ${MAKS_JALAN} tugas jalan bersamaan`);
 
     const prompt = String(p.prompt || '').trim();
     if (!prompt) return tolak(400, 'prompt kosong');
@@ -1479,180 +2006,69 @@ const server = http.createServer(async (req, res) => {
       return tolak(400, 'folder kerja tidak ada: ' + kerja);
     }
 
-    const sid = crypto.randomUUID();
-    const nama = clip(p.nama, 24) || 'tugas';
-    namaSesi.set(sid.slice(0, 12), nama);
-    // Jabatannya dipasang SEBELUM prosesnya lahir, memakai trik yang sama
-    // dengan nama: sesi id sudah kita tentukan sendiri lewat --session-id,
-    // jadi event hook pertamanya langsung datang dengan seragam yang benar.
-    if (typeof p.peran === 'string' && PERAN_SAH.test(p.peran)) {
-      peranSesi.set(sid.slice(0, 12), p.peran);
-    }
-    if (model) modelSesi.set(sid.slice(0, 12), model);
+    /* Semua yang nanti dibutuhkan spawn dikumpulkan di satu objek, supaya
+       jalur "lahir sekarang" dan "antre dulu" memakai bahan yang persis sama.
+       Disaring DI SINI, saat masuk — bukan saat lahir — supaya yang ditolak
+       tahu sekarang, bukan lima menit lagi waktu gilirannya tiba. */
+    const sifat = String(p.sifat || 'BIASA').trim().toUpperCase();
+    if (!SIFAT_SAH.has(sifat)) return tolak(400, 'sifat tidak dikenal: ' + clip(p.sifat, 20));
+    const tugas = {
+      id: crypto.randomBytes(6).toString('hex'),
+      prompt, cwd: kerja, nama: clip(p.nama, 24) || 'tugas',
+      peran: typeof p.peran === 'string' && PERAN_SAH.test(p.peran) ? p.peran : '',
+      model,
+      mode: typeof p.mode === 'string' && p.mode ? p.mode : '',
+      pagu: p.pagu ? String(Number(p.pagu) || 1) : '',
+      sifat, sejak: Date.now(),
+    };
 
-    // Prompt masuk sebagai satu elemen argv, BUKAN lewat shell: itu yang
-    // bikin teks bebas dari halaman tidak bisa jadi perintah shell.
-    const args = [
-      '-p', prompt,
-      '--session-id', sid,
-      // stream-json, bukan json: yang dibaca bukan cuma hasil akhirnya, tapi
-      // jalannya sesi — dan `-p` mensyaratkan --verbose untuk bentuk ini.
-      '--output-format', 'stream-json', '--verbose',
-      '--permission-mode', p.mode || 'bypassPermissions',
-      '--add-dir', kerja,
-    ];
-    if (model) args.push('--model', model);
-    if (p.pagu) args.push('--max-budget-usd', String(Number(p.pagu) || 1));
-
-    let anak;
-    try {
-      // Kredensial lewat env, tidak pernah lewat argv: baris perintah proses
-      // bisa dibaca proses lain di mesin yang sama, isi env-nya tidak.
-      const lingkungan = { ...process.env };
-      if (kredensial) lingkungan[kredensial.envKey] = kredensial.nilai;
-      anak = spawn(CLAUDE, args, {
-        cwd: kerja, shell: false, windowsHide: true, env: lingkungan,
-        // stdin ditutup sejak awal. Kalau dibiarkan berupa pipa yang tidak
-        // pernah diisi, CLI menunggunya dulu ("no stdin data received in 3s")
-        // — tiga detik terbuang tiap tugas, plus peringatan yang menyesatkan
-        // karena menutupi sebab gagal yang sebenarnya.
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } catch (err) {
-      namaSesi.delete(sid.slice(0, 12));
-      return tolak(500, 'gagal menjalankan claude: ' + err.message);
+    if (jalan.size >= MAKS_JALAN) {
+      if (antrean.length >= ANTRE_MAKS) {
+        return tolak(429, 'loket disposisi penuh — ' + ANTRE_MAKS + ' tugas sudah antre');
+      }
+      const posisi = masukAntrean(tugas);
+      res.writeHead(202, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, antre: true, id: tugas.id, posisi }));
+      return;
     }
 
-    const rec = {
-      anak, nama, mulai: Date.now(), cwd: kerja, keluar: '', galat: '', hidup: false,
-      streamMasuk: 0,          // berapa pesan stream-json yang sudah terbaca
-      hasil: null,             // pesan `result` terakhir — sumber sebab gagal & biaya
-      biaya: null,
-      alat: new Map(),         // tool_use_id -> { tool, label }
-      rapat: new Map(),        // tool_use_id panggilan Task/Agent -> nama pesertanya
-    };
-    jalan.set(sid, rec);
-
-    // Prosesnya lahir bukan berarti sesinya jalan. Kalau tidak ada satu pun
-    // hook dalam BISU_MS, bilang sekarang — jangan biarkan halaman menampilkan
-    // pegawai yang tampak sehat padahal sesinya tidak pernah mulai.
-    /* Sejak stream-json ikut dibaca, "tidak ada hook" dan "tidak ada apa-apa"
-       jadi dua hal yang berbeda — dan cuma yang kedua pantas dituduh gagal
-       autentikasi. Dulu keduanya dilaporkan sama, jadi sesi yang sebenarnya
-       sehat tapi hook-nya tidak terpasang ikut kena tuduhan yang salah. */
-    rec.bisu = setTimeout(() => {
-      if (rec.hidup) return;
-      if (rec.streamMasuk > 0) {
-        console.log('[agent-room] sesi ' + sid.slice(0, 12) + ' jalan tanpa hook — '
-          + 'ruangannya digerakkan dari stream-json (' + rec.streamMasuk + ' pesan). '
-          + 'Itu yang terjadi di mode --bare, dan memang tidak apa-apa.');
-        return;
-      }
-      console.warn('[agent-room] sesi ' + sid.slice(0, 12) + ' belum mengirim apa pun '
-        + (BISU_MS / 1000) + ' detik setelah lahir — hook maupun stream-json. '
-        + 'Sesi headless butuh kredensial sendiri: jalankan server ini dari terminal '
-        + 'biasa tempat perintah claude normal jalan, atau siapkan token lewat: '
-        + 'claude setup-token');
-      publish({
-        id: ++seq, ts: Date.now(), kind: 'tugas-bisu', session: sid.slice(0, 12),
-        nama, tool: null, ok: false,
-        label: 'nihil ' + (BISU_MS / 1000) + ' dtk, hook maupun stream — sesinya tidak pernah mulai',
-      });
-    }, BISU_MS);
-
-    /* stdout sekarang NDJSON, bukan satu JSON di akhir: dibaca baris per baris
-       supaya ruangannya bergerak selagi sesinya jalan, bukan menunggu selesai. */
-    let sisa = '';
-    anak.stdout.on('data', (c) => {
-      const teks = String(c);
-      // Mentahnya tetap disimpan sebagai cadangan pembaca sebab gagal, tapi
-      // ekornya saja: stream satu sesi panjang bisa puluhan MB, dan yang
-      // dibutuhkan cuma bagian akhir.
-      rec.keluar = (rec.keluar + teks).slice(-64 * 1024);
-      sisa += teks;
-      if (sisa.length > 8 * 1024 * 1024) {     // satu baris raksasa tanpa newline
-        console.warn('[agent-room] baris stream-json > 8 MB dibuang (sesi '
-                     + sid.slice(0, 12) + ')');
-        sisa = '';
-        return;
-      }
-      const baris = sisa.split('\n');
-      sisa = baris.pop();
-      for (const b of baris) {
-        const t = b.trim();
-        if (!t) continue;
-        let m;
-        // Baris yang tidak bisa diurai dilewati, bukan bikin meledak: satu
-        // pesan rusak tidak boleh mematikan seluruh sesi.
-        try { m = JSON.parse(t); } catch { continue; }
-        try { serapStream(rec, sid, m); }
-        catch (err) {
-          console.warn('[agent-room] stream-json ' + sid.slice(0, 12) + ': ' + err.message);
-        }
-      }
-    });
-    anak.stderr.on('data', (c) => { rec.galat = (rec.galat + c).slice(-16 * 1024); });
-
-    const batas = setTimeout(() => {
-      rec.galat += '\n[dihentikan: lewat batas waktu]';
-      try { anak.kill(); } catch { /* sudah mati */ }
-    }, TIMEOUT_MS);
-
-    /* Sebab gagal yang benar-benar terbaca. Dua jebakan yang dihindari:
-       - stderr sering cuma berisi peringatan, sementara sebab sebenarnya ada
-         di stdout sebagai JSON hasil (mis. "Not logged in · Please run /login")
-       - JSON itu panjang; yang dibaca orang cuma field result/error-nya */
-    const sebabGagal = () => {
-      // Pesan `result` terakhir dari stream sudah terurai waktu ia lewat, jadi
-      // tidak perlu mengurai ulang ekor stdout yang mungkin terpotong di tengah.
-      if (rec.hasil) {
-        const inti = rec.hasil.result || rec.hasil.error;
-        if (inti) return String(inti);
-      }
-      const err = rec.galat.split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter((l) => l && !/^warning:/i.test(l))
-        .join(' ');
-      return err || rec.keluar || '';
-    };
-
-    const selesai = (kode, sinyal) => {
-      clearTimeout(batas);
-      clearTimeout(rec.bisu);
-      jalan.delete(sid);
-      // Jangan diam kalau gagal: sesi yang tidak pernah lahir tidak akan
-      // memunculkan pegawai apa pun, jadi kegagalannya harus terlihat.
-      const gagal = kode !== 0;
-      /* Angka ini SETARA, bukan tagihan — dan bedanya penting. Sesi headless
-         yang dijalankan dengan token dari `claude setup-token` berautentikasi
-         lewat langganan: yang terpakai kuota paket, bukan saldo API. Yang
-         dikirim Claude Code di `total_cost_usd` adalah perkiraan sisi klien
-         soal berapa pemakaian itu KALAU ditagih lewat API. Dikirim sebagai
-         field sendiri, bukan digabung ke label — supaya halaman yang
-         memutuskan cara memberi taunya, bukan server yang sudah merangkai
-         kalimatnya. `resmi:false` di sini bukan hiasan: itu yang membuat
-         halaman menuliskannya sebagai "data sementara", bukan angka pasti. */
-      const biaya = typeof rec.biaya === 'number' ? { usd: rec.biaya, resmi: false } : null;
-      publish({
-        id: ++seq, ts: Date.now(), kind: 'tugas-selesai',
-        session: sid.slice(0, 12), nama, tool: null, ok: !gagal,
-        label: gagal
-          ? clip('gagal (kode ' + kode + (sinyal ? '/' + sinyal : '') + ') '
-                 + sebabGagal(), 220)
-          : nama,
-        ...(biaya ? { biaya } : {}),
-      });
-    };
-    anak.on('error', (err) => { rec.galat += err.message; selesai(-1, null); });
-    anak.on('close', selesai);
-
-    publish({ id: ++seq, ts: Date.now(), kind: 'tugas-mulai',
-              session: sid.slice(0, 12), nama, tool: null, label: nama, ok: true,
-              peran: peranSesi.get(sid.slice(0, 12)) || '', model });
-
+    const hasil = lahirkanTugas(tugas);
+    if (!hasil.ok) return tolak(500, hasil.pesan);
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, sesi: sid.slice(0, 12) }));
+    res.end(JSON.stringify({ ok: true, sesi: hasil.sesi }));
     return;
+  }
+
+  /* Batalkan yang masih antre. Gerbangnya sama persis dengan /perintah —
+     yang boleh menaruh disposisi di loket boleh juga menariknya kembali.
+     Dua bentuk diterima: DELETE /perintah/antre/<id>?token=… dan
+     POST /perintah/batal {token, id}, supaya klien yang alergi body di
+     DELETE tetap punya jalan. Yang sudah lahir bukan urusan sini — itu
+     /perintah/hentikan. */
+  const mAntre = req.method === 'DELETE' && url.pathname.match(/^\/perintah\/antre\/([0-9a-f]{12})$/);
+  if (mAntre || (url.pathname === '/perintah/batal' && req.method === 'POST')) {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    let token = '';
+    let idAntre = '';
+    if (mAntre) {
+      token = url.searchParams.get('token') || '';
+      idAntre = mAntre[1];
+    } else {
+      const body = (await readBody(req)).teks;
+      let p;
+      try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400).end(); return; }
+      token = p.token;
+      idAntre = String(p.id || '');
+    }
+    const balas = (kode, obj) => {
+      res.writeHead(kode, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(obj));
+    };
+    if (!IZIN) return balas(403, { ok: false, pesan: 'kendali web mati' });
+    if (token !== TOKEN) return balas(403, { ok: false, pesan: 'token tidak cocok' });
+    const t = batalAntre(idAntre);
+    if (!t) return balas(404, { ok: false, pesan: 'tidak ada di antrean (mungkin sudah lahir)' });
+    return balas(200, { ok: true, id: t.id, nama: t.nama });
   }
 
   if (url.pathname === '/perintah/hentikan' && req.method === 'POST') {
@@ -1699,9 +2115,46 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Buku agenda — tanpa token, sekelas /token-riwayat: isinya metadata yang
+     toh sudah lewat /stream tanpa autentikasi juga. Terbaru dulu. */
+  if (url.pathname === '/agenda') {
+    const p = url.searchParams;
+    const hariIni = tanggalLokal(Date.now());
+    const dari = p.get('dari') || hariIni;
+    const sampai = p.get('sampai') || dari;
+    if (!AGENDA_TANGGAL_RX.test(dari) || !AGENDA_TANGGAL_RX.test(sampai) || dari > sampai) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ galat: 'dari/sampai harus YYYY-MM-DD dan dari <= sampai' }));
+      return;
+    }
+    const limit = Math.min(2000, Math.max(1, Number(p.get('limit')) || 200));
+    const q = (p.get('q') || '').toLowerCase();
+    const sesi = p.get('sesi') || '';
+    const proyek = p.get('proyek') || '';
+    const kind = p.get('kind') || '';
+    const cocok = (o) => (!sesi || o.session === sesi)
+      && (!proyek || o.cwd === proyek)
+      && (!kind || o.kind === kind)
+      && (!q || [o.label, o.tool, o.kind, o.cwd].some((v) => v && String(v).toLowerCase().includes(q)));
+    const baris = [];
+    // mundur per hari dari `sampai`; rentang dibatasi seumur simpanan (AGENDA_HARI)
+    const d = new Date(sampai + 'T00:00:00');
+    for (let n = 0; n <= AGENDA_HARI + 1 && baris.length < limit; n++) {
+      const tgl = tanggalLokal(d.getTime() - n * 24 * 3600 * 1000);
+      if (tgl < dari) break;
+      const hari = agendaBacaHari(tgl);
+      for (let i = hari.length - 1; i >= 0 && baris.length < limit; i--) {
+        if (cocok(hari[i])) baris.push(hari[i]);
+      }
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify({ dari, sampai, jumlah: baris.length, baris }));
+    return;
+  }
+
   if (url.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, events: seq, viewers: clients.size, port: PORT }));
+    res.end(JSON.stringify({ ok: true, events: seq, viewers: clients.size, pemutarUlang, port: PORT }));
     return;
   }
 

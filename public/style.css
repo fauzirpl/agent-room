@@ -299,6 +299,15 @@ body {
 }
 .crew-row .aksi:hover { color: var(--ink); border-color: #37485c; }
 .crew-row.tugas .who { color: var(--amber); }
+/* loket disposisi: belum jadi pegawai, cuma map yang menunggu slot — garis
+   putus-putus supaya tidak terbaca sebagai sesi yang sedang jalan */
+.crew-row.antre { border-style: dashed; opacity: .75; }
+.crew-row.antre .chip { background: var(--khaki-tua); }
+.crew-row.antre .who { flex: none; }
+.crew-row.antre .nama { color: var(--emas-tua); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 76px; }
+.crew-row.antre .what { max-width: 104px; }
+.crew-row.antre.segera .who { color: var(--merah); font-weight: 700; }
+.crew-row.antre.segera { opacity: .9; }
 
 
 /* ---------- pemilih folder: dialog, bukan sempil di panel ---------- */

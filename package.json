@@ -1,0 +1,35 @@
+{
+  "name": "agent-room",
+  "version": "0.1.0",
+  "description": "Nonton sesi Claude Code bekerja sebagai pegawai kecil di kantor dinas pixel-art",
+  "bin": {
+    "agent-room": "dinas.mjs",
+    "dinas": "dinas.mjs"
+  },
+  "files": [
+    "dinas.mjs",
+    "dinas.cmd",
+    "dinas.sh",
+    "install.mjs",
+    "hook.mjs",
+    "server.mjs",
+    "uji-event.mjs",
+    "public/",
+    "README.md",
+    "DESIGN.md",
+    "EVENT-ACAK.md",
+    "event-acak.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node dinas.mjs",
+    "test": "node uji-event.mjs --semua"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fauzirpl/agent-room.git"
+  },
+  "dependencies": {}
+}

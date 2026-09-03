@@ -62,6 +62,16 @@ mengingat `AGENT_ROOM_CLAUDE`.
 | `dinas --periksa` | cuma tampilkan status, tidak menjalankan apa pun |
 | `dinas --port 4600` | pakai port lain |
 | `dinas --buka` | sekalian buka peramban |
+| `dinas --versi` | cetak versi paket saja |
+| `dinas --layanan` | daftarkan supaya kantornya nyala sendiri tiap login (`--lepas` mencabut, `--coba` cuma mencetak) |
+
+`--layanan` tidak membuat daemon sendiri; dia menumpang penjadwal login bawaan
+OS — Task Scheduler (`schtasks /SC ONLOGON`) di Windows, unit systemd `--user`
+di Linux, petunjuk launchd di macOS — supaya pengguna bisa melihat dan
+mencabutnya lewat alat yang sudah mereka kenal. Yang diteruskan ke layanan cuma
+`--port` dan `--kendali`; `--buka` sengaja tidak. Versinya dibaca dari
+`package.json` — berkas yang sama yang membuat `npx github:fauzirpl/agent-room`
+jalan tanpa clone dan tanpa publish ke npm.
 
 Kalau lebih suka menjalankan servernya langsung, itu tetap jalan dan tidak akan
 dihapus. Cuma mau menonton ruangannya:
@@ -159,6 +169,18 @@ yang orangnya antre. Ruang tunggu tinggal jadi limpahan: dipakai hanya kalau
 empat meja sudah terisi semua, dan begitu ada meja yang kosong, yang menunggu
 langsung dipanggil balik.
 
+**Kongsi seproyek.** Dua sesi nyata yang `cwd`-nya sama (cabang git boleh
+beda) duduk bersebelahan: waktu salah satunya kebagian meja kerja, yang dipilih
+bukan urutan prioritas `MEJA_KERJA_X`, melainkan meja kosong yang paling dekat
+ke meja rekannya (`slotKongsi`). Alasannya sama dengan kantor sungguhan — orang
+yang mengerjakan berkas yang sama duduk berdekatan supaya bisa saling lirik.
+Keputusannya cuma diambil saat penugasan slot; meja yang sudah ditempati tidak
+pernah digeser, jadi kursinya stabil dan penonton tidak melihat orang pindah
+meja tanpa sebab. Sesekali (±20–40 detik) dua rekan yang sama-sama menganggur
+saling menoleh sebentar, satu dari lima kali sambil bertanya pendek soal
+branch. Itu bukan event acak: tidak masuk log, tidak menaikkan statistik, dan
+batal seketika begitu tool call datang. Beda proyek tetap asing.
+
 ### Butuh manusia
 
 Ada keadaan ketiga di samping *sedang bekerja* dan *menganggur*: **sesinya
@@ -219,6 +241,38 @@ saya, saya butuh kamu" — memakainya lagi di sini bikin dua keadaan yang
 maknanya berlawanan terlihat sama. Lencana tidak menua dan tidak berganti isi;
 dia padam serentak begitu ada event lain dari sesi yang sama, sama seperti
 aturan pembatalan **butuh manusia**.
+
+### Nota dinas keluar (webhook)
+
+Dua keadaan di atas — plus **tugas bisu** dari kendali web — sama-sama berarti
+ruangan berhenti sampai ada orang yang datang, dan orang itu sering sedang
+tidak menatap halamannya. Untuk itu server bisa mengirim **nota dinas keluar**:
+satu POST JSON kecil ke URL yang kamu tunjuk, dibaca langsung oleh Slack,
+Discord, atau gateway bot Telegram.
+
+```bash
+AGENT_ROOM_LAPOR=https://hooks.slack.com/services/… node agent-room/server.mjs
+```
+
+Kosong berarti mati, dan itu bawaannya. Yang dikirim:
+
+| Field | Isi |
+|---|---|
+| `jenis` | `izin-minta` (butuh manusia, apa pun sebabnya), `stop-gagal` (macet), `tugas-bisu`, atau `selesai` |
+| `sesi`, `nama`, `proyek`, `cabang`, `model` | identitas pegawainya — proyek cuma nama folder, bukan path |
+| `sebab` | `izin`/`tolak`/`tanya` untuk butuh manusia; jenis galat untuk macet |
+| `alasan` | label tool atau pesan galat, dipotong 200 karakter |
+| `ts`, `alamat` | waktu, dan `http://127.0.0.1:PORT` supaya kamu tahu ruangan mana |
+| `text`, `content` | satu kalimat yang sama, mis. `🙏 Menunggu paraf: Budi (agent-room@master) — Bash: npm test` — Slack membaca `text`, Discord `content` |
+
+Yang **tidak pernah** ikut: `pikir`, `ucap`, dan prompt. Ini metadata saja,
+dan kind-nya sengaja tidak ada di daftar pemicu. Tiap sesi+jenis dijeda 30
+detik supaya rentetan izin dari satu sesi jadi satu kabar, bukan sepuluh.
+Kirimannya dibatasi 5 detik; gagal kirim tidak pernah mengganggu ruangan —
+satu baris peringatan di konsol paling banyak semenit sekali, sisanya diam.
+`AGENT_ROOM_LAPOR_SELESAI=1` menambahkan kabar `selesai` untuk `Stop` dan
+tugas kendali web yang habis, kalau kamu memang mau ditelepon waktu semuanya
+beres.
 
 ### Berpikir mengikuti tempatnya
 
@@ -388,7 +442,7 @@ posisi tombol berbeda:
 |---|---|
 | 💭 balon pikiran | balon pikiran nyala/mati |
 | 💬 buka kabar otomatis | kembaran dari centang **buka sendiri** di kaki modal kabar — dua-duanya setelan yang sama, cuma dua tempat |
-| 🔊 efek suara | efek suara (blip tiap event) nyala/mati |
+| 🔊 efek suara | foley per stasiun tiap event (stempel, laci arsip, kipas server, kursi rapat, ketikan) nyala/mati |
 | 🔔 notifikasi tugas selesai | lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
 | 🎧 musik lofi kantor | chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio |
 
@@ -404,11 +458,25 @@ Ketiga setelan suara itu masing-masing punya **slider volume** sendiri
 nyala/mati: angka volume ini BOLEH diingat lewat `localStorage`, karena cuma
 pengali relatif, bukan yang memaksa `AudioContext` menyala sendiri. Di baliknya
 satu `AudioContext` dipakai bersama dengan tiga bus `GainNode` (`busEfek`/
-`busNotif`/`busMusik`), dan setiap penghasil bunyi (blip tool call, derau
+`busNotif`/`busMusik`), dan setiap penghasil bunyi (foley tool call, derau
 hujan/guntur, lonceng notifikasi + `ucapSuara`, beat/chord musik lofi,
 termasuk Indonesia Raya) disambungkan ke bus yang sesuai alih-alih langsung
 ke `audio.destination` — supaya volumenya bisa digeser sendiri-sendiri tanpa
 mengubah campuran/attack tiap bunyi satu per satu.
+
+Efek suara tool call bukan lagi satu blip seragam, tapi **foley per stasiun**
+(`foley()` + kamus `FOLEY` di `room.js`): stempel yang thud lalu klik pegas
+untuk Edit/Write, laci arsip digeser untuk Read/Grep, desis kipas + bip HDD di
+rak server untuk git, kursi digeser atau ketukan pena di meja rapat, dua klik
+tuts untuk laptop/web/MCP, "deng" turun kalau gagal — mata sudah bisa
+membedakan meja, telinga seharusnya juga. Semua tetap disintesis, ≤250 ms,
+pelan. Tiga rem supaya sesi deras tidak jadi derau: jeda 220 ms per nama
+bunyi, pagu 6 bunyi/detik seluruh ruangan (kelebihannya dibuang, bukan
+diantrekan), dan ducking — musik lofi turun ke 60% selama ~300 ms tiap foley
+berbunyi, supaya bunyi pelan tidak tenggelam tanpa harus dikeraskan. Bunyinya
+di-pan stereo mengikuti posisi x pegawainya (±0,7 maksimum), jadi arsip di
+kiri kedengaran dari kiri dan rak server dari kanan. Lonceng notifikasi tidak
+lewat jalur ini: itu kabar untuk kamu, bukan suara ruangan.
 
 Panel yang sama juga menampilkan **status server** apa adanya — kendali web
 nyala/mati, sumber cuaca (nyata/dipaksa/tebakan), isi transkrip nyala/mati,
@@ -509,6 +577,54 @@ sama. Mematikan isi percakapan ikut memadamkan angka token; tidak ada mode
 "baca token saja tanpa baca isinya", karena membaca satu baris berarti
 mengurainya, terlepas dari field mana yang akhirnya dipakai.
 
+Sejak ada **Buku agenda** (di bawah), ada satu berkas baru di disk yang
+bertahan sebulan: `agenda/YYYY-MM-DD.jsonl`, berisi metadata event termasuk
+`label` (nama berkas yang disentuh, ringkasan perintah shell, prompt yang
+dipotong 120 karakter). Isi percakapan tidak pernah ditulis ke sana, dan
+dengan `AGENT_ROOM_ISI=off` `label`-nya pun ikut tidak ditulis.
+
+Ada **satu lalu lintas keluar** lagi selain `/cuaca`, dan sama-sama mati
+secara bawaan: **nota dinas keluar** (lihat bagiannya di atas). Dia baru hidup
+kalau `AGENT_ROOM_LAPOR` diisi URL, dan yang keluar cuma metadata keadaan
+tertahan — nama pegawai, nama folder, cabang, sebab — tidak pernah `pikir`,
+`ucap`, maupun prompt, terlepas dari `AGENT_ROOM_ISI`. Antrean disposisi juga
+sengaja hidup **di memori saja**: prompt yang menunggu giliran tidak pernah
+ditulis ke disk, jadi tidak ada berkas berisi perintah eksekusi yang
+tertinggal setelah server mati.
+
+## Buku agenda
+
+Ring 400 event di memori itu daya ingat ikan mas: restart server, ruangan hari
+ini hilang; buka halaman sore hari, yang kelihatan cuma sisa setengah jam
+terakhir. Buku agenda menambalnya dengan catatan append-only di
+`agenda/YYYY-MM-DD.jsonl` — satu berkas per hari, satu baris per event yang
+lewat `publish()`, ditulis `appendFileSync` (satu baris ~200 byte per tool
+call, jauh lebih murah daripada kehilangan baris terakhir saat server
+dimatikan). Saat start, berkas lebih tua dari 30 hari (`AGENT_ROOM_AGENDA_HARI`)
+dibuang dan ≤400 baris terakhir hari ini dimuat kembali ke `ring`, dengan
+`seq` dilanjutkan dari id terbesar supaya `Last-Event-ID` halaman yang sudah
+terbuka tidak bertabrakan.
+
+Yang ditulis **metadata saja**, lewat daftar putih di `agendaBaris()`: id, ts,
+sesi, proyek, cabang, kind, tool, label (dipotong 120), ok/galat, durasi,
+model, butuh/macet. `pikir`, `ucap`, dan `token` tidak pernah masuk, `teks`
+maupun `tanya` tidak pernah ikut walau menumpang di event lain. Ring/SSE boleh
+membawa isi karena umurnya sebatas memori; berkas di disk umurnya sebulan,
+jadi ambangnya sengaja lebih rendah. Event ambient tetap tidak tercatat —
+memang tidak pernah lewat `publish()`. Per hari, bukan satu berkas panjang,
+supaya rotasi cuma soal nama berkas dan `GET /agenda?q=&sesi=&proyek=&dari=&sampai=&kind=&limit=`
+(terbaru dulu, tanpa token seperti `/token-riwayat`) cukup membuka berkas yang
+diminta.
+
+`/stream?ulang=YYYY-MM-DD&laju=60` (atau halaman `?ulang=…&laju=…`) memutar
+ulang satu hari: koneksi SSE terpisah yang tidak menerima event live dan
+tidak dihitung viewer, jeda antar event = selisih ts asli / laju (dipangkas
+5 detik), tiap event bertanda `ulang: true`, ditutup `ulang-selesai`. Ini uji
+integrasi gratis: satu hari kerja sungguhan, dengan urutan dan jeda asli,
+dilempar ke halaman tanpa perlu menjalankan Claude Code — bug perpindahan
+pegawai yang cuma muncul pada urutan event tertentu jadi bisa direproduksi
+berkali-kali dari berkas yang sama.
+
 ## Peserta rapat
 
 Subagent punya hook sendiri: `SubagentStart` menandai satu agen masuk,
@@ -574,6 +690,16 @@ mengundang. `SubagentStop` membubarkan satu peserta saja — subagent selesai bu
 berarti sesinya selesai, jadi pegawainya tetap di mejanya. Rapat yang kursinya
 sudah habis ikut dicoret dari daftar saat itu juga, supaya entrinya tidak
 menyangkut sampai sapuan 15 menit.
+
+**Notulen sisa rapat.** Peserta yang permisi meninggalkan selembar catatan di
+sudut kiri depan meja rapat (`RUANGAN.notulen`, maks 10 lapis — bekas ruangan
+tidak pernah direset, jadi batasnya di data, bukan cuma di gambar). Tumpukan
+itu dibereskan pegawai standby berjabatan arsiparis (standby mana pun kalau
+tidak ada) tiap ±10 menit selama isinya ≥3 lembar: dia berjalan ke sudut meja,
+berhenti dua detik, lalu membawa kertasnya ke lemari arsip. Peserta yang
+`agent_type`-nya pernah bubar dari rapat sesi induk yang sama disapa beda
+waktu datang lagi — "hadir lagi" / "izin, lanjut yang tadi" — sekali per
+kedatangan; yang dikenali orangnya, bukan sekadar kursinya.
 
 Kursinya ada 9: tujuh menghadap kamera di sisi jauh, dua lagi membelakangi kamera
 di sisi dekat. Kalau fasenya lebih banyak dari kursi yang tersisa, sisanya
@@ -921,6 +1047,8 @@ Dua hal yang bikin ini aman buat sesi kamu:
 | `AGENT_ROOM_CLAUDE` | hasil `where claude` | tunjuk biner claude tertentu, kalau PATH menemukan instalasi yang salah |
 | `AGENT_ROOM_TOKEN_FILE` | `.agent-room-token` | tempat token headless diingat, kalau centangnya dinyalakan |
 | `AGENT_ROOM_TOKEN_LOG` | `token-riwayat.jsonl` | tempat riwayat token lintas sesi ditulis (lihat **Riwayat lintas sesi**) |
+| `AGENT_ROOM_AGENDA_DIR` | `agenda/` | folder buku agenda harian (lihat **Buku agenda**) |
+| `AGENT_ROOM_AGENDA_HARI` | `30` | berkas agenda lebih tua dari ini dibuang saat start |
 | `AGENT_ROOM_CUACA` | *(nyala, tebak dari IP)* | `off` mematikan cek cuaca; `lat,lon` menetapkan lokasi |
 | `AGENT_ROOM_ISI` | *(nyala)* | `off` menutup transkrip sesi: ruangan kembali cuma menyiarkan metadata, tanpa pikiran dan kalimat agen |
 
@@ -985,6 +1113,7 @@ dipakai ulang.
 | `GET /kendali` | status izin, token, daftar tugas yang berjalan |
 | `POST /perintah` | lahirkan sesi baru dengan nama + prompt + folder kerja |
 | `POST /perintah/hentikan` | hentikan tugas yang sedang jalan |
+| `POST /perintah/batal` · `DELETE /perintah/antre/<id>` | tarik tugas yang masih antre di loket disposisi |
 | `POST /nama` | beri nama panggilan ke sesi mana pun, termasuk sesi terminal |
 | `POST /peran` | tetapkan jabatan sesi mana pun; id yang tidak dikenal ditolak |
 | `POST /kredensial` | pasang atau hapus token headless; nilainya tidak pernah bisa dibaca kembali |
@@ -997,6 +1126,29 @@ sidebar. Endpoint di tabel atas tetap hidup dan bisa dipanggil langsung kalau
 kamu punya jalan lain ke token per-jalannya; yang hilang cuma jalan pintas
 lewat formulir bawaan. Panel **token headless** (di bawah) dikecualikan dari
 penyembunyian ini — lihat kenapa di bagiannya sendiri.
+
+### Antrean disposisi
+
+Batasnya tetap **4 proses bersamaan**, tapi tugas kelima tidak lagi ditolak
+`429` lalu hilang. Dia masuk **loket disposisi**: `/perintah` menjawab `202`
+`{antre: true, id, posisi}`, dan begitu satu slot kosong — selesai, timeout,
+atau prosesnya keluar — yang paling depan dilahirkan server sendiri lewat
+jalur spawn yang sama persis (`lahirkanTugas()` di [server.mjs](server.mjs)).
+Loketnya menampung 12; di atas itu baru `429` dengan pesan *loket disposisi
+penuh*. Field `sifat` di body (`BIASA` bawaan, atau `SEGERA`) menentukan
+urutannya: SEGERA menyalip semua BIASA, tapi antre di belakang SEGERA yang
+lebih dulu.
+
+Isi antrean — prompt, folder, nama, model — hidup **di memori saja**, tidak
+pernah ditulis ke disk. Server mati berarti loketnya kosong lagi, dan itu
+disengaja: perintah eksekusi bukan sesuatu yang pantas tertinggal di berkas.
+`GET /kendali` mengembalikan `antrean` (id, nama, nama folder, sejak, sifat,
+posisi — tanpa prompt), dan tiap perubahan disiarkan sebagai satu event ringan
+`{kind:'antre', aksi:'masuk'|'lahir'|'batal'|'gagal', antrean:[…]}` yang
+membawa potret seluruh loket, jadi halaman tinggal mengganti daftarnya tanpa
+polling. Di daftar kru barisnya tampil bergaris putus-putus di bawah standby:
+*antre #posisi · nama · proyek · sifat*, dengan tombol **batal** yang
+menariknya dari loket lewat gerbang yang sama dengan `/perintah`.
 
 ### Model yang dipakai
 
