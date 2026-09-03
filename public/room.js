@@ -2227,14 +2227,65 @@ function drawHead(a, x, yDagu) {
   }
 }
 
+/* Kedip. Waktu dibagi sel 4 detik; di tiap sel ada tepat satu kedip yang
+   letaknya (detik ke-1..3 dalam sel) ditentukan hash murah dari indeks sel +
+   slot orangnya — jadi jarak antar-kedip 2–6 detik, deterministik per orang
+   (bisa direproduksi lewat frame()), dan tidak pernah serempak satu ruangan.
+   Lama kedip 120 ms: cukup terbaca pada 60 fps, terlalu singkat buat
+   mengganggu. Tidak dimatikan oleh mode apa pun — ini kedip, bukan animasi. */
+const KEDIP_SEL = 4, KEDIP_LAMA = 0.12;
+function sedangKedip(a) {
+  const t = (a.phase || 0) + (a.slot || 0) * 1.618;
+  const sel = Math.floor(t / KEDIP_SEL);
+  const h = Math.sin(sel * 12.9898 + (a.slot || 0) * 78.233) * 43758.5453;
+  const mulai = sel * KEDIP_SEL + 1 + (h - Math.floor(h)) * 2;
+  return t >= mulai && t < mulai + KEDIP_LAMA;
+}
+
+/* Ekspresi, diurutkan dari yang paling mendesak. 'tegang' = berhenti
+   menunggu kamu atau macet karena galat; 'lega' = ±2 detik sesudah
+   menyerahkan hasil / selesai giliran; 'fokus' = sedang bekerja. Semuanya
+   1–2 piksel di dalam 8 baris kepala, tinggi sprite tidak berubah. */
+function ekspresi(a) {
+  if (a.butuh || a.macet) return 'tegang';
+  if (a.legaSampai && now < a.legaSampai) return 'lega';
+  if (a.state === 'work') return 'fokus';
+  return '';
+}
+
+const KERINGAT = '#8fd3f4';
 function drawEyes(a, x, ey, arah) {
-  const blink = Math.sin(a.phase * 0.9 + a.slot) > 0.985;
+  const wajah = ekspresi(a);
+  const blink = wajah !== 'lega' && sedangKedip(a);
+  // fokus = menyipit: kelopak turun sepiksel (kulit lebih gelap), yang tersisa
+  // cuma baris bawah mata. Dipilih ini, bukan alis, karena baris di atas mata
+  // (yT+3) sebelah kiri tertutup poni — alis di situ cuma kelihatan sebelah.
+  const kelopak = wajah === 'fokus' ? sh(a.pal.skin, 0.62) : null;
   if (arah) {                                                         // samping: satu mata, dekat dahi
-    if (blink) r(cermin(arah, x, 1, 2), ey + 1, 2, 1, P.ink);
-    else r(cermin(arah, x, 2, 1), ey, 1, 2, P.ink);
+    const rm = (k, yy, w, h, c) => r(cermin(arah, x, k, w), yy, w, h, c);
+    if (blink) rm(1, ey + 1, 2, 1, P.ink);
+    else if (wajah === 'lega') { rm(2, ey, 1, 1, P.ink); rm(3, ey + 1, 1, 1, P.ink); }   // mata menyipit tersenyum
+    else if (wajah === 'tegang') rm(1, ey, 2, 2, P.ink);              // melotot
+    else if (kelopak) { rm(2, ey, 1, 1, kelopak); rm(2, ey + 1, 1, 1, P.ink); }
+    else rm(2, ey, 1, 2, P.ink);
     return;
   }
   if (blink) { r(x - 3, ey + 1, 2, 1, P.ink); r(x + 1, ey + 1, 2, 1, P.ink); return; }
+  if (kelopak) {
+    r(x - 2, ey, 1, 1, kelopak); r(x - 2, ey + 1, 1, 1, P.ink);
+    r(x + 1, ey, 1, 1, kelopak); r(x + 1, ey + 1, 1, 1, P.ink);
+    return;
+  }
+  if (wajah === 'lega') {                                             // ^ ^ : mata melengkung
+    r(x - 3, ey + 1, 1, 1, P.ink); r(x - 2, ey, 1, 1, P.ink);
+    r(x + 1, ey, 1, 1, P.ink); r(x + 2, ey + 1, 1, 1, P.ink);
+    return;
+  }
+  if (wajah === 'tegang') {                                           // melotot + tetes keringat di pipi
+    r(x - 3, ey, 2, 2, P.ink); r(x + 1, ey, 2, 2, P.ink);
+    r(x + 3, ey + 2, 1, 1, KERINGAT);
+    return;
+  }
   r(x - 2, ey, 1, 2, P.ink);
   r(x + 1, ey, 1, 2, P.ink);
 }
@@ -2769,6 +2820,7 @@ class Agent {
     this.slotIdx = 0;
     this.doing = '';
     this.project = '';
+    this.cabang = '';       // cabang git di cwd-nya (dikirim server); kosong kalau bukan repo
     this.model = '';        // diisi server; sesi terminal sering tidak memberitahu
     this.stepT = 0;
     this.stampUp = false;
@@ -2783,6 +2835,10 @@ class Agent {
     this.laju = 1;           // pengali kecepatan jalan sementara (event)
     this.bekuSampai = 0;     // now-timestamp: jalan & efek kerja beku sampai lewat ini
     this.butuh = null;       // keadaan ketiga: berhenti menunggu keputusan kamu
+    this.pengingatTimer = null; // id setTimeout pengingat terkatung (lihat pantauTerkatung)
+    this.terkatungJenis = '';   // 'butuh' | 'macet' | '' — keadaan terkatung yang terakhir dipantau
+    this.legaSampai = 0;     // now-timestamp: wajah 'lega' sesudah menyerahkan hasil / selesai giliran
+    this.gagalBerturut = 0;  // tool call gagal berturut-turut yang SEDANG berlangsung; nol begitu ada yang berhasil
 
     this.el = document.createElement('div');
     this.el.className = 'bubble';
@@ -3028,6 +3084,10 @@ class Agent {
 
   destroy() {
     lepaskanAktor(this);                   // event tidak boleh memegang hantu
+    batalkanPengingat(this);               // lonceng tidak boleh berbunyi untuk hantu
+    // judul tab dihitung dari `agents`; pemanggil baru menghapusnya SESUDAH
+    // destroy() kembali, jadi hitung ulangnya ditunda satu putaran
+    setTimeout(perbaruiJudul, 0);
     this.el.remove();
     this.elPikir.remove();
     this.elMacet.remove();
@@ -3449,6 +3509,111 @@ function notifKonfirmasi() {
   ucapSuara('Izin mohon arahan');
 }
 
+/* ---------- pengingat sesi terkatung ----------
+   Lonceng pertama (notifKonfirmasi/stop-gagal) cuma berbunyi sekali, saat
+   kejadian. Kalau kamu sedang di jendela lain, kejadian itu lewat begitu saja
+   dan sesinya terkatung berjam-jam. Pengingat ini event-driven, bukan sapuan
+   berkala: timernya dipasang tepat saat pegawai masuk keadaan butuh/macet
+   (pantauTerkatung dari handle()) dan dicabut tepat saat keadaan itu padam
+   atau pegawainya dihapus (destroy). Tidak ada interval yang mengecek semua
+   pegawai tiap detik. */
+
+// Dua nada TURUN dan pendek — kebalikan lonceng selesai yang tiga nada naik:
+// yang ini bukan kabar baik, cuma "masih ada yang menunggu kamu".
+function bunyiLoncengPengingat() {
+  if (!audio) return;
+  if (audio.state === 'suspended') audio.resume().catch(() => {});
+  const t0 = audio.currentTime;
+  [783.99, 659.25].forEach((freq, i) => {   // G5 E5
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    const mulai = t0 + i * 0.14;
+    g.gain.setValueAtTime(0.0001, mulai);
+    g.gain.exponentialRampToValueAtTime(0.09, mulai + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, mulai + 0.3);
+    o.connect(g); g.connect(busNotif);
+    o.start(mulai); o.stop(mulai + 0.35);
+  });
+}
+
+// Judul tab: awalan "(n) menunggu paraf · " selama ada pegawai terkatung,
+// supaya tab yang tertimbun pun memberi tahu. Satu-satunya tempat yang menulis
+// document.title di halaman ini; JUDUL_ASLI diambil sekali dari <title>.
+const JUDUL_ASLI = document.title;
+function perbaruiJudul() {
+  let butuh = 0, macet = 0;
+  for (const a of agents.values()) { if (a.butuh) butuh++; else if (a.macet) macet++; }
+  const n = butuh + macet;
+  const judul = (!n ? '' : butuh ? '(' + n + ') menunggu paraf · ' : '(' + n + ') berhenti · ') + JUDUL_ASLI;
+  if (document.title !== judul) document.title = judul;
+}
+
+// Dipanggil handle() tiap event yang membawa butuh/macet. Timer cuma dipasang
+// atau dicabut pada TRANSISI jenis (bukan tiap event bernilai sama), supaya
+// pertanyaan yang sama tidak mengulang hitungan 2 menitnya dari nol.
+function pantauTerkatung(a) {
+  const jenis = a.butuh ? 'butuh' : a.macet ? 'macet' : '';
+  if (jenis !== a.terkatungJenis) {
+    a.terkatungJenis = jenis;
+    if (jenis) jadwalkanPengingat(a); else batalkanPengingat(a);
+  }
+  perbaruiJudul();
+}
+
+// `jenjang` opsional (array ms) untuk uji; `window.PENGINGAT_UJI_MS` memendekkan
+// jenjang pertama dari konsol tanpa menyentuh kode (jenjang kedua = 5×-nya).
+function jadwalkanPengingat(a, jenjang) {
+  batalkanPengingat(a);
+  if (!pengingatOn) return;
+  const ms = jenjang || (window.PENGINGAT_UJI_MS
+    ? [window.PENGINGAT_UJI_MS, window.PENGINGAT_UJI_MS * 5] : TERKATUNG_JENJANG_MS);
+  a.pengingatTimer = ms.map((t, i) => setTimeout(() => {
+    if (a.pengingatTimer) a.pengingatTimer[i] = 0;
+    bunyikanPengingat(a, i);
+  }, t));
+}
+function batalkanPengingat(a) {
+  if (!a.pengingatTimer) return;
+  for (const id of a.pengingatTimer) if (id) clearTimeout(id);
+  a.pengingatTimer = null;
+}
+
+function bunyikanPengingat(a, jenjang) {
+  // jaga-jaga: keadaannya sudah padam atau orangnya sudah dihapus tapi timer
+  // sempat lolos — lebih baik diam daripada mengingatkan hal yang tidak ada
+  if (!a.butuh && !a.macet) return;
+  if (agents.get(a.id) !== a) return;
+  bunyiLoncengPengingat();
+  notifPeramban(a, jenjang);
+}
+
+// Notification peramban cuma kalau izinnya SUDAH diberikan lewat tombol di
+// panel ⚙️ — tidak pernah diminta dari sini. `tag` per pegawai supaya jenjang
+// kedua mengganti kartu jenjang pertama, bukan menumpuk.
+function notifPeramban(a, jenjang) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const nama = namaTampil(a) + (a.project ? ' (' + a.project + ')' : '');
+  const judul = a.butuh ? 'Menunggu paraf: ' + nama : 'Berhenti karena galat: ' + nama;
+  const ket = a.butuh ? a.butuh.alasan || a.butuh.label : '';
+  const perkara = a.butuh
+    ? (TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin) + (ket ? ' — ' + ket : '')
+    : a.macet.label || a.macet.jenis || 'galat';
+  const sejak = a.tungguSejak ? ' · sudah ' + durasiSingkat(Date.now() - a.tungguSejak) : '';
+  try {
+    const n = new Notification(judul, {
+      body: satuBaris(perkara, 120) + sejak + (jenjang ? ' (pengingat kedua)' : ''),
+      tag: 'terkatung-' + a.id, renotify: true,
+      silent: true,   // loncengnya sudah dari kita; jangan bunyi dua kali
+    });
+    n.onclick = () => {
+      try { window.focus(); } catch { /* peramban boleh menolak */ }
+      if (agents.get(a.id) === a) bukaKartu(a);
+      n.close();
+    };
+  } catch { /* konstruktor Notification bisa melempar di beberapa peramban seluler */ }
+}
+
 function ucapSuara(teks) {
   if (!('speechSynthesis' in window)) return;
   try {
@@ -3867,6 +4032,7 @@ function barisKru(a, kelas, who, what) {
   row.innerHTML =
     '<span class="chip" style="background:' + j.pal.main + '"></span>' +
     '<span class="who">' + esc(who) + '</span>' +
+    (a.cabang ? '<span class="cabang" title="cabang git: ' + esc(a.cabang) + '">⎇ ' + esc(a.cabang) + '</span>' : '') +
     '<span class="jab">' + esc(j.singkat) + '</span>' +
     '<span class="what">' + esc(what) + '</span>';
   row.addEventListener('click', (e) => {
@@ -4110,6 +4276,7 @@ function perbaruiKartu() {
   } else {
     baris.push(['sesi', a.id]);
     if (a.project) baris.push(['proyek', a.project]);
+    if (a.cabang) baris.push(['cabang', a.cabang]);
   }
   baris.push(['posisi', (STATIONS[a.station] || {}).name || a.station]);
   // Alasan penolakan ditulis apa adanya dari Claude Code — itu satu-satunya
@@ -4209,9 +4376,13 @@ function handle(ev) {
   // event ini tidak mengubah apa-apa soal itu.
   if (ev.butuh !== undefined) a.setButuh(ev.butuh);
   if (ev.macet !== undefined) a.setMacet(ev.macet);
+  if (ev.butuh !== undefined || ev.macet !== undefined) pantauTerkatung(a);
   a.lastEvent = now;
   toolTerakhir = now;
   if (ev.cwd) a.project = ev.cwd;
+  // cabang git ikut cwd: server yang membacanya, halaman cuma menyimpan.
+  // undefined = event ini tidak bicara soal cabang; '' = bukan repo git.
+  if (ev.cabang !== undefined) a.cabang = ev.cabang || '';
   if (ev.model) a.model = ev.model;
   if (ev.nama) namaPanggilan.set(ev.session, ev.nama);
   // jabatan disimpan server, jadi ikut menempel walau halaman dibuka ulang
@@ -4251,8 +4422,11 @@ function handle(ev) {
     case 'post': {
       a.busyUntil = now + 900;
       if (ev.peserta) tutupRapat(ev);
+      // beruntun = gagal berturut-turut TANPA diselingi yang berhasil; dibaca potretRuangan()
+      if (ev.ok !== false) a.gagalBerturut = 0;
       if (ev.ok === false) {
         a.gagal++;
+        a.gagalBerturut = (a.gagalBerturut || 0) + 1;
         // dipakai inspektorat-mendadak: pemicunya data nyata, bukan dadu.
         // Disimpan sebagai timestamp Date.now(), BUKAN `now` (performance.now()) —
         // dua jam yang berbeda basis, mencampurnya bikin selisihnya tidak berarti.
@@ -4311,6 +4485,7 @@ function handle(ev) {
       a.fx = null;
       a.goTo(stasiunPulang(a));
       a.say('beres, siap disposisi ☕');
+      a.legaSampai = now + 2000;          // wajah lega sebentar: gilirannya tuntas
       nowDoing.textContent = 'selesai — menunggu arahan';
       pushLog(ev, 'mark', ['selesai, menunggu arahan', '']);
       blip(420, 0.1);
@@ -4338,6 +4513,7 @@ function handle(ev) {
     case 'ucap': {
       a.say(esc(satuBaris(ev.teks, 84)), 'say');
       kabarMasuk(ev, a, ev.akhir ? 'hasil' : 'lapor');
+      if (ev.akhir) a.legaSampai = now + 2000;   // hasil sudah di tangan kamu: wajahnya lega
       pushLog(ev, 'mark',
         [ev.akhir ? 'menyampaikan hasil' : 'melapor', satuBaris(ev.teks, 120)]);
       break;
@@ -4833,6 +5009,14 @@ const TITIK = '<span class="titik"><i></i><i></i><i></i></span>';
 
 let balonPikir = ingatan.baca('balonPikir', '1') !== '0';
 
+/* Pengingat sesi terkatung (pegawai berhenti menunggu paraf/galat) — dua
+   jenjang: 2 menit menangkap yang sekadar lupa (tab tertimbun jendela lain),
+   10 menit menangkap yang sudah meninggalkan meja; satu jenjang saja pasti
+   terlalu cepat untuk yang satu atau terlalu lambat untuk yang lain.
+   BISU_MS 25 detik di server cuma menjaga kelahiran tugas, bukan ini. */
+const TERKATUNG_JENJANG_MS = [2 * 60 * 1000, 10 * 60 * 1000];
+let pengingatOn = ingatan.baca('pengingatTerkatung', '1') !== '0';
+
 const satuBaris = (t, n) => {
   const s = String(t || '').replace(/\s+/g, ' ').trim();
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
@@ -5261,6 +5445,40 @@ setMusik.onchange = () => {
   if (musikNyala) musikNyalakan(); else musikMatikan();
 };
 
+/* Pengingat sesi terkatung — boleh diingat browser (bukan bunyi yang menyala
+   sendiri, cuma izin untuk menjadwalkan; loncengnya toh tetap menunggu
+   AudioContext yang dibuka lewat klik). Izin Notification peramban TIDAK
+   diminta waktu halaman dibuka: cuma dari tombol di bawah, sesudah gestur. */
+const setPengingat = document.getElementById('setPengingat');
+const setNotifPeramban = document.getElementById('setNotifPeramban');
+const setNotifPerambanKet = document.getElementById('setNotifPerambanKet');
+function pengingatSet(v) {
+  pengingatOn = v;
+  ingatan.tulis('pengingatTerkatung', v ? '1' : '0');
+  setPengingat.checked = v;
+  // yang sudah terjadwal ikut dicabut; yang sedang terkatung dijadwalkan dari
+  // nol lagi saat dinyalakan — hitungannya mulai dari saat kamu menyalakan
+  for (const a of agents.values()) {
+    if (!a.terkatungJenis) continue;
+    if (v) jadwalkanPengingat(a); else batalkanPengingat(a);
+  }
+}
+function notifPerambanGambar() {
+  const izin = 'Notification' in window ? Notification.permission : 'tidak-ada';
+  setNotifPerambanKet.textContent =
+    izin === 'granted' ? 'diizinkan' :
+    izin === 'denied' ? 'ditolak di peramban — ubah lewat ikon gembok' :
+    izin === 'default' ? 'belum diminta' : 'peramban ini tidak mendukung';
+  setNotifPeramban.disabled = izin !== 'default';
+}
+setPengingat.checked = pengingatOn;
+setPengingat.onchange = () => pengingatSet(setPengingat.checked);
+setNotifPeramban.onclick = async () => {
+  try { await Notification.requestPermission(); } catch { /* peramban lama pakai callback; abaikan */ }
+  notifPerambanGambar();
+};
+notifPerambanGambar();
+
 /* Volume mixer per komponen — beda dari tiga checkbox di atas: angka 0..1 ini
    BOLEH diingat lewat localStorage, karena cuma pengali relatif dan tidak
    memaksa AudioContext menyala sendiri waktu halaman dibuka lagi (itu tetap
@@ -5574,10 +5792,55 @@ function bisaDipinjam(a) {
     && a.station !== 'keluar' && !a.keluar;
 }
 
+/* Laju token: contoh (t, jumlah) diambil tiap ±1 detik dari tokenTotal, jendela
+   5 menit. Dihitung dari selisih total, bukan dari stempel waktu per sesi —
+   server tidak mengirim token per waktu, dan selisih sudah cukup buat
+   "sedang boros atau tidak". Jumlahnya SEMUA jenis (input, output, cache
+   tulis, cache baca): cache baca memang murah, tapi itu yang menumpuk. */
+const contohToken = [];      // [{ t: Date.now(), n }] terurut waktu
+const LAJU_JENDELA = 300000, LAJU_JEDA = 1000;
+function lajuTokenMenit() {
+  const n = tokenTotal.input + tokenTotal.output + tokenTotal.cacheTulis + tokenTotal.cacheBaca;
+  const t = Date.now();
+  const akhir = contohToken[contohToken.length - 1];
+  if (!akhir || t - akhir.t >= LAJU_JEDA) contohToken.push({ t, n });
+  while (contohToken.length > 1 && contohToken[0].t < t - LAJU_JENDELA) contohToken.shift();
+  const awal = contohToken[0];
+  const menit = (t - awal.t) / 60000;
+  return menit < 0.05 ? 0 : Math.round((n - awal.n) / menit);
+}
+
+/* Potret ruangan: apa yang dilihat penjadwal event tiap percobaan. Bagian
+   pertama suasana (jam, lampu, cuaca, siapa yang menganggur); bagian kedua
+   FAKTA SESI, dihitung dari agen nyata saja (agents, bukan peserta rapat /
+   standby) supaya event bisa bereaksi pada yang sungguh terjadi. Dibaca
+   saja, tidak menulis apa pun ke log/statistik — aturan 2 event acak utuh.
+     gagalBeruntun  maks tool call gagal berturut-turut yang sedang berlangsung di satu agen
+     lajuToken      token per menit, semua jenis, jendela 5 menit terakhir
+     rasioEdit      porsi tool call Edit/Write/… (stasiun 'edit') dari seluruh call, 0..1
+     proyekDominan  { nama, agen } proyek dengan agen terbanyak; null kalau tak ada
+     proyekBerbeda  jumlah proyek (cwd) unik
+     modelCampur    true kalau lebih dari satu model terlihat
+     tungguTotal    jumlah agen yang sedang menunggu kamu (butuh) atau macet karena galat
+     sibukRatio     agen state 'work' / seluruh agen nyata, 0..1 (0 kalau belum ada agen) */
 function potretRuangan() {
   const orang = [...penghuni()];
   const A = ambien();
   const d = new Date();
+  const nyata = [...agents.values()];
+  let calls = 0, edit = 0, gagalBeruntun = 0, tunggu = 0, sibuk = 0;
+  const proyek = new Map(), model = new Set();
+  for (const a of nyata) {
+    calls += a.calls || 0;
+    edit += (a.perStasiun && a.perStasiun.edit) || 0;
+    gagalBeruntun = Math.max(gagalBeruntun, a.gagalBerturut || 0);
+    if (a.butuh || a.macet) tunggu++;
+    if (a.state === 'work') sibuk++;
+    if (a.project) proyek.set(a.project, (proyek.get(a.project) || 0) + 1);
+    if (a.model) model.add(a.model);
+  }
+  let proyekDominan = null;
+  for (const [nama, agen] of proyek) if (!proyekDominan || agen > proyekDominan.agen) proyekDominan = { nama, agen };
   return {
     jam: A.jam, lampu: A.lampu, luar: A.luar, malam: A.lampu > 0.5,
     hujan: CUACA.hujan, petir: CUACA.petir,
@@ -5588,6 +5851,15 @@ function potretRuangan() {
     nganggur: orang.filter(bisaDipinjam),
     bekerja: orang.filter((a) => a.state === 'work'),
     stasiunAktif: new Set(orang.filter((a) => a.state === 'work').map((a) => a.station)),
+    // fakta sesi (lihat komentar blok di atas)
+    gagalBeruntun,
+    lajuToken: lajuTokenMenit(),
+    rasioEdit: calls ? edit / calls : 0,
+    proyekDominan,
+    proyekBerbeda: proyek.size,
+    modelCampur: model.size > 1,
+    tungguTotal: tunggu,
+    sibukRatio: nyata.length ? sibuk / nyata.length : 0,
   };
 }
 

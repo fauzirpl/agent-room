@@ -164,6 +164,68 @@ const clip = (v, n = 88) => {
 };
 const baseName = (p) => String(p ?? '').split(/[\\/]/).filter(Boolean).pop() || '';
 
+/* ------------------------------------------------------- cabang git -----
+   Nama folder saja tidak cukup membedakan dua sesi di proyek yang sama:
+   yang satu di `master`, yang lain di worktree `fitur/x`. Cabangnya dibaca
+   langsung dari `.git/HEAD` — bukan lewat `git rev-parse` — karena ini
+   jalan di setiap event hook dan tidak boleh memunculkan proses baru.
+   Worktree punya `.git` berupa BERKAS berisi `gitdir: <path>`; diikuti ke
+   sana, HEAD-nya yang dibaca. Hasilnya nama cabang, atau 7 hex pertama saat
+   detached, atau string kosong kalau cwd bukan repo. Tidak pernah melempar. */
+const cabangCache = new Map();   // cwd -> { cabang, dicek, mtime, head }
+const CABANG_SEGAR = 15 * 1000;  // di bawah ini tidak stat sama sekali
+const CABANG_NAIK = 8;           // batas naik ke folder induk mencari .git
+
+function cariHeadGit(cwd) {
+  let dir = path.resolve(cwd);
+  for (let i = 0; i < CABANG_NAIK; i++) {
+    const git = path.join(dir, '.git');
+    let st = null;
+    try { st = fs.statSync(git); } catch {}
+    if (st) {
+      if (st.isDirectory()) return path.join(git, 'HEAD');
+      const m = fs.readFileSync(git, 'utf8').match(/^gitdir:\s*(.+?)\s*$/m);
+      return m ? path.join(path.resolve(dir, m[1]), 'HEAD') : '';
+    }
+    const induk = path.dirname(dir);
+    if (induk === dir) break;
+    dir = induk;
+  }
+  return '';
+}
+
+function bacaHeadGit(head) {
+  const isi = fs.readFileSync(head, 'utf8').trim();
+  const m = isi.match(/^ref:\s*refs\/heads\/(.+)$/);
+  if (m) return clip(m[1], 48);
+  return /^[0-9a-f]{40}$/i.test(isi) ? isi.slice(0, 7) : '';
+}
+
+function cabangGit(cwd) {
+  if (!cwd) return '';
+  cwd = String(cwd);
+  const kini = Date.now();
+  try {
+    const c = cabangCache.get(cwd);
+    if (c && kini - c.dicek < CABANG_SEGAR) return c.cabang;
+    if (c && c.head) {
+      // di luar masa segar cukup stat: HEAD ditulis ulang tiap checkout,
+      // jadi mtime yang sama berarti cabangnya juga masih sama
+      const mtime = fs.statSync(c.head).mtimeMs;
+      if (mtime === c.mtime) { c.dicek = kini; return c.cabang; }
+    }
+    const head = cariHeadGit(cwd);
+    const mtime = head ? fs.statSync(head).mtimeMs : 0;
+    const cabang = head ? bacaHeadGit(head) : '';
+    cabangCache.set(cwd, { cabang, dicek: kini, mtime, head });
+    if (cabangCache.size > 200) cabangCache.delete(cabangCache.keys().next().value);
+    return cabang;
+  } catch {
+    cabangCache.set(cwd, { cabang: '', dicek: kini, mtime: 0, head: '' });
+    return '';
+  }
+}
+
 const EVENT_ALIAS = {
   PreToolUse: 'pre',
   PostToolUse: 'post',
@@ -373,6 +435,8 @@ function normalize(raw) {
     kind,
     session: String(raw.session_id || 'local').slice(0, 12),
     cwd: raw.cwd ? baseName(raw.cwd) : '',
+    // nama cabangnya saja, bukan path — path penuh tidak pernah keluar ke halaman
+    ...(raw.cwd ? { cabang: cabangGit(raw.cwd) } : {}),
     tool,
     label: tool ? describe(tool, raw.tool_input) : '',
     ok: kind === 'post' ? !gagalTool && !isError(raw.tool_response) : true,
@@ -604,23 +668,100 @@ function riwayatCatat(ts, proyek, model, d) {
   });
 }
 
+/* Pemadatan. Delta per giliran itu ~100 byte, tapi berkasnya bisa 8.000 baris
+   dalam lima hari — puluhan MB setahun, dan semuanya dibaca sinkron tiap start.
+   Padahal konsumennya (total, per hari, per proyek, grafik 14 hari) tidak
+   pernah butuh butiran per giliran untuk data lama. Jadi waktu muat, baris
+   yang lebih tua dari PADAT_HARI dilebur jadi satu baris per HARI per proyek
+   (`padat: true`, `n` = berapa giliran yang dilebur, ts = awal hari lokal),
+   dan kalau berkasnya masih di atas PADAT_UKURAN, baris berumur 7-30 hari
+   ikut dilebur per JAM per proyek. Baris aslinya tidak dibuang: dipindahkan
+   ke `token-riwayat.arsip.jsonl`, yang tidak pernah dibaca saat start —
+   itu cuma jaminan kalau suatu hari ada yang butuh butirannya lagi.
+   Field `model` dilepas waktu dilebur: tidak ada konsumen yang membacanya
+   dari berkas, dan satu hari bisa memakai beberapa model sekaligus. */
+const BERKAS_ARSIP_TOKEN = BERKAS_RIWAYAT_TOKEN.replace(/\.jsonl$/i, '') + '.arsip.jsonl';
+const PADAT_HARI = 30 * 24 * 3600 * 1000;      // lebih tua dari ini: per hari
+const PADAT_JAM = 7 * 24 * 3600 * 1000;        // lebih tua dari ini: per jam, kalau masih gemuk
+const PADAT_UKURAN = 4 * 1024 * 1024;          // batas gemuk berkas utama
+
+const awalHariLokal = (ts) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const awalJamLokal = (ts) => { const d = new Date(ts); d.setMinutes(0, 0, 0); return d.getTime(); };
+
+/* `baris`: [{ o, teks }] hasil parse. Yang ts-nya di bawah `batas` dikelompokkan
+   per (kunciWaktu(ts), proyek). Kelompok berisi satu baris yang sudah padat
+   dibiarkan — supaya start berikutnya tidak menulis ulang berkas yang sama. */
+function riwayatLebur(baris, batas, kunciWaktu) {
+  const kelompok = new Map();
+  const sisa = [];
+  for (const b of baris) {
+    if (b.o.ts >= batas) { sisa.push(b); continue; }
+    const k = kunciWaktu(b.o.ts) + '|' + (b.o.proyek || '');
+    if (!kelompok.has(k)) kelompok.set(k, []);
+    kelompok.get(k).push(b);
+  }
+  const arsip = [];
+  for (const grup of kelompok.values()) {
+    if (grup.length === 1 && grup[0].o.padat) { sisa.push(grup[0]); continue; }
+    const o = { ts: kunciWaktu(grup[0].o.ts), proyek: grup[0].o.proyek || '',
+                input: 0, output: 0, cacheTulis: 0, cacheBaca: 0, n: 0, padat: true };
+    for (const b of grup) {
+      o.input += b.o.input; o.output += b.o.output;
+      o.cacheTulis += b.o.cacheTulis; o.cacheBaca += b.o.cacheBaca;
+      o.n += b.o.n || 1;
+      arsip.push(b.teks);
+    }
+    sisa.push({ o, teks: JSON.stringify(o) });
+  }
+  sisa.sort((a, b) => a.o.ts - b.o.ts);
+  return { sisa, arsip };
+}
+
 function riwayatMuat() {
   let teks = '';
   try { teks = fs.readFileSync(BERKAS_RIWAYAT_TOKEN, 'utf8'); }
   catch { return; }                 // belum ada berkasnya: wajar, riwayat baru mulai
-  let baik = 0;
-  for (const baris of teks.split('\n')) {
-    if (!baris) continue;
-    let o;
-    try { o = JSON.parse(baris); } catch { continue; }
-    if (!o || !Number.isFinite(o.ts)) continue;
-    riwayatTambah(o.ts, o.proyek || '', {
-      input: Number(o.input) || 0, output: Number(o.output) || 0,
-      cacheTulis: Number(o.cacheTulis) || 0, cacheBaca: Number(o.cacheBaca) || 0,
-    });
-    baik++;
+  const baris = [];
+  const rusak = [];                 // ikut ke arsip kalau berkas utama ditulis ulang
+  for (const t of teks.split('\n')) {
+    if (!t.trim()) continue;
+    let o = null;
+    try { o = JSON.parse(t); } catch {}
+    if (!o || !Number.isFinite(o.ts)) { rusak.push(t); continue; }
+    o.input = Number(o.input) || 0; o.output = Number(o.output) || 0;
+    o.cacheTulis = Number(o.cacheTulis) || 0; o.cacheBaca = Number(o.cacheBaca) || 0;
+    riwayatTambah(o.ts, o.proyek || '', o);
+    baris.push({ o, teks: t });
   }
-  if (baik) console.log('[agent-room] riwayat token dimuat: ' + baik + ' baris dari ' + BERKAS_RIWAYAT_TOKEN);
+  if (baris.length) console.log('[agent-room] riwayat token dimuat: ' + baris.length + ' baris dari ' + BERKAS_RIWAYAT_TOKEN);
+  // Dulu baris rusak dibuang diam-diam; sekarang dihitung supaya berkas yang
+  // terpotong (mis. mati listrik di tengah append) ketahuan, bukan hilang senyap.
+  if (rusak.length) console.warn('[agent-room] token-riwayat: ' + rusak.length + ' baris ditolak (bukan JSON / tanpa ts)');
+
+  const kini = Date.now();
+  let { sisa, arsip } = riwayatLebur(baris, kini - PADAT_HARI, awalHariLokal);
+  let isi = sisa.map((b) => b.teks).join('\n') + '\n';
+  if (Buffer.byteLength(isi) > PADAT_UKURAN) {
+    const lagi = riwayatLebur(sisa, kini - PADAT_JAM, awalJamLokal);
+    sisa = lagi.sisa; arsip = arsip.concat(lagi.arsip);
+    isi = sisa.map((b) => b.teks).join('\n') + '\n';
+  }
+  if (!arsip.length) return;        // tidak ada yang layak dilebur: berkas tidak disentuh
+
+  // Arsip dulu, baru berkas utama: kalau arsip gagal, berkas utama tetap utuh
+  // dan tidak ada butiran yang hilang. Tulis .tmp lalu rename supaya start
+  // yang keburu mati di tengah tidak meninggalkan berkas utama setengah jadi.
+  try {
+    fs.appendFileSync(BERKAS_ARSIP_TOKEN, arsip.concat(rusak).join('\n') + '\n');
+    const tmp = BERKAS_RIWAYAT_TOKEN + '.tmp';
+    fs.writeFileSync(tmp, isi);
+    fs.renameSync(tmp, BERKAS_RIWAYAT_TOKEN);
+    console.log('[agent-room] token-riwayat dipadatkan: ' + arsip.length + ' baris -> '
+      + (arsip.length - (baris.length - sisa.length)) + ' ringkasan; '
+      + baris.length + ' -> ' + sisa.length + ' baris, aslinya ke ' + path.basename(BERKAS_ARSIP_TOKEN));
+  } catch (err) {
+    console.warn('[agent-room] gagal memadatkan token-riwayat: ' + err.message);
+  }
 }
 riwayatMuat();
 
@@ -630,6 +771,7 @@ const dasarSesi = (sesi, cwd, ts) => ({
   ts: ts || Date.now(),
   session: sesi,
   cwd: baseName(cwd || ''),
+  ...(cwd ? { cabang: cabangGit(cwd) } : {}),
   tool: null,
   label: '',
   ok: true,
@@ -821,6 +963,7 @@ function serapStream(rec, sid, m) {
 
   const dasar = (tambah) => ({
     id: ++seq, ts: Date.now(), session: sesi, cwd: baseName(rec.cwd),
+    ...(rec.cwd ? { cabang: cabangGit(rec.cwd) } : {}),
     nama: rec.nama, tool: null, label: '', ok: true,
     ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
     ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
@@ -1129,6 +1272,7 @@ const server = http.createServer(async (req, res) => {
       kredensialBerkas: Boolean(kredensial && kredensial.dariBerkas),
       berjalan: [...jalan.entries()].map(([id, j]) => ({
         sesi: id.slice(0, 12), nama: j.nama, mulai: j.mulai, cwd: j.cwd,
+        cabang: cabangGit(j.cwd),
         peran: peranSesi.get(id.slice(0, 12)) || '',
         model: modelSesi.get(id.slice(0, 12)) || '',
       })),

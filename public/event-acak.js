@@ -725,7 +725,10 @@ daftarEvent(
   id: 'antre-tanda-tangan-kadis',
   kelas: 'panggung', bobot: B.sedang, cooldown: 240, durasi: 30,
   perluAktor: true,
-  syarat: (S) => S.kerjaJam,
+  // Di luar jam kerja pun antrean bisa mengular: kalau ≥2 agen nyata sedang
+  // menunggu keputusan kamu / macet (S.tungguTotal), tanda tangan kadis
+  // memang sedang jadi penyumbat. `?? 0` buat potret yang belum membawanya.
+  syarat: (S) => S.kerjaJam || (S.tungguTotal ?? 0) >= 2,
   mulai(E) {
     const orang = pinjamAktor(E, 3);
     E.data.antre = orang;
@@ -2359,7 +2362,11 @@ daftarEvent(
   id: 'audit-token',
   kelas: 'panggung', bobot: B.langka, cooldown: 3600, durasi: 25,
   perluAktor: true,
-  syarat: () => toolCount > 150,
+  // Dua pintu masuk: sesi yang sudah panjang (toolCount), atau yang sedang
+  // boros sekarang — S.lajuToken = token/menit 5 menit terakhir, semua jenis
+  // termasuk cache baca. 120 ribu/menit itu sesi yang giliran-gilirannya
+  // berat, bukan yang sekadar aktif. `?? 0`: potret lama/harness tidak punya.
+  syarat: (S) => toolCount > 150 || (S.lajuToken ?? 0) > 120000,
   mulai(E, S) {
     const sibuk = [...agents.values()].sort((a, b) => b.calls - a.calls)[0];
     const a = pemeran(E, ['auditor', 'statistisi']);
@@ -3955,7 +3962,10 @@ daftarEvent(
 {
   id: 'rak-server-kepanasan',
   kelas: 'panggung', bobot: B.jarang, cooldown: 720, durasi: 60,
-  syarat: (S) => S.orang.filter((o) => o.station === 'server').length >= 1,
+  // Rak juga panas kalau bebannya nyata: ≥3/4 agen nyata sedang bekerja
+  // (S.sibukRatio) dan bukan cuma satu orang. `?? 0` buat potret lama/harness.
+  syarat: (S) => S.orang.filter((o) => o.station === 'server').length >= 1
+    || ((S.sibukRatio ?? 0) >= 0.75 && (S.sesi ?? 0) >= 2),
   mulai(E) {
     const a = pemeranDekat(E, 400, 268, 200);
     if (a) { a.doingEvent = 'mengarahkan kipas ke rak'; a.goToXY(400, 268, 'up'); }
@@ -3976,7 +3986,11 @@ daftarEvent(
 {
   id: 'rebutan-stempel',
   kelas: 'panggung', bobot: B.jarang, cooldown: 600, durasi: 13,
-  syarat: (S) => S.orang.filter((o) => o.station !== 'rapat' && bisaDipinjam(o)).length >= 2,
+  // Stempel cuma diperebutkan kalau memang laris: begitu ada sesi nyata,
+  // porsi Edit/Write (S.rasioEdit) harus ≥ 1/5 dari seluruh tool call.
+  // Ruangan tanpa sesi (standby saja) tetap seperti dulu. `?? 0` buat harness.
+  syarat: (S) => S.orang.filter((o) => o.station !== 'rapat' && bisaDipinjam(o)).length >= 2
+    && (!(S.sesi ?? 0) || (S.rasioEdit ?? 0) >= 0.2),
   mulai(E, S) {
     const dua = S.orang.filter((o) => o.station !== 'rapat' && bisaDipinjam(o)).slice(0, 2);
     for (const a of dua) { a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a); }
@@ -4636,9 +4650,14 @@ daftarEvent(
 {
   id: 'inspektorat-mendadak',
   kelas: 'panggung', bobot: B.jarang, cooldown: 420, durasi: 16,
-  syarat: () => RUANGAN.gagalBeruntun.length >= 3,
+  // RUANGAN.gagalBeruntun = tiga kegagalan se-ruangan dalam 60 detik;
+  // S.gagalBeruntun = satu agen gagal tiga kali BERTURUT-TURUT tanpa jeda
+  // waktu. Yang kedua justru lebih layak diinspeksi: itu orang yang mengulang
+  // kesalahan yang sama. `?? 0` buat potret yang belum membawanya.
+  syarat: (S) => RUANGAN.gagalBeruntun.length >= 3 || (S.gagalBeruntun ?? 0) >= 3,
   mulai(E, S) {
-    const target = S.orang.find((o) => o.gagal > 0 && !o.standby) || S.orang.find((o) => !o.standby);
+    const target = S.orang.find((o) => (o.gagalBerturut || 0) >= 3 && !o.standby)
+      || S.orang.find((o) => o.gagal > 0 && !o.standby) || S.orang.find((o) => !o.standby);
     E.data.target = target;
     RUANGAN.inspeksiLog.push(Date.now());
     if (RUANGAN.inspeksiLog.length > 20) RUANGAN.inspeksiLog.shift();

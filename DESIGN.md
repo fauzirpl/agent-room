@@ -276,6 +276,29 @@ Kalau `transcript_path` suatu hari hilang dari payload, jalurnya ditebak dari
 (`~/.claude/projects/<cwd disandikan>/<id>.jsonl`, dan `CLAUDE_CONFIG_DIR`
 dihormati). Yang mati cuma jalan pintasnya, bukan fiturnya.
 
+### Balon ucap tiga baris
+
+Balon ucap dulu **sebaris** dan dipotong `…` di tengah kata. Untuk sapaan
+pendek ("siap, ndan") itu cukup, tapi `ucap` — kalimat yang benar-benar
+ditulis agen untuk kamu — hampir tidak pernah muat sebaris, dan yang
+terpotong di huruf ke-84 cuma jadi penanda "ada yang bilang sesuatu", bukan
+sesuatu yang dibaca.
+
+Sekarang balonnya melebar sampai **244 px dan tiga baris**. Batasnya dijaga
+CSS (`line-clamp`), bukan cuma potong huruf di JS: kalimat pendek tetap balon
+kecil sebaris, kalimat panjang berhenti rapi di baris ketiga, dan tidak ada
+angka ajaib di JS yang harus ditebak ulang tiap kali lebar balonnya berubah.
+Balon yang lebih dari sebaris juga hidup lebih lama (6,4 detik, bukan 4,2) —
+tiga baris butuh waktu baca yang lain dari dua kata.
+
+Karena melebar, balon ucap ikut **dijaga di dalam bingkai** seperti balon
+pikiran: pegawai di meja paling tepi tidak boleh bicara separuh keluar layar.
+Geserannya sebatas lebar balonnya sendiri, dan ekornya digeser balik sejauh
+itu juga supaya tetap menunjuk kepala orangnya, tidak pernah copot dari
+badan balonnya. Tinggi dan lebar sungguhannya diukur sekali tiap `say()`
+(bukan konstanta, bukan tiap frame) — itu yang dipakai balon pikiran untuk
+menumpuk tepat di atasnya berapa pun baris yang terpakai.
+
 ### Pikiran jadi balon awan
 
 Bentuknya sengaja dibedakan dari balon ucap: **awan bersudut bulat dengan dua
@@ -453,9 +476,19 @@ sesi aktif yang sudah ada (yang tetap terbatas pada "sejak halaman ini
 dibuka", karena itu memang butuh peta sesi yang cuma ada di sisi halaman).
 Mau pindah lokasi berkasnya: `AGENT_ROOM_TOKEN_LOG=/path/berkas.jsonl`.
 
-Berkasnya tumbuh terus tanpa rotasi — satu baris sekitar 100-150 byte, jadi
-bahkan ribuan tool call sehari masih dalam orde kilobyte. Tidak di-commit ke
-git (lihat `.gitignore`), sama seperti `.agent-room-token`.
+Satu baris cuma 100-150 byte, tapi delta per giliran ternyata jalan ribuan
+kali sehari — lima hari saja sudah 8.000 baris, dan semuanya dibaca sinkron
+tiap start. Padahal untuk data lama tidak ada yang butuh butiran per giliran:
+grafiknya per hari, tabelnya per proyek. Jadi waktu muat, baris yang lebih
+tua dari 30 hari **dilebur** jadi satu baris per hari per proyek (`padat:
+true`, `n` = jumlah giliran yang dilebur, ts = awal hari lokal); kalau
+berkasnya masih di atas 4 MB, baris berumur 7-30 hari ikut dilebur per jam.
+Berkas utama ditulis ulang atomik (`.tmp` lalu rename), dan baris aslinya
+tidak dibuang melainkan dipindah ke `token-riwayat.arsip.jsonl` — yang tidak
+pernah dibaca saat start, cuma jaminan kalau butirannya suatu hari dibutuhkan.
+Baris yang rusak tidak lagi dibuang diam-diam: dihitung dan dilaporkan satu
+baris di konsol. Keduanya tidak di-commit ke git (lihat `.gitignore`), sama
+seperti `.agent-room-token`.
 
 ### Yang berubah soal privasi
 
@@ -618,7 +651,7 @@ ditebak kartu ini punya siapa; yang sedang dibuka juga diberi sorotan di lantai.
 | Isi kartu | Keterangan |
 |---|---|
 | nama + jabatan | lengkap dengan padanan software house dan uraian tugasnya |
-| sesi / proyek | id sesi 12-char dan nama folder project-nya |
+| sesi / proyek | id sesi 12-char dan nama folder project-nya, plus cabang git-nya |
 | posisi + kegiatan | stasiun tempat dia berdiri dan yang sedang dikerjakan |
 | tertahan + alasan | cuma muncul waktu sesinya menunggu keputusan kamu; alasan penolakan ditulis apa adanya |
 | di kantor | sudah berapa lama sejak pegawainya muncul |
@@ -634,6 +667,19 @@ cuma keterangan mereka ini apa.
 
 Menutupnya: klik lantai kosong, tombol ✕, atau baris yang sama sekali lagi.
 Pegawai yang pulang di tengah jalan menutup kartunya sendiri.
+
+### Cabang git sebagai konteks sesi
+
+Nama folder saja tidak cukup membedakan dua pegawai di proyek yang sama:
+sejak ada worktree, yang satu bisa di `master` dan yang lain di `fitur/x`
+dengan nama folder yang sama-sama `agent-room`. Jadi tiap event yang punya
+`cwd` juga membawa `cabang` — dibaca server langsung dari `.git/HEAD` (kalau
+`.git`-nya berkas `gitdir:` milik worktree, diikuti ke sana), naik ke folder
+induk paling banyak delapan tingkat, tanpa memunculkan proses `git` sama
+sekali karena ini jalan tiap tool call. Hasilnya nama cabang, 7 hex pertama
+saat detached, atau kosong kalau bukan repo. Di-cache per cwd 15 detik, dan
+di luar itu cukup cek mtime HEAD — checkout selalu menulis ulang berkas itu.
+Yang keluar ke halaman hanya nama cabangnya, bukan path.
 
 ## Bahasa yang tampil
 
@@ -763,6 +809,20 @@ lebih lama dari eventnya — noda tinta di meja stempel, kartu inspeksi di APAR,
 label yang akhirnya tertempel di patch panel, kabel yang sudah dirapikan.
 Ruangan yang menyimpan jejak kejadian tadi terasa dihuni; yang selalu kembali
 bersih terasa seperti demo.
+
+Objek `S` yang diterima `syarat()`/`mulai()`/`tick()` — potret ruangan dari
+`potretRuangan()` — sejak ini membawa **fakta sesi**, bukan cuma jam, lampu,
+dan cuaca: `gagalBeruntun` (kegagalan tool berturut-turut terbanyak di satu
+agen), `lajuToken` (token/menit 5 menit terakhir), `rasioEdit`,
+`proyekDominan`, `proyekBerbeda`, `modelCampur`, `tungguTotal` (agen yang
+menunggu kamu/macet), `sibukRatio`. Semuanya dihitung dari agen nyata saja,
+dan potretnya **hanya dibaca**: tidak ada event yang menulis balik ke agen,
+log, atau statistik, jadi aturan 2 di bawah tetap utuh — yang berubah cuma
+*kapan* sebuah kejadian suasana masuk akal (`inspektorat-mendadak` menyusul
+agen yang tiga kali gagal beruntun, `audit-token` saat sesinya boros,
+`antre-tanda-tangan-kadis` saat ≥2 agen menunggu tanda tangan kamu). Setiap
+pembacaan dijaga `?? 0` supaya potret lama dan harness `uji-event.mjs` tetap
+jalan.
 
 ### Tiga aturan yang tidak boleh dilanggar
 

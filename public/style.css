@@ -415,6 +415,15 @@ body {
 }
 .crew-row.pilih { border-color: var(--amber); }
 .crew-row.pilih .jab { color: var(--amber); border-color: #4a3a1c; }
+/* cabang git di baris kru: cap tinta pudar di sebelah nama, sengaja bukan
+   papan hitam seperti .jab supaya tidak bersaing dengan jabatan. flex: 0 0 auto
+   supaya namanya tidak terjepit jadi "⎇ m…" di panel sempit — biar .what yang
+   ellipsis-nya mengalah; max-width menjaga nama cabang panjang tetap satu chip. */
+.crew-row .cabang {
+  color: var(--tinta-pudar); border: 1px solid var(--khaki-tua); border-radius: 2px;
+  font-size: 8.5px; letter-spacing: .03em; padding: 0 4px; flex: 0 0 auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 76px;
+}
 #formTugas select {
   background: #0c1219; border: 1px solid var(--line); border-radius: 5px;
   color: var(--ink); font: inherit; font-size: 11px; padding: 5px 7px;
@@ -687,4 +696,13 @@ body {
 }
 .pengaturan-vol-nilai { font-size: 9.5px; color: var(--dim); width: 30px; text-align: right; flex-shrink: 0; }
 .pengaturan-nota { margin: 8px 0 0; font-size: 9.5px; line-height: 1.5; color: var(--dim); }
+/* tombol izin Notification peramban: satu-satunya gestur yang boleh memintanya */
+.pengaturan-izin { display: flex; align-items: center; gap: 8px; padding: 2px 0 8px 22px; }
+.pengaturan-izin button {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 10.5px; padding: 4px 8px; cursor: pointer;
+}
+.pengaturan-izin button:hover { border-color: var(--navy); }
+.pengaturan-izin button:disabled { opacity: .45; cursor: default; }
+.pengaturan-izin-ket { font-size: 9.5px; color: var(--tinta-pudar); }
 .pengaturan-grup .kartu-info { border-top: 0; padding-top: 0; grid-template-columns: 92px 1fr; }
