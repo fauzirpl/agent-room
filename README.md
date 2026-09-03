@@ -15,7 +15,7 @@
 ## 🇮🇩 Bahasa Indonesia
 
 Nonton sesi **Claude Code** kamu kerja — bukan di terminal, tapi sebagai
-pegawai voxel 3D di kantor dinas pixel-art. Tiap sesi jadi satu orang, jalan
+pegawai kecil di kantor dinas pixel-art. Tiap sesi jadi satu orang, jalan
 ke meja berbeda sesuai tool yang lagi dipakai: `Read` ke lemari arsip,
 `Edit`/`Write` ke meja stempel, `git` ke PC server, `Task`/`Agent` ke meja
 rapat. Lengkap Garuda, dispenser galon, AC yang netes ke ember, cuaca
@@ -58,7 +58,7 @@ Katalog 373 event acak ada di **[EVENT-ACAK.md](EVENT-ACAK.md)**.
 ## 🇺🇸 English
 
 Watch your **Claude Code** sessions work — not in a terminal, but as a
-voxel-art civil servant inside a pixel-art Indonesian government office
+little pixel-art civil servant inside an Indonesian government office
 ("kantor dinas"). Each session becomes one employee who walks to a
 different desk depending on which tool their agent is using right now:
 `Read` sends them to the filing cabinet, `Edit`/`Write` to the stamping

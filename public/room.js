@@ -1,7 +1,7 @@
 /* agent-room :: renderer — edisi kantor dinas
-   Kantor pemerintahan Indonesia dalam pixel-art. Satu pegawai (voxel 3D,
-   gaya Crossy Road) per sesi Claude Code; tiap tool call dia jalan ke
-   meja/stasiun yang sesuai lalu kerja di sana. */
+   Kantor pemerintahan Indonesia dalam pixel-art. Satu pegawai (sprite
+   pixel-art bergaris tepi) per sesi Claude Code; tiap tool call dia jalan
+   ke meja/stasiun yang sesuai lalu kerja di sana. */
 
 const W = 480, H = 356;   // baris meja kerja menempati strip baru di bawah
 const FLOOR_TOP = 110;
@@ -2105,41 +2105,138 @@ const MODEL_ID = new Map(MODEL.map((m) => [m.id, m]));
 // yang tidak dikenal ditampilkan apa adanya, bukan diaku-aku "bawaan".
 const namaModel = (id) => (MODEL_ID.get(id) || {}).nama || id || '';
 
-/* ------------------------------------------------- pegawai voxel 3D ----- */
+/* ------------------------------------------------- sprite pegawai -------
+   Sosok pixel-art bergaris tepi, bukan lagi balok voxel bertumpuk: kepala
+   bulat, leher, bahu melandai, lengan lepas dari badan, dua kaki bersepatu,
+   dan tampak samping yang sungguh samping (satu mata, hidung, satu lengan
+   di depan badan). Semua koordinat relatif ke (x, y) = tengah garis kaki;
+   tingginya 28 px (29 dengan peci). Yang membaca ukuran ini dari luar --
+   balon di y-30, kotak klik y-30..y+5, lencana galat y-34, perkakas di
+   drawTool/drawBawaan yang dipegang setinggi yb-13 -- tidak perlu diubah.
+   Garis tepinya warna dasar tiap bagian yang digelapkan, bukan hitam:
+   cukup tegas buat memisahkan seragam putih dari lantai terang, tapi tidak
+   sekeras stiker. Cahaya dari kiri-atas seperti box3 perabot, jadi kolom
+   paling kanan tiap bagian sedikit teduh. */
 
-function drawHead(a, x, yFoot) {
-  const p = a.pal;
-  const back = a.face === 'up';
-  if (p.head === 'jilbab') {
-    box3(x - 5, yFoot, 10, 8, 5, p.jilbab);
-    if (!back) {
-      r(x - 2, yFoot - 6, 5, 4, p.skin);
-      drawEyes(a, x, yFoot - 5, 0);
-    }
-    return;
-  }
-  box3(x - 4, yFoot, 8, 6, 4, back ? p.hair : p.skin);
-  // peci yang melorot sedikit; dirapikan sendiri beberapa detik kemudian
-  if (p.head === 'peci') box3(x - 3 + (a.peciMiring || 0), yFoot - 6, 6, 2, 3, '#17171c');
-  else box3(x - 4, yFoot - 6, 8, 2, 4, p.hair);
-  if (!back) {
-    if (p.head !== 'peci') r(x - 4, yFoot - 5, 2, 2, p.hair);   // poni samping
-    drawEyes(a, x, yFoot - 4, 0);
-    if (a.masker || MOD.masker) r(x - 2, yFoot - 3, 5, 3, '#e8ece8');   // masker kabut asap
-    else if (p.kumis) r(x - 1, yFoot - 2, 3, 1, '#2b2118');
-    if (a.mulut) r(x - 1, yFoot - 2, 2, 2, '#3a2a24');          // menguap
-  }
-  if (a.pulpenDiTelinga) r(x + 3, yFoot - 4, 1, 2, '#1c4e8a');  // bolpoin diselipkan di telinga
+const garisTepi = (c) => sh(c, 0.55);
+const PECI = { isi: '#17171c', tepi: '#0a0a0e', kilap: '#34343e', pita: '#202028' };
+const SEPATU = '#26221c', SANDAL = '#8a6844', TALI_SANDAL = '#d9b96a';
+const KUMIS = '#2b2118', MASKER = '#e8ece8', MASKER_LIPAT = '#cfd5d0', MULUT_NGUAP = '#3a2a24';
+const PULPEN_TELINGA = '#1c4e8a';
+
+/* Gumpalan bersudut bulat bergaris tepi: isi w×h dari pojok kiri-atas
+   (xL, yT), keempat sudut isinya dipangkas satu piksel, garis tepi satu
+   piksel mengelilinginya tanpa mengisi pojok luar -- itu yang bikin bulat,
+   bukan kotak. */
+function gumpal(xL, yT, w, h, c, ct) {
+  const t = ct || garisTepi(c);
+  r(xL + 1, yT - 1, w - 2, 1, t);
+  r(xL + 1, yT + h, w - 2, 1, t);
+  r(xL - 1, yT + 1, 1, h - 2, t);
+  r(xL + w, yT + 1, 1, h - 2, t);
+  r(xL, yT, 1, 1, t); r(xL + w - 1, yT, 1, 1, t);
+  r(xL, yT + h - 1, 1, 1, t); r(xL + w - 1, yT + h - 1, 1, 1, t);
+  r(xL + 1, yT, w - 2, h, c);
+  r(xL, yT + 1, 1, h - 2, c); r(xL + w - 1, yT + 1, 1, h - 2, c);
 }
 
-function drawEyes(a, x, ey) {
+/* Arah hadap sebagai angka: 0 depan/belakang, 1 kanan, -1 kiri. */
+const arahDari = (face) => (face === 'left' ? -1 : face === 'right' ? 1 : 0);
+/* Kolom awal persegi selebar w yang mulai k piksel di kanan bx pada sosok
+   hadap kanan. Hadap kiri dicerminkan pada sumbu di antara bx-1 dan bx,
+   supaya sosok selebar genap (x-4..x+3) tetap simetris. */
+const cermin = (arah, bx, k, w) => (arah < 0 ? bx - k - w : bx + k);
+
+/* Kepala, dari garis dagu (yDagu) ke atas: isi 8 baris di yDagu-8..yDagu-1,
+   garis tepi atas di yDagu-9, peci menambah 2 baris lagi di atasnya. */
+function drawHead(a, x, yDagu) {
+  const p = a.pal;
+  const back = a.face === 'up';
+  const arah = arahDari(a.face);
+  const rm = (k, yy, w, h, c) => r(cermin(arah, x, k, w), yy, w, h, c);
+  const kulit = p.skin, tk = garisTepi(kulit);
+  const yT = yDagu - 8;
+  const jilbab = p.head === 'jilbab';
+
+  gumpal(x - 4, yT, 8, 8, jilbab ? p.jilbab : kulit);
+  r(x + 3, yT + 1, 1, 6, sh(jilbab ? p.jilbab : kulit, 0.9));       // pipi kanan teduh
+
+  if (jilbab) {
+    r(x - 3, yT + 1, 3, 1, lerpHex(p.jilbab, '#ffffff', 0.18));      // kilap ubun-ubun kerudung
+    if (!back) {                                                      // jendela wajah, bersudut bulat
+      if (arah) { rm(0, yT + 2, 3, 1, kulit); rm(-1, yT + 3, 5, 4, kulit); rm(0, yT + 7, 3, 1, kulit); }
+      else { r(x - 2, yT + 2, 4, 1, kulit); r(x - 3, yT + 3, 6, 4, kulit); r(x - 2, yT + 7, 4, 1, kulit); }
+    }
+  } else if (p.head === 'peci') {
+    // songkok: lebih tinggi dari tudung rambut, kilap di kiri-atas, pita di
+    // tepi bawah. Melorot sedikit (peciMiring) lalu dirapikan lagi oleh event.
+    const px = x + (a.peciMiring || 0);
+    r(px - 3, yT - 2, 6, 1, PECI.tepi);
+    r(px - 4, yT - 1, 1, 1, PECI.tepi); r(px + 3, yT - 1, 1, 1, PECI.tepi);
+    r(px - 3, yT - 1, 6, 1, PECI.isi);
+    r(px - 5, yT, 1, 3, PECI.tepi); r(px + 4, yT, 1, 3, PECI.tepi);
+    r(px - 4, yT, 8, 3, PECI.isi);
+    r(px - 3, yT - 1, 3, 1, PECI.kilap);
+    r(px - 4, yT + 2, 8, 1, PECI.pita);
+    if (arah) rm(-4, yT + 3, 1, 2, p.hair);                          // cambang, cuma sisi belakang
+    else { r(x - 4, yT + 3, 1, 2, p.hair); r(x + 3, yT + 3, 1, 2, p.hair); }
+  } else {
+    const th = garisTepi(p.hair);
+    r(x - 3, yT - 1, 6, 1, th);
+    r(x - 4, yT, 1, 1, th); r(x + 3, yT, 1, 1, th);
+    r(x - 3, yT, 6, 1, p.hair);
+    r(x - 5, yT + 1, 1, 2, th); r(x + 4, yT + 1, 1, 2, th);
+    r(x - 4, yT + 1, 8, 2, p.hair);
+    r(x - 3, yT + 1, 3, 1, lerpHex(p.hair, '#ffffff', 0.22));         // kilap
+    if (back) {                                                       // tengkuk tertutup rambut
+      r(x - 5, yT + 3, 1, 3, th); r(x + 4, yT + 3, 1, 3, th);
+      r(x - 4, yT + 3, 8, 3, p.hair);
+    } else if (arah) {                                                // samping: belakang kepala tertutup
+      rm(-5, yT + 3, 1, 3, th);
+      rm(-4, yT + 3, 4, 3, p.hair);
+      rm(0, yT + 3, 2, 1, p.hair);                                    // poni menyapu ke dahi
+    } else {
+      r(x - 4, yT + 3, 3, 1, p.hair);                                 // poni samping
+      r(x + 3, yT + 3, 1, 1, p.hair);
+      r(x - 4, yT + 4, 1, 1, p.hair); r(x + 3, yT + 4, 1, 1, p.hair); // cambang
+    }
+  }
+
+  if (!jilbab) {                                                      // telinga
+    if (arah) rm(-1, yT + 4, 1, 2, sh(kulit, 0.78));
+    else {
+      r(x - 6, yT + 4, 1, 2, tk); r(x - 5, yT + 4, 1, 2, kulit);
+      r(x + 5, yT + 4, 1, 2, tk); r(x + 4, yT + 4, 1, 2, kulit);
+    }
+  }
+
+  if (!back) {
+    drawEyes(a, x, yT + 4, arah);
+    if (arah) { rm(4, yT + 5, 1, 1, kulit); rm(5, yT + 5, 1, 1, tk); }   // hidung
+    if (a.masker || MOD.masker) {                                      // masker kabut asap
+      if (arah) { rm(0, yT + 6, 5, 3, MASKER); rm(0, yT + 7, 5, 1, MASKER_LIPAT); }
+      else { r(x - 3, yT + 6, 6, 3, MASKER); r(x - 3, yT + 7, 6, 1, MASKER_LIPAT); }
+    } else {
+      if (a.mulut) { if (arah) rm(1, yT + 6, 2, 2, MULUT_NGUAP); else r(x - 1, yT + 6, 2, 2, MULUT_NGUAP); }   // menguap
+      else if (!p.kumis) { if (arah) rm(2, yT + 7, 1, 1, sh(kulit, 0.72)); else r(x - 1, yT + 7, 2, 1, sh(kulit, 0.72)); }
+      if (p.kumis) { if (arah) rm(1, yT + 6, 3, 1, KUMIS); else r(x - 2, yT + 6, 4, 1, KUMIS); }
+    }
+  }
+  if (a.pulpenDiTelinga) {                                            // bolpoin diselipkan di telinga
+    if (arah) rm(-1, yT + 3, 1, 2, PULPEN_TELINGA); else r(x + 5, yT + 3, 1, 2, PULPEN_TELINGA);
+  }
+}
+
+function drawEyes(a, x, ey, arah) {
   const blink = Math.sin(a.phase * 0.9 + a.slot) > 0.985;
-  if (blink) { r(x - 2, ey + 1, 5, 1, P.ink); return; }
-  let off = 0;
-  if (a.face === 'left') off = -1;
-  if (a.face === 'right') off = 1;
-  r(x - 2 + off, ey, 1, 2, P.ink);
-  r(x + 1 + off, ey, 1, 2, P.ink);
+  if (arah) {                                                         // samping: satu mata, dekat dahi
+    if (blink) r(cermin(arah, x, 1, 2), ey + 1, 2, 1, P.ink);
+    else r(cermin(arah, x, 2, 1), ey, 1, 2, P.ink);
+    return;
+  }
+  if (blink) { r(x - 3, ey + 1, 2, 1, P.ink); r(x + 1, ey + 1, 2, 1, P.ink); return; }
+  r(x - 2, ey, 1, 2, P.ink);
+  r(x + 1, ey, 1, 2, P.ink);
 }
 
 function drawPerson(a) {
@@ -2160,8 +2257,10 @@ function drawPerson(a) {
   const p = a.pal;
   const t = a.phase;
   const back = a.face === 'up';
+  const arah = arahDari(a.face);
+  const rm = (k, yy, w, h, c) => r(cermin(arah, x, k, w), yy, w, h, c);
 
-  let bob = 0, liftL = 0, liftR = 0, armL = 0, armR = 0;
+  let bob = 0, liftL = 0, liftR = 0, armL = 0, armR = 0, langkah = 0;
   if (a.state === 'walk') {
     const s = Math.sin(t * 10);
     bob = Math.abs(s) > 0.72 ? -1 : 0;
@@ -2169,6 +2268,7 @@ function drawPerson(a) {
     liftR = Math.max(0, Math.round(-s * 2));
     armL = -Math.round(s * 1.6);
     armR = Math.round(s * 1.6);
+    langkah = Math.round(s * 2);            // tampak samping: kaki depan maju-mundur
   } else if (a.state === 'work') {
     bob = Math.sin(t * 4) > 0.85 ? -1 : 0;
   } else {
@@ -2183,46 +2283,114 @@ function drawPerson(a) {
   ctx.globalAlpha = alphaDasar;
 
   const yb = y + bob;
+  const kulit = p.skin, tk = garisTepi(kulit);
+  const main = p.main, tm = garisTepi(main), mainG = sh(main, 0.85);
+  const celana = p.pants, celanaG = sh(celana, 0.8);
+  const sabuk = sh(celana, 0.7);
+  const alas = a.sandal ? SANDAL : SEPATU;   // pantofel — atau sandal jepit lewat jam setengah tiga
 
-  // kaki + sepatu pantofel — atau sandal jepit, kalau sudah lewat jam setengah tiga
-  const alas = a.sandal ? '#8a6844' : '#26221c';
-  box3(xKaki - 5, y - liftL, 3, 5, 2, p.pants);
-  box3(xKaki + 1, y - liftR, 3, 5, 2, p.pants);
-  r(xKaki - 5, y - 1 - liftL, 3, 1, alas);
-  r(xKaki + 1, y - 1 - liftR, 3, 1, alas);
-  if (a.sandal) { r(xKaki - 4, y - 2 - liftL, 1, 1, '#d9b96a'); r(xKaki + 2, y - 2 - liftR, 1, 1, '#d9b96a'); }
-
-  // badan seragam
-  box3(x - 5, yb - 5, 10, 8, 4, p.main);
-  r(x - 5, yb - 6, 10, 1, sh(p.pants, 0.8));               // ikat pinggang
-  r(x - 1, yb - 6, 2, 1, P.gold);
-  if (!back) {
-    r(x - 4, yb - 11, 3, 1, sh(p.main, 0.72));             // saku dada
-    r(x + 2, yb - 11, 3, 1, sh(p.main, 0.72));
-    r(x, yb - 12, 1, 6, sh(p.main, 0.78));                 // kancing
-    if (p.pattern) {
-      for (let i = 0; i < 8; i++) {                        // motif batik
-        r(x - 4 + ((i * 3) % 9), yb - 12 + ((i * 5) % 6), 1, 1, p.pattern);
-      }
-    }
+  // ---- kaki. Celananya naik sampai pinggang di balik sabuk supaya badan
+  // yang bob-nya naik satu piksel tidak membuka celah. Kaki yang terangkat
+  // memendek dari bawah: telapaknya yang naik, bukan seluruh kaki melayang.
+  const kaki = (px, sx, lift, w, gelap) => {
+    r(px, y - 8, 3, 7 - lift, gelap ? celanaG : celana);
+    if (!gelap) r(px + 2, y - 8, 1, 7 - lift, celanaG);
+    r(sx, y - 1 - lift, w, 2, alas);
+    if (a.sandal) r(px + 1, y - 2 - lift, 1, 1, TALI_SANDAL);
+  };
+  if (arah) {
+    // samping: kaki belakang teduh dan digambar dulu, sepatu memanjang ke
+    // arah hadap; waktu jalan keduanya melangkah maju-mundur, yang sedang di
+    // depan sekaligus terangkat.
+    const geser = arah < 0 ? 1 : 0;
+    const sB = cermin(arah, xKaki, -3 - langkah, 4), sD = cermin(arah, xKaki, langkah, 4);
+    kaki(sB + geser, sB, Math.max(0, -langkah), 4, true);
+    kaki(sD + geser, sD, Math.max(0, langkah), 4, false);
+  } else {
+    kaki(xKaki - 4, xKaki - 4, liftL, 3, false);
+    kaki(xKaki + 1, xKaki + 1, liftR, 3, false);
   }
-  if (!p.pattern) {                                        // lidah bahu PNS
-    r(x - 4, yb - 14, 2, 1, sh(p.main, 0.6));
-    r(x + 3, yb - 14, 2, 1, sh(p.main, 0.6));
-  }
 
-  // lengan (kolom gelap di pangkal biar tidak menyatu dengan sisi badan)
   // a.pose menang atas keduanya: itu jalur event, dan event tahu persis pose
   // apa yang sedang diperlukan — mengangkat, menunjuk, menguap, bertepuk.
   // Menunggu keputusan kamu menang atas semuanya: dua tangan mengangkat map.
   const pose = a.butuh ? { l: -6, r: -6 }
     : a.pose ? posEvent(a)
     : (a.state === 'work' ? workArms(a) : { l: armL, r: armR });
-  box3(x - 8, yb - 6 + pose.l, 3, 7, 2, p.main);
-  box3(x + 6, yb - 6 + pose.r, 3, 7, 2, p.main);
-  r(x + 6, yb - 13 + pose.r, 1, 7, sh(p.main, 0.82));
-  r(x - 8, yb - 8 + pose.l, 3, 2, p.skin);
-  r(x + 6, yb - 8 + pose.r, 3, 2, p.skin);
+
+  // ---- badan: bahu membulat, pinggang lurus ke sabuk berkepala emas
+  const badan = () => {
+    if (arah) {
+      r(x - 2, yb - 16, 4, 1, tm);
+      r(x - 3, yb - 15, 1, 1, tm); r(x + 2, yb - 15, 1, 1, tm);
+      r(x - 2, yb - 15, 4, 1, main);
+      r(x - 4, yb - 14, 1, 6, tm); r(x + 3, yb - 14, 1, 6, tm);
+      r(x - 3, yb - 14, 6, 6, main);
+      r(x + 2, yb - 14, 1, 6, mainG);
+      if (p.pattern) for (let i = 0; i < 5; i++) r(x - 3 + ((i * 3) % 6), yb - 14 + ((i * 5) % 6), 1, 1, p.pattern);
+      else r(x - 1, yb - 15, 2, 1, sh(main, 0.62));
+      r(x - 4, yb - 8, 8, 1, sabuk); rm(1, yb - 8, 1, 1, P.gold);
+      return;
+    }
+    r(x - 3, yb - 16, 6, 1, tm);
+    r(x - 4, yb - 15, 1, 1, tm); r(x + 3, yb - 15, 1, 1, tm);
+    r(x - 3, yb - 15, 6, 1, main);
+    r(x - 5, yb - 14, 1, 6, tm); r(x + 4, yb - 14, 1, 6, tm);
+    r(x - 4, yb - 14, 8, 6, main);
+    r(x + 3, yb - 14, 1, 6, mainG);
+    if (!back) {
+      r(x - 1, yb - 15, 2, 1, sh(main, 0.8));                          // kerah
+      for (let yy = yb - 13; yy <= yb - 9; yy += 2) r(x, yy, 1, 1, tm);  // kancing
+      r(x - 3, yb - 13, 2, 1, sh(main, 0.72));                         // saku dada
+      r(x + 1, yb - 13, 2, 1, sh(main, 0.72));
+    }
+    if (p.pattern) {                                                   // motif batik
+      for (let i = 0; i < 8; i++) r(x - 4 + ((i * 3) % 8), yb - 14 + ((i * 5) % 6), 1, 1, p.pattern);
+    } else {                                                           // lidah bahu PNS
+      r(x - 4, yb - 15, 2, 1, sh(main, 0.62)); r(x + 2, yb - 15, 2, 1, sh(main, 0.62));
+    }
+    r(x - 5, yb - 8, 10, 1, sabuk); r(x - 1, yb - 8, 2, 1, P.gold);
+  };
+
+  // ---- lengan. Depan/belakang: dua lengan lepas di sisi badan, garis tepi
+  // di sisi luarnya saja. Samping: yang lebih terangkat jadi lengan dekat di
+  // depan badan (isyarat event harus tetap terbaca dari samping), satunya di
+  // balik badan dan cuma nongol kalau ikut terangkat. Angka pose = offset y,
+  // makin negatif makin terangkat; dari samping yang terangkat juga terjulur.
+  const lengan = (ax, luar, lift) => {
+    const yA = yb - 15 + lift;
+    r(ax, yA - 1, 2, 1, tm);
+    r(luar, yA, 1, 8, tm);
+    r(ax, yA, 2, 6, main);
+    r(ax + 1, yA, 1, 6, mainG);
+    r(ax, yA + 6, 2, 2, kulit);
+    r(ax, yA + 8, 2, 1, tk);
+  };
+  const lenganSamping = (k, lift, warna) => {
+    const yA = yb - 15 + lift;
+    rm(k, yA - 1, 2, 1, tm);
+    rm(k - 1, yA, 1, 8, tm); rm(k + 2, yA, 1, 8, tm);
+    rm(k, yA, 2, 6, warna);
+    rm(k, yA + 6, 2, 2, kulit);
+    rm(k, yA + 8, 2, 1, tk);
+  };
+  if (arah) {
+    const dekat = Math.min(pose.l, pose.r), jauh = Math.max(pose.l, pose.r);
+    const ayun = a.state === 'walk' ? -langkah : 0;
+    const maju = (lift) => (lift < -2 ? Math.round(-lift / 3) : 0);
+    if (jauh < -1) lenganSamping(-1 - ayun + maju(jauh), jauh, mainG);
+    badan();
+    lenganSamping(-1 + ayun + maju(dekat), dekat, main);
+  } else {
+    badan();
+    lengan(x - 7, x - 8, pose.l);
+    lengan(x + 5, x + 7, pose.r);
+  }
+
+  if (p.head === 'jilbab') {                 // kerudung menjuntai menutup bahu, jarum emas di depan
+    if (arah) gumpal(x - 4, yb - 16, 8, 4, p.jilbab); else gumpal(x - 5, yb - 16, 10, 4, p.jilbab);
+    if (!back) rm(arah ? 1 : 0, yb - 14, 1, 1, P.gold);
+  }
 
   // Map disposisi digambar SEBELUM kepala supaya kepalanya menang: yang jadi
   // tanda justru wajah yang menghadap penonton, jadi tidak boleh tertutup map.
@@ -2230,15 +2398,19 @@ function drawPerson(a) {
     // Lebarnya berhenti di pangkal telapak, bukan menutupinya: kalau tangannya
     // ikut tertutup, mapnya terbaca menempel di dada, bukan diangkat.
     r(x - 5, yb - 16, 5, 1, '#e8a0a8');                     // lidah map
-    r(x - 5, yb - 15, 11, 8, '#e8a0a8');                    // map disposisi
-    r(x - 5, yb - 8, 11, 1, '#c07e86');                     // sisi bawah: tebalnya terbaca
-    r(x - 3, yb - 13, 7, 1, P.paper);                       // lembar di dalamnya
-    r(x - 3, yb - 11, 5, 1, P.paper);
-    r(x + 2, yb - 11, 3, 3, '#c03030');                     // cap merah, belum diteken
+    r(x - 5, yb - 15, 10, 8, '#e8a0a8');                    // map disposisi
+    r(x - 5, yb - 8, 10, 1, '#c07e86');                     // sisi bawah: tebalnya terbaca
+    r(x - 3, yb - 13, 6, 1, P.paper);                       // lembar di dalamnya
+    r(x - 3, yb - 11, 4, 1, P.paper);
+    r(x + 1, yb - 11, 3, 3, '#c03030');                     // cap merah, belum diteken
   }
 
   // kepala peserta yang ketiduran turun beberapa piksel, lalu tersentak naik
-  drawHead(a, x, yb - 13 + (a.ngantuk || 0));
+  const yDagu = yb - 17 + Math.round(a.ngantuk || 0);
+  drawHead(a, x, yDagu);
+  // leher memutus garis dagu di tengah: kepala terbaca menyambung ke badan,
+  // bukan menempel di atasnya. Yang tertunduk dagunya sudah tenggelam di bahu.
+  if (p.head !== 'jilbab' && yDagu === yb - 17) r(x - 1, yDagu, 2, 1, sh(kulit, 0.75));
   // perkakas mejanya disembunyikan selagi menunggu: tangannya sedang penuh
   if (a.state === 'work' && !a.butuh) drawTool(a, x, yb);
   if (a.bawa) drawBawaan(a, x, yb);

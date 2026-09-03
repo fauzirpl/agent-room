@@ -4,7 +4,7 @@
 > Versi ringkas + cara jalanin dalam 2 menit ada di [README.md](README.md).
 
 Visualisasi langsung sesi Claude Code: kantor pemerintahan Indonesia dalam
-pixel-art, satu pegawai voxel 3D (gaya Crossy Road) per sesi, yang jalan ke
+pixel-art, satu pegawai (sprite kecil bergaris tepi) per sesi, yang jalan ke
 meja berbeda sesuai tool yang lagi dipakai agent-nya. Lengkap dengan Garuda,
 bendera merah putih, dispenser galon, dan AC yang netes ke ember.
 
@@ -655,11 +655,26 @@ perubahan origin main", `git commit` jadi "mencatat perubahan", `git status` jad
 "memeriksa perubahan". Flag global dilewati, jadi `git -C proyek log --oneline`
 tetap terbaca "membaca riwayat".
 
-Pegawainya voxel 3D, seragamnya mengikuti jabatan: khaki PNS (plus peci dan
-kumis), batik sogan, Korpri, wearpack teknisi, sampai yang berjilbab. Beberapa
-sesi Claude Code sekaligus
+Pegawainya sprite pixel-art, seragamnya mengikuti jabatan: khaki PNS (plus peci
+dan kumis), batik sogan, Korpri, wearpack teknisi, sampai yang berjilbab.
+Beberapa sesi Claude Code sekaligus
 = beberapa pegawai; dengan hook global, panel kanan juga menampilkan nama folder
 project tiap sesi. Kalau dua pegawai ke meja yang sama, mereka berjajar otomatis.
+
+Sosoknya dulu balok voxel bertumpuk (gaya Crossy Road): kepala kubus, badan
+kubus, kaki kubus. Diganti **sprite pixel-art bergaris tepi** — kepala bulat,
+leher, bahu melandai, lengan lepas dari badan, dua kaki bersepatu — karena balok
+bikin semua pegawai terbaca kotak, dan seragam putih hari Senin/Selasa/Kamis
+nyaris lenyap di atas ubin terang. Garis tepinya warna dasar tiap bagian yang
+digelapkan, bukan hitam: cukup tegas memisahkan sosok dari lantai tanpa jadi
+stiker. Tampak samping digambar sungguhan (satu mata, hidung, lengan dekat di
+depan badan, kaki melangkah maju-mundur), bukan wajah depan yang matanya digeser
+sepiksel; lengan yang lebih terangkat selalu jadi lengan dekat supaya isyarat
+event tetap terbaca dari samping. Tingginya dijaga 28 px supaya balon, kotak
+klik, dan lencana galat yang mengukur dari garis kaki tidak perlu disentuh.
+Orang luar (tamu, kurir, ojol) memakai penggambar yang sama lewat
+`gambarOrangLuar`, jadi tidak ada tamu bergaya balok di antara pegawai bergaya
+sprite.
 
 ## Suasana ikut jam
 

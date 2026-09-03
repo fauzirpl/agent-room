@@ -82,22 +82,17 @@ function menoleh(orang, tx, ty, lama) {
 
 /* Orang yang bukan pegawai: tamu, ojol, pedagang, kurir. Sengaja BUKAN turunan
    Agent — mereka tidak punya sesi, tidak boleh muncul di panel kru, dan tidak
-   boleh ikut berebut slot stasiun. Yang mereka butuhkan cuma digambar. */
+   boleh ikut berebut slot stasiun. Yang mereka butuhkan cuma digambar, jadi
+   dititipkan ke drawPerson lewat objek seadanya: pal buatan sendiri (kepala =
+   warna rambut, atau helm buat ojol), menghadap penonton, tanpa sesi. Dengan
+   begitu bentuknya seragam dengan pegawai — satu gaya sosok di ruangan ini,
+   bukan tamu bergaya balok di antara pegawai bergaya sprite. */
 function gambarOrangLuar(fx, fy, baju, motif, bawa, kepala) {
-  const x = Math.round(fx), y = Math.round(fy);
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = '#20301f';
-  ctx.beginPath(); ctx.ellipse(x + 1, y + 1, 8, 2.4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = 1;
-  box3(x - 5, y, 3, 5, 2, '#3a3f45');
-  box3(x + 1, y, 3, 5, 2, '#3a3f45');
-  box3(x - 5, y - 5, 10, 8, 4, baju);
-  if (motif) for (let i = 0; i < 6; i++) r(x - 4 + ((i * 3) % 9), y - 12 + ((i * 5) % 6), 1, 1, motif);
-  box3(x - 4, y - 13, 8, 6, 4, '#e0ae80');
-  box3(x - 4, y - 19, 8, 2, 4, kepala || '#2b2118');
-  r(x - 2, y - 11, 1, 2, P.ink);
-  r(x + 1, y - 11, 1, 2, P.ink);
-  if (bawa) drawBawaan({ bawa, face: 'right' }, x, y);
+  drawPerson({
+    x: fx, y: fy, face: 'down', state: 'idle', phase: now / 1000, slot: 0,
+    pal: { main: baju, pants: '#3a3f45', skin: '#e0ae80', hair: kepala || '#2b2118', head: 'hair', pattern: motif || null },
+    bawa,
+  });
 }
 
 // Taksiran kalender Hijriah (aritmetik tabular, akurasi ±1 hari) — cukup
