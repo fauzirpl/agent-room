@@ -6913,7 +6913,10 @@ daftarEvent(
   },
   tick(E) {
     const U = E.data.urutan;
-    if (!U || U.length < 2) return;
+    // Rantai serah-amplop sudah tuntas (E.data.i === U.length) tapi eventnya
+    // sendiri masih hidup sampai durasinya habis — tanpa guard ini,
+    // U[E.data.i] keluar indeks dan .diam di bawah meledak tiap frame sisanya.
+    if (!U || U.length < 2 || E.data.selesai) return;
     const bawa = U[E.data.i];
     if (bawa.diam && !E.data.tunggu) {
       E.data.tunggu = true;
