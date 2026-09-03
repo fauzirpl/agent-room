@@ -21,6 +21,7 @@
     "public/",
     "README.md",
     "DESIGN.md",
+    "docs/",
     "EVENT-ACAK.md",
     "event-acak.json"
   ],

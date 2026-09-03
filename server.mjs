@@ -2054,7 +2054,33 @@ async function cuacaSekarang() {
   }
 }
 
+/* --- event acak: dipecah per tema di public/event/, disambung di sini ----
+   Semua bagian tetap <script> polos yang BERBAGI satu scope global (helper di
+   00-dasar.js dipakai bagian berikutnya), jadi yang dikirim ke peramban tetap
+   SATU berkas: sambungan berkas-berkas di manifest.json, urutan wajib. Harness
+   uji-event.mjs menyambung dengan cara yang persis sama (bacaEventAcak).      */
+const EVENT_DIR = path.join(PUBLIC_DIR, 'event');
+let eventAcakCache = null;                  // { kunci (mtime tiap berkas), teks }
+function bacaEventAcak() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(EVENT_DIR, 'manifest.json'), 'utf8'));
+  const berkas = manifest.berkas.map((n) => path.join(EVENT_DIR, path.basename(n)));
+  const kunci = berkas.map((f) => f + ':' + fs.statSync(f).mtimeMs).join('|');
+  if (eventAcakCache && eventAcakCache.kunci === kunci) return eventAcakCache.teks;
+  const teks = berkas.map((f) => fs.readFileSync(f, 'utf8')).join('');
+  eventAcakCache = { kunci, teks };
+  return teks;
+}
+
 function serveStatic(req, res, urlPath) {
+  if (urlPath === '/event-acak.js') {
+    try {
+      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' });
+      res.end(bacaEventAcak());
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'text/plain' }).end('event acak gagal disambung: ' + err.message);
+    }
+    return;
+  }
   const rel = urlPath === '/' ? 'index.html' : decodeURIComponent(urlPath).replace(/^\/+/, '');
   const file = path.join(PUBLIC_DIR, rel);
   if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403).end('forbidden'); return; }

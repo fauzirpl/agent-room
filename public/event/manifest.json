@@ -1,0 +1,26 @@
+{
+  "keterangan": "Urutan berkas event acak. Server menyambungnya jadi satu /event-acak.js (scope global bersama, urutan wajib). Berkas baru harus didaftarkan di sini; ubah urutan hanya kalau helper yang dipakai berkas berikutnya ikut dipindah.",
+  "berkas": [
+    "00-dasar.js",
+    "01-infrastruktur-listrik-jaringan-ac-perabo.js",
+    "02-insiden-yang-rusak-tumpah-jatuh-dan-mace.js",
+    "03-birokrasi-ritual-dinas-disposisi-paraf-s.js",
+    "04-kultur-kantor-yang-bikin-ruangan-ini-ter.js",
+    "05-hewan-tamu-yang-masuk-tanpa-diundang.js",
+    "06-meta-claude-code-kenyataan-sesi-diterjem.js",
+    "07-perayaan.js",
+    "08-easter-egg-langka-dicari-menyenangkan-wa.js",
+    "09-suasana-efek-yang-bagus-karena-caranya-d.js",
+    "10-gelombang-2-infrastruktur-23-event.js",
+    "11-gelombang-2-insiden-17-event.js",
+    "12-gelombang-2-birokrasi-bagian-a-19-dari-3.js",
+    "13-gelombang-2-birokrasi-bagian-b-18-sisany.js",
+    "14-hewan-tamu-makhluk-kecil-yang-numpang-le.js",
+    "15-meta-claude-kelakar-tentang-sesi-claude-.js",
+    "16-perayaan-lanjutan-gelombang-2.js",
+    "17-easter-egg-lanjutan-gelombang-2.js",
+    "18-suasana-lanjutan-gelombang-2.js",
+    "19-cuaca-waktu-lanjutan-gelombang-2.js",
+    "20-kultur-kantor-lanjutan-gelombang-2.js"
+  ]
+}

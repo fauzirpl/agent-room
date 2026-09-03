@@ -34,7 +34,7 @@ jobs:
 
       # Papan skor, bukan gerbang: selalu exit 0. Angka "berapa event sudah jadi
       # kode" dibaca dari sini, bukan ditulis tangan di README/DESIGN.
-      - name: Papan skor katalog event (event-acak.json vs event-acak.js)
+      - name: Papan skor katalog event (event-acak.json vs public/event/*.js)
         run: node uji-katalog.mjs
 
       - name: Smoke server (nyalakan, cek /health, matikan)

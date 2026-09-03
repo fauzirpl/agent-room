@@ -27,7 +27,7 @@ node uji-katalog.mjs            # papan skor katalog (event-acak.json vs kode); 
 node --check server.mjs && node --check dinas.mjs
 ```
 
-Harness `uji-event.mjs` memuat `public/room.js` + `public/event-acak.js` apa
+Harness `uji-event.mjs` memuat `public/room.js` + sambungan `public/event/*.js` (urutan dari `manifest.json`) apa
 adanya ke sandbox `node:vm` dan memanggil `syarat()/mulai()/tick()/selesai()`
 tiap event langsung, tanpa peramban. Hook `gambar*` ikut dipanggil terhadap
 canvas 2D palsu yang **melempar** kalau ada argumen angka `NaN`/`undefined`
@@ -52,7 +52,7 @@ node uji-zorder.mjs --perbarui
 ```
 
 `uji-katalog.mjs` cuma papan skor: mencetak berapa id `event-acak.json` yang
-sudah terdaftar di `event-acak.js`, yang belum (per kategori), dan id yang
+sudah terdaftar di `public/event/*.js`, yang belum (per kategori), dan id yang
 terdaftar tapi tidak ada di katalog. Angka "berapa event sudah jadi kode" di
 README/DESIGN diambil dari sini. CI (`.github/workflows/uji.yml`) menjalankan
 ketiganya plus smoke test `/health` di tiap push.
@@ -74,7 +74,7 @@ harus bisa dimatikan (`?event=0`) atau dipaksa (`?event=<id>`).
 `mulai()` yang melempar membatalkan eventnya — jadi jangan biarkan `tick()`
 bergantung pada state yang mungkin belum ada.
 
-Event didaftarkan ke `daftarEvent(...)` di `public/event-acak.js`; `id` harus
+Event didaftarkan ke `daftarEvent(...)` di salah satu berkas `public/event/NN-*.js` (dipecah per tema; berkas baru wajib didaftarkan di `public/event/manifest.json` sesuai urutan, karena semuanya berbagi satu scope global); `id` harus
 unik (yang kembar dilewati dengan peringatan). Bentuk minimalnya:
 
 ```js

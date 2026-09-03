@@ -23,7 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { muatKonteks, EVENT_ACAK_JS, merah, hijau, kuning, abu, tebal } from './uji-event.mjs';
+import { muatKonteks, bacaEventAcak, merah, hijau, kuning, abu, tebal } from './uji-event.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const KATALOG = path.join(__dirname, 'event-acak.json');
@@ -38,7 +38,7 @@ export function audit() {
   const setTerdaftar = new Set(terdaftar);
 
   // silang: regex di sumber vs registri sungguhan
-  const src = fs.readFileSync(EVENT_ACAK_JS, 'utf8');
+  const src = bacaEventAcak();
   const regexId = [...src.matchAll(/^\s{2}id: '([^']+)'/gm)].map((m) => m[1]);
   const kembar = regexId.filter((id, i) => regexId.indexOf(id) !== i);
   const regexTanpaRegistri = regexId.filter((id) => !setTerdaftar.has(id));
@@ -73,7 +73,7 @@ export function audit() {
 
 function cetak(h) {
   const persen = h.katalog ? Math.round((h.terimplementasi / h.katalog) * 100) : 0;
-  console.log(tebal('Papan skor katalog event acak') + abu('  (event-acak.json vs daftarEvent di public/event-acak.js)'));
+  console.log(tebal('Papan skor katalog event acak') + abu('  (event-acak.json vs daftarEvent di public/event/*.js)'));
   console.log();
   console.log(`  katalog rancangan   : ${tebal(h.katalog)}`);
   console.log(`  terdaftar di kode   : ${tebal(h.terdaftar)}` + abu(`  (regex id: ${h.silang.regex})`));

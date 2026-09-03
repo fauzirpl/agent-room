@@ -362,13 +362,19 @@ function buatSandbox() {
 
 /* ------------------------------------------ muat room.js + event-acak.js */
 export const ROOM_JS = path.join(__dirname, 'public', 'room.js');
-export const EVENT_ACAK_JS = path.join(__dirname, 'public', 'event-acak.js');
+export const EVENT_ACAK_DIR = path.join(__dirname, 'public', 'event');
+export const EVENT_ACAK_JS = EVENT_ACAK_DIR;   // nama lama, sekarang menunjuk foldernya
+/** Menyambung bagian-bagian event acak persis seperti server (manifest.json, urutan wajib). */
+export function bacaEventAcak() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(EVENT_ACAK_DIR, 'manifest.json'), 'utf8'));
+  return manifest.berkas.map((n) => fs.readFileSync(path.join(EVENT_ACAK_DIR, n), 'utf8')).join('');
+}
 
 export function muatKonteks() {
   const sandbox = buatSandbox();
   const ctx = vm.createContext(sandbox);
   const roomSrc = fs.readFileSync(ROOM_JS, 'utf8');
-  const eventSrc = fs.readFileSync(EVENT_ACAK_JS, 'utf8');
+  const eventSrc = bacaEventAcak();
 
   // Tiga skrip berurutan di CONTEXT YANG SAMA, bukan vm.SourceTextModule —
   // room.js & event-acak.js dimuat public/index.html sebagai <script> polos
@@ -376,7 +382,7 @@ export function muatKonteks() {
   // sungguhan. event-acak.js sendiri memanggil daftarEvent(...) di
   // top-level-nya, jadi urutan (room.js dulu, baru event-acak.js) wajib.
   new vm.Script(roomSrc, { filename: 'public/room.js' }).runInContext(ctx);
-  new vm.Script(eventSrc, { filename: 'public/event-acak.js' }).runInContext(ctx);
+  new vm.Script(eventSrc, { filename: 'public/event/(sambungan manifest.json)' }).runInContext(ctx);
 
   // Fungsi (`function nama(){}`) otomatis jadi properti context, jadi
   // daftarEvent/nyalakanEvent/matikanEvent/pinjamAktor/bisaDipinjam/pada/
