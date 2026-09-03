@@ -104,23 +104,32 @@ terminal atau aplikasi Claude, **bukan di halaman ini.** Halaman ini menonton,
 tidak menjawab; menyembunyikan itu cuma bikin orang menunggu tombol yang memang
 tidak akan pernah ada.
 
-Modalnya sendiri berlagak **email yang meneruskan nota dinas**: kepala modal
-gaya kepala email (avatar bulat + inisial, nama & jabatan pengirim, lencana
-jenis, jam kirim), badannya panel gelap yang menaruh satu kertas krem di
-tengah — kop **PEMERINTAH KANTOR DINAS**, judul **NOTA DINAS**, lalu tabel
-Nomor/Sifat/Perihal/Tanggal/Kepada/Dari sebelum isi pesannya sendiri. Nomor
-suratnya (`nomorNota()`) format asli `urut/ND-inisial-jabatan/bulan-romawi/
-tahun`, urutnya jalan terus (`kabarSeq`) walau kabar lama sudah dibuang dari
-larik `kabar` (lihat `KABAR_MAX`). Sifat (BIASA/SEGERA/PENTING) dan stempel
-sudut kertas (`SELESAI`/`DICATAT`/`SEGERA`/`TERHENTI`, `mix-blend-mode:
-multiply` biar nempel seperti tinta) dua-duanya dipakaikan ulang dari
-taksonomi `cls` yang sama dipakai lencana jenis — satu sumber warna, tiga
-tempat pakai. Metadata teknis (nama tool, id sesi) sengaja ditaruh **di luar**
-kertas, di bawahnya — seperti header mentah yang klien email tampilkan
-terpisah dari isi pesan yang diformat.
+Modalnya sendiri berlagak **grup WhatsApp kantor**: kepala hijau tua WA dengan
+avatar grup 👥, nama grup **Grup Kantor Agent (RESMI) 🙏**, dan subjudul
+daftar anggota (siapa saja yang pernah menulis di kotak ini, ditutup "Anda").
+Badannya wallpaper krem berpola titik, dan **seluruh kotak digambar sebagai
+satu utas** (`kabarUtas()`), bukan satu kabar per halaman: tiap kabar satu
+balon masuk berekor dengan avatar kecil di kiri, nama pengirim berwarna
+seragam jabatannya (`warnaNama()` menggelapkannya dulu supaya khaki terang
+tetap kebaca di atas putih), `~ jabatan` kecil di sampingnya, baris tebal
+pembuka ala pegawai ("✅ Izin melaporkan hasil pekerjaan", "🙏 Mohon arahan
+Bapak/Ibu", "⚠️ Mohon maaf, ada kendala" — `emoji` + `perihal` di
+`KABAR_JENIS`), isi pesan, lalu jam.menit kecil di sudut kanan bawah bersama
+metadata teknis (tool, id sesi). `AskUserQuestion` berpilihan digambar sebagai
+**jajak pendapat** WA (`kabarPolling()`): judul, "Pilih satu", opsi dengan
+lingkaran radio dan batang suara kosong. Pil di tengah utas ada tiga: tanggal
+(`HARI INI` / `KEMARIN` / tanggal, `labelHari()`), **N PESAN BELUM DIBACA**
+(dibekukan saat modal dibuka, `kabarBatasBaru`), dan pesan sistem 🔒 kuning
+muda di bawah tiap kabar yang menahan sesi — pengganti pemberitahuan enkripsi,
+isinya pengingat bahwa jawabannya di terminal, bukan di sini. Bilah bawah ala
+kotak ketik: pil putih berisi hitungan kabar + pengingat yang sama, tombol
+bulat hijau `‹ ›`. Warna hijau/abu di modal ini sengaja warna WA asli, bukan
+palet kantor — yang dikenali orang justru itu.
 
-Kotak kabar menyimpan 60 kabar terakhir, bisa dibolak-balik dengan `←` `→`,
-ditutup dengan `Esc`.
+Kotak kabar menyimpan 60 kabar terakhir; `←` `→` melompat antar balon (yang
+dituju disorot tepi hijau), `Esc` menutup. Kabar baru yang masuk saat modal
+terbuka menggambar ulang utasnya tanpa menggeser posisi gulir, kecuali kalau
+yang dibaca memang kabar terakhir.
 
 ### Meja disposisi & pencarian
 
@@ -467,121 +476,6 @@ Orang luar (tamu, kurir, ojol) memakai penggambar yang sama lewat
 `gambarOrangLuar`, jadi tidak ada tamu bergaya balok di antara pegawai bergaya
 sprite.
 
-### Kamera
-
-Kanvasnya tetap 480×356 dan `fit()` tetap cuma memilih skala integer ke CSS;
-kameranya (`KAMERA` di room.js) hidup di koordinat dunia dan dipasang di
-`frame()` lewat `setTransform` sebelum segala gambar, jadi lantai, props,
-pegawai, dan partikel tidak tahu ada kamera. Zoom bidikannya cuma 1 atau 2 —
-bulat — karena satu piksel dunia harus tetap jadi kotak piksel layar yang
-utuh; zoom 1,4 bikin garis tepi sprite belang walau smoothing sudah mati.
-Nilai pecahan cuma lewat sebentar selagi easing (±600 ms), geserannya pun
-dibulatkan ke piksel kanvas.
-
-Semua yang menempel ke kanvas dari DOM — balon ucap, balon pikiran, lencana
-galat, kartu pegawai — dan hit-test klik lewat SATU pasang fungsi,
-`keLayar()`/`dariLayar()`. Dulu tiap-tiap menghitung `offX + x * scale`
-sendiri; begitu kamera bergeser, satu saja yang lupa dan kartunya meleset
-dari orangnya. Tiga mode di ⚙️ (mati / ikut pegawai / sinematik; `?kamera=`
-di URL mengalahkannya). Bawaannya **mati**: halaman ini alat pantau dulu,
-baru tontonan — kamera yang bergerak sendiri mengejutkan orang yang cuma mau
-melirik siapa yang sedang macet. *Ikut* membidik pegawai yang baru tool call
-selama 4 detik, tapi mundur ke tampak penuh begitu dua orang sama-sama
-aktif (jangan bolak-balik). *Sinematik* berkeliling stasiun sesudah 60 detik
-sepi, dan dimatikan kalau `prefers-reduced-motion` menyala.
-
-### Debu di berkas cahaya & rim light
-
-Dua sentuhan kecil yang membuat cahayanya terasa *mengisi* ruangan, bukan
-sekadar ditempel di atasnya. **Debu** (`debu[]`, `updateDebu`/`drawDebu`):
-paling banyak 40 butir 1 px, alpha rendah, melayang pelan sekali — dan hanya
-lahir *di dalam* berkas: kerucut neon waktu malam, berkas jendela di lantai
-waktu siang. Yang hanyut keluar dari berkasnya dibunuh, bukan dibiarkan
-melayang di gelap; debu memang ada di mana-mana, tapi cuma kelihatan waktu
-ditembus cahaya. Digambar sesudah selubung suasana supaya tidak ikut
-digelapkan.
-
-**Rim light** (`sumberCahaya`/`rimPegawai`, dipakai `drawPerson`): satu piksel
-tepi badan di sisi yang menghadap cahaya, diwarnai lewat jalur tepi sprite
-yang sudah ada (`lerpHex` dari warna baju ke warna cahaya), bukan lapisan alpha
-di atasnya — jadi tetap satu piksel tegas seperti tepi lainnya. Sumbernya
-sengaja **satu** yang dominan per frame: neon terdekat waktu malam, jendela
-waktu siang, senja memilih yang lebih kuat. Dua sumber berarti dua sisi
-terang, dan sprite selebar 10 px berhenti terbaca sebagai badan bertepi.
-Yang tepat di bawah lampu tidak dapat rim (tidak ada "sisi"), yang memegang
-map disposisi dilewati karena mapnya menutupi separuh badan. Depth-sort tidak
-disentuh sama sekali. Keduanya mati di mode ringan.
-
-### Mode ringan
-
-Halaman ini biasanya dibiarkan hidup berjam-jam di layar kedua atau laptop,
-dan 60 fps dengan tujuh gradasi radial per frame itu boros buat ruangan yang
-isinya berubah pelan. Mode ringan (centang di ⚙️, diingat browser) menyala
-sendiri kalau `?ringan=1` di URL, `prefers-reduced-motion` aktif, atau
-Battery API melaporkan baterai <30 % tanpa dicas (opsional — kalau API-nya
-tidak ada, ya tidak ada). Yang berubah:
-
-- **30 fps**: `frame()` melewati frame yang datang terlalu cepat *tanpa*
-  menyentuh `last`, jadi `dt` frame berikutnya menampung dua interval —
-  simulasinya tetap tepat waktu, cuma digambar separuh sesering. Saat tab
-  tersembunyi rAF dijeda peramban; mode ringan menjalankan simulasinya 15 fps
-  lewat `setTimeout` supaya pegawai tidak melompat waktu tab dibuka lagi.
-- **pendar neon dari cache** (`neonLapis`): geometrinya tetap dan semua
-  alphanya linear terhadap intensitas, jadi tiap neon cukup digambar sekali ke
-  kanvas offscreen pada intensitas 1, lalu tiap frame cuma `drawImage` dengan
-  `globalAlpha` = intensitas saat itu. Kedipnya tetap hidup — yang berkedip
-  alphanya — tapi `createRadialGradient` per frame turun dari 8 ke 0.
-  Vignette (`vignetteLapis`) sama, dikunci pada alpha `MOD.vignette`.
-- jatah partikel separuh (120; yang tertua digusur, bukan yang baru ditolak,
-  karena pemanggil boleh memegang partikel yang dikembalikan `spawn`), debu
-  mati, rim light mati. Kedip neon **tidak** dimatikan: itu identitas
-  ruangan, bukan hiasan. `prefers-reduced-motion` juga membekukan kipas
-  plafon.
-
-Fps sebenarnya (frame yang benar-benar digambar) tampil kecil di panel ⚙️
-selagi panelnya terbuka, berikut sebab otomatisnya kalau ada.
-
-### Mode kadis: `?kadis=1`
-
-Kepala dinas yang melirik dari HP tidak butuh diorama; dia butuh daftar. Dengan
-`?kadis=1` kanvas dan bilah panggung disembunyikan (`body.mode-kadis` di
-style.css), panel jadi **satu kolom penuh layar** berhuruf lebih besar dengan
-tombol setinggi jempol, dan di atas daftar kru ada ringkasan
-(`kadisGambar()` di room.js) yang menjawab pertanyaan kadis berurutan: siapa
-**menunggu paraf/izin**, siapa **berhenti karena galat**, siapa **sedang
-bekerja**, siapa di meja tanpa tool call, berapa yang **antre** di loket
-disposisi, dan **token hari ini** dari `/token-riwayat` (angka token saja,
-tanpa dolar — biaya di halaman ini toh "data sementara"). Tombol merah
-**muat ulang** di bawahnya, karena di HP tidak ada F5. Ringkasan digambar
-ulang tiap `renderCrew()` dan tiap 4 detik (kegiatan berganti tanpa
-`renderCrew()`), token disegarkan tiap menit. Simulasinya tetap jalan di
-balik layar supaya keadaan pegawai benar; yang tidak digambar cuma kanvasnya.
-
-Satu hal yang tidak boleh disalahpahami: server **tetap bind `127.0.0.1`**.
-Mode ini hanya berguna lewat tunnel (ssh `-L`, Tailscale, atau sejenisnya)
-dari HP ke mesin yang menjalankan server — dan itu memang jalannya. Jangan
-pernah melonggarkan bind ke `0.0.0.0` demi mode ini: yang lewat `/stream`
-adalah isi kerja agen, dan halaman tanpa autentikasi di jaringan Wi-Fi kantor
-bukan "tampilan HP", tapi kebocoran.
-
-### Overlay layar kedua / OBS: `?overlay=1`
-
-Buat ditumpuk di atas siaran atau layar kedua: `?overlay=1` menyembunyikan
-panel kanan, bilah panggung, pita merah-putih, dan semua dialog (kabar yang
-menyela di atas siaran bukan fitur), lalu membuat latar `<html>` dan `<body>`
-**tembus** (`background: transparent`) — OBS browser source menampilkan apa
-yang ada di bawahnya. `?overlay=chroma` memakai hijau `#00ff00` sebagai gantinya
-buat chroma key di perangkat yang tidak mendukung alpha. Kelasnya
-(`mode-overlay` + `mode-tembus`/`mode-chroma`) dipasang di awal room.js,
-sebelum `fit()` pertama.
-
-Di mode ini `fit()` berubah dua hal: tepi 36 px yang biasa disisakan buat
-bayangan kanvas ditiadakan (stageInner-nya full-bleed, padding 0), dan skala
-**dikunci ke bilangan bulat ≥ 1** — OBS menyusun ulang tiap frame, skala pecahan
-bikin garis tepi sprite belang di layar penonton. Balon ucap dan balon pikiran
-tetap tampil (mereka anak stageInner), jadi padukan dengan `?panggung=1` kalau
-siarannya ditonton orang lain: isi balon dan kabar disamarkan, animasinya tetap.
-
 ## Buku agenda
 
 Ring 400 event di memori itu daya ingat ikan mas: restart server, ruangan hari
@@ -614,4 +508,47 @@ integrasi gratis: satu hari kerja sungguhan, dengan urutan dan jeda asli,
 dilempar ke halaman tanpa perlu menjalankan Claude Code — bug perpindahan
 pegawai yang cuma muncul pada urutan event tertentu jadi bisa direproduksi
 berkali-kali dari berkas yang sama.
+
+## Arsip kliping mingguan
+
+Selain riwayat token di atas, server juga merangkum sendiri tiap **minggu**
+kalender (Senin–Minggu, waktu lokal server) jadi satu "sheet" yang dijilid ke
+map arsip di atas lemari — makin lama dipakai, tumpukannya makin tebal
+(`RUANGAN.arsipKlipingLembar`, digambar di `drawArsip()`). Isi satu sheet:
+berapa sesi aktif minggu itu, tool apa paling sering dipakai, proyek apa
+paling aktif, dan event ambient apa yang paling jarang muncul. Dibuka lewat
+tombol 🗃️ di bilah bawah.
+
+Dua berkas, dua peran berbeda — bukan satu dipaksa dua fungsi:
+
+- **`kliping-mingguan.jsonl`** — append-only, satu baris = satu minggu yang
+  **sudah final**. Beda dari `token-riwayat.jsonl`: baris di sini agregat
+  akhir minggu itu, bukan delta yang masih perlu dijumlah ulang — granularitas
+  per-tool-call sengaja tidak disimpan, terlalu berat untuk fitur dekoratif.
+- **`kliping-berjalan.json`** — checkpoint minggu yang **masih berjalan**,
+  ditimpa di tempat (bukan append) tiap ada perubahan (didebounce ~20 detik),
+  supaya hitungan minggu ini tidak hilang tiap restart server. Kalau server
+  sempat mati tepat pas pergantian minggu, checkpoint yang sudah basi itu
+  langsung difinalkan saat startup berikutnya, bukan dibiarkan hilang begitu
+  saja.
+
+Tool teratas & proyek teratas ditumpangkan ke jalur `/event` yang sudah ada
+(dihitung dari `ev.tool`/`ev.cwd` yang `normalize()` sudah punya, murni
+dibaca — tidak menulis balik apa pun ke `ev`/`ring`/`tokenSesi`). Event
+ambient terjarang lewat jalur **terpisah total**: `POST /ambien`, dipanggil
+dari `nyalakanEvent()` cuma untuk event `kelas: 'panggung'` (saling eksklusif,
+jadi volumenya kecil), dan **tidak pernah** memanggil `publish()` — tidak
+masuk `ring`, tidak lewat SSE, tidak menyentuh statistik sesi sama sekali.
+Itu yang menjaga aturan "event ambient tidak menaikkan statistik" (lihat
+**Tiga aturan yang tidak boleh dilanggar** di atas) tetap utuh: ledger
+suasana ini murni tally ruangan, arsitekturnya memang harus terpisah dari
+laporan sesi, bukan kebetulan dipisah. Event yang dipaksa manual lewat
+`?event=<id>` (satu-satunya cara menguji event langka) sengaja tidak ikut
+dilaporkan, supaya tidak mengotori arsip sungguhan.
+
+Konsekuensinya satu hal yang jujur diakui, bukan cacat yang ditutupi: karena
+event ambient murni simulasi sisi klien, kalau tidak ada tab browser yang
+terbuka sepanjang minggu itu, "kejadian terjarang" minggu itu memang kosong —
+walau Claude Code dipakai berat lewat terminal. Sheet-nya menulis "tidak ada
+kejadian langka tercatat minggu ini" apa adanya, bukan berpura-pura tahu.
 

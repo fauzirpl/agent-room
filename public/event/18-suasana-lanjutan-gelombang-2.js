@@ -286,4 +286,57 @@ daftarEvent(
   sortY: 113,
 },
 
+/* Siklus tahun anggaran: ritme birokrasi paling khas kantor dinas Indonesia,
+   dua status musiman berlawanan seperti ramadan-siang-sunyi di atas — tapi
+   digerakkan kalender Masehi, bukan Hijriah. */
+{
+  id: 'tahun-anggaran-baru',
+  kelas: 'latar', bobot: B.jarang, cooldown: 3600, durasi: 20,
+  syarat: (S) => {
+    const d = new Date();
+    return d.getMonth() === 0 && d.getDate() <= 14 && S.jam >= 7 && S.jam < 17;
+  },
+  perluAktor: true,
+  mulai(E) {
+    const a = pinjamAktor(E, 1)[0];
+    E.data.a = a;
+    if (a) { a.bawa = 'map'; a.goTo('read'); }
+  },
+  tick(E) {
+    const a = E.data.a;
+    if (!a) return;
+    pada(E, 8, () => {
+      if (RUANGAN.mapDisposisi > 0) RUANGAN.mapDisposisi--;
+      if (RUANGAN.tumpukanFiling > 0) RUANGAN.tumpukanFiling--;
+      a.say('beres-beres arsip, tahun baru');
+    });
+    pada(E, 16, () => { a.bawa = null; a.goTo(stasiunPulang(a)); });
+  },
+},
+
+{
+  id: 'serapan-anggaran-akhir-tahun',
+  kelas: 'latar', bobot: B.sedang, cooldown: 2400, durasi: 40,
+  syarat: (S) => {
+    const b = new Date().getMonth();
+    return b >= 9 && S.jam >= 15 && S.jam < 19;
+  },
+  mulai(E) {
+    const a = pinjamAktor(E, 1)[0];
+    if (a) { E.data.a = a; a.pose = 'ngantuk'; }
+  },
+  tick(E, dt) {
+    MOD.lajuGlobal = 0.85;
+    const a = E.data.a;
+    if (a) {
+      pada(E, 3, () => a.say('SPJ akhir tahun belum kelar-kelar'));
+      pada(E, 10, () => { a.pose = null; a.goTo(stasiunPulang(a)); });
+    }
+    if (E.umur > 2 && E.umur < 2 + dt * 2) {
+      RUANGAN.mapDisposisi = Math.min(5, RUANGAN.mapDisposisi + 1);
+      RUANGAN.tumpukanFiling = Math.min(6, RUANGAN.tumpukanFiling + 1);
+    }
+  },
+},
+
 );

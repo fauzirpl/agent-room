@@ -50,6 +50,12 @@ Dokumen ini dipecah per tema ke folder `docs/` (bagian panjangnya sudah 1.800 ba
   - [Babak hari kerja](docs/02-ruangan.md#babak-hari-kerja)
   - [Tema kalender](docs/02-ruangan.md#tema-kalender)
   - [Hujan ikut cuaca sungguhan](docs/02-ruangan.md#hujan-ikut-cuaca-sungguhan)
+- [Rupa halaman](docs/02-ruangan.md#rupa-halaman)
+  - [Kamera](docs/02-ruangan.md#kamera)
+  - [Debu di berkas cahaya & rim light](docs/02-ruangan.md#debu-di-berkas-cahaya-rim-light)
+  - [Mode ringan](docs/02-ruangan.md#mode-ringan)
+  - [Mode kadis: `?kadis=1`](docs/02-ruangan.md#mode-kadis-kadis1)
+  - [Overlay layar kedua / OBS: `?overlay=1`](docs/02-ruangan.md#overlay-layar-kedua-obs-overlay1)
 
 ### [Isi transkrip & arsip](docs/03-isi-transkrip.md)
 
@@ -64,12 +70,8 @@ Dokumen ini dipecah per tema ke folder `docs/` (bagian panjangnya sudah 1.800 ba
   - [Papan SKP & nota mingguan](docs/03-isi-transkrip.md#papan-skp-nota-mingguan)
   - [Yang berubah soal privasi](docs/03-isi-transkrip.md#yang-berubah-soal-privasi)
 - [Bahasa yang tampil](docs/03-isi-transkrip.md#bahasa-yang-tampil)
-  - [Kamera](docs/03-isi-transkrip.md#kamera)
-  - [Debu di berkas cahaya & rim light](docs/03-isi-transkrip.md#debu-di-berkas-cahaya-rim-light)
-  - [Mode ringan](docs/03-isi-transkrip.md#mode-ringan)
-  - [Mode kadis: `?kadis=1`](docs/03-isi-transkrip.md#mode-kadis-kadis1)
-  - [Overlay layar kedua / OBS: `?overlay=1`](docs/03-isi-transkrip.md#overlay-layar-kedua-obs-overlay1)
 - [Buku agenda](docs/03-isi-transkrip.md#buku-agenda)
+- [Arsip kliping mingguan](docs/03-isi-transkrip.md#arsip-kliping-mingguan)
 
 ### [Event acak](docs/04-event-acak.md)
 

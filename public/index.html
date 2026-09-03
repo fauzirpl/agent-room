@@ -24,6 +24,7 @@
       <button id="settingBtn" class="ghost" title="pengaturan">⚙️</button>
       <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
       <button id="statsBtn" class="ghost" title="statistik token">📊</button>
+      <button id="klipingBtn" class="ghost" title="arsip kliping mingguan">🗃️</button>
       <button id="mejaBtn" class="ghost" title="meja disposisi">📚</button>
     </div>
   </section>
@@ -114,13 +115,11 @@
 <div class="dlg-latar" id="dlgKabar" hidden>
   <div class="dlg kbr" role="dialog" aria-modal="true" aria-labelledby="kabarJudul">
     <header class="dlg-kepala kbr-kepala">
-      <div class="kbr-avatar" id="kabarAvatar" aria-hidden="true"></div>
+      <div class="kbr-avatar" aria-hidden="true">👥</div>
       <div class="kbr-dari">
-        <b id="kabarJudul">—</b>
-        <span class="kbr-jab" id="kabarJab"></span>
+        <b id="kabarJudul">Grup Kantor Agent (RESMI) 🙏</b>
+        <span class="kbr-anggota" id="kabarAnggota">Anda</span>
       </div>
-      <span class="kbr-jenis" id="kabarJenis"></span>
-      <span class="kbr-jam" id="kabarJam"></span>
       <button type="button" id="kabarTutup" title="tutup (Esc)">✕</button>
     </header>
     <div class="kbr-badan" id="kabarBadan"></div>
@@ -146,6 +145,15 @@
     </header>
     <div class="kbr-badan" id="statsBadan"></div>
     <div class="kbr-badan skp-badan" id="skpBadan" hidden></div>
+  </div>
+</div>
+<div class="dlg-latar" id="dlgKliping" hidden>
+  <div class="dlg stat" role="dialog" aria-modal="true" aria-labelledby="klipingJudul">
+    <header class="dlg-kepala">
+      <b id="klipingJudul">Arsip kliping mingguan</b>
+      <button type="button" id="klipingTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="kbr-badan" id="klipingBadan"></div>
   </div>
 </div>
 <!-- Meja disposisi: tumpukan kabar yang bisa dicari/disaring/disematkan/disalin.

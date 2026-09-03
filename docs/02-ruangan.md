@@ -594,3 +594,154 @@ AGENT_ROOM_CUACA=-6.2,106.8 node server.mjs
 Uji cepat dari URL: `?hujan=gerimis`, `?hujan=deras`, `?hujan=petir`, atau
 angka `?hujan=0.5` — boleh digabung `?demo=1&jam=22&hujan=petir`.
 
+## Rupa halaman
+
+Chrome di sekeliling kanvas — panel kanan, bilah panggung, kartu pegawai, semua
+dialog — mengambil warnanya dari benda yang benar-benar ada di kantor ASN
+sekarang, bukan dari dashboard gelap ala terminal:
+
+- **kain PDH khaki** buat latar panel; kartu dan dialog di atasnya kertas krem
+  bertepi khaki tua, seperti berkas di atas meja;
+- **kop surat** buat kepala panel dan kepala dialog: lencana bintang emas di
+  atas biru Korpri, nama instansi serif rata tengah, lalu garis tebal-tipis —
+  ciri yang langsung dikenali siapa pun yang pernah membaca surat dinas;
+- **pita merah-putih** setinggi 6 px di puncak halaman, diulang setipis 4 px di
+  tepi atas kartu pegawai. Merah bendera cuma dipakai di situ, di tombol utama
+  (Tugaskan, Pakai folder ini), dan di tanda galat — kalau dipakai di mana-mana
+  dia berhenti berarti;
+- **papan nama akrilik** buat label jabatan di baris kru: hitam dengan huruf
+  kapital kecil, satu-satunya elemen hitam di panel;
+- **emas** buat angka yang harus terbaca sekali lirik (statistik, grafik token):
+  emas tua di atas krem, karena emas terang gagal kontras di latar terang; emas
+  terang disimpan buat bilah panggung yang gelap;
+- **biru Korpri** buat tautan, fokus keyboard, dan kata kerja di log;
+- **panel kayu jati gelap** di balik diorama, seperti dinding ruang kepala dinas,
+  supaya pixel-art-nya tetap menonjol di antara permukaan yang serba terang.
+
+Huruf ikut dibagi dua peran: serif (Georgia/Times) buat yang "resmi" — nama
+instansi, judul dialog, judul bagian, angka statistik — dan monospace buat yang
+"mesin": log, chip, isian, jalur berkas. Satu pengecualian sengaja: modal kabar
+memakai monospace seluruhnya plus warna WA asli, karena yang ditiru di situ
+aplikasi chat, bukan dokumen kantor.
+
+Dua catatan buat yang mengubahnya. Kotak statistik di panel diberi selector
+`.stats .stat`, bukan `.stat`, karena dialog token juga berkelas `stat` dan dulu
+ikut mewarisi `flex: 1` (melebar sepenuh layar) serta `text-align: center` dari
+kotak panel. Fokus keyboard (`:focus-visible`) dan `prefers-reduced-motion`
+ditangani global, jadi tidak perlu diulang per elemen.
+
+### Kamera
+
+Kanvasnya tetap 480×356 dan `fit()` tetap cuma memilih skala integer ke CSS;
+kameranya (`KAMERA` di room.js) hidup di koordinat dunia dan dipasang di
+`frame()` lewat `setTransform` sebelum segala gambar, jadi lantai, props,
+pegawai, dan partikel tidak tahu ada kamera. Zoom bidikannya cuma 1 atau 2 —
+bulat — karena satu piksel dunia harus tetap jadi kotak piksel layar yang
+utuh; zoom 1,4 bikin garis tepi sprite belang walau smoothing sudah mati.
+Nilai pecahan cuma lewat sebentar selagi easing (±600 ms), geserannya pun
+dibulatkan ke piksel kanvas.
+
+Semua yang menempel ke kanvas dari DOM — balon ucap, balon pikiran, lencana
+galat, kartu pegawai — dan hit-test klik lewat SATU pasang fungsi,
+`keLayar()`/`dariLayar()`. Dulu tiap-tiap menghitung `offX + x * scale`
+sendiri; begitu kamera bergeser, satu saja yang lupa dan kartunya meleset
+dari orangnya. Tiga mode di ⚙️ (mati / ikut pegawai / sinematik; `?kamera=`
+di URL mengalahkannya). Bawaannya **mati**: halaman ini alat pantau dulu,
+baru tontonan — kamera yang bergerak sendiri mengejutkan orang yang cuma mau
+melirik siapa yang sedang macet. *Ikut* membidik pegawai yang baru tool call
+selama 4 detik, tapi mundur ke tampak penuh begitu dua orang sama-sama
+aktif (jangan bolak-balik). *Sinematik* berkeliling stasiun sesudah 60 detik
+sepi, dan dimatikan kalau `prefers-reduced-motion` menyala.
+
+### Debu di berkas cahaya & rim light
+
+Dua sentuhan kecil yang membuat cahayanya terasa *mengisi* ruangan, bukan
+sekadar ditempel di atasnya. **Debu** (`debu[]`, `updateDebu`/`drawDebu`):
+paling banyak 40 butir 1 px, alpha rendah, melayang pelan sekali — dan hanya
+lahir *di dalam* berkas: kerucut neon waktu malam, berkas jendela di lantai
+waktu siang. Yang hanyut keluar dari berkasnya dibunuh, bukan dibiarkan
+melayang di gelap; debu memang ada di mana-mana, tapi cuma kelihatan waktu
+ditembus cahaya. Digambar sesudah selubung suasana supaya tidak ikut
+digelapkan.
+
+**Rim light** (`sumberCahaya`/`rimPegawai`, dipakai `drawPerson`): satu piksel
+tepi badan di sisi yang menghadap cahaya, diwarnai lewat jalur tepi sprite
+yang sudah ada (`lerpHex` dari warna baju ke warna cahaya), bukan lapisan alpha
+di atasnya — jadi tetap satu piksel tegas seperti tepi lainnya. Sumbernya
+sengaja **satu** yang dominan per frame: neon terdekat waktu malam, jendela
+waktu siang, senja memilih yang lebih kuat. Dua sumber berarti dua sisi
+terang, dan sprite selebar 10 px berhenti terbaca sebagai badan bertepi.
+Yang tepat di bawah lampu tidak dapat rim (tidak ada "sisi"), yang memegang
+map disposisi dilewati karena mapnya menutupi separuh badan. Depth-sort tidak
+disentuh sama sekali. Keduanya mati di mode ringan.
+
+### Mode ringan
+
+Halaman ini biasanya dibiarkan hidup berjam-jam di layar kedua atau laptop,
+dan 60 fps dengan tujuh gradasi radial per frame itu boros buat ruangan yang
+isinya berubah pelan. Mode ringan (centang di ⚙️, diingat browser) menyala
+sendiri kalau `?ringan=1` di URL, `prefers-reduced-motion` aktif, atau
+Battery API melaporkan baterai <30 % tanpa dicas (opsional — kalau API-nya
+tidak ada, ya tidak ada). Yang berubah:
+
+- **30 fps**: `frame()` melewati frame yang datang terlalu cepat *tanpa*
+  menyentuh `last`, jadi `dt` frame berikutnya menampung dua interval —
+  simulasinya tetap tepat waktu, cuma digambar separuh sesering. Saat tab
+  tersembunyi rAF dijeda peramban; mode ringan menjalankan simulasinya 15 fps
+  lewat `setTimeout` supaya pegawai tidak melompat waktu tab dibuka lagi.
+- **pendar neon dari cache** (`neonLapis`): geometrinya tetap dan semua
+  alphanya linear terhadap intensitas, jadi tiap neon cukup digambar sekali ke
+  kanvas offscreen pada intensitas 1, lalu tiap frame cuma `drawImage` dengan
+  `globalAlpha` = intensitas saat itu. Kedipnya tetap hidup — yang berkedip
+  alphanya — tapi `createRadialGradient` per frame turun dari 8 ke 0.
+  Vignette (`vignetteLapis`) sama, dikunci pada alpha `MOD.vignette`.
+- jatah partikel separuh (120; yang tertua digusur, bukan yang baru ditolak,
+  karena pemanggil boleh memegang partikel yang dikembalikan `spawn`), debu
+  mati, rim light mati. Kedip neon **tidak** dimatikan: itu identitas
+  ruangan, bukan hiasan. `prefers-reduced-motion` juga membekukan kipas
+  plafon.
+
+Fps sebenarnya (frame yang benar-benar digambar) tampil kecil di panel ⚙️
+selagi panelnya terbuka, berikut sebab otomatisnya kalau ada.
+
+### Mode kadis: `?kadis=1`
+
+Kepala dinas yang melirik dari HP tidak butuh diorama; dia butuh daftar. Dengan
+`?kadis=1` kanvas dan bilah panggung disembunyikan (`body.mode-kadis` di
+style.css), panel jadi **satu kolom penuh layar** berhuruf lebih besar dengan
+tombol setinggi jempol, dan di atas daftar kru ada ringkasan
+(`kadisGambar()` di room.js) yang menjawab pertanyaan kadis berurutan: siapa
+**menunggu paraf/izin**, siapa **berhenti karena galat**, siapa **sedang
+bekerja**, siapa di meja tanpa tool call, berapa yang **antre** di loket
+disposisi, dan **token hari ini** dari `/token-riwayat` (angka token saja,
+tanpa dolar — biaya di halaman ini toh "data sementara"). Tombol merah
+**muat ulang** di bawahnya, karena di HP tidak ada F5. Ringkasan digambar
+ulang tiap `renderCrew()` dan tiap 4 detik (kegiatan berganti tanpa
+`renderCrew()`), token disegarkan tiap menit. Simulasinya tetap jalan di
+balik layar supaya keadaan pegawai benar; yang tidak digambar cuma kanvasnya.
+
+Satu hal yang tidak boleh disalahpahami: server **tetap bind `127.0.0.1`**.
+Mode ini hanya berguna lewat tunnel (ssh `-L`, Tailscale, atau sejenisnya)
+dari HP ke mesin yang menjalankan server — dan itu memang jalannya. Jangan
+pernah melonggarkan bind ke `0.0.0.0` demi mode ini: yang lewat `/stream`
+adalah isi kerja agen, dan halaman tanpa autentikasi di jaringan Wi-Fi kantor
+bukan "tampilan HP", tapi kebocoran.
+
+### Overlay layar kedua / OBS: `?overlay=1`
+
+Buat ditumpuk di atas siaran atau layar kedua: `?overlay=1` menyembunyikan
+panel kanan, bilah panggung, pita merah-putih, dan semua dialog (kabar yang
+menyela di atas siaran bukan fitur), lalu membuat latar `<html>` dan `<body>`
+**tembus** (`background: transparent`) — OBS browser source menampilkan apa
+yang ada di bawahnya. `?overlay=chroma` memakai hijau `#00ff00` sebagai gantinya
+buat chroma key di perangkat yang tidak mendukung alpha. Kelasnya
+(`mode-overlay` + `mode-tembus`/`mode-chroma`) dipasang di awal room.js,
+sebelum `fit()` pertama.
+
+Di mode ini `fit()` berubah dua hal: tepi 36 px yang biasa disisakan buat
+bayangan kanvas ditiadakan (stageInner-nya full-bleed, padding 0), dan skala
+**dikunci ke bilangan bulat ≥ 1** — OBS menyusun ulang tiap frame, skala pecahan
+bikin garis tepi sprite belang di layar penonton. Balon ucap dan balon pikiran
+tetap tampil (mereka anak stageInner), jadi padukan dengan `?panggung=1` kalau
+siarannya ditonton orang lain: isi balon dan kabar disamarkan, animasinya tetap.
+

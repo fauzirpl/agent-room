@@ -990,6 +990,17 @@ const tanggalLokal = (ts) => {
     + '-' + String(d.getDate()).padStart(2, '0');
 };
 
+/* Batas minggu buat arsip kliping mingguan (di bawah): kalender lokal, mulai
+   SENIN, dikunci sebagai tanggal Senin-nya sendiri. Rolling 7 hari sengaja
+   ditolak — metafora "satu sheet dijilid" butuh titik tutup yang jelas,
+   rolling window tidak pernah "selesai". */
+const mingguLokal = (ts) => {
+  const d = new Date(ts);
+  const dow = (d.getDay() + 6) % 7;             // Senin=0 ... Minggu=6
+  d.setDate(d.getDate() - dow);
+  return tanggalLokal(d.getTime());
+};
+
 function riwayatTambah(ts, proyek, d) {
   if (!riwayatSejak || ts < riwayatSejak) riwayatSejak = ts;
   riwayatTotal.input += d.input; riwayatTotal.output += d.output;
@@ -1296,6 +1307,162 @@ function putarUlang(req, res, tanggal, laju) {
   req.on('close', () => { putus = true; clearTimeout(timer); pemutarUlang = Math.max(0, pemutarUlang - 1); });
   langkah();
 }
+
+/* ---------------------------------------------------- kliping mingguan ---
+   Map arsip yang makin tebal tiap minggu: server merangkum sendiri tiap
+   minggu (sesi aktif, tool teratas, proyek teratas, event ambient terjarang)
+   jadi satu "sheet" yang dijilid ke arsip permanen. Dua berkas, dua peran
+   berbeda — bukan satu dipaksa dua fungsi:
+   - kliping-mingguan.jsonl: append-only, satu baris = satu minggu yang SUDAH
+     FINAL (agregat akhir, bukan delta — beda dari token-riwayat di atas,
+     karena granularitas per-tool-call di sini cuma akan menggandakan volume
+     tulis untuk fitur yang murni dekoratif)
+   - kliping-berjalan.json: checkpoint minggu YANG MASIH BERJALAN, ditimpa di
+     tempat, supaya hitungan minggu ini tidak hilang tiap restart server     */
+const BERKAS_KLIPING = process.env.AGENT_ROOM_KLIPING_LOG
+  || path.join(__dirname, 'kliping-mingguan.jsonl');
+const BERKAS_KLIPING_BERJALAN = path.join(path.dirname(BERKAS_KLIPING), 'kliping-berjalan.json');
+const arsipMingguan = [];            // minggu yang sudah final, kronologis naik
+let mingguAktif = null;              // { minggu, sesi:{}, tool:{}, proyek:{}, ambien:{} }
+let klipingCheckpointTimer = null;
+
+const klipingKosong = (minggu) => ({ minggu, sesi: {}, tool: {}, proyek: {}, ambien: {} });
+
+function klipingTambah1(peta, kunci) {
+  if (!kunci) return;
+  peta[kunci] = (peta[kunci] || 0) + 1;
+}
+
+const klipingTeratas = (peta) => {
+  let nama = null, jumlah = 0;
+  for (const [k, v] of Object.entries(peta)) if (v > jumlah) { nama = k; jumlah = v; }
+  return nama ? { nama, jumlah } : null;
+};
+
+/* Rarity dihitung EMPIRIS per-minggu (hitungan paling kecil minggu itu yang
+   menang), bukan dari label rarity statis di katalog event — "minggu ini XYZ
+   cuma sekali" itu cerita yang lebih hidup daripada label langka bawaan. */
+const klipingTerjarang = (peta) => {
+  let id = null, jumlah = Infinity;
+  for (const [k, v] of Object.entries(peta)) if (v < jumlah) { id = k; jumlah = v; }
+  return id ? { id, jumlah } : null;
+};
+
+/* Bentuk yang dikirim ke halaman: sesi jadi ANGKA (bukan daftar id — begitu
+   minggu final, daftar id-nya tidak berguna lagi), plus tiga field turunan
+   supaya halaman tidak perlu menghitung ulang tiap modal dibuka. */
+function klipingRingkas(m) {
+  if (!m) return null;
+  return {
+    minggu: m.minggu, sesi: Object.keys(m.sesi).length,
+    tool: m.tool, proyek: m.proyek, ambien: m.ambien,
+    toolTeratas: klipingTeratas(m.tool),
+    proyekTeratas: klipingTeratas(m.proyek),
+    ambienTerjarang: klipingTerjarang(m.ambien),
+  };
+}
+
+function klipingTulisCheckpoint() {
+  if (!mingguAktif) return;
+  fs.writeFile(BERKAS_KLIPING_BERJALAN, JSON.stringify(mingguAktif), (err) => {
+    if (err) console.warn('[agent-room] gagal menulis checkpoint kliping: ' + err.message);
+  });
+}
+
+// Debounced ~20 detik — dipanggil tiap tool call/event ambient, tidak boleh
+// menulis disk sesering itu. Rollover minggu (di bawah) TIDAK lewat jalur ini
+// — itu menulis segera, lihat alasannya di klipingPastikanMinggu.
+function klipingJadwalkanCheckpoint() {
+  clearTimeout(klipingCheckpointTimer);
+  klipingCheckpointTimer = setTimeout(klipingTulisCheckpoint, 20000);
+  klipingCheckpointTimer.unref?.();
+}
+
+/* Dipanggil dari tiap titik yang mencatat (tool/ambien) plus penjaga berkala
+   di bawah. Kalau minggu berjalan sudah beda dari minggu ts ini: minggu lama
+   dijilid jadi baris final di kliping-mingguan.jsonl, minggu baru dimulai. */
+function klipingPastikanMinggu(ts) {
+  const minggu = mingguLokal(ts);
+  if (mingguAktif && mingguAktif.minggu === minggu) return;
+  if (mingguAktif) {
+    const m = mingguAktif;
+    arsipMingguan.push(klipingRingkas(m));
+    const baris = JSON.stringify({
+      minggu: m.minggu, sesi: Object.keys(m.sesi).length, tool: m.tool, proyek: m.proyek, ambien: m.ambien,
+    });
+    fs.appendFile(BERKAS_KLIPING, baris + '\n', (err) => {
+      if (err) console.warn('[agent-room] gagal menulis kliping mingguan: ' + err.message);
+    });
+  }
+  mingguAktif = klipingKosong(minggu);
+  // Checkpoint minggu BARU ditulis SEGERA, bukan debounced: kalau server crash
+  // tepat di celah ini, checkpoint lama di disk masih menunjuk minggu yang
+  // barusan difinalkan — restart berikutnya akan memfinalkannya LAGI (baris
+  // dobel di .jsonl). Menulis langsung menutup celah itu.
+  klipingTulisCheckpoint();
+}
+
+function klipingCatatTool(ts, sesi, tool, cwd) {
+  klipingPastikanMinggu(ts);
+  mingguAktif.sesi[sesi] = true;
+  klipingTambah1(mingguAktif.tool, tool);
+  if (cwd) klipingTambah1(mingguAktif.proyek, cwd);
+  klipingJadwalkanCheckpoint();
+}
+
+function klipingCatatAmbien(ts, id) {
+  klipingPastikanMinggu(ts);
+  klipingTambah1(mingguAktif.ambien, id);
+  klipingJadwalkanCheckpoint();
+}
+
+function klipingMuat() {
+  let teks = '';
+  try { teks = fs.readFileSync(BERKAS_KLIPING, 'utf8'); } catch { /* belum ada: wajar */ }
+  let baik = 0;
+  for (const baris of teks.split('\n')) {
+    if (!baris) continue;
+    let o;
+    try { o = JSON.parse(baris); } catch { continue; }
+    if (!o || !o.minggu) continue;
+    const tool = o.tool || {}, proyek = o.proyek || {}, ambien = o.ambien || {};
+    arsipMingguan.push({
+      minggu: o.minggu, sesi: Number(o.sesi) || 0, tool, proyek, ambien,
+      toolTeratas: klipingTeratas(tool), proyekTeratas: klipingTeratas(proyek),
+      ambienTerjarang: klipingTerjarang(ambien),
+    });
+    baik++;
+  }
+  arsipMingguan.sort((a, b) => (a.minggu < b.minggu ? -1 : 1));
+
+  let checkpoint = null;
+  try { checkpoint = JSON.parse(fs.readFileSync(BERKAS_KLIPING_BERJALAN, 'utf8')); } catch { /* belum ada: wajar */ }
+  const mingguSekarang = mingguLokal(Date.now());
+  if (checkpoint && checkpoint.minggu === mingguSekarang) {
+    mingguAktif = checkpoint;
+  } else if (checkpoint) {
+    // Minggu checkpoint sudah lewat SEPENUHNYA selagi server mati (mis. mati
+    // pas pergantian Minggu->Senin) — difinalkan sekarang juga saat startup,
+    // bukan didiamkan sampai tercatat sebagai kekosongan yang salah.
+    arsipMingguan.push(klipingRingkas(checkpoint));
+    const b = JSON.stringify({
+      minggu: checkpoint.minggu, sesi: Object.keys(checkpoint.sesi).length,
+      tool: checkpoint.tool, proyek: checkpoint.proyek, ambien: checkpoint.ambien,
+    });
+    fs.appendFile(BERKAS_KLIPING, b + '\n', () => {});
+    mingguAktif = klipingKosong(mingguSekarang);
+  } else {
+    mingguAktif = klipingKosong(mingguSekarang);
+  }
+  klipingTulisCheckpoint();
+  if (baik) console.log('[agent-room] kliping mingguan dimuat: ' + baik + ' minggu dari ' + BERKAS_KLIPING);
+}
+klipingMuat();
+// Penjaga rollover berkala: mendeteksi lewat traffic asli (klipingPastikanMinggu
+// dipanggil dari klipingCatatTool/klipingCatatAmbien) sudah cukup untuk ruangan
+// yang aktif, tapi ruangan yang idle pas pergantian Minggu->Senin butuh ini
+// supaya minggu tetap terfile tepat waktu.
+setInterval(() => klipingPastikanMinggu(Date.now()), 15 * 60 * 1000).unref?.();
 
 /* ------------------------------------------------------ buku induk pegawai ---
    Kartu pegawai cuma tahu SATU sesi; kliping cuma tahu SATU minggu. Buku induk
@@ -2454,6 +2621,11 @@ function terimaEvent(raw, opsi = {}) {
   // nota dinas keluar hanya untuk yang baru terjadi: event yang tertunda
   // berjam-jam bukan bahan lapor "sedang tertahan"
   if (!opsi.tunda) laporKeluar(ev);          // hanya kalau AGENT_ROOM_LAPOR diisi
+  // Top tool/top proyek buat kliping mingguan: murni MEMBACA field yang
+  // normalize() sudah hitung, tidak menulis balik ke ev/ring/tokenSesi
+  // apa pun. kind:'pre' dipilih supaya tepat satu hitungan per tool call
+  // (beda dari 'post' yang bercabang ke PostToolUseFailure).
+  if (ev.kind === 'pre' && ev.tool) klipingCatatTool(ev.ts, ev.session, ev.tool, ev.cwd);
   // Buku induk pegawai: karier per folder proyek, hanya dari hook nyata di sini
   bukuIndukCatat(ev);
   /* Jalur transkrip cuma diketahui dari sini. Waktu sesinya habis
@@ -2812,6 +2984,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Ledger kejadian ambient buat arsip kliping mingguan — TERPISAH TOTAL dari
+     /event: tidak pernah publish(), tidak pernah masuk ring/SSE/tokenSesi.
+     Event ambient tidak pernah menaikkan statistik SESI (lihat DESIGN.md);
+     endpoint ini murni tally suasana RUANGAN, bukan laporan sesi, jadi
+     arsitekturnya memang harus terpisah, bukan cuma kebetulan. */
+  if (url.pathname === '/ambien' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = (await readBody(req)).teks;
+    try {
+      const { id } = JSON.parse(body || '{}');
+      if (typeof id === 'string' && id) klipingCatatAmbien(Date.now(), clip(id, 64));
+      res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
+    } catch {
+      res.writeHead(400).end();
+    }
+    return;
+  }
+
   /* Telemetri galat halaman — pasangan laporGalat() di room.js. Dijaga
      asalSah seperti /ambien: hanya halaman dari alamat kantor ini. Yang
      masuk sudah dipotong lagi di sini (clip), bukan mempercayai klien. */
@@ -3151,6 +3341,18 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
     res.end(JSON.stringify(skpHitung(dari, sampai)));
+    return;
+  }
+
+  /* Arsip kliping mingguan — tanpa token/Origin check, sama seperti
+     /token-riwayat: angkanya toh sudah publik lewat /event juga. */
+  if (url.pathname === '/kliping-mingguan') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify({
+      arsip: arsipMingguan,
+      berjalan: klipingRingkas(mingguAktif),
+      lembar: arsipMingguan.length,
+    }));
     return;
   }
 

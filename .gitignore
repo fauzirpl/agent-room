@@ -5,6 +5,10 @@
 token-riwayat.jsonl
 token-riwayat.arsip.jsonl
 
+# arsip kliping mingguan: data lokal, bukan kode
+kliping-mingguan.jsonl
+kliping-berjalan.json
+
 # buku agenda: log event harian (metadata), data lokal, bukan kode
 agenda/
 

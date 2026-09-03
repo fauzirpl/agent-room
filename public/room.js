@@ -339,6 +339,13 @@ function kegiatan(tool, label) {
 // Uji suasana tanpa menunggu jamnya tiba: tambah ?jam=18.4 di URL.
 const JAM_PAKSA = parseFloat(new URLSearchParams(location.search).get('jam'));
 
+/* Mode panggung: layar kedua/live-stream aman ditonton orang lain — isi
+   balon pikiran & kotak kabar (kalimat/pikiran sungguhan agen, bisa memuat
+   kode/rahasia proyek) disamarkan jadi label generik, tapi animasi/cuaca/
+   siklus siang-malam/event ambient tetap tampil apa adanya. Lihat
+   panggungSensor() dekat handle(). */
+const PANGGUNG = new URLSearchParams(location.search).get('panggung') === '1';
+
 const rgbCache = new Map();
 function bagiWarna(w2) {
   let v = rgbCache.get(w2);
@@ -853,6 +860,14 @@ function drawArsip(active) {
   r(x + 6, y - 14, 18, 2, '#d9cba8');
   r(x + 10, y - 10, 10, 4, P.paper);
   r(x + 30, y - 9, 14, 7, '#b98d5e');
+  // Kliping mingguan (map arsip kliping mingguan — RUANGAN.arsipKlipingLembar,
+  // diisi dari GET /kliping-mingguan): tumpuk di celah antara dus arsip &
+  // piala, warna merah bata beda spesies dari ordner/map biasa di rak yang
+  // sama. Idiom render sama seperti tumpukanFiling (drawFiling) — lapis
+  // bergantian warna, tampilan dibatasi 10 walau datanya tidak dipotong.
+  for (let k = 0; k < Math.min(10, RUANGAN.arsipKlipingLembar); k++) {
+    r(x + 28, y - 3 - k * 2, 15, 2, k % 2 ? '#8a3a2e' : '#a34536');
+  }
   // Piala voli antar-OPD — muncul sekali (piala-voli-dipajang), permanen
   if (RUANGAN.piala) {
     glow(x + 49, y - 17, 7, '#d1a326', 0.2 + 0.06 * Math.sin(now / 420));
@@ -1646,22 +1661,78 @@ function drawMejaKerja() {
     r(x + 36, y - 1, 1, 4, '#4f8a56');
     r(x + 35, y - 3, 1, 3, '#3e6b4f');
 
-    // sisi kiri meja: berkas, dibedakan biar tidak terlihat salin-tempel
-    if (i % 2 === 0) {
-      r(x + 6, y + 3, 15, 5, '#1d1712');                  // papan nama
-      r(x + 7, y + 4, 13, 1, P.gold);
-      for (let l = 0; l < 3; l++) {
-        r(x + 8 + (l % 2), y + 1 - l * 2, 12, 2,
-          ['#c9a03a', '#3e6b4f', '#b03030'][l]);
-      }
-    } else {
-      for (let l = 0; l < 5; l++) {                       // tumpukan berkas
-        r(x + 6 + (l % 2), y + 7 - l * 2, 14, 2, l % 2 ? '#e4ddc8' : P.paper);
-      }
-      r(x + 24, y + 4, 5, 5, '#dfe7ef');                  // gelas
-    }
+    // sisi kiri meja: dulu cuma gantian nama-plakat/tumpukan-berkas (i%2),
+    // sekarang tiap slotIdx punya "kepribadian" sendiri lewat drawMejaTema —
+    // requested biar keenam meja tidak terasa kopi-tempel satu sama lain.
+    drawMejaTema(i, x, y);
     gambarTemaMeja(x, y);                                 // bendera kecil agustusan (tema kalender)
   });
+}
+
+// Zona bebas untuk pernak-pernik identitas: x+6..+29 dan y-4..+8 (relatif
+// papan meja). Batas itu bukan sembarangan — di kanan ada pot mini (x+33),
+// di kiri lampu meja (x+0..+5), dan sandaran kursi (cx±5 = x+27..+37, absolut
+// y=329..337) numpuk kalau melebar terlalu jauh ke kanan.
+// Tumpukan berkas & gelas versi lama sudah mepet batas ini (sampai x+29) jadi
+// dipakai sebagai patokan aman, bukan diperketat lagi.
+// Urutan tema di sini SENGAJA cuma ikut urutan slotIdx (indeks di
+// MEJA_KERJA_X), tidak ada kaitan dengan mekanik meja pojok (slotIdx===3
+// dikunci wifi-sudut-lemah di event-acak.js) — itu soal posisi x, ini cuma
+// soal dekorasi, aman dipetakan bebas.
+function drawMejaTema(i, x, y) {
+  switch (i) {
+    case 0:                                                // meja rapi
+      r(x + 6, y + 3, 15, 5, '#1d1712');                  // papan nama
+      r(x + 7, y + 4, 13, 1, P.gold);
+      for (let l = 0; l < 3; l++) {                       // map rata sempurna, tanpa zigzag
+        r(x + 8, y + 1 - l * 2, 12, 2, ['#c9a03a', '#3e6b4f', '#b03030'][l]);
+      }
+      r(x + 21, y + 2, 3, 6, '#e4ddc8');                  // wadah pulpen
+      r(x + 21, y, 1, 3, '#c23b3b'); r(x + 22, y - 1, 1, 4, '#3565b0'); r(x + 23, y, 1, 3, '#2c3440');
+      break;
+    case 1:                                                // meja berantakan
+      r(x + 6, y + 7, 12, 2, P.paper);                    // alas
+      r(x + 9, y + 3, 16, 2, '#e4ddc8');                  // lapis tengah nongol lebih lebar -> mau longsor
+      r(x + 7, y + 0, 10, 2, P.paper);
+      r(x + 19, y - 2, 6, 2, '#b03030');                  // map merah nyelip miring paling atas
+      r(x + 23, y + 5, 4, 3, '#e4ddc8'); r(x + 24, y + 4, 2, 1, '#c9c2ac');   // kertas kusut
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#6b4a2e';   // noda kopi bekas gelas tumpah
+      ctx.beginPath(); ctx.ellipse(x + 27, y + 8.5, 3, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    case 2:                                                // meja otaku
+      r(x + 7, y + 6, 7, 2, '#2c3440');                   // alas pajangan figure
+      r(x + 9, y + 2, 3, 3, '#f0c79c');                   // kepala chibi
+      r(x + 8, y + 5, 5, 3, P.blue);                      // badan
+      r(x + 8, y + 5, 1, 2, '#f0c79c'); r(x + 12, y + 5, 1, 2, '#f0c79c');    // tangan kecil
+      for (let l = 0; l < 4; l++) {                       // punggung manga berjajar tegak
+        r(x + 16 + l * 3, y + 1, 2, 7, ['#c23b3b', '#d1a326', '#3e6b4f', P.mag][l]);
+      }
+      break;
+    case 3:                                                // meja kpoper
+      r(x + 8, y, 2, 8, '#e4ddc8');                       // gagang lightstick
+      r(x + 6, y - 4, 5, 4, P.mag);                       // bohlam
+      glow(x + 8, y - 2, 6, P.mag, 0.22);
+      r(x + 15, y + 1, 5, 7, P.paper); r(x + 16, y + 2, 3, 5, P.blueL);       // photocard 1
+      r(x + 20, y + 2, 5, 7, P.paper); r(x + 21, y + 3, 3, 5, '#e8a0a8');     // photocard 2, nyempil lebih rendah
+      break;
+    case 4:                                                // meja tanaman
+      r(x + 7, y + 3, 5, 5, '#8a5a3a'); r(x + 7, y + 3, 5, 1, '#a8734a');     // pot kecil
+      r(x + 8, y - 2, 1, 6, '#3e6b4f'); r(x + 10, y - 1, 1, 5, '#4f8a56'); r(x + 9, y - 4, 1, 3, '#3e6b4f');
+      r(x + 15, y + 1, 6, 7, '#8a5a3a'); r(x + 15, y + 1, 6, 1, '#a8734a');   // pot sedang
+      r(x + 16, y - 4, 1, 6, '#3e6b4f'); r(x + 18, y - 3, 1, 5, '#4f8a56'); r(x + 20, y - 2, 1, 4, '#3e6b4f');
+      break;
+    default:                                               // meja PNS klasik: termos, toples, foto keluarga
+      r(x + 7, y - 1, 5, 9, '#4a7fd0');                   // termos
+      r(x + 7, y - 1, 5, 1, '#79b0e8');
+      r(x + 8, y - 3, 3, 2, '#2c3440');                   // tutup termos
+      r(x + 14, y + 2, 6, 6, '#e8e4d4');                  // toples kaca
+      r(x + 15, y + 3, 4, 3, '#d9b96a');                  // isi kue kering
+      r(x + 14, y + 1, 6, 1, '#8a6844');                  // tutup toples
+      r(x + 22, y - 2, 6, 6, '#8a5a3a');                  // bingkai foto
+      r(x + 23, y - 1, 4, 4, '#f0ede2');                  // foto
+      break;
+  }
 }
 
 // Meja rapat persegi panjang dengan perspektif ringan (tepi belakang lebih
@@ -1967,8 +2038,12 @@ function drawXBanner() {
 // Plakat nilai kerja — statis, tidak ada hook event. Diselipkan di celah
 // dinding kosong antara AC (berakhir ~x374) dan piagam/rambu larangan
 // merokok (mulai ~x418), jadi tidak butuh koordinat baru yang bentrok.
+// y=16, bukan sejajar atap: lampu neon kanan (NEON_X[1]=410) kabel+rumah
+// lampunya turun sampai y=13 di rentang x390..430, tumpang tindih dengan
+// lebar plakat (376..416) — digeser ke bawah situ, bukan disempitkan,
+// supaya "INOVASI/KOLABORASI/INTEGRITAS" tetap terbaca penuh tiga baris.
 function drawPlakatNilai() {
-  const x = 376, y = 6, w = 40, h = 30;
+  const x = 376, y = 16, w = 40, h = 30;
   r(x, y, w, h, '#6d5535');
   r(x + 2, y + 2, w - 4, h - 4, P.paper);
   ctx.fillStyle = '#2c3440';
@@ -3175,6 +3250,8 @@ class Agent {
     this.laju = 1;           // pengali kecepatan jalan sementara (event)
     this.bekuSampai = 0;     // now-timestamp: jalan & efek kerja beku sampai lewat ini
     this.butuh = null;       // keadaan ketiga: berhenti menunggu keputusan kamu
+    this.tungguSejak = 0;    // Date.now() saat mulai menunggu, 0 kalau tidak sedang menunggu
+    this.tungguTotal = 0;    // ms akumulasi menunggu kamu sepanjang sesi ini
     this.pengingatTimer = null; // id setTimeout pengingat terkatung (lihat pantauTerkatung)
     this.terkatungJenis = '';   // 'butuh' | 'macet' | '' — keadaan terkatung yang terakhir dipantau
     this.legaSampai = 0;     // now-timestamp: wajah 'lega' sesudah menyerahkan hasil / selesai giliran
@@ -3198,6 +3275,8 @@ class Agent {
     this.el.style.display = 'none';
     overlay.appendChild(this.el);
     this.bubbleUntil = 0;
+    this.tinggiUcap = TINGGI_UCAP;   // diukur ulang tiap say(): balonnya 1–3 baris
+    this.lebarUcap = 0;              // idem — dipakai menjaga balon di dalam bingkai
 
     // Balon pikiran punya elemen sendiri, bukan menumpang balon ucap: dua-duanya
     // bisa muncul bersamaan (mikir sambil melapor) dan umurnya beda jauh.
@@ -3294,6 +3373,14 @@ class Agent {
      memanggil arrive() lagi, jadi kalau tidak dipasang sekarang dia tetap
      membelakangi kamera sampai perjalanan berikutnya. */
   setButuh(b) {
+    // Akumulasi waktu tunggu: mulai jam saat transisi ke truthy, ditambahkan
+    // ke total saat transisi balik ke null — dua-duanya cuma boleh terjadi
+    // sekali per transisi, bukan tiap kali setButuh dipanggil dengan nilai sama.
+    if (b && !this.butuh) this.tungguSejak = Date.now();
+    else if (!b && this.butuh && this.tungguSejak) {
+      this.tungguTotal += Date.now() - this.tungguSejak;
+      this.tungguSejak = 0;
+    }
     this.butuh = b || null;
     this.face = this.butuh
       ? 'down'
@@ -3314,6 +3401,15 @@ class Agent {
     this.el.innerHTML = text;
     this.el.style.display = '';
     this.bubbleUntil = now + 4200;
+    // Balonnya bisa satu sampai tiga baris dan selebar apa pun sampai batas
+    // CSS, jadi ukurannya diukur sekali di sini — bukan konstanta. Tingginya
+    // dipakai menumpuk balon pikiran (+4 jatah ekor), lebarnya dipakai
+    // menggeser balon masuk bingkai persis seperlunya. Sekali per say(),
+    // bukan tiap frame: kalimatnya tidak berubah selama balonnya hidup.
+    this.tinggiUcap = (this.el.offsetHeight || 23) + 4;
+    this.lebarUcap = this.el.offsetWidth || 0;
+    // Kalimat panjang butuh waktu baca lebih lama daripada 'siap, ndan'.
+    if (this.tinggiUcap > TINGGI_UCAP) this.bubbleUntil = now + 6400;
   }
 
   /* Isi kepalanya. Ditampilkan sepenggal-sepenggal, bukan sekaligus: satu blok
@@ -3413,16 +3509,27 @@ class Agent {
       spawn('steam', this.x + 10, this.y - 14);
     }
 
-    // Posisi balon teks lewat keLayar(): ikut kamera (zoom/pan), bukan
+    // Posisi balon teks. Sejak balonnya boleh melebar sampai tiga baris,
+    // dia ikut dijaga di dalam bingkai seperti balon pikiran: pegawai di meja
+    // paling kiri/kanan tidak boleh bicara separuh keluar layar.
+    // Semua titik DOM di bawah lewat keLayar(): ikut kamera (zoom/pan), bukan
     // offX/scale mentah. Yang di luar bidikan kamera disembunyikan — kalau
-    // tidak, balonnya menempel di tepi tanpa orang.
+    // tidak, jagaBingkai() menariknya ke tepi dan jadi balon tanpa orang.
     const tampak = kameraTampak(this.x, this.y);
     if (now > this.bubbleUntil || !tampak) {
       if (this.el.style.display !== 'none') this.el.style.display = 'none';
     } else {
       if (this.el.style.display === 'none') this.el.style.display = '';
+      // Digeser sebatas lebar balonnya sendiri: balon pendek ("siap, ndan")
+      // nyaris tidak bergeser, yang tiga baris bergeser banyak. Ekornya
+      // dibatasi separuh lebar balon supaya tidak pernah copot dari badannya.
+      const sisi = this.lebarUcap / 2;
       const [tengah, atas] = keLayar(this.x, this.y - 30);
-      this.el.style.left = Math.round(tengah) + 'px';
+      const kiri = jagaBingkai(tengah, sisi + 8);
+      const bebas = Math.max(0, sisi - 9);
+      this.el.style.setProperty('--geser',
+        Math.max(-bebas, Math.min(bebas, tengah - kiri)) + 'px');
+      this.el.style.left = Math.round(kiri) + 'px';
       this.el.style.top = Math.round(atas) + 'px';
     }
 
@@ -3437,12 +3544,11 @@ class Agent {
         this.pikirGanti = now + PIKIR_GANTI;
         this.elPikir.innerHTML = this.pikirBagian[this.pikirIdx];
       }
-      const naik = now < this.bubbleUntil ? TINGGI_UCAP : 0;
+      const naik = now < this.bubbleUntil ? this.tinggiUcap : 0;
       // separuh lebar balon + sedikit jarak; tanpa ini pegawai di tepi kiri
       // ruangan memikirkan sesuatu yang kalimatnya terpotong bingkai
       const [tengah, atas] = keLayar(this.x, this.y - 31);
-      const tepi = Math.min(118, panggungW / 2);
-      const kiri = Math.max(tepi, Math.min(panggungW - tepi, tengah));
+      const kiri = jagaBingkai(tengah, 118);
       // balon yang digeser masuk bingkai ekornya ikut bergeser balik, supaya
       // gelembungnya tetap menunjuk kepala orangnya
       this.elPikir.style.setProperty('--geser',
@@ -4061,6 +4167,7 @@ const statTools = document.getElementById('statTools');
 const statAgents = document.getElementById('statAgents');
 const statTime = document.getElementById('statTime');
 const statsBtn = document.getElementById('statsBtn');
+const klipingBtn = document.getElementById('klipingBtn');
 
 let toolCount = 0;
 /* Total token sejak HALAMAN INI dibuka, dijumlah dari tiap event `token`
@@ -5227,6 +5334,10 @@ function perbaruiKartu() {
       .sort((x, y) => y[1] - x[1]).slice(0, 2)
       .map(([id, n]) => ((STATIONS[id] || {}).name || id) + ' ×' + n).join(', ');
     if (sering) baris.push(['sering di', sering]);
+    if (a.tungguTotal || a.tungguSejak) {
+      const totalTunggu = a.tungguTotal + (a.tungguSejak ? Date.now() - a.tungguSejak : 0);
+      baris.push(['nunggu kamu', durasiSingkat(totalTunggu) + ' dari ' + durasiSingkat(Date.now() - a.sejak)]);
+    }
     if (a.token) baris.push(['token', formatToken(a.token)]);
     if (a.biaya) baris.push(['biaya', formatBiaya(a.biaya)]);
   }
@@ -5364,7 +5475,31 @@ function drawSorot(a) {
 setInterval(() => { if (terpilih) perbaruiKartu(); }, 800);
 
 /* ------------------------------------------------------------------ events */
+
+/* Cuma kind yang membawa isi bebas (bukan nama tool/status) yang disamarkan:
+   'pikir' dan 'ucap' (kalimat sungguhan agen), plus ev.tanya (pertanyaan
+   AskUserQuestion / rencana ExitPlanMode, yang juga membocorkan cuplikannya
+   lewat ev.label saat kind:'pre'). Yang TIDAK disentuh: label aktivitas tool
+   biasa (itu lapisan dasar ruangan ini, ada sejak sebelum balon pikiran/kabar
+   ada), dan izin-minta/notify/stop-gagal — isinya sudah kalimat generik dari
+   kamus tetap sisi server (GALAT_STOP dkk.), bukan teks bebas yang ditulis agen. */
+function panggungSensor(ev) {
+  if (!PANGGUNG) return ev;
+  const e = { ...ev };
+  if (e.kind === 'pikir') {
+    e.teks = '';                    // berpikir() sudah otomatis render "tersegel" kalau teks kosong
+  } else if (e.kind === 'ucap') {
+    e.teks = e.akhir ? 'menyampaikan hasil kerja' : 'menulis catatan';
+  }
+  if (e.tanya) {
+    e.label = e.tanya.jenis === 'rencana' ? 'mengajukan rencana kerja' : 'mengajukan pertanyaan';
+    e.tanya = { ...e.tanya, teks: '', daftar: [] };
+  }
+  return e;
+}
+
 function handle(ev) {
+  ev = panggungSensor(ev);
   now = performance.now();
 
   if (ev.kind === 'session-end') {
@@ -5556,7 +5691,7 @@ function handle(ev) {
        sisanya kalimat pengantar sebelum tool berikutnya — cukup lewat sebagai
        balon lalu menumpuk di kotak kabar. */
     case 'ucap': {
-      a.say(esc(satuBaris(ev.teks, 84)), 'say');
+      a.say(esc(satuBaris(ev.teks, UCAP_MAX)), 'say');
       kabarMasuk(ev, a, ev.akhir ? 'hasil' : 'lapor');
       if (ev.akhir) a.legaSampai = now + 2000;   // hasil sudah di tangan kamu: wajahnya lega
       pushLog(ev, 'mark',
@@ -6129,7 +6264,9 @@ const ingatan = {
 
 const PIKIR_GANTI = 3200;      // ms per penggal kalimat di balon pikiran
 const PIKIR_UMUR = 11000;      // ms maksimum satu balon pikiran bertahan
-const TINGGI_UCAP = 27;        // tinggi balon ucap dalam px CSS, untuk menumpuk
+const TINGGI_UCAP = 27;        // tinggi balon ucap sebaris (px CSS), untuk menumpuk
+const UCAP_MAX = 150;          // jatah huruf balon ucap; sisa lebihnya dipotong
+                               // line-clamp CSS, jadi angka ini boleh longgar
 const TITIK = '<span class="titik"><i></i><i></i><i></i></span>';
 
 let balonPikir = ingatan.baca('balonPikir', '1') !== '0';
@@ -6145,6 +6282,14 @@ let pengingatOn = ingatan.baca('pengingatTerkatung', '1') !== '0';
 const satuBaris = (t, n) => {
   const s = String(t || '').replace(/\s+/g, ' ').trim();
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
+};
+
+/* Titik tengah balon, digeser secukupnya supaya separuh lebarnya (`tepi`)
+   tetap di dalam panggung. Dipakai balon ucap dan balon pikiran sama-sama;
+   yang memanggil bertanggung jawab menggeser balik ekor/gelembungnya. */
+const jagaBingkai = (tengah, tepi) => {
+  const t = Math.min(tepi, panggungW / 2);
+  return Math.max(t, Math.min(panggungW - t, tengah));
 };
 
 /* Pikiran dipecah per kalimat, lalu kalimat pendek digabung sampai sepanjang
@@ -6170,65 +6315,68 @@ const KABAR_MAX = 60;
 
 /* `auto` = boleh menyela. Cuma yang menutup giliran dan yang menahan sesinya
    yang dapat hak itu; catatan di tengah jalan tidak.
-   `perihal` dan `sifat` dipakai kepala nota dinas di badan modal — bukan
-   `tajuk` (itu tetap yang dipakai lencana kecil di kepala modal, lebih
-   singkat buat sekali lirik). */
+   `emoji` + `perihal` jadi baris tebal pembuka tiap balon — kebiasaan grup WA
+   kantor: pesan selalu diawali "Izin melaporkan," / "Mohon arahan," sebelum
+   isinya. `tajuk` tinggal dipakai tooltip balon. */
 const KABAR_JENIS = {
-  hasil:   { tajuk: 'hasil kerja',        cls: 'hasil',  auto: true,
-             perihal: 'Laporan hasil pekerjaan',            sifat: 'BIASA'  },
-  lapor:   { tajuk: 'catatan',            cls: 'lapor',  auto: false,
-             perihal: 'Catatan pelaksanaan tugas',          sifat: 'BIASA'  },
-  tanya:   { tajuk: 'butuh jawaban',      cls: 'tunggu', auto: true,
-             perihal: 'Permohonan arahan',                  sifat: 'SEGERA' },
-  izin:    { tajuk: 'minta izin',         cls: 'tunggu', auto: true,
-             perihal: 'Permohonan izin',                    sifat: 'SEGERA' },
-  rencana: { tajuk: 'mengajukan rencana', cls: 'tunggu', auto: true,
-             perihal: 'Pengajuan rencana kerja',             sifat: 'SEGERA' },
-  galat:   { tajuk: 'berhenti',           cls: 'galat',  auto: true,
-             perihal: 'Laporan kendala pelaksanaan tugas',   sifat: 'PENTING' },
+  hasil:   { tajuk: 'hasil kerja',        cls: 'hasil',  auto: true,  emoji: '✅',
+             perihal: 'Izin melaporkan hasil pekerjaan' },
+  lapor:   { tajuk: 'catatan',            cls: 'lapor',  auto: false, emoji: '📝',
+             perihal: 'Sekadar info' },
+  tanya:   { tajuk: 'butuh jawaban',      cls: 'tunggu', auto: true,  emoji: '🙏',
+             perihal: 'Mohon arahan Bapak/Ibu' },
+  izin:    { tajuk: 'minta izin',         cls: 'tunggu', auto: true,  emoji: '🙏',
+             perihal: 'Mohon izin' },
+  rencana: { tajuk: 'mengajukan rencana', cls: 'tunggu', auto: true,  emoji: '📋',
+             perihal: 'Mengajukan rencana kerja, mohon persetujuan' },
+  galat:   { tajuk: 'berhenti',           cls: 'galat',  auto: true,  emoji: '⚠️',
+             perihal: 'Mohon maaf, ada kendala' },
   // SK kenaikan pangkat dari buku induk (lihat terimaPromosi): langka — paling
   // sering sekali per proyek per beberapa hari — jadi boleh menyela seperti hasil.
-  sk:      { tajuk: 'SK kenaikan pangkat', cls: 'hasil',  auto: true,
-             perihal: 'Petikan SK Kenaikan Pangkat',       sifat: 'BIASA'  },
+  sk:      { tajuk: 'SK kenaikan pangkat', cls: 'hasil',  auto: true,  emoji: '📜',
+             perihal: 'Petikan SK Kenaikan Pangkat' },
 };
 
-// Stempel di sudut kertas: satu kata per `cls`, warnanya dipakai ulang dari
-// lencana jenis yang sudah ada (hasil/tunggu/galat/dim) supaya kodenya cuma
-// satu tempat, bukan dua taksonomi warna yang bisa melenceng satu sama lain.
-const KABAR_STEMPEL = { hasil: 'SELESAI', lapor: 'DICATAT', tunggu: 'SEGERA', galat: 'TERHENTI' };
-
-const ROMAN_BULAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
-// Format nomor surat dinas asli: urut/kode-jabatan/bulan-romawi/tahun.
-// Urutnya jalan terus (kabarSeq) walau kabar lama dibuang dari array (lihat
-// KABAR_MAX) -- nomor surat asli juga tidak mundur cuma karena arsipnya disortir.
-function nomorNota(k) {
-  const inisial = k.jab.split(/\s+/).map((w) => w[0]).join('').toUpperCase().slice(0, 4);
-  const d = new Date(k.ts);
-  return String(k.no).padStart(3, '0') + '/ND-' + inisial + '/'
-    + ROMAN_BULAN[d.getMonth()] + '/' + d.getFullYear();
-}
 const tanggalID = (ts) => new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+// Pil pemisah hari di tengah utas, label persis WhatsApp.
+function labelHari(ts) {
+  const d = new Date(ts), acuan = new Date();
+  if (d.toDateString() === acuan.toDateString()) return 'HARI INI';
+  acuan.setDate(acuan.getDate() - 1);
+  if (d.toDateString() === acuan.toDateString()) return 'KEMARIN';
+  return tanggalID(ts).toUpperCase();
+}
+// WA cuma menulis jam.menit, dengan titik seperti locale id-ID.
+const jamWA = (ts) => jam(ts).slice(0, 5).replace(':', '.');
 
-// Inisial 1-2 huruf buat avatar bulat di kepala modal -- nama panggilan bisa
+// Inisial 1-2 huruf buat avatar bulat di samping balon -- nama panggilan bisa
 // "Budi Santoso" (dua suku kata) atau "agent-room·72db" (fallback proyek·id).
 function inisialNama(nama) {
   const kata = String(nama).split(/[\s·]+/).filter(Boolean);
   return kata.length > 1 ? (kata[0][0] + kata[1][0]).toUpperCase() : nama.slice(0, 2).toUpperCase();
+}
+// Warna seragam (pal.main) ada yang khaki terang; buat NAMA pengirim di atas
+// balon putih digelapkan dulu supaya masih kebaca, avatarnya tetap warna asli.
+function warnaNama(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const g = (x) => Math.round(x * 0.62).toString(16).padStart(2, '0');
+  return '#' + g(n >> 16 & 255) + g(n >> 8 & 255) + g(n & 255);
 }
 
 const kabar = [];
 let kabarIdx = -1;
 let kabarBaru = 0;
 let kabarSeq = 0;
+// Pil "N PESAN BELUM DIBACA": indeks kabar pertama yang belum dibaca waktu
+// modal dibuka + jumlahnya saat itu. Dibekukan selama modal terbuka (WA juga
+// begitu), dibuang lagi waktu ditutup.
+let kabarBatasBaru = -1;
+let kabarBatasN = 0;
 let kabarOtomatis = ingatan.baca('kabarOtomatis', '1') !== '0';
 
 const kbr = {
   latar: document.getElementById('dlgKabar'),
-  avatar: document.getElementById('kabarAvatar'),
-  judul: document.getElementById('kabarJudul'),
-  jab: document.getElementById('kabarJab'),
-  jenis: document.getElementById('kabarJenis'),
-  jam: document.getElementById('kabarJam'),
+  anggota: document.getElementById('kabarAnggota'),
   badan: document.getElementById('kabarBadan'),
   hitung: document.getElementById('kabarHitung'),
   sebelum: document.getElementById('kabarSebelum'),
@@ -6249,7 +6397,7 @@ function kabarMasuk(ev, a, jenis) {
     nama: namaKru(a),
     jab: j.singkat,
     warna: j.pal.main,
-    jenis, tajuk: def.tajuk, cls: def.cls, perihal: def.perihal, sifat: def.sifat,
+    jenis, tajuk: def.tajuk, cls: def.cls, emoji: def.emoji, perihal: def.perihal,
     teks: ev.teks || ev.alasan || ev.label || '',
     tanya: ev.tanya || null,
     tool: ev.tool || '',
@@ -6261,6 +6409,7 @@ function kabarMasuk(ev, a, jenis) {
     if (i < 0) break;
     kabar.splice(i, 1);
     if (kabarIdx > i) kabarIdx--;
+    if (kabarBatasBaru > i) kabarBatasBaru--;
   }
   kabarBaru++;
   kabarLencana();
@@ -6280,89 +6429,112 @@ function kabarMasuk(ev, a, jenis) {
 function kabarBuka(i) {
   if (!kabar.length) return;
   kabarIdx = Math.max(0, Math.min(kabar.length - 1, i));
-  const pertama = kbr.latar.hidden;
-  kbr.latar.hidden = false;
-  if (pertama) document.addEventListener('keydown', kabarTombol);
+  if (kbr.latar.hidden) {
+    kbr.latar.hidden = false;
+    document.addEventListener('keydown', kabarTombol);
+    kabarBatasBaru = kabarBaru > 0 ? kabar.length - kabarBaru : -1;
+    kabarBatasN = kabarBaru;
+  }
   kabarBaru = 0;
   kabarLencana();
-  kabarGambar();
+  kabarGambar(true);
 }
 
 function kabarTutupDialog() {
   kbr.latar.hidden = true;
+  kabarBatasBaru = -1;
   document.removeEventListener('keydown', kabarTombol);
 }
 
-function kabarGambar() {
+/* Seluruh kotak dirender sebagai SATU utas grup, bukan satu kabar per
+   halaman. `lompat` = gulir ke balon yang sedang dituju (buka / ← →); tanpa
+   itu posisi gulir dipertahankan, supaya orang yang lagi membaca kabar lama
+   tidak diseret waktu kabar baru masuk dan utasnya digambar ulang. */
+function kabarGambar(lompat) {
   const k = kabar[kabarIdx];
   if (!k) return;
-  kbr.avatar.style.background = k.warna;
-  kbr.avatar.textContent = inisialNama(k.nama);
-  kbr.judul.textContent = k.nama;
-  kbr.jab.textContent = k.jab;
-  kbr.jenis.textContent = k.tajuk;
-  kbr.jenis.className = 'kbr-jenis ' + k.cls;
-  kbr.jam.textContent = jam(k.ts);
-  kbr.badan.innerHTML = kabarIsi(k);
-  kbr.badan.scrollTop = 0;
-  kbr.hitung.textContent = (kabarIdx + 1) + ' / ' + kabar.length;
+  // Subjudul grup WA = daftar anggota. Isinya siapa saja yang pernah menulis
+  // di kotak ini, ditutup "Anda" seperti aslinya.
+  const anggota = [...new Set(kabar.map((x) => x.nama))];
+  kbr.anggota.textContent = anggota.slice(0, 4).join(', ')
+    + (anggota.length > 4 ? ', +' + (anggota.length - 4) + ' lainnya' : '') + ', Anda';
+  const posisi = kbr.badan.scrollTop;
+  kbr.badan.innerHTML = kabarUtas();
+  if (!lompat) kbr.badan.scrollTop = posisi;
+  else if (kabarIdx === kabar.length - 1) kbr.badan.scrollTop = kbr.badan.scrollHeight;
+  else {
+    const el = kbr.badan.querySelector('.wa-pesan.aktif');
+    if (el) kbr.badan.scrollTop = el.offsetTop - (kbr.badan.clientHeight - el.offsetHeight) / 2;
+  }
+  kbr.hitung.textContent = 'kabar ' + (kabarIdx + 1) + ' / ' + kabar.length + ' — balas lewat terminal';
   kbr.sebelum.disabled = kabarIdx <= 0;
   kbr.lanjut.disabled = kabarIdx >= kabar.length - 1;
 }
 
-// Badan modal dirender ala email yang meneruskan nota dinas: kertas krem
-// (kop + tabel Nomor/Sifat/Perihal/Kepada/Dari + isi + stempel sudut) duduk
-// di dalam badan modal yang gelap, sama seperti klien email menampilkan
-// lampiran dokumen resmi di tengah rangka UI-nya sendiri.
-function kabarIsi(k) {
-  const isi = [];
+function kabarUtas() {
+  const out = [];
+  let hariLalu = '';
+  kabar.forEach((k, i) => {
+    const hari = new Date(k.ts).toDateString();
+    if (hari !== hariLalu) { out.push('<div class="wa-pil">' + labelHari(k.ts) + '</div>'); hariLalu = hari; }
+    if (i === kabarBatasBaru) out.push('<div class="wa-pil wa-baru">' + kabarBatasN + ' PESAN BELUM DIBACA</div>');
+    out.push(kabarPesan(k, i === kabarIdx));
+    // Halaman ini menonton, tidak menjawab. Dibilang terang-terangan sebagai
+    // "pesan sistem" 🔒 di bawah balonnya -- menyembunyikannya cuma bikin
+    // orang menunggu kotak balas yang memang tidak akan pernah ada.
+    // Kecuali izin sesi halaman yang lewat loket paraf: itu memang bisa
+    // dijawab di sini — dari kartu pegawainya, bukan dari kotak ini.
+    if (k.cls === 'tunggu') {
+      out.push(izinTunggu.has(k.sesi)
+        ? '<div class="wa-pil wa-sistem">✍️ Sesi halaman: bisa diparaf di sini — buka kartu pegawainya, tombol Paraf / Tolak.</div>'
+        : '<div class="wa-pil wa-sistem">🔒 Sesi ini berhenti sampai dijawab. Jawabannya di tempat sesi itu jalan — terminal atau aplikasi Claude, bukan di halaman ini.</div>');
+    }
+  });
+  return out.join('');
+}
+
+// Satu kabar = satu balon masuk ala grup WA: avatar kecil di kiri, nama
+// pengirim berwarna + jabatan (posisi "~ nama" buat nomor yang tidak
+// tersimpan), baris tebal pembuka, isi, lalu jam kecil di sudut kanan bawah.
+// AskUserQuestion yang punya pilihan digambar sebagai JAJAK PENDAPAT (polling
+// WA) -- pertanyaan berpilihan memang itu bentuknya di grup kantor.
+function kabarPesan(k, aktif) {
+  const isi = ['<p class="wa-perihal">' + k.emoji + ' <b>' + esc(k.perihal) + '</b></p>'];
   if (k.tanya && k.tanya.jenis === 'tanya') {
     for (const q of k.tanya.daftar || []) {
-      if (q.tanya) isi.push('<p class="kbr-tanya">' + esc(q.tanya) + '</p>');
-      if (q.opsi && q.opsi.length) {
-        isi.push('<ol class="kbr-opsi">' + q.opsi.map((o) => '<li>' + esc(o) + '</li>').join('') + '</ol>');
-      }
+      if (q.opsi && q.opsi.length) isi.push(kabarPolling(q));
+      else if (q.tanya) isi.push('<div class="wa-teks">' + esc(q.tanya) + '</div>');
     }
   } else if (k.tanya && k.tanya.jenis === 'rencana') {
-    isi.push('<div class="kbr-teks">' + esc(k.tanya.teks || k.teks) + '</div>');
-  } else {
-    isi.push('<div class="kbr-teks">' + esc(k.teks) + '</div>');
+    isi.push('<div class="wa-teks">' + esc(k.tanya.teks || k.teks) + '</div>');
+  } else if (k.teks) {
+    isi.push('<div class="wa-teks">' + esc(k.teks) + '</div>');
   }
-
-  const field = (label, nilai) => nilai
-    ? '<dt>' + label + '</dt><dd>' + nilai + '</dd>' : '';
-
-  const kertas = '<div class="kbr-kertas">'
-    + '<div class="kbr-kop"><b>PEMERINTAH KANTOR DINAS</b><span>Sekretariat &amp; Tata Usaha</span></div>'
-    + '<h3 class="kbr-judulnota">NOTA DINAS</h3>'
-    + '<dl class="kbr-field">'
-      + field('Nomor', esc(nomorNota(k)))
-      + field('Sifat', '<span class="kbr-sifat ' + k.cls + '">' + esc(k.sifat) + '</span>')
-      + field('Perihal', '<b>' + esc(k.perihal) + '</b>')
-      + field('Tanggal', esc(tanggalID(k.ts)))
-      + field('Kepada', 'Yth. Pimpinan')
-      + field('Dari', esc(k.nama) + ', ' + esc(k.jab))
-    + '</dl>'
-    + '<div class="kbr-isi">' + isi.join('') + '</div>'
-    + '<div class="kbr-stempel ' + k.cls + '"><span>' + (KABAR_STEMPEL[k.cls] || 'DICATAT') + '</span></div>'
-  + '</div>';
-
-  const catatan = [];
-  // Halaman ini menonton, tidak menjawab. Menyembunyikan itu bikin orang
-  // menunggu tombol yang memang tidak akan pernah ada.
-  if (k.cls === 'tunggu') {
-    catatan.push('<p class="kbr-nota">Sesinya berhenti di sini sampai dijawab, dan '
-      + 'jawabannya di tempat sesi itu jalan — terminal atau aplikasi Claude, '
-      + 'bukan di halaman ini.</p>');
-  }
-  // Metadata teknis ditaruh DI LUAR kertas, seperti header mentah yang
-  // ditampilkan klien email terpisah dari isi pesannya sendiri.
+  // Metadata teknis (tool, id sesi) ikut di kaki balon, sekecil jamnya.
   const meta = [];
-  if (k.tool) meta.push('tool <code>' + esc(k.tool) + '</code>');
-  if (k.sesi) meta.push('sesi <code>' + esc(k.sesi) + '</code>');
-  if (meta.length) catatan.push('<p class="kbr-meta">' + meta.join(' · ') + '</p>');
+  if (k.tool) meta.push('via ' + esc(k.tool));
+  if (k.sesi) meta.push('sesi ' + esc(k.sesi));
 
-  return kertas + catatan.join('');
+  return '<div class="wa-pesan ' + k.cls + (aktif ? ' aktif' : '') + '" title="' + esc(k.tajuk) + '">'
+    + '<span class="wa-avatar" style="background:' + k.warna + '">' + esc(inisialNama(k.nama)) + '</span>'
+    + '<div class="wa-balon">'
+      + '<div class="wa-pengirim"><b style="color:' + warnaNama(k.warna) + '">' + esc(k.nama) + '</b>'
+        + '<span>~ ' + esc(k.jab) + '</span></div>'
+      + isi.join('')
+      + '<div class="wa-kaki">'
+        + (meta.length ? '<span class="wa-meta">' + meta.join(' · ') + '</span>' : '')
+        + '<span class="wa-jam">' + jamWA(k.ts) + '</span>'
+      + '</div>'
+    + '</div>'
+  + '</div>';
+}
+
+function kabarPolling(q) {
+  return '<div class="wa-poll">'
+    + '<div class="wa-poll-judul">' + esc(q.tanya || 'Pilih salah satu') + '</div>'
+    + '<div class="wa-poll-ket">JAJAK PENDAPAT · Pilih satu</div>'
+    + '<ul>' + q.opsi.map((o) => '<li><i></i><span>' + esc(o) + '</span><em>0</em><b></b></li>').join('') + '</ul>'
+  + '</div>';
 }
 
 function kabarLencana() {
@@ -6900,6 +7072,88 @@ function notaCetakLapis(html, cetakOtomatis = true) {
   }
 }
 
+/* ---------------------------------------------------- kliping mingguan --- *
+ * Map arsip yang makin tebal tiap minggu (RUANGAN.arsipKlipingLembar,
+ * digambar di drawArsip() — lihat komentarnya di sana). Mirror 1:1 blok
+ * statistik token di atas: sama-sama modal + tombol toolbar + fetch ulang
+ * tiap dibuka. */
+const dlgKliping = document.getElementById('dlgKliping');
+const klipingBadan = document.getElementById('klipingBadan');
+
+let arsipKliping = null;
+async function muatArsipKliping() {
+  try {
+    const r = await fetch('/kliping-mingguan');
+    arsipKliping = await r.json();
+    // prop di ruangan ikut data server sejak halaman dimuat, bukan cuma
+    // begitu modalnya dibuka
+    RUANGAN.arsipKlipingLembar = arsipKliping.lembar || 0;
+  } catch { /* server lokal lagi restart — modal berikutnya coba lagi */ }
+  if (!dlgKliping.hidden) klipingGambar();
+}
+muatArsipKliping();
+
+function labelMinggu(senin) {
+  const awal = new Date(senin + 'T00:00:00');
+  const akhir = new Date(awal);
+  akhir.setDate(akhir.getDate() + 6);
+  const opt = { day: 'numeric', month: 'short' };
+  return awal.toLocaleDateString('id-ID', opt) + '–' + akhir.toLocaleDateString('id-ID', opt);
+}
+
+function klipingKartu(m, aktif) {
+  if (!m) return '';
+  const baris = ['<span class="kk">sesi aktif</span><span class="vv">' + m.sesi + '</span>'];
+  if (m.toolTeratas) {
+    baris.push('<span class="kk">tool</span><span class="vv">'
+      + esc(m.toolTeratas.nama) + ' ×' + m.toolTeratas.jumlah + '</span>');
+  }
+  if (m.proyekTeratas) {
+    baris.push('<span class="kk">proyek</span><span class="vv">'
+      + esc(m.proyekTeratas.nama) + ' ×' + m.proyekTeratas.jumlah + '</span>');
+  }
+  // "Laporan nihil" apa adanya kalau memang tidak ada — ambient event murni
+  // simulasi client-side, jadi kalau tidak ada tab yang terbuka minggu itu,
+  // memang tidak ada yang tercatat. Itu bukan cacat yang perlu ditutupi.
+  baris.push('<span class="kk">terjarang</span><span class="vv">'
+    + (m.ambienTerjarang
+      ? esc(m.ambienTerjarang.id) + ' ×' + m.ambienTerjarang.jumlah
+      : 'tidak ada kejadian langka tercatat minggu ini')
+    + '</span>');
+  return '<div class="kartu-info kliping-kartu">'
+    + '<h3>' + esc(labelMinggu(m.minggu)) + (aktif ? ' <span class="kliping-tag">belum dijilid</span>' : '') + '</h3>'
+    + baris.join('') + '</div>';
+}
+
+function klipingGambar() {
+  const k = arsipKliping;
+  if (!k) { klipingBadan.innerHTML = '<p class="stat-ket">memuat…</p>'; return; }
+  const blok = [klipingKartu(k.berjalan, true)];
+  if (k.arsip && k.arsip.length) {
+    blok.push('<div class="stat-blok"><h3>arsip</h3>'
+      + [...k.arsip].reverse().map((m) => klipingKartu(m, false)).join('') + '</div>');
+  } else {
+    blok.push('<p class="stat-ket">belum ada minggu yang dijilid — kembali lagi minggu depan.</p>');
+  }
+  klipingBadan.innerHTML = blok.join('');
+}
+
+function klipingTutupDialog() {
+  dlgKliping.hidden = true;
+  document.removeEventListener('keydown', klipingTombol);
+}
+function klipingTombol(e) { if (e.key === 'Escape') { e.preventDefault(); klipingTutupDialog(); } }
+
+klipingBtn.onclick = () => {
+  if (!dlgKliping.hidden) { klipingTutupDialog(); return; }
+  klipingGambar();
+  muatArsipKliping();
+  dlgKliping.hidden = false;
+  document.addEventListener('keydown', klipingTombol);
+};
+document.getElementById('klipingTutup').onclick = klipingTutupDialog;
+dlgKliping.onclick = (e) => { if (e.target === dlgKliping) klipingTutupDialog(); };
+
 /* ------------------------------------------------------------------ kamera */
 /* Kamera hidup, sengaja dipisah dari fit(). fit() cuma mengurus skala integer
    kanvas→CSS (itu urusan piksel layar); kamera bekerja di koordinat dunia
@@ -7228,6 +7482,9 @@ function settingGambarInfo() {
   if (kendali.host && kendali.port) {
     baris.push('<span class="kk">alamat</span><span class="vv"><code>'
       + esc(kendali.host) + ':' + esc(String(kendali.port)) + '</code></span>');
+  }
+  if (PANGGUNG) {
+    baris.push('<span class="kk">mode panggung</span><span class="vv">aktif — isi balon/kabar disamarkan</span>');
   }
   settingInfo.innerHTML = baris.join('');
 }
@@ -7809,6 +8066,11 @@ const RUANGAN = {
   piagamDinding: false,    // piagam zona integritas tergantung di dinding, permanen
   laciTerbuka: -1,         // laci filing yang sedang dibuka (arsiparis mengajari magang)
   tumpukanMap: [],         // {x,y,sisa} tumpukan map sementara (rangkap tiga dkk)
+  // Berapa "sheet" kliping mingguan yang sudah dijilid (GET /kliping-mingguan,
+  // field `lembar`) — diisi langsung dari hasil fetch, bukan dihitung sendiri
+  // di client. Tampilan dibatasi maks 10 lapis di drawArsip(), datanya sendiri
+  // tidak pernah dipotong.
+  arsipKlipingLembar: 0,
   // Lembar notulen yang ditinggal peserta rapat di sudut meja rapat, 0..10
   // (NOTULEN_MAKS). Naik tiap Peserta bubar; dibawa arsiparis standby ke
   // lemari arsip tiap ±10 menit kalau ≥3 (lihat class Standby).
@@ -8000,7 +8262,20 @@ function nyalakanEvent(def) {
   // Event yang tidak dapat pemain sama sekali padahal butuh: batalkan, jangan
   // biarkan jalan hampa selama durasinya lalu menghabiskan cooldown.
   if (def.perluAktor && !E.aktor.length) { matikanEvent(E, true); return false; }
+  // Lapor ke arsip kliping mingguan — cuma event kelas 'panggung' (saling
+  // eksklusif, jadi volumenya kecil) dan bukan yang dipaksa manual lewat
+  // ?event= buat testing (EVENT_PAKSA tidak boleh ikut mengotori arsip
+  // sungguhan). Fire-and-forget, gagal = diam — ruangan tidak boleh terganggu
+  // gara-gara pelaporan suasana.
+  if (def.kelas === 'panggung' && !EVENT_PAKSA) laporAmbien(def.id);
   return true;
+}
+
+function laporAmbien(id) {
+  fetch('/ambien', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  }).catch(() => {});
 }
 
 /* ------------------------------------------------------ telemetri galat ---

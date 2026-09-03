@@ -186,6 +186,7 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_CLAUDE` | hasil `where claude` | tunjuk biner claude tertentu, kalau PATH menemukan instalasi yang salah |
 | `AGENT_ROOM_TOKEN_FILE` | `.agent-room-token` | tempat token headless diingat, kalau centangnya dinyalakan |
 | `AGENT_ROOM_TOKEN_LOG` | `token-riwayat.jsonl` | tempat riwayat token lintas sesi ditulis (lihat **Riwayat lintas sesi**) |
+| `AGENT_ROOM_KLIPING_LOG` | `kliping-mingguan.jsonl` | tempat arsip kliping mingguan ditulis (lihat **Arsip kliping mingguan**); checkpoint minggu berjalan ikut ke folder yang sama |
 | `AGENT_ROOM_AGENDA_DIR` | `agenda/` | folder buku agenda harian (lihat **Buku agenda**) |
 | `AGENT_ROOM_AGENDA_HARI` | `30` | berkas agenda lebih tua dari ini dibuang saat start |
 | `AGENT_ROOM_BUKU_INDUK` | `buku-induk.json` | tempat buku induk pegawai (karier per folder proyek) ditulis (lihat **Buku induk pegawai**) |
