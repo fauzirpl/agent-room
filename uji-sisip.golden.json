@@ -1,0 +1,65 @@
+{
+  "_catatan": "Golden urutan gambar gambarSisipKadis() (bukaan ruang kadis) di public/room.js. Isinya URUTAN label (prop:<fungsi>, orang:<id>, sorot:<id>, dinding, karpet, kusen, gorden), bukan angka y. Perbarui dengan `node uji-sisip.mjs --perbarui` HANYA kalau perubahan urutannya memang disengaja. Tidak ada hubungannya dengan uji-zorder.golden.json — itu golden ruang utama dan tidak boleh ikut bergeser oleh pekerjaan ruang kadis.",
+  "kasus": {
+    "tertutup-t0": [
+      "kusen",
+      "gorden"
+    ],
+    "terbuka-kosong": [
+      "dinding",
+      "karpet",
+      "prop:drawKursiKadis",
+      "orang:kadis-npc",
+      "prop:drawMejaKadis",
+      "prop:drawKursiTamu",
+      "kusen",
+      "gorden"
+    ],
+    "satu-tamu": [
+      "dinding",
+      "karpet",
+      "prop:drawKursiKadis",
+      "orang:kadis-npc",
+      "prop:drawMejaKadis",
+      "orang:T1",
+      "prop:drawKursiTamu",
+      "kusen",
+      "gorden"
+    ],
+    "tiga-tamu": [
+      "dinding",
+      "karpet",
+      "prop:drawKursiKadis",
+      "orang:kadis-npc",
+      "prop:drawMejaKadis",
+      "orang:T3",
+      "orang:T1",
+      "orang:T2",
+      "prop:drawKursiTamu",
+      "kusen",
+      "gorden"
+    ],
+    "tamu-terpilih-disorot": [
+      "dinding",
+      "karpet",
+      "prop:drawKursiKadis",
+      "orang:kadis-npc",
+      "prop:drawMejaKadis",
+      "sorot:T1",
+      "orang:T1",
+      "prop:drawKursiTamu",
+      "kusen",
+      "gorden"
+    ],
+    "orang-ruang-utama-tidak-ikut": [
+      "dinding",
+      "karpet",
+      "prop:drawKursiKadis",
+      "orang:kadis-npc",
+      "prop:drawMejaKadis",
+      "prop:drawKursiTamu",
+      "kusen",
+      "gorden"
+    ]
+  }
+}

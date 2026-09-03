@@ -110,7 +110,7 @@ daftarEvent(
       E.data.a = pemeran(E);
       if (E.data.a) E.data.a.goToXY(347, 130, 'up');
     });
-    pada(E, 7.5, () => { if (E.data.a) E.data.a.say('sudah, tenang'); });
+    pada(E, 7.5, () => { if (E.data.a && E.data.a.eventKerja === E) E.data.a.say('sudah, tenang'); });
   },
 },
 
@@ -196,7 +196,11 @@ daftarEvent(
   perluAktor: true,
   mulai(E) { E.data.a = pemeranStasiun(E, 'server'); },
   tick(E, dt) {
-    if (!E.data.a) return;
+    // E.data.a itu potret dari mulai(). Kalau tool call sungguhan menariknya di
+    // tengah (lepasDariEvent → eventKerja null), event ini TIDAK boleh menyeret
+    // dia balik ke rak server di detik 10 — panel akan bilang dia mengerjakan
+    // hal lain sementara ruangan menggambarnya berdiri di rak.
+    if (!E.data.a || E.data.a.eventKerja !== E) return;
     pada(E, 2, () => { E.data.a.say('silau, ndan'); E.data.a.goTo('web'); });
     if (E.umur > 2 && E.umur < 10) RUANGAN.gordenKanan = Math.min(16, RUANGAN.gordenKanan + 5 * dt);
     pada(E, 10, () => { if (E.data.a) E.data.a.goTo('server'); });
@@ -269,11 +273,11 @@ daftarEvent(
   },
   tick(E, dt) {
     const a = E.data.a;
-    if (!a) return;
-    pada(E, 2, () => { a.pose = null; a.goTo('web'); });
+    if (!masihMain(E, a)) return;     // direbut tool call: jangan diseret ke gorden
+    pada(E, 2, () => { if (masihMain(E, a)) { a.pose = null; a.goTo('web'); } });
     if (E.umur > 2 && E.umur < 4) RUANGAN.gordenKanan = Math.min(16, RUANGAN.gordenKanan + 5 * dt);
     pada(E, 4, () => { if (a) a.say('silau, ditutup ya'); });
-    pada(E, 6, () => { if (a) a.goTo('think'); });
+    pada(E, 6, () => { if (masihMain(E, a)) a.goTo('think'); });
   },
   gambarProp(E) {
     if (E.umur > 6) return;
@@ -310,7 +314,7 @@ daftarEvent(
       if (RUANGAN.tumpukanFiling > 0) RUANGAN.tumpukanFiling--;
       a.say('beres-beres arsip, tahun baru');
     });
-    pada(E, 16, () => { a.bawa = null; a.goTo(stasiunPulang(a)); });
+    pada(E, 16, () => { if (masihMain(E, a)) { a.bawa = null; a.goTo(stasiunPulang(a)); } });
   },
 },
 
@@ -330,7 +334,7 @@ daftarEvent(
     const a = E.data.a;
     if (a) {
       pada(E, 3, () => a.say('SPJ akhir tahun belum kelar-kelar'));
-      pada(E, 10, () => { a.pose = null; a.goTo(stasiunPulang(a)); });
+      pada(E, 10, () => { if (masihMain(E, a)) { a.pose = null; a.goTo(stasiunPulang(a)); } });
     }
     if (E.umur > 2 && E.umur < 2 + dt * 2) {
       RUANGAN.mapDisposisi = Math.min(5, RUANGAN.mapDisposisi + 1);

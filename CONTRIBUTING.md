@@ -18,12 +18,17 @@ menyebutnya.
 ## Cara uji
 
 ```bash
-npm test                        # = uji-event --semua && uji-zorder && uji-katalog
+npm test                        # semua gerbang sekaligus (daftar persisnya di package.json)
 node uji-event.mjs <id>         # satu event, detail lengkap (termasuk hook gambar & rantai lanjutan)
 node uji-event.mjs --daftar     # semua id yang valid
 node uji-event.mjs --penjadwal  # cuma aturan bentrok / kelas panggung / pinjam aktor
 node uji-zorder.mjs             # z-order frame() vs golden; --tampil untuk melihat urutannya
 node uji-katalog.mjs            # papan skor katalog (event-acak.json vs kode); --gerbang untuk menggagalkan
+node uji-ulang.mjs              # putar ulang satu hari buku agenda sungguhan; --sampai N / --laju 1 / --tampil
+node uji-sisip.mjs              # bukaan ruang kadis vs golden: sapuan piksel, batas keras, klip
+node uji-seragam.mjs            # seragam kantor cabang: jarak warna rompi vs semua baju harian
+node uji-pagu.mjs               # pagu anggaran token: ambang, pagar minggu dua arah, metrik
+node uji-pegawai.mjs            # formasi pegawai tetap: kursi, sapuan basi, ambient tidak menyentuh
 node --check server.mjs && node --check dinas.mjs
 ```
 
@@ -50,6 +55,50 @@ perbarui golden-nya dan commit bersama perubahan kodenya:
 ```bash
 node uji-zorder.mjs --perbarui
 ```
+
+`uji-ulang.mjs` memutar ulang **satu hari kerja sungguhan** ke `frame()`/
+`handle()` asli `room.js`, headless: 3.099 kejadian, 11.329 frame, 9,4 menit
+ruangan virtual, ±27 detik di mesin lengang. Fixture-nya
+`uji-ulang.fixture.jsonl`: buku agenda satu hari (`agenda/YYYY-MM-DD.jsonl`)
+yang label & pengenalnya sudah diganti sintetis, dipadatkan jadi bentuk
+kolumnar < 96 KB. Yang diperiksa **sifat sepanjang hari**, bukan golden urutan:
+nol lemparan, nol `console.warn('[event]')`, tiap penghuni & prop digambar
+tepat sekali tiap frame, tidak ada wadah yang bocor, `MOD` kembali ke bawaan
+tiap kali tidak ada event hidup, dan `toolCount` sama persis dengan jumlah
+baris `pre` di fixture — itu Aturan 2 yang diuji langsung, bukan dipercayai.
+Laporannya berupa tabel puncak-tertinggi tiap penghitung terhadap ambangnya,
+jadi sisa ruangnya kelihatan sebelum jadi merah. Uji ini **tidak** punya
+golden apa pun tentang event mana yang menyala — kalau punya, menambah satu
+definisi event akan memerahkannya.
+
+Memperbarui fixture (perlu kalau bentuk buku agenda berubah, atau kalau kamu
+ingin hari yang lebih representatif):
+
+```bash
+# 1. BEKUKAN sumbernya. Berkas hari ini masih ditulis server yang hidup —
+#    membuat fixture dari berkas yang sedang tumbuh tidak bisa diulang.
+cp agenda/2026-09-03.jsonl /tmp/hari.jsonl
+
+# 2. Bikin ulang. Label diganti sintetis, dan tiap penggantian DIBUKTIKAN
+#    mendarat di meja yang sama lewat stationFor() asli room.js; kalau ada
+#    satu baris pun yang berpindah meja, perintah ini gagal dan menyebutnya.
+node buat-fixture.mjs --dari /tmp/hari.jsonl --tanggal 2026-09-03
+
+# 3. Periksa kesetiaannya terhadap sumber (opsional, tapi murah).
+node buat-fixture.mjs --periksa --dari /tmp/hari.jsonl --tanggal 2026-09-03
+
+# 4. Lihat dengan mata sendiri: bentangkan balik jadi buku agenda, lalu tonton.
+node buat-fixture.mjs --keluarkan-agenda agenda/2026-04-15.jsonl
+#    buka http://127.0.0.1:4517/?ulang=2026-04-15&laju=60 — pegawainya harus
+#    berpindah meja dengan pola yang sama seperti hari aslinya.
+#    Hapus berkasnya sesudah selesai (agenda/ memang di-gitignore).
+```
+
+Fixture **tidak boleh disunting tangan**. `periksaPrivasi()` dijalankan ulang
+tiap kali `uji-ulang.mjs` jalan, per bidang, dan menolak nilai string apa pun
+yang tidak cocok dengan pola pseudonim atau katalog enum bidangnya — jalur
+berkas, URL, nama sungguhan, atau bidang yang tidak dikenal langsung
+menggagalkan uji sebelum satu frame pun diputar.
 
 `uji-katalog.mjs` cuma papan skor: mencetak berapa id `event-acak.json` yang
 sudah terdaftar di `public/event/*.js`, yang belum (per kategori), dan id yang

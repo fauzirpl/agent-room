@@ -50,6 +50,9 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 - 272 event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat) —
   angka dihitung otomatis: `node uji-katalog.mjs`
 - Cuaca sungguhan di jendela + siklus siang–malam
+- Ruangan mengusut sepanjang hari: pagi meja rapi, menjelang pulang penuh
+  tumpukan dokumen, kursi serong, lembaran tercecer — pagi berikutnya bersih
+  lagi. Coba `?kusut=1`
 - Notifikasi suara pas sesi selesai, plus musik lofi kantor opsional —
   semua bunyi disintesis langsung, nol file audio eksternal
 - Opsional: tugaskan pekerjaan baru dan telusuri folder langsung dari halaman
@@ -66,7 +69,9 @@ Tanpa dependency — cuma butuh Node dan `curl`. Alasan di balik tiap
 keputusan desain (kenapa `curl` bukan Node, kenapa hujan bukan event acak,
 kenapa perintah shell dipecah dua meja, dst.) ada di **[DESIGN.md](DESIGN.md)**.
 Katalog rancangan 373 event acak ada di **[EVENT-ACAK.md](EVENT-ACAK.md)**
-(267 di antaranya sudah jadi kode — papan skor: `node uji-katalog.mjs`).
+(306 di antaranya sudah jadi kode; total 337 event terpasang, sisanya gelombang
+*tamu tenar* yang ditambahkan di luar rancangan — papan skor:
+`node uji-katalog.mjs`).
 
 ---
 

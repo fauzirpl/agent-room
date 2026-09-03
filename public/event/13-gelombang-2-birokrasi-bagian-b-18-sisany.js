@@ -42,7 +42,12 @@ daftarEvent(
     MOD.pintuKadis = true;
     MOD.sidak = true;   // drawMejaKerja membaca ini: semua laptop terang penuh
   },
-  selesai() { MOD.sidak = false; MOD.pintuKadis = false; },
+  // MOD direset SETIAP frame oleh resetMod(), jadi selesai() tidak perlu
+  // membersihkannya — dan justru TIDAK BOLEH: pintuKadis dipakai bersama
+  // sebelas event lain, dan menulis false di sini membanting pintu yang
+  // sedang ditahan terbuka event lain di frame yang sama. Konvensi di
+  // seluruh katalog: pintuKadis hanya pernah ditulis TRUE.
+  selesai() { MOD.sidak = false; },
 },
 
 {
@@ -179,7 +184,12 @@ daftarEvent(
       const c = E.aktor[0]; if (c) c.goTo('edit');
     });
   },
-  selesai() { MOD.pintuKadis = false; },
+  // MOD direset SETIAP frame oleh resetMod(), jadi selesai() tidak perlu
+  // membersihkannya — dan justru TIDAK BOLEH: pintuKadis dipakai bersama
+  // sebelas event lain, dan menulis false di sini membanting pintu yang
+  // sedang ditahan terbuka event lain di frame yang sama. Konvensi di
+  // seluruh katalog: pintuKadis hanya pernah ditulis TRUE.
+  // (selesai() jadi kosong, jadi dihapus sekalian.)
 },
 
 {
@@ -281,7 +291,12 @@ daftarEvent(
     if (E.umur > 45) return;
     r(96, 40, Math.min(30, E.umur), 1, '#3565b0');
   },
-  selesai() { MOD.pintuKadis = false; },
+  // MOD direset SETIAP frame oleh resetMod(), jadi selesai() tidak perlu
+  // membersihkannya — dan justru TIDAK BOLEH: pintuKadis dipakai bersama
+  // sebelas event lain, dan menulis false di sini membanting pintu yang
+  // sedang ditahan terbuka event lain di frame yang sama. Konvensi di
+  // seluruh katalog: pintuKadis hanya pernah ditulis TRUE.
+  // (selesai() jadi kosong, jadi dihapus sekalian.)
 },
 
 {
@@ -357,8 +372,9 @@ daftarEvent(
       s.say('sudah balik, ini SPJ-nya');
       s.goTo('think');
       spawn('paper', s.x, 300);
-      pada(E, E.umur + 3, () => { s.bawa = null; });
+      E.data.koperPada = E.umur + 3;      // pada(E, E.umur + 3, ..) tidak pernah jalan
     }
+    if (E.data.koperPada && E.umur > E.data.koperPada && s.bawa) s.bawa = null;
   },
   selesai(E) {
     if (E.data.sasaran) E.data.sasaran.bawa = null;
@@ -467,12 +483,12 @@ daftarEvent(
     if (humas) { humas.doingEvent = 'menjamu tamu kabupaten'; humas.goTo('rapat'); }
   },
   tick(E) {
-    pada(E, 1, () => { const h = E.data.humas; if (h) h.say('silakan, Pak, dari Kabupaten sebelah ya'); });
+    pada(E, 1, () => { const h = E.data.humas; if (masihMain(E, h)) h.say('silakan, Pak, dari Kabupaten sebelah ya'); });
     if (Math.random() < 0.03) spawn('steam', 214, 210);
     if (Math.random() < 0.03) spawn('steam', 278, 210);
     pada(E, 55, () => {
       const h = E.data.humas;
-      if (h) { h.pose = 'salam'; h.goToXY(-16, LANE_DOWN, 'left'); }
+      if (masihMain(E, h)) { h.pose = 'salam'; h.goToXY(-16, LANE_DOWN, 'left'); }
       if (E.data.tamu) E.data.tamu.bubar();
     });
   },
@@ -508,7 +524,14 @@ daftarEvent(
     }
     if (E.data.a && E.data.a.diam && T.fase === 'bingung') {
       E.data.a.pose = 'nunjuk';
-      pada(E, E.umur + 1.5, () => { T.fase = 'keluar'; T.hadap = 'right'; E.data.a.pose = null; T.terimakasih = true; });
+      // Tamunya dulu tidak pernah pergi: pada(E, E.umur + 1.5, ..) targetnya
+      // bergerak tiap frame jadi callback-nya mati. Tenggat disimpan sekali.
+      if (E.data.tunjukPada == null) E.data.tunjukPada = E.umur + 1.5;
+      else if (E.umur > E.data.tunjukPada) {
+        T.fase = 'keluar'; T.hadap = 'right';
+        E.data.a.pose = null;
+        T.terimakasih = true;
+      }
     }
   },
   gambarProp(E) {

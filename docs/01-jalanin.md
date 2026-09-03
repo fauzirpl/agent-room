@@ -191,6 +191,10 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_AGENDA_HARI` | `30` | berkas agenda lebih tua dari ini dibuang saat start |
 | `AGENT_ROOM_BUKU_INDUK` | `buku-induk.json` | tempat buku induk pegawai (karier per folder proyek) ditulis (lihat **Buku induk pegawai**) |
 | `AGENT_ROOM_BUKU_INDUK_UJI` | *(kosong)* | **uji saja**: pengali jam dinas (mis. `100000`) supaya kenaikan golongan bisa dipaksa; nilainya ikut tampil di `/buku-induk` sebagai `uji` |
+| `AGENT_ROOM_PAGU` | `pagu.json` | tempat setelan pagu **token** per proyek dibaca (lihat **Pagu anggaran token**). Berkasnya tidak ada = fitur mati total, tanpa peringatan |
+| `AGENT_ROOM_PAGU_BAWAAN` | *(kosong)* | jalan pintas tanpa berkas: satu angka token yang berlaku untuk semua proyek. Hanya dibaca kalau `pagu.json` memang tidak ada |
+| `AGENT_ROOM_FORMASI` | `formasi.json` | tempat formasi pegawai tetap (nama & jabatan penghuni tiap kursi per folder proyek) ditulis (lihat **Pegawai tetap per proyek** di [Ruangan & pegawai](02-ruangan.md)) |
+| `AGENT_ROOM_PEGAWAI_TETAP` | *(nyala)* | `off` mematikan formasi pegawai tetap: nama pegawai kembali diundi tiap sesi dan `formasi.json` tidak pernah lahir |
 | `AGENT_ROOM_CUACA` | *(nyala, tebak dari IP)* | `off` mematikan cek cuaca; `lat,lon` menetapkan lokasi |
 | `AGENT_ROOM_ISI` | *(nyala)* | `off` menutup transkrip sesi: ruangan kembali cuma menyiarkan metadata, tanpa pikiran dan kalimat agen |
 | `AGENT_ROOM_KUNCI` | *(kosong)* | kalau diisi, `POST /event` wajib membawa header `x-agent-room-kunci` yang sama; **wajib** begitu bind dibuka ke jaringan (lihat **Kantor pusat & kantor cabang**) |
@@ -261,6 +265,76 @@ cabang cukup menunjuk ujung tunnel-nya. Kendali web (`--izinkan-perintah`)
 tidak pernah boleh dinyalakan di server yang terbuka ke jaringan: token
 per-jalannya bisa dibaca siapa pun lewat `GET /kendali` dari alamat yang lolos
 penjaga Host.
+
+### Pagu anggaran token
+
+Tiap proyek boleh diberi **pagu token per minggu kalender** (Senin sampai
+Minggu). Begitu serapan minggu berjalan melewati ambang, ruangan menerbitkan
+satu nota — sama seperti nota promosi buku induk: dideteksi di server, bukan di
+halaman, supaya satu kejadian berarti satu nota di semua penonton.
+
+**Ini angka token, bukan uang.** Tidak ada tabel harga di dalamnya dan tidak
+akan pernah ada: harga berubah, angka token dari API tidak. (Kata "pagu" muncul
+juga di antrean disposisi sebagai `--max-budget-usd`; itu pagu dolar, dunia
+lain, dan tidak pernah disambung ke angka di sini.)
+
+Ini juga **nota, bukan rem**. Serapan yang lewat pagu tidak pernah menahan
+pegawai, menahan antrean, atau mengubah state siapa pun.
+
+Bentuk `pagu.json` (salin dari `pagu.contoh.json`):
+
+```json
+{
+  "v": 1,
+  "ambang": [80, 100],
+  "bawaan": 0,
+  "hitung": "io",
+  "proyek": { "agent-room": 5000000 }
+}
+```
+
+| Kunci | Guna |
+|---|---|
+| `ambang` | persen serapan yang menerbitkan nota. Bawaan `[80, 100]` |
+| `bawaan` | pagu untuk proyek yang tidak disebut di `proyek`. `0` = tidak dipagu |
+| `hitung` | `io` (bawaan) menghitung token masuk+keluar saja; `semua` ikut menghitung token tulis-cache dan baca-cache |
+| `proyek` | nama **folder** proyek → pagu token per minggu |
+
+Tanpa `pagu.json`, **tidak terjadi apa-apa**: tidak ada nota, tidak ada metrik,
+tidak ada berkas baru, dan tidak satu baris konsol pun. Yang tidak memakai fitur
+ini tidak perlu tahu fitur ini ada.
+
+Empat sifat yang lebih baik dibaca sekarang daripada ditemukan sendiri nanti:
+
+1. **Dibaca sekali waktu start.** Mengubah `pagu.json` tanpa merestart dinas
+   tidak berpengaruh, sama seperti env lain.
+2. **Dasar diam.** Pemeriksaan pertama sebuah proyek menandai *diam* semua
+   ambang yang sudah terlewati sebelumnya, supaya restart di tengah minggu tidak
+   memuntahkan ulang nota lama. Harganya: kalau pagu baru diisi waktu serapan
+   sudah 90%, nota 80% memang tidak akan terbit minggu itu — hanya 100%.
+3. **Kuncinya nama folder**, sama seperti riwayat proyek dan buku induk. Dua
+   worktree yang nama foldernya sama dihitung sebagai satu pagu.
+4. **Ambang lebih dari empat dipotong** dari yang terendah, tapi ambang 100%
+   tidak pernah ikut dibuang — itu satu-satunya nota yang jadi alasan fitur ini
+   ada. Yang dibuang tetap disebut namanya di konsol.
+
+Lima metrik ikut terbit di `/metrics` begitu pagu aktif:
+
+| Metrik | Arti |
+|---|---|
+| `agent_room_pagu_proyek` | berapa proyek dipagu eksplisit di berkas (angka konfigurasi, bukan pemakaian) |
+| `agent_room_pagu_bawaan` | pagu bawaan (`0` = tidak ada) |
+| `agent_room_pagu_proyek_aktif` | proyek berpagu yang masuk laporan minggu berjalan |
+| `agent_room_pagu_serapan_rasio` | serapan minggu berjalan sebagai rasio terpakai/pagu (`1.0` = pas pagu) |
+| `agent_room_pagu_terlampaui` | berapa proyek yang serapan minggu ininya sudah lewat pagu |
+
+Ditambah `agent_room_pagu_hitung_penuh_total`, yang naik sekali tiap laporan
+dihitung penuh — kalau angka itu naik tiap scrape, cache laporannya sudah tidak
+bekerja. Dengan `AGENT_ROOM_METRICS_PROYEK=1`, dua metrik berlabel `proyek`
+ikut terbit (20 teratas menurut rasio).
+
+`pagu.json` berisi nama folder proyek milik pemakai, jadi berkasnya diabaikan
+`.gitignore`. Yang ikut di repo justru `pagu.contoh.json`.
 
 ## Kenapa curl, bukan node
 

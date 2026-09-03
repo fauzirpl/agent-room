@@ -12,7 +12,7 @@
 | Meja stempel | `Edit`, `Write`, `Artifact` | CAP! stempel + cipratan tinta merah |
 | PC server | perintah **git** (`git`, `gh`, `jj`, …) lewat `Bash`/`PowerShell` | rak besi: patch panel, dua server, storage, switch, UPS, kabel UTP menjuntai, APAR di sampingnya |
 | Meja rapat | `Task`, `Agent`, `Workflow`, plus **kegiatan berpikir selagi ada subagent berjalan** | meja panjang bertaplak putih + rimpel hijau, 9 kursi, peserta undangan ikut duduk, ada yang bicara ada yang mencatat notulen |
-| Ruang kadis | `Skill`, `SendMessage`, `mcp__*` | ketuk pintu bawa map disposisi |
+| Ruang kadis | `Skill`, `SendMessage`, `mcp__*` | ketuk pintu bawa map disposisi; kalau bukaannya terbuka, pegawainya benar-benar masuk ke dalam (lihat **Ruang kadis**) |
 | Meja kerja | `TodoWrite`, `AskUserQuestion`, **semua perintah shell non-git**, dan tempat pulang waktu menganggur | **4 meja** di baris depan, laptopnya menyala hanya di meja yang ditempati |
 | Ruang tunggu | limpahan waktu empat meja penuh | berdiri ngopi dekat dispenser — baris depan tengah |
 
@@ -211,6 +211,67 @@ ditentukan **isi perintahnya**, bukan nama tool-nya:
 Pembungkus di depan perintah dibuang dulu, jadi `rtk git push` dan `sudo git pull`
 tetap terbaca git. `cat .git/config` tidak: yang dibaca programnya, bukan
 kata "git" di mana pun.
+
+## Ruang kadis
+
+Selama ini pegawai yang menghadap kepala dinas cuma berdiri **di depan pintu**
+dan mengetuk. Sekarang ruang kadis punya wujud: sebuah **bukaan berbingkai di
+dinding sayap timur** yang tersibak begitu ada yang menghadap, dan pegawainya
+benar-benar pindah ke dalamnya.
+
+**Bukaan, bukan lantai dua, dan bukan dunia yang diperlebar.** Kotak bukaan itu
+wilayah dunia 480×356 yang sama — koordinat di dalamnya koordinat biasa. Itu
+sebabnya kamera, `keLayar`/`dariLayar`, `kameraTampak`, `agenDiTitik`,
+`taruhKartu`, sorot, dan balon DOM semuanya langsung benar tanpa satu baris pun
+diubah di sana.
+
+Melebarkan dunia sempat dipertimbangkan dan ditolak, dengan alasan yang konkret:
+lebar dunia dipakai puluhan berkas event sebagai arti "tepi kanan ruangan",
+selubung malam menutup selebar dunia (jadi dunia yang lebih lebar akan terbelah
+siang/malam), dan titik pintu keluar dihitung dari lebar dunia — melebarkannya
+menaruh pintu itu di dalam tembok.
+
+**Letaknya tidak ditebak.** Kotak yang diusulkan rancangan (154×94 di x284)
+ternyata menimpa 9.165 piksel milik 17 perabot berbeda — yang terbesar rak PC
+server, stasiun yang dipakai tiap hari. Jadi yang dicari adalah **persegi kosong
+terbesar** di pita dinding itu: 73×46 di x289..362, y33..79. Satu kolom
+dikembalikan kepada ekor cicak `cicak-jatuh-ke-berkas` yang lewat di kolom 289
+selama ±70 ms, sehingga bukaan yang dipakai adalah **72×46 di x290..362**.
+Batas kerasnya dijaga `uji-sisip.mjs` dengan sapuan piksel sungguhan, bukan
+dengan mata.
+
+Satu penyimpangan dari rancangan dicatat apa adanya: rancangan menyebut "jendela
+kaca di samping pintu", tapi dinding antara rak server dan pintu kadis sudah
+penuh — celah terlebar di sana cuma 16×8 px. Jadi bukaan ini berada 78 px di
+kiri pintu kadis, dan yang menyambungkannya ke pintu itu bukan kusen melainkan
+isinya.
+
+Setelannya tiga keadaan, di panel setelan:
+
+| Setelan | Perilaku |
+|---|---|
+| `auto` *(bawaan)* | bukaan tersibak sendiri begitu ada yang menghadap kadis, lalu menutup setelah ruangannya kosong |
+| `selalu` | dibiarkan terbuka terus |
+| `mati` | tidak pernah terbuka — pegawai berhenti di ambang pintu seperti sebelum fitur ini ada |
+
+`?ruang=kadis` mengunci setelan `selalu` lewat URL dan `?ruang=mati` mengunci
+`mati`, tanpa menulis ulang setelan tersimpan — pola yang sama dengan
+`?kamera=`. Mengklik bukaan yang sedang terbuka membidikkan kamera ke dalamnya;
+klik lagi untuk melepas.
+
+Seberapa "persis" perilaku lama itu di setelan `mati` bukan klaim melainkan
+ukuran: dindingnya nol piksel berbeda dari ruangan sebelum fitur ini ada,
+diukur seluruh kanvas di tiga jam berbeda, dan sembilan titik sentuh lainnya
+ikut diam. Satu hal memang **tidak** ikut mati, dan disebut supaya tidak ada
+yang mengira `mati` berarti nol jejak: tempat berdiri antrean di depan pintu
+kadis sekarang 440/452/464, tidak lagi menyebar ke kiri sampai x=357. Itu
+tambalan cacat lama yang berdiri sendiri, bukan bagian dari bukaan.
+
+**Jangan tertukar dengan `?kadis=1`.** Itu **mode HP** berupa daftar teks
+(lihat **Mode kadis** di bawah), kanvasnya justru disembunyikan, dan sama sekali
+bukan ruangan. Parameter bukaan ini `?ruang=`, bukan `?kadis=`. Di mode HP
+bukaan tidak pernah ada, jadi pilihan setelannya sengaja dimatikan alih-alih
+pura-pura bisa dipilih.
 
 ## Peserta rapat
 
@@ -488,6 +549,72 @@ Yang keluar ke disk dan ke `GET /buku-induk` (tanpa token, sekelas
 tidak ada isi, jadi tidak ada yang perlu tunduk ke `AGENT_ROOM_ISI`. Berkasnya
 tidak di-commit (`.gitignore`), sama seperti riwayat token.
 
+### Pegawai tetap per proyek
+
+Dulu nama pegawai diundi tiap sesi: buka dua terminal di folder yang sama, dapat
+dua orang asing; tutup lalu buka lagi, orangnya berganti. Sekarang tiap folder
+proyek punya **formasi**: kursi #1 sampai #12, dan nama serta jabatan menempel
+pada **kursi**, bukan pada sesi.
+
+Jadi terminal pertama di sebuah folder selalu ditempati orang yang sama, terminal
+kedua selalu orang kedua yang sama, dan begitu seterusnya — hari ini, besok,
+maupun setahun lagi. Sesi ke-13 yang jalan bersamaan berjalan tanpa nama tetap,
+persis perilaku lama.
+
+- **Kursi dilepas waktu sesi pamit**, jadi kursi #1 bebas untuk terminal
+  berikutnya di folder itu.
+- **Penghuni yang diam lebih dari 30 menit** dianggap sudah pulang tanpa pamit
+  dan kursinya disapu.
+- **Nama yang kamu ganti sendiri jadi permanen**: kursi itu ditandai `manual`,
+  dan undian tidak akan pernah menimpanya lagi.
+- **64 folder** yang boleh punya formasi. Waktu penuh, yang dibuang adalah folder
+  dengan kunjungan **paling tua** dan tidak sedang dihuni — bukan yang paling
+  lama dibuat, supaya folder yang benar-benar dipakai tidak pernah kehilangan
+  orangnya. Sengaja bukan kedaluwarsa per hari: folder yang ditengok lagi
+  setahun kemudian tetap berhak atas pegawai yang sama.
+
+Disimpan di `formasi.json`, **berkas sendiri, bukan menumpang di
+`buku-induk.json`**. Menumpang berarti menaikkan versi skema buku induk, dan
+server versi lama yang membaca berkas versi baru akan menolak lalu menimpa
+seluruh berkas — jam dinas dan golongan semua orang hilang cuma gara-gara fitur
+nama. Dengan berkas terpisah, turun versi paling banter kehilangan nama;
+kariernya utuh.
+
+Aturan privasi dijaga dari sini juga: yang ditulis ke disk cuma nama panggilan,
+id jabatan, cap waktu, nama folder, dan nama cabang/mesin. **Id sesi tidak
+pernah ikut** — ia hidup di memori saja dan sengaja ditanggalkan waktu berkasnya
+ditulis. Cabang git dicatat sebagai keterangan "dari mana dia terakhir
+bertugas", bukan bagian dari identitas.
+
+`AGENT_ROOM_PEGAWAI_TETAP=off` mematikan seluruhnya: nama kembali diundi tiap
+sesi dan `formasi.json` tidak pernah lahir.
+
+### Seragam kantor cabang
+
+Kalau beberapa mesin melapor ke satu kantor pusat (lihat **Kantor pusat & kantor
+cabang** di [Jalanin & pasang](01-jalanin.md)), tiap mesin dapat **rompi
+seragam** sendiri: khaki, kelabu dinas, hijau lapangan, atau biru dinas. Nama
+mesin di-hash (FNV-1a, ditulis tangan — nol dependency) lalu dipetakan ke salah
+satu dari empat, jadi satu mesin selalu berompi sama tanpa perlu didaftarkan.
+
+**Pegawai lokal tidak pernah berompi.** Rompi itu penanda "orang ini bertugas
+dari cabang", jadi mesin yang tidak menyebut namanya tidak dapat apa-apa.
+
+Rompi menumpang **di atas** seragam harian, tidak menggantikannya: batik Rabu
+dan Jumat tetap terlihat di baliknya. Karena itu warnanya dipilih dengan syarat
+keras dan dijaga `uji-seragam.mjs` — usulan awal rancangan (hijau `#41603c`,
+kelabu `#4f545c`, cokelat `#7a4f2e`) semuanya jatuh di uji itu karena masing-masing
+cuma berjarak 7, 41, dan 16 dari batik hijau Jumat, navy Rabu, dan batik cokelat
+Jumat. Rompi yang warnanya setara bajunya tidak menandai apa pun. Yang dipakai
+sekarang lebih terang dari semua baju gelap dan tetap lebih gelap dari kemeja
+putih. Tidak ada cokelat sama sekali: setiap cokelat yang cukup jauh dari batik
+cokelat sudah menjadi khaki.
+
+Di daftar kru, chip mesin memakai warna rompi orangnya supaya panel dan ruangan
+cocok tanpa perlu membaca nama mesin. Chipnya sendiri tetap muncul selama sesi
+menyebut mesin, walau tabel warna kebetulan tidak punya jawaban — "ada atau
+tidak" tidak boleh bergantung pada warna.
+
 ## Suasana ikut jam
 
 Ruangan mengikuti jam di mesin penontonnya, digeser mulus antar patokan jam —
@@ -535,6 +662,82 @@ kerja; lembur-sampai-malam saat lembur; sandal jepit saat pulang/lembur.
 Pengali diterapkan di `pilihBerbobot`, bukan di `syarat`, supaya event yang
 bobotnya nol di satu babak tidak menghabiskan cooldown dan `uji-event.mjs`
 (yang merakit `S` sendiri tanpa `babak`) tetap jalan.
+
+### Kekusutan harian
+
+Ruangan tidak cuma berganti cahaya sepanjang hari — dia juga **mengusut**.
+Pagi-pagi meja masih rapi; menjelang siang berkas mulai menumpuk; menjelang
+pulang mejanya penuh tumpukan dokumen, ada dus di kolong, kursi ditinggal
+serong, dan lembaran tercecer di lantai. Sesudah jam pulang tumpukannya
+menyusut lagi, dan pagi berikutnya ruangan sudah bersih.
+
+Semuanya satu angka: **`RUANGAN.kusut`, 0..1**. Ini satu-satunya field
+`RUANGAN` yang berjalan sendiri mengikuti jam, bukan bekas sebuah kejadian.
+Kalau tiap benda punya jamnya masing-masing, yang kebaca cuma "ada yang
+berubah" — bukan "sudah sore"; jadi tumpukan, kursi, dan ceceran semuanya
+membaca kurva yang sama supaya ruangannya mengusut serempak.
+
+| Jam | `kusut` (sesi sepi → ramai) | Yang kelihatan |
+|---|---|---|
+| 05.00–07.00 | 0,01–0,03 | bersih; petugas kebersihan sudah lewat |
+| 09.00 | 0,14–0,20 | lapis pertama di meja yang pemiliknya paling cuek |
+| 11.30–12.00 | 0,34–0,51 | keenam meja sudah menumpuk minimal satu lapis |
+| 14.00 | 0,49–0,69 | kursi ditinggal serong, dus mulai turun ke kolong |
+| 16.00–16.48 | 0,67–1,00 | puncak: 2–4 lapis per meja, map nyelip, lembar teratas terlipat |
+| 19.00 | 0,27–0,38 | tinggal sisa; yang pulang membereskan mejanya sendiri |
+| 21.00 | 0,10–0,14 | nyaris bersih lagi |
+
+Kurvanya patokan per jam di `KUSUT_JAM` ([public/room.js](../public/room.js)),
+idiom sama seperti `FASE_HARI`. Dua hal yang membedakannya:
+
+- **Bukan fungsi murni dari jam.** Nilainya disimpan dan diseret pelan ke
+  sasaran (naik 0,004/detik, turun 0,03/detik), jadi event yang membereskan
+  ruangan lewat `bereskanKusut(sisa)` menyisakan jejak "sempat bersih"
+  beberapa menit sebelum tumpukannya kembali — bukan terhapus di frame
+  berikutnya oleh kurvanya sendiri. Yang memakainya: `jumat-bersih`
+  (`0.1`, seisi ruangan) dan `ob-ngepel-lantai` (`0.6`, cuma lantainya —
+  tumpukan di meja orang tidak disentuh OB).
+- **Tick pertama menyetel langsung, tanpa diseret.** Membuka halaman jam
+  15.00 harus dapat kantor yang *sudah* kusut, bukan kantor bersih yang baru
+  mulai berantakan di depan mata penonton.
+
+Sesi ramai mengusutkan lebih cepat: kurvanya dikali `0,7 + 0,3 ×
+min(1, sesi/3)`. Berhenti di 0,7 (bukan 0) karena kantor tanpa sesi nyata
+tetap dihuni pegawai standby yang mondar-mandir — sore tetap sore, cuma
+tumpukannya berhenti satu-dua lapis lebih rendah. Hari libur (`hariLibur`)
+dipatok maksimal 0,1: tidak ada yang mengusutkannya.
+
+Yang dibacakan angka itu:
+
+- **Tumpukan dokumen di meja kerja** (`gambarKusutMeja`) — 2 px per lapis,
+  meruncing ke atas, ditumpuk **di atas** pernak-pernik tema meja: zona
+  identitas `x+6..+29` sudah terisi penuh di keenam tema, dan begitulah meja
+  kantor sungguhan jadi penuh — berkas baru ditaruh di atas yang sudah ada,
+  bukan dicarikan tempat kosong. Kapasitas maksimumnya beda per meja
+  (`KUSUT_MEJA_MAKS`) dan **mengikuti kepribadian meja di `drawMejaTema`**:
+  meja rapi mentok 2 lapis dan paling lama bertahan, meja berantakan 4 lapis
+  dan sudah menumpuk sejak jam 10. Lewat 0,62 ada map nyelip miring
+  bersandar di sisi kanan; lewat 0,82 lembar teratas nyeruak, sudutnya
+  terlipat.
+- **Dus arsip di kolong meja** — lewat 0,55, bertumpu di palang bawah,
+  berhenti sebelum tiang kursi.
+- **Kursi ditinggal serong** — lewat 0,42, offset dari tabel `KUSUT_KURSI`
+  (bukan `Math.random()`, jadi tidak bergeser sendiri tiap frame). Cuma meja
+  yang **sedang kosong**: kursi yang diduduki tertutup badan pegawainya.
+- **Ceceran di lantai** (`gambarKusutLantai`) — 14 titik tetap di
+  `KUSUT_LANTAI`, masing-masing punya ambang sendiri, jadi cecerannya
+  menyebar pelan-pelan dari tengah ruangan ke pinggir. Ini **bukan**
+  `RUANGAN.kertasLantai` (itu punya event, meluruh dalam hitungan detik):
+  yang ini turunan murni dari kurvanya, **tanpa state** — muncul dan hilang
+  sendiri, jadi tidak ada array yang bocor kalau tabnya dibiarkan terbuka
+  semalam, dan `bereskanKusut()` otomatis menyapunya. Titiknya tabel tetap,
+  bukan acak: lantai yang titik sampahnya berpindah tiap frame kebaca
+  sebagai kedipan, bukan sebagai kotor.
+
+Tersedia buat event lewat **`S.kusut`**. Uji cepat tanpa menunggu jamnya
+tiba: **`?kusut=0.9`** — boleh digabung dengan `?jam=` (`?kusut=` menang,
+`?jam=` cuma mengatur cahayanya), misalnya `?demo=1&jam=7.4&kusut=1` untuk
+memeriksa kantor yang kusut di bawah cahaya pagi.
 
 ### Tema kalender
 

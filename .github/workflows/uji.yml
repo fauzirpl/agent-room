@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 22
 
-      # Repo ini nol dependency dan tanpa package.json — tidak ada npm install.
+      # Repo ini nol dependency: package.json ada, tapi tanpa deps — tidak ada npm install.
       - name: Periksa sintaks server.mjs
         run: node --check server.mjs
 
@@ -31,6 +31,37 @@ jobs:
 
       - name: Uji z-order deterministik (golden uji-zorder.golden.json)
         run: node uji-zorder.mjs
+
+      # Bukaan ruang kadis: memastikan denahnya tetap muat di dunia yang sama
+      # (tanpa lantai dua, tanpa memperlebar dunia) dan tidak menabrak perabot.
+      - name: Uji bukaan ruang kadis (golden uji-sisip.golden.json)
+        run: node uji-sisip.mjs
+
+      # Seragam kantor cabang: satu mesin satu seragam, dan hubungannya dengan
+      # seragam harian batik tidak saling menimpa.
+      - name: Uji seragam kantor cabang
+        run: node uji-seragam.mjs
+
+      # Gerbang, bukan papan skor. Memutar ulang satu hari buku agenda
+      # sungguhan (tersamar) ke frame()/handle() asli room.js dan memeriksa
+      # invarian sepanjang hari: nol lemparan, nol warn event, tiap penghuni
+      # digambar tepat sekali, tidak ada wadah yang bocor, MOD kembali ke
+      # bawaan, dan toolCount == jumlah 'pre' (Aturan 2). 11.329 frame; terukur
+      # 27 detik di mesin lengang, 60-an detik kalau mesinnya lagi rebutan.
+      # Kalau runner-nya kepayahan: `node uji-ulang.mjs --laju 20` (separuh).
+      # Pagu anggaran token: ambang, pagar minggu dua arah (jam mesin maju MAUPUN
+      # mundur tidak boleh mematikan nota), dan lima metrik di /metrics.
+      # Menyalakan server sungguhan beberapa kali, jadi agak lama.
+      - name: Uji pagu anggaran token
+        run: node uji-pagu.mjs
+
+      # Pegawai tetap per proyek: nama menempel pada kursi, bukan pada sesi;
+      # kursi basi disapu utuh; event ambient tidak boleh menyentuh formasi.
+      - name: Uji formasi pegawai tetap
+        run: node uji-pegawai.mjs
+
+      - name: Uji putar ulang hari sungguhan (fixture buku agenda)
+        run: node uji-ulang.mjs
 
       # Papan skor, bukan gerbang: selalu exit 0. Angka "berapa event sudah jadi
       # kode" dibaca dari sini, bukan ditulis tangan di README/DESIGN.

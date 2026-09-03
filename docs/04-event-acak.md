@@ -4,12 +4,31 @@
 
 ## Event acak
 
-Selain yang dipicu tool call, ruangan punya **272 kejadian yang muncul
+Selain yang dipicu tool call, ruangan punya **337 kejadian yang muncul
 sendiri** (angka dihitung otomatis: `node uji-katalog.mjs`): UPS berbunyi,
 kalender disobek, kabel LAN longgar, gorengan naik ke
 meja rapat, kucing tidur di karpet, tamu salah alamat, sirene lewat di jalan
 depan. Katalog lengkapnya ada di [EVENT-ACAK.md](../EVENT-ACAK.md); definisinya di
-[public/event-acak.js](../public/event/), mesinnya di `room.js`.
+[public/event/](../public/event/) (per tema, urutannya di `manifest.json`),
+mesinnya di `room.js`.
+
+Tidak semuanya berasal dari rapat desain. Satu gelombang ditambahkan
+sesudahnya dan **sengaja berada di luar rancangan 373 itu**: 26 event *tamu
+tenar* (`public/event/33-tamu-tenar-dasar.js` sampai `37-...`), yaitu sosok
+terkenal yang datang ke kantor lalu menabrak prosedur — nomor antrean tetap
+berlaku, paraf tetap harus ditunggu, dan yang berwenang tetap sedang rapat di
+luar. Karena bukan bagian rancangan, papan skor `uji-katalog.mjs` mencatatnya
+sebagai "terdaftar di luar katalog", dan itu memang benar: yang dihitung
+persentasenya tetap 373 event hasil rapat, bukan total yang terpasang.
+
+Tidak ada nama orang sungguhan di gelombang itu. Tokohnya dikenali dari
+**siluet** — harmonika melingkar di leher, raket di punggung, jersey merah muda
+bernomor sepuluh, wearpack berhelm yang tidak dibuka, kepang ungu, blangkon,
+singlet merah-putih dengan barbel — dan pegawai yang menyebutnya cukup bilang
+"itu... yang di TV itu, kan?". Alasan lengkapnya ada di komentar kepala
+`33-tamu-tenar-dasar.js`; ringkasnya: balon kata di ruangan ini milik kita,
+jadi menempelkannya ke orang yang benar-benar ada adalah batas yang tidak
+dilewati — dan siluet lebih tahan lama daripada nama.
 
 Cara kerjanya: satu registri berbobot, satu penjadwal berjeda 18–45 detik,
 cooldown per event. Bentuk satu definisi:
@@ -69,6 +88,60 @@ ruangan. Tiga aturan menjaga urutan itu:
 `mulai()` yang melempar akan **membatalkan** eventnya, bukan membiarkannya jalan
 setengah jadi — kalau tidak, `tick()`-nya ikut meledak tiap frame sampai
 durasinya habis.
+
+#### Aturan 1 punya jebakan yang tidak kelihatan
+
+`handle()` melepas pemeran lewat `lepasDariEvent()` → `lepaskanAktor()`, dan itu
+memangkas `E.aktor`. Tapi **potret** yang disimpan event sendiri tidak ikut
+terpangkas: `E.data.a`, `E.data.antre`, atau variabel yang ditangkap closure
+tetap menunjuk orangnya. Perintah tertunda — `pada()`, penjaga tenggat — lalu
+tetap jalan beberapa detik kemudian dan **menyeret pegawai yang panelnya sedang
+menulis tool call**. Bentuk paling parahnya melempar (`Cannot read properties of
+undefined`) karena `E.aktor[0]` sudah kosong.
+
+Tiga penyaring di `public/event/00-dasar.js` untuk itu, pakai sebelum menyuruh
+siapa pun bergerak dari dalam callback tertunda:
+
+| helper | untuk |
+|---|---|
+| `masihMain(E, a)` | satu pemeran |
+| `yangMasihMain(E, daftar)` | potret banyak pemeran (barisan, penonton) |
+| `pangkasLepas(E, antrean)` | antrean yang dimutasi sendiri (`q.shift()`), dibuang di tempat |
+
+`node uji-tenggat.mjs` menjaganya: ia menjalankan tiap event, **merebut semua
+pemerannya di tengah**, lalu menghitung apakah event itu masih menyuruh mereka
+bergerak. Meminjam ulang orang yang sudah bebas tetap sah.
+
+Penjaga itu cuma sekuat *fixture*-nya, dan fixture-nya pernah bolong. Orang
+palsu di `uji-event.mjs` dulu cuma punya dua wujud: sibuk (`station: 'think'`,
+`state: 'work'`) dan menganggur di ruang tunggu (`station: 'idle'`). Wujud
+ketiga — **menganggur di mejanya sendiri** (`station: 'think'`, `state: 'idle'`)
+— tidak pernah ada, padahal itu yang dibuat `stasiunPulang()` untuk siapa pun
+yang baru selesai tool call. Karena `bisaDipinjam()` menolak `state 'work'`,
+syarat sekelas `o.station === 'think' && bisaDipinjam(o)` **mustahil** benar di
+seluruh 36 kombinasi: eventnya lapor "0/36 syarat", `mulai()`-nya tidak pernah
+dapat aktor, dan Uji Rebutan melewatinya diam-diam lewat `if (!E.aktor.length)
+continue`. Centang hijaunya menyesatkan. Sesudah fixture diberi dua orang
+"diam di mejanya", jangkauan Uji Rebutan melompat dari 165 ke 213 event dan
+langsung menemukan tiga bug rebutan yang sudah lama terpasang
+(`lupa-mau-ngapain`, `gantian-jaga-loket`, `kipas-direbut-arah`). Pelajarannya
+bukan tentang satu wujud yang kurang: **fixture yang tidak pernah memenuhi
+sebuah syarat membuat event yang memakainya tidak pernah diuji, dan itu tidak
+kelihatan sebagai kegagalan.**
+
+#### `MOD` milik bersama: tulis `true` saja
+
+`resetMod()` mengosongkan `MOD` setiap frame, jadi tidak ada yang perlu
+dibersihkan di `selesai()`. Menulis `false` ke sana bukan cuma mubazir, tapi
+**salah**: satu flag bisa dipakai belasan event, dan `MOD.pintuKadis = false` di
+`selesai()` membanting pintu yang sedang ditahan terbuka event lain di frame
+yang sama. Bentuk yang sama liciknya adalah menulis sebuah perbandingan —
+`MOD.pintuKadis = E.umur < 0.5` menulis `false` di setiap frame sesudah detik
+0,5. Yang benar `if (E.umur < 0.5) MOD.pintuKadis = true;`.
+
+Kalau dua event memang tidak boleh hidup bersamaan, itu urusan `bentrokDengan`,
+bukan urusan saling menimpa `MOD`. `bentrok()` membacanya **dua arah**: cukup
+salah satu yang mendaftarkan lawannya.
 
 ### Pantry
 

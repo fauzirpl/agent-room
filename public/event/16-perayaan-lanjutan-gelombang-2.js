@@ -18,16 +18,21 @@ daftarEvent(
     });
   },
   tick(E) {
-    pada(E, 6, () => { for (const a of E.data.baris) a.pose = 'hormat'; });
+    // E.data.baris cuma potret waktu mulai(). Yang sudah ditarik tool call
+    // sungguhan (lepasDariEvent → eventKerja null) dilewati: barisan yang
+    // bolong dibiarkan bolong, sama seperti aturan apel pagi di room.js.
+    const ikut = () => E.data.baris.filter((a) => a.eventKerja === E);
+    pada(E, 6, () => { for (const a of ikut()) a.pose = 'hormat'; });
     pada(E, 16, () => {
-      for (const a of E.data.baris) a.pose = null;
-      if (E.data.baris[0]) E.data.baris[0].goToXY(300, 200, 'up');
+      for (const a of ikut()) a.pose = null;
+      const p = ikut()[0];
+      if (p) p.goToXY(300, 200, 'up');
     });
     pada(E, 24, () => {
-      const s = E.data.baris[0];
+      const s = ikut()[0];
       if (s) { spawn('talk', s.x, s.y - 24); s.say('panca prasetya'); }
     });
-    pada(E, 34, () => { for (const a of E.data.baris) a.pose = 'tepuk'; });
+    pada(E, 34, () => { for (const a of ikut()) a.pose = 'tepuk'; });
   },
   selesai(E) {
     for (const [a, pal] of E.data.asli) a.pal = pal;

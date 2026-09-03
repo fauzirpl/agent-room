@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "ambang": [80, 100],
+  "bawaan": 0,
+  "hitung": "io",
+  "proyek": {
+    "agent-room": 5000000
+  }
+}

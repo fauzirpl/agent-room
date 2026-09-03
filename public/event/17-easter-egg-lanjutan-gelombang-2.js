@@ -54,10 +54,11 @@ daftarEvent(
   },
   tick(E) {
     const a = E.data.a;
-    if (!a) return;
+    // magangnya sudah direbut tool call sungguhan? jangan diseret balik
+    if (!masihMain(E, a)) return;
     if (a.diam && !E.data.duduk) { E.data.duduk = true; spawn('idea', a.x, a.y - 26, P.amber); a.say('sebentar saja'); }
     if (E.umur > 8 && E.umur < 8.6) MOD.pintuKadis = true;
-    pada(E, 8.3, () => { a.say('eh permisi'); a.laju = 1.8; a.goTo('think'); });
+    pada(E, 8.3, () => { if (masihMain(E, a)) { a.say('eh permisi'); a.laju = 1.8; a.goTo('think'); } });
   },
   selesai(E) { if (E.data.a) E.data.a.laju = 1; },
 },
@@ -75,7 +76,12 @@ daftarEvent(
   },
   tick(E) {
     const a = E.data.a;
-    if (!a) return;
+    // masihMain, bukan cuma !a: tool call nyata bisa merebutnya di tengah
+    // adegan, dan sesudah itu goToXY/say di bawah akan menyeret pegawai yang
+    // sudah bukan milik event ini. Bug ini baru kelihatan sesudah fixture
+    // uji-event.mjs punya orang "diam di mejanya" — sebelum itu mulai() tidak
+    // pernah dapat aktor di harness, jadi seluruh tick ini tidak pernah diuji.
+    if (!masihMain(E, a)) return;
     if (a.diam && E.data.tahap === 1) {
       E.data.tahap = 2;
       a.say('tadi mau apa ya');
@@ -336,7 +342,7 @@ daftarEvent(
   },
   tick(E) {
     const a = E.data.a;
-    if (!a) return;
+    if (!masihMain(E, a)) return;      // dilepas tool call: berhenti menyuruh
     if (a.diam && !E.data.baca) {
       E.data.baca = true;
       a.say('astaga, nama Pak Kadis kurang satu huruf');

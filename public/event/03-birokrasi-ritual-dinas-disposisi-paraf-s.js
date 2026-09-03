@@ -56,7 +56,9 @@ daftarEvent(
     });
   },
   tick(E) {
-    const q = E.data.antre;
+    // buang dari antrean siapa pun yang sudah direbut tool call sungguhan,
+    // supaya q[0] selalu orang yang memang masih mengantre
+    const q = pangkasLepas(E, E.data.antre);
     if (!q || !q.length) return;
     MOD.pintuKadis = E.data.diDalam != null;
     if (E.data.diDalam == null && E.umur > (E.data.berikut || 3)) {
@@ -100,7 +102,7 @@ daftarEvent(
     });
   },
   tick(E) {
-    const q = E.data.antre;
+    const q = pangkasLepas(E, E.data.antre);      // yang direbut tool call keluar antrean
     if (!q || !q.length) return;
     MOD.pintuKadis = true;
     if (E.data.masuk == null && E.umur > (E.data.berikut || 4)) {
@@ -194,7 +196,7 @@ daftarEvent(
     });
   },
   tick(E) {
-    const q = E.data.antre;
+    const q = pangkasLepas(E, E.data.antre);      // yang direbut tool call keluar antrean
     if (!q || !q.length) return;
     if (E.umur > (E.data.berikut || 5)) {
       const a = q.shift();

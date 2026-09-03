@@ -18,6 +18,17 @@
     "uji-zorder.mjs",
     "uji-zorder.golden.json",
     "uji-katalog.mjs",
+    "uji-tenggat.mjs",
+    "selaras-katalog.mjs",
+    "uji-sisip.mjs",
+    "uji-sisip.golden.json",
+    "uji-seragam.mjs",
+    "uji-pagu.mjs",
+    "uji-pegawai.mjs",
+    "pagu.contoh.json",
+    "buat-fixture.mjs",
+    "uji-ulang.mjs",
+    "uji-ulang.fixture.jsonl",
     "public/",
     "README.md",
     "DESIGN.md",
@@ -30,7 +41,7 @@
   },
   "scripts": {
     "start": "node dinas.mjs",
-    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-katalog.mjs"
+    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-ulang.mjs"
   },
   "repository": {
     "type": "git",

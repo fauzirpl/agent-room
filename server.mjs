@@ -971,11 +971,12 @@ const tokenSesi = new Map();                // sesi 12-char -> { input, output, 
      3. penulisnya (riwayatCatat/riwayatLebur) otomatis memakai angka baru.
    Berkas lama tidak pernah ditulis ulang hanya demi versi; migrasi hidup
    di memori sampai barisnya kebetulan ditulis ulang (pemadatan).           */
-const SKEMA = { token: 1, agenda: 1, bukuInduk: 1 };
+const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1 };
 const versiSkema = (o) => (Number.isFinite(Number(o.v)) ? Number(o.v) : 0);
 function migrasiToken(o) { o.v = SKEMA.token; return o; }
 function migrasiAgenda(o) { o.v = SKEMA.agenda; return o; }
 function migrasiBukuInduk(o) { o.v = SKEMA.bukuInduk; return o; }
+function migrasiFormasi(o) { o.v = SKEMA.formasi; return o; }
 
 const BERKAS_RIWAYAT_TOKEN = process.env.AGENT_ROOM_TOKEN_LOG
   || path.join(__dirname, 'token-riwayat.jsonl');
@@ -1036,6 +1037,10 @@ function riwayatCatat(ts, proyek, model, d) {
   fs.appendFile(BERKAS_RIWAYAT_TOKEN, baris + '\n', (err) => {
     if (err) console.warn('[agent-room] gagal menulis riwayat token: ' + err.message);
   });
+  /* Pagu anggaran token dipasang di SINI, ujung jalur hidup — bukan di
+     riwayatTambah(), yang juga dipanggil riwayatMuat() untuk SETIAP baris
+     riwayat lama waktu start. Di sana, satu restart = ribuan nota basi. */
+  paguPeriksa(ts, proyek || '', d);
 }
 
 /* Pemadatan. Delta per giliran itu ~100 byte, tapi berkasnya bisa 8.000 baris
@@ -1143,6 +1148,439 @@ function riwayatMuat() {
 }
 riwayatMuat();
 
+/* -------------------------------------------------- pagu anggaran token ---
+   Tiap proyek (kunci = nama FOLDER, sama dengan riwayatProyek dan buku induk)
+   boleh diberi pagu token per MINGGU KALENDER — Senin sampai Minggu, memakai
+   mingguLokal() yang sudah dipakai arsip kliping. Begitu serapan minggu
+   berjalan melewati ambang (bawaan 80% lalu 100%), server menerbitkan satu
+   event kind:'pagu', persis pola kind:'promosi' dari buku induk: dideteksi di
+   SINI, bukan di halaman, supaya satu kejadian = satu nota, sama di semua
+   penonton.
+
+   Tiga janji yang tidak boleh dilanggar:
+
+   1. TANPA pagu.json, TIDAK ADA APA-APA. Tidak ada nota, tidak ada metrik,
+      tidak ada berkas baru di disk, dan tidak satu baris konsol pun. Yang
+      tidak memakai fitur ini tidak perlu tahu fitur ini ada.
+   2. PAGU ITU ANGKA TOKEN, BUKAN UANG. Tidak ada tabel harga di sini dan
+      tidak akan pernah ada: harga berubah, angka token dari API tidak.
+   3. NOTA, BUKAN REM. Keadaan pagu tidak pernah dipakai untuk menahan
+      pegawai, menahan antrean, atau mengubah state siapa pun. Serapan lewat
+      pagu bukan alasan berhenti bekerja — cuma alasan memberi tahu.
+
+   Anti-spamnya sengaja TANPA berkas keadaan baru: tanda "ambang ini sudah
+   terbit" hidup di memori (paguDitandai), dan pemeriksaan hidup PERTAMA untuk
+   sebuah proyek menandai DIAM semua ambang yang sudah terlewati sebelum delta
+   yang sedang diproses. Itu yang membuat restart di tengah minggu tidak
+   memuntahkan ulang nota lama, sementara delta yang baru saja melewati ambang
+   tetap terbit. Harganya dibayar sadar: kalau pagu.json baru diisi waktu
+   serapan sudah 90%, nota 80% memang tidak akan terbit minggu itu.
+
+   AWAS, KATA "PAGU" DI BERKAS INI PUNYA DUA ARTI. Yang di blok ini ANGKA
+   TOKEN. Yang di antrean disposisi (`t.pagu`, diteruskan ke CLI sebagai
+   `--max-budget-usd`) itu pagu DOLAR, milik dunia lain, dan tidak boleh
+   pernah disambung ke angka di sini. Kalau suatu hari keduanya perlu
+   bertemu, yang berubah namanya — bukan satuannya.                         */
+const BERKAS_PAGU = process.env.AGENT_ROOM_PAGU || path.join(__dirname, 'pagu.json');
+const PAGU_V = 1;                        // bentuk pagu.json yang dikenal proses ini
+const PAGU_AMBANG_BAWAAN = [80, 100];    // persen serapan yang menerbitkan nota
+const PAGU_AMBANG_MAX = 4;               // lebih dari ini bukan peringatan lagi, tapi hujan nota
+const PAGU_AMBANG_WAJIB = 100;           // "pagu terlampaui" — tidak pernah ikut dipotong
+const PAGU_NAMA_MAX = 64;                // nama folder proyek terpanjang yang diterima jadi kunci
+const PAGU_PROYEK_MAX = 200;             // kunci proyek yang dibaca dari berkas
+const PAGU_TANDA_MAX = PAGU_PROYEK_MAX;  // proyek yang boleh ditandai (= diberi nota) per minggu
+const PAGU_RINGKAS_MAX = 20;             // baris RINCIAN proyek di /token-riwayat & /metrics berlabel
+
+let pagu = null;                    // null = FITUR MATI, dan itu bawaannya
+let paguMinggu = '';                // Senin minggu yang tandanya sedang dipegang
+const paguDitandai = new Map();     // nama folder -> Set ambang yang notanya sudah terbit minggu ini
+let paguTandaPenuh = false;         // batas PAGU_TANDA_MAX sudah dikabarkan minggu ini
+
+/* Dibaca SEKALI waktu start. Mengubah pagu.json tanpa restart tidak
+   berpengaruh — sama seperti env lain di berkas ini. Sifat baca-sekali itu,
+   dasar diam, kunci nama folder, dan aturan potong ambang sekarang juga
+   tertulis di docs/01-jalanin.md → Pagu anggaran token; kalau salah satunya
+   diubah di sini, halaman itu ikut diubah. pagu.json sudah masuk .gitignore
+   (isinya nama folder proyek milik pemakai); yang ikut di repo cuma
+   pagu.contoh.json. */
+function paguMuat() {
+  let mentah = null;                // null = berkasnya memang tidak ada
+  try { mentah = fs.readFileSync(BERKAS_PAGU, 'utf8'); }
+  catch (err) {
+    // ENOENT itu keadaan normal, bukan kekurangan: diam total (janji 1).
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] pagu: ' + path.basename(BERKAS_PAGU) + ' tidak terbaca ('
+        + err.code + ') — pagu token tidak aktif');
+      pagu = null;
+      return;
+    }
+  }
+
+  let o = null;
+  if (mentah === null) {
+    // Jalan pintas tanpa berkas: satu angka di env, berlaku untuk semua proyek.
+    const bawaanEnv = Number(process.env.AGENT_ROOM_PAGU_BAWAAN);
+    if (!Number.isFinite(bawaanEnv) || bawaanEnv <= 0) { pagu = null; return; }
+    o = { bawaan: bawaanEnv };
+  } else {
+    try { o = JSON.parse(mentah); } catch { o = null; }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) {
+      console.warn('[agent-room] pagu: isi ' + path.basename(BERKAS_PAGU)
+        + ' bukan objek JSON yang bisa dibaca — pagu token tidak aktif');
+      pagu = null;
+      return;
+    }
+    const v = Number(o.v);
+    if (Number.isFinite(v) && v > PAGU_V) {
+      console.warn('[agent-room] pagu: ' + path.basename(BERKAS_PAGU) + ' ber-v' + v
+        + ', lebih baru dari yang dikenal proses ini (v' + PAGU_V + ') — pagu token tidak aktif');
+      pagu = null;
+      return;
+    }
+  }
+
+  /* Ambang diurut naik lalu dipotong dari ujung BAWAH — TAPI 100 disisihkan
+     dulu dan selalu dikembalikan. Memotong dari atas membuang 90 dan 100 di
+     konfigurasi enam ambang; memotong dari bawah membuang 100 di konfigurasi
+     [100,150,200,250,300]. Dua-duanya membuang hal yang sama: satu-satunya
+     nota yang jadi alasan fitur ini ada ("pagu terlampaui", yang di halaman
+     jadi kabar bercorak galat). Jadi bukan arah potongnya yang dibalik, tapi
+     100-nya yang dikunci; sisanya baru dipotong dari yang terendah, dan yang
+     dibuang tetap disebut namanya — peringatan yang mengecil diam-diam lebih
+     buruk daripada tidak ada. */
+  const ambangSemua = [...new Set((Array.isArray(o.ambang) ? o.ambang : [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 1000))]
+    .sort((a, b) => a - b);
+  const adaWajib = ambangSemua.includes(PAGU_AMBANG_WAJIB);
+  // jatah untuk ambang SELAIN 100; ditulis lewat Math.max supaya slice(-0)
+  // — yang diam-diam berarti "ambil semuanya" — tidak pernah kejadian
+  const jatahSisa = Math.max(0, PAGU_AMBANG_MAX - (adaWajib ? 1 : 0));
+  const ambang = (jatahSisa
+    ? ambangSemua.filter((n) => n !== PAGU_AMBANG_WAJIB).slice(-jatahSisa)
+    : [])
+    .concat(adaWajib ? [PAGU_AMBANG_WAJIB] : [])
+    .sort((a, b) => a - b);
+  const ambangBuang = ambangSemua.filter((n) => !ambang.includes(n));
+  const bawaanAngka = Number(o.bawaan);
+  const bawaan = Number.isFinite(bawaanAngka) && bawaanAngka > 0 ? bawaanAngka : 0;
+  const proyek = new Map();
+  const daftar = o.proyek && typeof o.proyek === 'object' && !Array.isArray(o.proyek) ? o.proyek : {};
+  const namaPanjang = [];
+  for (const [k, v] of Object.entries(daftar)) {
+    if (proyek.size >= PAGU_PROYEK_MAX) break;
+    /* Kunci dipakai APA ADANYA — bukan clip(). clip() menempelkan elipsis dan
+       meratakan spasi ganda, jadi kunci hasilnya tidak akan pernah cocok
+       dengan nama folder mana pun: entri mati yang tetap ikut dihitung dan
+       tetap memakan satu baris ringkasan. Yang kepanjangan ditolak, dengan
+       suara, supaya orangnya tahu pagunya memang tidak berlaku. */
+    const nama = String(k);
+    const angka = Number(v);
+    if (nama.length > PAGU_NAMA_MAX) { namaPanjang.push(nama); continue; }
+    if (!nama || !Number.isFinite(angka) || angka < 0) continue;   // 0 = sengaja dikecualikan
+    proyek.set(nama, angka);
+  }
+  let berpagu = 0;
+  for (const n of proyek.values()) if (n > 0) berpagu++;
+
+  /* Berkasnya ada tapi tidak memberi pagu kepada siapa pun — bawaan 0 dan nol
+     kunci berpagu. PERILAKUNYA sama dengan tidak ada berkas, tapi SUARANYA
+     tidak boleh sama: satu salah ketik kunci ("projects" alih-alih "proyek")
+     menghasilkan kantor yang dikira berpagu padahal tidak, tanpa satu pun
+     tempat untuk mengetahuinya. Kalimat ini MENGGANTIKAN keluhan potongan di
+     bawah, bukan menemaninya — mengabarkan ambang mana "yang dipakai" waktu
+     tidak ada satu pun yang dipakai cuma menguatkan salah paham yang sama.
+     Janji 1 tetap utuh: jalur tanpa berkas sudah pulang jauh di atas sini,
+     dan `mentah === null` (jalan pintas env) dijaga di sini. */
+  if (bawaan <= 0 && !berpagu) {
+    if (mentah !== null) {
+      console.warn('[agent-room] pagu: ' + path.basename(BERKAS_PAGU) + ' ada tapi tidak memberi'
+        + ' pagu kepada proyek mana pun (bawaan 0, nol kunci berpagu) — pagu token tidak aktif');
+    }
+    pagu = null;
+    return;
+  }
+
+  /* Baru di sini, sesudah pagunya dipastikan HIDUP: yang ditulis orang memang
+     sebagian tidak dipakai, dan dia berhak tahu bagian mana. */
+  if (ambangBuang.length) {
+    console.warn('[agent-room] pagu: ' + ambangSemua.length + ' ambang, lebih dari batas '
+      + PAGU_AMBANG_MAX + ' — yang terendah diabaikan'
+      + (adaWajib ? ' (ambang ' + PAGU_AMBANG_WAJIB + '% selalu dipertahankan)' : '') + ': '
+      + ambangBuang.join('%, ') + '%'
+      + ' (yang dipakai: ' + ambang.join('%, ') + '%)');
+  }
+  if (namaPanjang.length) {
+    console.warn('[agent-room] pagu: ' + namaPanjang.length + ' nama proyek terlalu panjang'
+      + ' (batas ' + PAGU_NAMA_MAX + ' huruf) dan tidak dipagu: ' + clip(namaPanjang[0], 72)
+      + (namaPanjang.length > 1 ? ' (dan ' + (namaPanjang.length - 1) + ' lagi)' : ''));
+  }
+
+  pagu = {
+    ambang: ambang.length ? ambang : PAGU_AMBANG_BAWAAN.slice(),
+    bawaan,
+    berpagu,                          // kunci berpagu di berkas — TIDAK ikut bergerak tiap minggu
+    hitung: o.hitung === 'semua' ? 'semua' : 'io',
+    proyek,
+  };
+  console.log('[agent-room] pagu token aktif: ' + berpagu + ' proyek'
+    + (bawaan > 0 ? ' (+ bawaan ' + bawaan + ')' : '')
+    + ', ambang ' + pagu.ambang.join('%, ') + '% — mingguan mulai Senin, hitung ' + pagu.hitung);
+}
+paguMuat();
+
+/* 0 berarti "tidak dipagu": proyek tanpa nama, proyek yang sengaja diisi 0,
+   atau semua proyek kalau `bawaan` memang 0. */
+const paguDari = (nama) => {
+  if (!pagu || !nama || nama === '(tanpa proyek)') return 0;
+  const n = pagu.proyek.get(nama);
+  return Number.isFinite(n) ? n : pagu.bawaan;
+};
+
+/* Tujuh tanggal lokal dari minggu yang dikunci Senin-nya. */
+function paguHariMinggu(minggu) {
+  const keluar = [];
+  const d = new Date(minggu + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return keluar;
+  for (let i = 0; i < 7; i++) {
+    const h = new Date(d.getTime());
+    h.setDate(h.getDate() + i);                 // lewat setDate, jadi DST tidak menggeser tanggal
+    keluar.push(tanggalLokal(h.getTime()));
+  }
+  return keluar;
+}
+
+/* TUJUH Map.get, titik. Fungsi ini jalan tiap giliran asisten yang membawa
+   usage — belasan kali semenit kalau beberapa sesi hidup bersamaan — jadi
+   biayanya tidak boleh tumbuh seumur riwayat. Menyusuri seluruh riwayatHarian
+   (bisa ratusan hari) di jalur sepanas ini adalah cara paling gampang membuat
+   fitur dekoratif memperlambat kantor. */
+function paguSerapan(nama, minggu) {
+  const semua = Boolean(pagu && pagu.hitung === 'semua');
+  let jumlah = 0;
+  for (const tgl of paguHariMinggu(minggu)) {
+    const p = riwayatHarian.get(tgl)?.proyek?.[nama];
+    if (!p) continue;
+    jumlah += (p.input || 0) + (p.output || 0);
+    if (semua) jumlah += (p.cacheTulis || 0) + (p.cacheBaca || 0);
+  }
+  return jumlah;
+}
+
+const paguDelta = (d) => (!d ? 0 : (d.input || 0) + (d.output || 0)
+  + (pagu && pagu.hitung === 'semua' ? (d.cacheTulis || 0) + (d.cacheBaca || 0) : 0));
+
+/* Minggu berjalan bergerak SATU ARAH, dan tidak pernah mundur ke minggu
+   lampau. ts yang datang mundur — baris transkrip lama yang baru terbaca
+   sesudah resume — tidak boleh mereset tandanya dan membuat semua nota minggu
+   ini terbit dua kali. Lantainya minggu KALENDER berjalan, bukan sekadar nilai
+   paguMinggu sebelumnya: waktu proses baru mulai nilainya masih kosong, dan
+   dulu satu baris transkrip kemarin sudah cukup untuk mengunci seluruh laporan
+   ke minggu lalu sampai ada giliran minggu ini. Yang boleh memundurkannya
+   cuma satu: koreksi jam MESIN yang melewati batas minggu — lihat di dalam. */
+function paguPastikanMinggu(ts) {
+  const kini = mingguLokal(Date.now());
+  const dari = mingguLokal(ts);
+  /* Langit-langitnya minggu kalender BERJALAN. Tanpa ini pagarnya cuma satu
+     arah: mundur ditolak, maju tidak dibatasi sama sekali — dan satu baris
+     transkrip ber-stempel minggu depan (jam mesin yang cepat, transkrip yang
+     dibawa dari mesin lain, resume sesudah koreksi NTP) mengunci paguMinggu
+     ke minggu yang belum terjadi. Sesudah itu setiap giliran sungguhan jatuh
+     ke pagar mundur dan pulang, serapan minggu yang belum terjadi selalu 0,
+     dan seluruh nota mati diam-diam seumur hidup proses — sementara /metrics
+     dan /token-riwayat (yang memakai Date.now() sendiri) tetap melaporkan
+     200% dengan benar, jadi tidak ada satu pun gejala yang kelihatan.
+     ts masa depan tetap masuk riwayat: itu urusan riwayatTambah, dan token
+     yang jatuh di hari depan memang bukan serapan minggu ini. */
+  /* Dan karena pagar mundur di bawah memakai paguMinggu sebagai LANTAI,
+     lantainya sendiri harus masuk akal. paguMinggu cuma bisa berisi minggu
+     yang belum terjadi kalau jam MESIN sendiri pernah berada di sana lalu
+     dimundurkan: koreksi NTP sesudah jam RTC ngebut, snapshot mesin maya
+     dipulihkan, tanggal mesin salah lalu dibetulkan orangnya. Tanpa buangan
+     ini cacatnya persis yang di alinea atas, cuma terbalik arahnya — tiap
+     giliran sungguhan jatuh ke pagar mundur dan pulang, dan seluruh nota mati
+     diam-diam sampai jam mesin merangkak melewati minggu yang telanjur
+     terkunci: bisa seminggu penuh, tanpa satu pun gejala.
+     Tandanya ikut dibuang, dan itu memang benar: minggu yang dibuang itu
+     tidak pernah terjadi, jadi tidak ada nota terbit yang perlu diingat.
+     Satu baris konsol, sekali per koreksi (sesudahnya paguMinggu tidak lagi
+     di masa depan, jadi cabang ini tidak terpicu lagi): jam mesin yang lompat
+     mundur melewati batas minggu pantas kelihatan, bukan pantas ditebak
+     orang dari nota yang tidak kunjung terbit. */
+  if (paguMinggu && paguMinggu > kini) {
+    console.warn('[agent-room] pagu: jam mesin mundur melewati batas minggu — tanda minggu '
+      + paguMinggu + ' dibuang, minggu berjalan sekarang ' + kini
+      + ' (nota minggu ini dihitung ulang dari nol)');
+    paguMinggu = '';
+    paguDitandai.clear();
+    paguTandaPenuh = false;
+  }
+  const m = dari > kini ? kini : dari;
+  if (m === paguMinggu) return;
+  if (m < (paguMinggu || kini)) return;
+  paguMinggu = m;
+  paguDitandai.clear();
+  paguTandaPenuh = false;
+}
+
+function paguPeriksa(ts, nama, d) {
+  if (!pagu) return;
+  const batas = paguDari(nama);
+  if (batas <= 0) return;
+  paguPastikanMinggu(ts);
+  const pakai = paguSerapan(nama, paguMinggu);
+  const persen = pakai / batas * 100;
+  let tanda = paguDitandai.get(nama);
+  if (!tanda) {
+    /* Rem terakhir: satu `bawaan` yang keisi terlalu rendah berlaku untuk
+       SETIAP nama folder yang lewat, dan tanpa batas ini ratusan proyek baru
+       dalam satu minggu berubah jadi hujan nota — di kotak kabar, di buku
+       agenda, dan di /stream sekaligus. Berkasnya sendiri sudah dibatasi
+       PAGU_PROYEK_MAX; yang lewat `bawaan` sampai sekarang tidak. */
+    if (paguDitandai.size >= PAGU_TANDA_MAX) {
+      if (!paguTandaPenuh) {
+        paguTandaPenuh = true;
+        console.warn('[agent-room] pagu: batas ' + PAGU_TANDA_MAX + ' proyek ditandai untuk minggu '
+          + paguMinggu + ' sudah kena — proyek berikutnya tidak diberi nota sampai minggu berganti');
+      }
+      return;
+    }
+    /* Pemeriksaan hidup pertama proyek ini (proses baru mulai, atau minggu
+       baru berganti): ambang yang sudah terlewati SEBELUM delta ini ditandai
+       diam — tidak ada nota yang terbit dari sini. Lihat catatan blok. */
+    tanda = new Set();
+    paguDitandai.set(nama, tanda);
+    const sebelum = (pakai - paguDelta(d)) / batas * 100;
+    for (const a of pagu.ambang) if (a <= sebelum) tanda.add(a);
+  }
+  for (const a of pagu.ambang) {
+    if (persen < a || tanda.has(a)) continue;
+    tanda.add(a);
+    // session: '' — nota ini milik FOLDER, bukan sesi. Jangan sampai halaman
+    // melahirkan pegawai hantu bernama sesi kosong gara-gara nota anggaran.
+    publish({
+      id: ++seq, ts, kind: 'pagu', session: '', cwd: nama, tool: null, ok: true,
+      ambang: a, persen: Math.round(persen), pakai, pagu: batas, minggu: paguMinggu,
+      label: 'serapan pagu ' + Math.round(persen) + '% — ' + nama,
+    });
+  }
+}
+
+/* Dibaca /token-riwayat dan /metrics. null saat fitur mati — halaman memakai
+   itu apa adanya untuk memutuskan menggambar blok pagu atau tidak.
+
+   `jumlah`/`lewat`/`maks` dihitung dari HIMPUNAN PENUH, dan `proyek` yang
+   dipotong PAGU_RINGKAS_MAX cuma daftar rincian untuk tampilan. Pemotongan itu
+   pernah ikut dipakai /metrics, dan hasilnya gauge alert yang jenuh di 20:
+   angka peringatan yang mengecil sendiri lebih berbahaya daripada tidak ada
+   angka sama sekali.
+
+   Mingguannya SELALU minggu kalender berjalan, bukan `paguMinggu` — laporan
+   ini memang tentang minggu ini, dan paguMinggu masih kosong sampai giliran
+   pertama masuk.
+
+   BIAYANYA, DENGAN ANGKA. Bentuk lamanya dua kali linear: himpunan namanya
+   disusun dari 7 hari riwayat, lalu TIAP nama membayar 7 Map.get lagi lewat
+   paguSerapan(). Diukur di kantor yang sudah lama hidup — 8.000 proyek dalam
+   satu minggu, selisih terhadap proses yang sama tanpa pagu.json — blok ini
+   menambahkan 49,8 ms ke TIAP scrape /metrics dan 73,9 ms ke tiap
+   /token-riwayat, yaitu tiap scrape Prometheus dan tiap kali modal Statistik
+   token dibuka. Setiap angka lain di blok ini dipagari (PAGU_PROYEK_MAX,
+   PAGU_TANDA_MAX, PAGU_RINGKAS_MAX); himpunan ini satu-satunya yang tidak.
+
+   Sikapnya: BUKAN dibatasi, tapi dihitung sekali. (a) satu lintasan atas 7
+   hari menggantikan N x 7 lookup — jumlah semua proyek langsung terkumpul
+   sambil berjalan, jadi himpunan penuhnya tetap utuh dan tidak ada gauge yang
+   jenuh diam-diam; (b) hasilnya disimpan dengan kunci "minggu berjalan +
+   jumlah token yang pernah tercatat". Kuncinya DATA, bukan waktu: riwayatCatat
+   -> riwayatTambah selalu menambah riwayatTotal, jadi satu giliran masuk =
+   kunci berubah = hitung ulang. Tidak ada jendela basi, sekecil apa pun —
+   /token-riwayat sesudah satu giliran tetap segar, dan kasus 4/5/13/20 di
+   uji-pagu.mjs memang menagih itu.
+
+   Sesudahnya, di titik ukur yang sama: satu hitung penuh ~8 ms (dari ~74 ms),
+   dan scrape berikutnya di antara giliran tenggelam di derau (selisihnya
+   -0,4 ms). YANG TIDAK DITEBUS, dan itu memang disengaja: kantor yang sibuk
+   tetap membayar satu hitung penuh per giliran kalau tiap giliran disusul
+   scrape — pertumbuhannya masih linear terhadap jumlah proyek seminggu, cuma
+   konstantanya sembilan kali lebih kecil dan tidak lagi dikalikan frekuensi
+   scrape. Membatasi himpunannya akan mematikan pertumbuhan itu, tapi harganya
+   gauge yang mengecil sendiri persis waktu keadaan paling buruk — dan itu
+   sudah pernah dicoba sekali di sini (lihat alinea di atas). */
+let paguCache = null;               // hasil paguRingkas() terakhir
+let paguCacheKunci = '';            // minggu berjalan + jumlah token yang pernah tercatat
+/* Berapa kali lintasan penuh di bawah benar-benar dijalankan sejak proses
+   hidup. Dipasang di /metrics sebagai counter, dan itu bukan hiasan: satu-
+   satunya cara MENAGIH cache ini dari luar. Ukuran waktu tidak bisa —
+   selisih 3 ms dari 0 ms tenggelam di derau mesin yang ramai, dan uji yang
+   tidak bisa merah bukan uji. Dengan counter ini "20 scrape tanpa giliran
+   baru = tetap satu hitung penuh" jadi angka bulat yang deterministik.
+   Sekalian berguna di kantor sungguhan: rate()-nya menunjukkan berapa mahal
+   blok ini sebenarnya dibayar. */
+let paguHitungPenuh = 0;
+
+function paguRingkas() {
+  if (!pagu) return null;
+  const minggu = mingguLokal(Date.now());
+  const kunci = minggu + '|' + (riwayatTotal.input + riwayatTotal.output
+    + riwayatTotal.cacheTulis + riwayatTotal.cacheBaca);
+  if (paguCache && paguCacheKunci === kunci) return paguCache;
+
+  paguHitungPenuh++;
+  const ikutCache = Boolean(pagu.hitung === 'semua');
+  const pakaiPer = new Map();
+  // proyek yang dipagu EKSPLISIT selalu ikut dilaporkan, walau nol serapan
+  for (const [k, v] of pagu.proyek) if (v > 0) pakaiPer.set(k, 0);
+  /* Satu lintasan: yang lewat `bawaan` ikut ketemu di sini juga, dan
+     paguDari() yang memutuskan siapa yang berpagu — proyek tanpa nama dan
+     yang sengaja diisi 0 tersaring di situ, sama seperti sebelumnya. */
+  for (const tgl of paguHariMinggu(minggu)) {
+    const h = riwayatHarian.get(tgl);
+    if (!h || !h.proyek) continue;
+    for (const k of Object.keys(h.proyek)) {
+      if (!pakaiPer.has(k)) {
+        if (paguDari(k) <= 0) continue;
+        pakaiPer.set(k, 0);
+      }
+      const p = h.proyek[k];
+      pakaiPer.set(k, pakaiPer.get(k) + (p.input || 0) + (p.output || 0)
+        + (ikutCache ? (p.cacheTulis || 0) + (p.cacheBaca || 0) : 0));
+    }
+  }
+  const semua = [];
+  for (const [n, pakai] of pakaiPer) {
+    const batas = paguDari(n);
+    const rasio = batas > 0 ? pakai / batas : 0;
+    semua.push({ nama: n, pagu: batas, pakai, persen: Math.round(rasio * 100), rasio });
+  }
+  let lewat = 0;
+  let maks = 0;
+  for (const p of semua) {
+    if (p.rasio >= 1) lewat++;
+    if (p.rasio > maks) maks = p.rasio;
+  }
+  const proyek = semua
+    .sort((a, b) => b.rasio - a.rasio)
+    .slice(0, PAGU_RINGKAS_MAX)
+    .map(({ nama: n, pagu: batas, pakai, persen }) => ({ nama: n, pagu: batas, pakai, persen }));
+  /* `jumlah` itu himpunan LAPORAN minggu berjalan; `berpagu`/`bawaan` itu
+     KONFIGURASI, yang tidak ikut bergerak tiap Senin. Dua-duanya dibawa
+     supaya halaman tidak perlu menebak.
+     UTANG, dan sengaja ditulis di sini: halamannya BELUM memakainya. Modal
+     Statistik masih menulis "N proyek berpagu" dari `jumlah` (public/room.js,
+     cari string 'proyek berpagu'), jadi Senin pagi kalimat itu masih bisa
+     berbunyi "0 proyek berpagu" padahal pagunya aktif lewat `bawaan`. Yang
+     sudah tertutup di sini cuma sisi Prometheus. Sisi halaman menunggu
+     giliran yang boleh menyentuh public/room.js. */
+  paguCache = {
+    minggu, ambang: pagu.ambang, hitung: pagu.hitung,
+    berpagu: pagu.berpagu, bawaan: pagu.bawaan,
+    jumlah: semua.length, lewat, maks, proyek,
+  };
+  paguCacheKunci = kunci;
+  return paguCache;
+}
+
 /* -------------------------------------------------------- buku agenda ----
    Ring di atas cuma 400 event terakhir DI MEMORI: restart server, ruangan
    hari ini hilang; buka halaman jam empat sore, yang kelihatan cuma sisa
@@ -1150,7 +1588,7 @@ riwayatMuat();
    satu berkas per HARI (agenda/YYYY-MM-DD.jsonl), satu baris per event.
 
    Yang dicatat METADATA SAJA — tool apa, berkas mana, berhasil atau tidak,
-   berapa lama. `pikir`/`ucap`/`token` tidak pernah masuk, dan tidak ada
+   berapa lama. `pikir`/`ucap`/`token`/`nama` tidak pernah masuk, dan tidak ada
    field isi transkrip (`teks`, `tanya`, `token`) yang ikut ditulis walau
    menumpang di event lain. Ring/SSE boleh membawa isi karena umurnya sebatas
    memori; berkas di disk umurnya 30 hari, jadi ambangnya sengaja lebih
@@ -1164,7 +1602,14 @@ riwayatMuat();
 const AGENDA_DIR = process.env.AGENT_ROOM_AGENDA_DIR || path.join(__dirname, 'agenda');
 const AGENDA_HARI = Math.max(1, Number(process.env.AGENT_ROOM_AGENDA_HARI) || 30);
 const AGENDA_LABEL_MAX = 120;
-const AGENDA_KIND_TOLAK = new Set(['pikir', 'ucap', 'token']);
+/* `nama` ikut ditolak — pengumuman, bukan kejadian. Tiap baris agenda sudah
+   membawa field `nama` sendiri (lihat agendaBaris di bawah), jadi baris
+   kind:'nama' tidak menambah satu pun keterangan waktu diputar ulang: cuma
+   satu baris ekstra per pelantikan kursi dan per ganti nama, selamanya, di
+   berkas yang umurnya 30 hari. Blok formasi pegawai tetap memang menyiarkan
+   pengumuman itu ke penonton yang sedang menonton (SSE + ring), tapi
+   sengaja tidak menitipkannya ke disk.                                    */
+const AGENDA_KIND_TOLAK = new Set(['pikir', 'ucap', 'token', 'nama']);
 const AGENDA_TANGGAL_RX = /^\d{4}-\d{2}-\d{2}$/;
 let agendaGalatTerakhir = 0;        // peringatan tulis dibatasi 1x/menit, bukan tiap event
 
@@ -1195,6 +1640,15 @@ function agendaBaris(ev) {
   if (ev.agenId) b.agenId = ev.agenId;
   if (ev.panggilan) b.panggilan = ev.panggilan;
   if (ev.golongan) b.golongan = ev.golongan;              // kind:'promosi' (buku induk)
+  // kind:'pagu' — angka dan nama folder saja, tidak ada isi kerja; ini yang
+  // membuat /stream?ulang=YYYY-MM-DD bisa memutar notanya lagi utuh
+  if (ev.kind === 'pagu') {
+    b.ambang = ev.ambang;
+    b.persen = ev.persen;
+    b.pakai = ev.pakai;
+    b.pagu = ev.pagu;
+    b.minggu = ev.minggu;
+  }
   if (ev.sebelumnya) b.sebelumnya = ev.sebelumnya;
   if (Array.isArray(ev.peserta)) b.peserta = ev.peserta.slice(0, 12).map((p) => clip(p, 40));
   for (const k of ['butuh', 'macet']) {
@@ -1668,6 +2122,362 @@ function bukuIndukRingkas() {
   };
 }
 
+/* ------------------------------------------------ formasi pegawai tetap ---
+   Buku induk di atas mencatat KARIER sebuah folder; blok ini mencatat
+   ORANGNYA. Tiap folder proyek punya beberapa KURSI formasi — pegawai tetap
+   #1, #2, … — dan sesi yang datang dipinjami kursi kosong bernomor terkecil.
+   Nama panggilan dan jabatan menempel pada KURSI, bukan pada sesi: sesi hari
+   ini yang bekerja di folder yang sama dipanggil dengan nama yang sama
+   seperti kemarin, tanpa siapa pun mengetik ulang. Kursinya dilepas waktu
+   sesinya pamit, jadi besok pagi orang pertama yang masuk kembali ke #1.
+
+   KUNCI IDENTITASNYA PROYEK SAJA — ev.cwd, yang sudah berupa nama folder
+   (baseName), kunci yang sama persis dengan buku induk — BUKAN proyek+cabang.
+   Dua alasannya:
+   - satu sesi bisa `git checkout` di tengah kerja. Kalau cabang ikut jadi
+     kunci, orangnya berganti nama di tengah jalan dan satu pegawai pecah jadi
+     banyak orang yang sebetulnya sama.
+   - `git worktree` sudah otomatis jadi FOLDER lain, jadi cabang yang memang
+     perlu dibedakan sudah terpisah dengan sendirinya.
+   Cabang tetap dicatat di kursi sebagai `cabangTerakhir`: itu KETERANGAN —
+   dari mana dia terakhir bertugas — bukan bagian dari identitas.
+
+   KENAPA BERKAS SENDIRI, bukan menumpang di buku-induk.json: menumpang berarti
+   menaikkan SKEMA.bukuInduk 1 -> 2, dan server versi LAMA yang membaca berkas
+   v2 akan menolak SELURUH berkas lalu menimpanya — seluruh jam dinas dan
+   golongan hilang cuma gara-gara fitur nama. Dengan berkas terpisah, turun
+   versi tidak merugikan apa pun: yang lama paling banter kehilangan nama,
+   kariernya utuh.
+
+   Aturan 5 (privasi) dijaga dari sini: yang ditulis ke disk cuma nama
+   panggilan, id jabatan, cap waktu, nama folder, dan nama cabang/mesin. Id
+   sesi TIDAK PERNAH ikut — `penghuni` hidup di memori saja dan sengaja
+   ditanggalkan waktu berkasnya ditulis (lihat formasiIsi()).
+
+   SAKLAR MATI: AGENT_ROOM_PEGAWAI_TETAP=off mematikan seluruh blok ini —
+   tidak ada kursi yang dilantik, formasi.json tidak dibaca dan tidak pernah
+   ditulis, dan sesi terminal kembali tanpa nama panggilan persis seperti
+   sebelum fitur ini ada. Pemasangan lama yang tidak meminta apa-apa berhak
+   mendapatkan perilakunya kembali dengan satu env, bukan dengan menunggu
+   tambalan.                                                                */
+const PEGAWAI_MATI = String(process.env.AGENT_ROOM_PEGAWAI_TETAP || '').trim().toLowerCase() === 'off';
+const BERKAS_FORMASI = process.env.AGENT_ROOM_FORMASI || path.join(__dirname, 'formasi.json');
+const FORMASI_MAKS = 12;                    // sesi ke-13 yang bersamaan jalan tanpa nama tetap, persis perilaku lama
+/* Berapa banyak FOLDER yang boleh punya formasi. Tanpa batas ini tiap folder
+   yang pernah dipakai sekali menetap selamanya — 300 folder sekali pakai =
+   300 entri permanen — padahal semua dimensi lain di berkas ini dibatasi.
+   Yang dibuang waktu penuh: yang `terakhir`-nya paling tua (dan tidak sedang
+   dihuni), bukan yang paling lama dibuat, supaya folder yang benar-benar
+   dipakai tidak pernah kehilangan orangnya. Sengaja BUKAN kedaluwarsa per
+   hari: folder yang baru ditengok lagi setahun kemudian tetap berhak atas
+   pegawai yang sama — itu inti fiturnya.                                   */
+const FORMASI_PROYEK_MAKS = 64;
+const PEGAWAI_SEPI_MS = 30 * 60 * 1000;     // penghuni sediam ini dianggap sudah pulang tanpa pamit
+/* Hanya hook yang benar-benar menandakan orang sedang bekerja yang boleh
+   melantik pegawai. `notify`, `compact`, `subagent-*` dan kawan-kawannya
+   sengaja di luar daftar. Event ambient tidak ada di sini sama sekali —
+   /ambien memang tidak pernah lewat terimaEvent(), dan Aturan 2 melarangnya
+   menyentuh apa pun yang berhubungan dengan sesi.
+
+   'session-end' juga TIDAK di sini, walau dia hook nyata: yang pamit tidak
+   perlu kursi. Sesi yang event PERTAMANYA kebetulan SessionEnd — gampang
+   kejadian, tiap server direstart selagi ada terminal terbuka, dan kotak
+   surat tunda memperbanyaknya — akan direkrut jadi pegawai hantu: kursi dan
+   entri proyek permanen lahir untuk orang yang justru sedang pulang, `sejak`
+   kursinya jadi jam KEPERGIAN, dan halaman menerima pengumuman pegawai baru
+   untuk sprite yang detik itu juga hilang. Sesi yang sudah punya kursi tetap
+   pamit dengan namanya: namanya sudah menempel di namaSesi, dan
+   pegawaiLepas() baru dipanggil SESUDAH event pamitnya disiarkan.          */
+const PEGAWAI_KIND = new Set(['pre', 'post', 'stop', 'session-start', 'prompt']);
+
+/* Dua daftar nama bergaya pegawai dinas. Undiannya deterministik (lihat
+   pegawaiUndi), jadi URUTAN daftar ini ikut menentukan siapa yang lahir di
+   kursi mana: menyisipkan nama di TENGAH daftar akan mengganti nama pegawai
+   yang sudah bertugas. Kalau daftarnya mau diperpanjang, sambung di ujung.
+   Aksesori kepala di halaman mengikuti JABATAN, bukan nama, jadi kesan gender
+   pada nama bukan janji gambar. */
+const NAMA_DEPAN = [
+  'Budi', 'Sri', 'Bambang', 'Dewi', 'Agus', 'Siti', 'Joko', 'Rina',
+  'Hendra', 'Ratna', 'Slamet', 'Endang', 'Bayu', 'Wulan', 'Darmanto', 'Tuti',
+  'Eko', 'Yanti', 'Rudi', 'Maryati', 'Suparman', 'Nunung', 'Wahyu', 'Titik',
+];
+const NAMA_BELAKANG = [
+  'Santoso', 'Rahayu', 'Nugroho', 'Handayani', 'Wijaya', 'Kusuma', 'Prasetyo', 'Lestari',
+  'Hartono', 'Puspita', 'Setiawan', 'Wibowo', 'Anggraini', 'Suryana', 'Mulyani', 'Saputra',
+];
+
+const formasi = { v: SKEMA.formasi, proyek: {} };   // nama folder -> [kursi]; indeks 0 = pegawai tetap #1
+const slotSesi = new Map();                 // sesi 12-char -> { proyek, i } — memori saja, tidak pernah ke disk
+let formasiKotor = false;
+let formasiTimer = null;
+
+/* Satu kursi. `sejak` = kapan kursinya pertama kali dilantik (itu yang
+   dipajang kartu pegawai sebagai "sejak <tanggal>"); `terakhir` = kapan
+   terakhir kali ada yang MENDUDUKINYA — dicatat sekali per penempatan, bukan
+   tiap hook, supaya jalur event tidak mengotori berkas tiap detik. */
+const kursiKosong = (ts) => ({
+  nama: '', peran: '', sejak: ts, terakhir: ts,
+  manual: false, peranManual: false,
+  cabangTerakhir: '', mesinTerakhir: '',
+  penghuni: '',                             // sesi yang sedang menduduki; MEMORI SAJA
+});
+
+/* Nama yang sedang dipakai kursi LAIN di proyek yang sama — supaya dua
+   pegawai tetap di satu ruangan tidak kembar nama. */
+function namaDipakai(kursi, kecuali) {
+  const s = new Set();
+  kursi.forEach((k, idx) => { if (idx !== kecuali && k && k.nama) s.add(k.nama); });
+  return s;
+}
+
+/* Undian nama DETERMINISTIK: hash(proyek + '#' + kursi + '#' + salt), byte
+   pertama memilih nama depan, byte kedua nama belakang. Deterministik dipilih
+   supaya (a) formasi.json boleh hilang tanpa membuat seluruh kantor berganti
+   orang, dan (b) uji bisa menghitung ulang nama yang seharusnya keluar tanpa
+   mematok nama harfiah di dalam kodenya. `salt` dinaikkan (probe linear)
+   selama hasilnya sudah dipakai kursi lain. */
+function pegawaiUndi(proyek, i, dipakai) {
+  for (let salt = 0; salt < 64; salt++) {
+    const h = crypto.createHash('sha256').update(proyek + '#' + i + '#' + salt).digest();
+    const nama = NAMA_DEPAN[h[0] % NAMA_DEPAN.length] + ' ' + NAMA_BELAKANG[h[1] % NAMA_BELAKANG.length];
+    if (!dipakai || !dipakai.has(nama)) return nama;
+  }
+  // 384 kombinasi vs 12 kursi: tidak akan sampai sini, tapi jangan pernah
+  // mengembalikan nama kosong hanya karena undian mentok
+  return NAMA_DEPAN[i % NAMA_DEPAN.length] + ' ' + NAMA_BELAKANG[i % NAMA_BELAKANG.length];
+}
+
+/* Buang formasi folder yang paling lama tidak ditengok sampai jumlah proyek
+   kembali ke FORMASI_PROYEK_MAKS. `lindungi` = folder yang barusan dibuat
+   (jangan sampai yang baru lahir langsung dibuang kalau semua tetangganya
+   lebih baru), dan folder yang kursinya sedang dihuni tidak pernah jadi
+   calon: membuang formasi orang yang sedang duduk berarti mencabut namanya
+   di tengah kerja. Mengembalikan berapa folder yang dibuang. */
+function formasiPangkas(lindungi) {
+  const nama = Object.keys(formasi.proyek);
+  let sisa = nama.length - FORMASI_PROYEK_MAKS;
+  if (sisa <= 0) return 0;
+  const umur = (n) => (formasi.proyek[n] || []).reduce((m, k) => Math.max(m, k.terakhir || 0), 0);
+  const dihuni = (n) => (formasi.proyek[n] || []).some((k) => k.penghuni);
+  const calon = nama.filter((n) => n !== lindungi && !dihuni(n)).sort((a, b) => umur(a) - umur(b));
+  let buang = 0;
+  for (const n of calon) {
+    if (sisa-- <= 0) break;
+    delete formasi.proyek[n];
+    buang++;
+  }
+  return buang;
+}
+
+function formasiKursi(proyek) {
+  let a = formasi.proyek[proyek];
+  if (!Array.isArray(a)) {
+    a = [];
+    formasi.proyek[proyek] = a;
+    // folder baru: sekalian periksa apakah ruang arsipnya sudah kepenuhan
+    if (formasiPangkas(proyek)) formasiKotor = true;
+  }
+  return a;
+}
+
+/** Kursi milik sesi ini beserta alamatnya (proyek + indeks), supaya
+    pemanggilnya bisa mengundi ulang nama. null = sesi tanpa kursi, mis.
+    tenaga kontrak yang dilahirkan halaman. */
+function pegawaiSlot(sesi) {
+  const alamat = slotSesi.get(sesi);
+  if (!alamat) return null;
+  const kursi = formasi.proyek[alamat.proyek];
+  const slot = Array.isArray(kursi) ? kursi[alamat.i] : null;
+  return slot ? { slot, kursi, proyek: alamat.proyek, i: alamat.i } : null;
+}
+
+/* Melantik sesi ke sebuah kursi, atau null kalau sesi ini memang tidak berhak
+   dapat nama tetap. Dipanggil dari terimaEvent() untuk SETIAP hook, jadi
+   jalur cepatnya (sudah punya kursi) harus di paling atas. */
+function pegawaiTetapPasang(ev) {
+  if (PEGAWAI_MATI) return null;                      // AGENT_ROOM_PEGAWAI_TETAP=off
+  if (!ev.cwd || !ev.session || !PEGAWAI_KIND.has(ev.kind)) return null;
+  if (slotSesi.has(ev.session)) return null;          // sudah dilantik
+  /* Sesi yang dilahirkan halaman lewat lahirkanTugas() sudah membawa nama dari
+     formulir tugas. Dia tenaga kontrak untuk satu pekerjaan, jangan sampai
+     mengambil nomor formasi staf tetap. Pakai .get() truthy, JANGAN .has():
+     jalur lain bisa menyisakan string kosong di peta yang sama. */
+  if (namaSesi.get(ev.session)) return null;
+  const proyek = clip(ev.cwd, 120);
+  if (!proyek) return null;
+  const kursi = formasiKursi(proyek);
+  const kini = Date.now();
+
+  /* Sapuan malas, tanpa timer — polanya sama dengan potretRuangan(): kursi
+     yang penghuninya tidak ada lagi di sesiHidup, atau yang sudah diam lebih
+     lama dari PEGAWAI_SEPI_MS, dianggap ditinggal pulang tanpa pamit.
+
+     Yang disapu dilepas LENGKAP lewat pegawaiLepas(), bukan cuma dicoret dari
+     slotSesi. Melepas setengah-setengah bikin dua kerusakan sekaligus: (a)
+     namaSesi-nya tertinggal, jadi orang yang tersapu tetap dipanggil dengan
+     nama kursi yang sudah diberikan ke orang lain — dua sesi hidup bernama
+     sama persis, padahal namaDipakai() dibuat justru supaya itu mustahil; dan
+     (b) gerbang "sudah punya nama = tenaga kontrak" di atas ikut menjebaknya,
+     jadi waktu dia bekerja lagi dia TIDAK PERNAH dilantik ulang — kursinya
+     hilang selamanya dan ganti nama/jabatan lewat kartu pegawai diam-diam
+     tidak mendarat ke berkas. Harganya: orang yang diam 30 menit lalu bekerja
+     lagi bisa berganti nama kalau kursinya sudah ditempati. Nama berkedip
+     sekali jauh lebih ringan daripada dua orang bernama sama selamanya. */
+  for (const k of kursi) {
+    if (!k.penghuni) continue;
+    const h = sesiHidup.get(k.penghuni);
+    if (!h || kini - h.terakhir > PEGAWAI_SEPI_MS) pegawaiLepas(k.penghuni);
+  }
+
+  let i = kursi.findIndex((k) => !k.penghuni);
+  let baru = false;
+  if (i < 0) {
+    if (kursi.length >= FORMASI_MAKS) return null;    // ruangannya penuh: jalan tanpa nama tetap
+    i = kursi.length;
+    kursi.push(kursiKosong(ev.ts || kini));
+    baru = true;
+  }
+  const slot = kursi[i];
+  if (!slot.nama) slot.nama = pegawaiUndi(proyek, i, namaDipakai(kursi, i));
+  slot.penghuni = ev.session;
+  slot.terakhir = ev.ts || kini;
+  if (ev.cabang) slot.cabangTerakhir = clip(ev.cabang, 48);
+  if (ev.mesin) slot.mesinTerakhir = clip(ev.mesin, 32);
+  slotSesi.set(ev.session, { proyek, i });
+  namaSesi.set(ev.session, slot.nama);
+  if (slot.peran) peranSesi.set(ev.session, slot.peran);
+  formasiKotor = true;
+  formasiJadwalkanTulis();
+  return { nama: slot.nama, peran: slot.peran || '', slot: i + 1, sejak: slot.sejak, baru };
+}
+
+/* Pegawainya pulang: kursinya dikosongkan supaya sesi berikutnya di proyek
+   yang sama mendapat nomor yang sama. Sekalian membersihkan tiga peta per-sesi
+   yang selama ini cuma dibersihkan di jalur gagal-spawn. */
+function pegawaiLepas(sesi) {
+  if (!sesi) return;
+  namaSesi.delete(sesi);
+  peranSesi.delete(sesi);
+  modelSesi.delete(sesi);
+  const alamat = slotSesi.get(sesi);
+  if (!alamat) return;
+  slotSesi.delete(sesi);
+  const kursi = formasi.proyek[alamat.proyek];
+  const slot = Array.isArray(kursi) ? kursi[alamat.i] : null;
+  if (slot && slot.penghuni === sesi) slot.penghuni = '';
+}
+
+// Bentuk yang boleh mendarat di disk: `penghuni` (id sesi) ditanggalkan di sini.
+const formasiIsi = () => JSON.stringify({
+  v: SKEMA.formasi,
+  proyek: Object.fromEntries(Object.entries(formasi.proyek).map(([nm, kursi]) => [nm, kursi.map((k) => ({
+    nama: k.nama, peran: k.peran, sejak: k.sejak, terakhir: k.terakhir,
+    manual: k.manual, peranManual: k.peranManual,
+    cabangTerakhir: k.cabangTerakhir, mesinTerakhir: k.mesinTerakhir,
+  }))])),
+});
+
+function formasiTulis(sinkron) {
+  if (PEGAWAI_MATI || !formasiKotor) return;          // saklar mati: berkasnya tidak pernah lahir
+  formasiKotor = false;
+  clearTimeout(formasiTimer);
+  const isi = formasiIsi();
+  if (sinkron) {
+    try { fs.writeFileSync(BERKAS_FORMASI, isi); }
+    catch (err) { console.warn('[agent-room] gagal menulis formasi: ' + err.message); }
+    return;
+  }
+  // .tmp lalu rename, sama alasannya dengan buku induk: satu objek JSON,
+  // setengah jadi = tidak terbaca sama sekali
+  const tmp = BERKAS_FORMASI + '.tmp';
+  fs.writeFile(tmp, isi, (err) => {
+    if (err) { console.warn('[agent-room] gagal menulis formasi: ' + err.message); formasiKotor = true; return; }
+    fs.rename(tmp, BERKAS_FORMASI, (e2) => {
+      if (e2) { console.warn('[agent-room] gagal menulis formasi: ' + e2.message); formasiKotor = true; }
+    });
+  });
+}
+
+// Debounce 20 detik, sama dengan buku induk: dipanggil dari jalur hook.
+function formasiJadwalkanTulis() {
+  if (formasiTimer) return;
+  formasiTimer = setTimeout(() => { formasiTimer = null; formasiTulis(false); }, 20000);
+  formasiTimer.unref?.();
+}
+
+function formasiMuat() {
+  if (PEGAWAI_MATI) return;                           // AGENT_ROOM_PEGAWAI_TETAP=off
+  let teks = '';
+  try { teks = fs.readFileSync(BERKAS_FORMASI, 'utf8'); }
+  catch (err) {
+    /* Berkas belum ada memang wajar — kantornya baru buka, diam saja. Tapi
+       "ada, cuma tidak bisa dibaca" (izin, perangkat) bukan hal yang wajar
+       dan tidak boleh dibuang tanpa suara: sebentar lagi berkasnya ditimpa. */
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] formasi: 1 berkas ditolak (tidak terbaca: ' + err.message + ')');
+    }
+    return;
+  }
+  let o = null;
+  /* Dua cabang penolakan di bawah memperingatkan; yang ini dulu diam saja,
+     padahal justru yang paling perlu terdengar: berkas terpotong (mati listrik
+     saat rename, disk penuh) tidak bisa dibedakan dari kantor yang baru buka,
+     dan seluruh nama yang sudah dipilih manusia lenyap tanpa jejak begitu
+     kursi pertama lahir dan berkasnya ditimpa. */
+  try { o = JSON.parse(teks); }
+  catch (err) {
+    console.warn('[agent-room] formasi: 1 berkas ditolak (isinya bukan JSON utuh: ' + err.message
+      + '); nama lama hilang, berkasnya ditimpa begitu ada pegawai dilantik — ' + BERKAS_FORMASI);
+    return;
+  }
+  if (!o || typeof o !== 'object' || !o.proyek || typeof o.proyek !== 'object') {
+    console.warn('[agent-room] formasi: 1 berkas ditolak (skema v' + SKEMA.formasi + '; bentuk tidak dikenal)');
+    return;
+  }
+  if (versiSkema(o) > SKEMA.formasi) {
+    console.warn('[agent-room] formasi: 1 berkas ditolak (skema v' + SKEMA.formasi + '; berkas ber-v' + versiSkema(o) + ' lebih baru)');
+    return;
+  }
+  if (versiSkema(o) < SKEMA.formasi) migrasiFormasi(o);
+  let n = 0, jumlahKursi = 0;
+  for (const [nama, arr] of Object.entries(o.proyek)) {
+    if (!nama || !Array.isArray(arr)) continue;
+    const kursi = [];
+    // dipotong di FORMASI_MAKS, dan kursi rusak tetap memakan tempat: nomor
+    // formasi itu alamat, menggesernya berarti menukar orang
+    for (const r of arr.slice(0, FORMASI_MAKS)) {
+      const k = kursiKosong(0);
+      if (r && typeof r === 'object') {
+        k.nama = clip(r.nama, 24);
+        k.peran = typeof r.peran === 'string' && PERAN_SAH.test(r.peran) ? r.peran : '';
+        k.sejak = Math.max(0, Number(r.sejak) || 0);
+        k.terakhir = Math.max(0, Number(r.terakhir) || 0);
+        k.manual = r.manual === true;
+        k.peranManual = r.peranManual === true;
+        k.cabangTerakhir = clip(r.cabangTerakhir, 48);
+        k.mesinTerakhir = clip(r.mesinTerakhir, 32);
+      }
+      kursi.push(k);
+    }
+    if (!kursi.length) continue;
+    formasi.proyek[clip(nama, 120)] = kursi;
+    n++; jumlahKursi += kursi.length;
+  }
+  /* Berkas yang lahir dari server versi lama (atau disunting tangan) bisa
+     membawa ribuan folder; dipangkas di sini juga, bukan cuma waktu folder
+     baru datang. Ditandai kotor supaya bentuk rampingnya benar-benar mendarat
+     ke disk waktu kantornya tutup, bukan cuma hidup di memori. */
+  const dibuang = formasiPangkas();
+  if (dibuang) {
+    formasiKotor = true;
+    n = 0; jumlahKursi = 0;
+    for (const arr of Object.values(formasi.proyek)) { n++; jumlahKursi += arr.length; }
+  }
+  if (n) console.log('[agent-room] formasi dimuat: ' + jumlahKursi + ' pegawai tetap di ' + n + ' proyek dari ' + BERKAS_FORMASI
+    + (dibuang ? ' (' + dibuang + ' proyek terlama dibuang, batas ' + FORMASI_PROYEK_MAKS + ')' : ''));
+}
+formasiMuat();
+
 /* ------------------------------------------------------------ papan SKP ---
    Kinerja per PROYEK dan per SESI dalam satu rentang tanggal, dihitung saat
    diminta dari tiga sumber yang sudah ada — bukan tabel baru yang harus
@@ -1793,7 +2603,7 @@ function skpHitung(dari, sampai) {
 
 // Tulis saat keluar: 'exit' cuma boleh sinkron, dan SIGINT/SIGTERM harus
 // diubah jadi exit() supaya 'exit' sempat jalan. Dipasang sekali saja.
-process.on('exit', () => bukuIndukTulis(true));
+process.on('exit', () => { bukuIndukTulis(true); formasiTulis(true); });
 for (const sinyal of ['SIGINT', 'SIGTERM']) {
   process.on(sinyal, () => process.exit(0));
 }
@@ -2616,6 +3426,31 @@ function terimaEvent(raw, opsi = {}) {
     if (Number.isFinite(opsi.ts) && opsi.ts > 0) ev.ts = opsi.ts;
   }
   tandaiHidup(ev.session);
+  /* Pelantikan pegawai tetap dulu, baru kegiatannya diumumkan: halaman harus
+     tahu siapa orangnya sebelum melihat apa yang dikerjakannya. Event 'nama'
+     terbit sekali per penempatan dan SENGAJA tidak masuk buku agenda sama
+     sekali (lihat AGENDA_KIND_TOLAK): tiap baris agenda sudah membawa field
+     `nama` sendiri, jadi barisnya tidak menambah keterangan apa pun waktu
+     diputar ulang — cuma menggemukkan berkas harian.
+
+     Nomornya DITUKAR, bukan diambil dari ujung antrean. Yang terbit lebih
+     dulu harus ber-id lebih kecil: susulan Last-Event-ID bersandar pada
+     invarian "urutan publish = urutan id" (`ring.filter(e => e.id > since)`),
+     jadi kalau pengumuman namanya bernomor lebih besar, klien yang putus
+     tepat di sela dua publish ini akan meminta id > id-pengumuman dan
+     kehilangan event pemicunya untuk selamanya. Dua-duanya tetap unik dan
+     menaik. */
+  const tetap = pegawaiTetapPasang(ev);
+  if (tetap) {
+    if (!ev.nama) ev.nama = tetap.nama;
+    if (!ev.peran && tetap.peran) ev.peran = tetap.peran;
+    const idPengumuman = ev.id;
+    ev.id = ++seq;
+    publish({ id: idPengumuman, ts: ev.ts, kind: 'nama', session: ev.session, cwd: ev.cwd,
+              nama: tetap.nama, peran: tetap.peran || '',
+              tetap: { slot: tetap.slot, sejak: tetap.sejak, baru: tetap.baru },
+              tool: null, label: '', ok: true });
+  }
   catatSesiHidup(ev);
   publish(ev);
   // nota dinas keluar hanya untuk yang baru terjadi: event yang tertunda
@@ -2632,8 +3467,11 @@ function terimaEvent(raw, opsi = {}) {
      pemantauannya tidak langsung dicabut: kalimat penutup agen sering baru
      mendarat di berkas beberapa saat sesudah hook terakhir. Event tunda
      tidak membuka pemantau: sesinya sudah lewat, isinya sudah basi. */
-  if (ev.kind === 'session-end') setTimeout(() => lepasTranskrip(ev.session), 3000).unref?.();
-  else if (!opsi.tunda) pantauTranskrip(ev.session, jalurTranskrip(raw));
+  if (ev.kind === 'session-end') {
+    // sesudah publish, supaya event pamitnya masih membawa nama orangnya
+    pegawaiLepas(ev.session);
+    setTimeout(() => lepasTranskrip(ev.session), 3000).unref?.();
+  } else if (!opsi.tunda) pantauTranskrip(ev.session, jalurTranskrip(raw));
   return ev;
 }
 
@@ -2735,6 +3573,63 @@ function metrikTeks() {
     token(riwayatTotal, riwayatProyek));
   metrik('agent_room_token_hari_ini', 'gauge', 'Token hari ini (kalender lokal server) dari riwayat lintas sesi.',
     token(hariIni, hariIni.proyek ? Object.entries(hariIni.proyek) : null));
+  /* Pagu anggaran token — hanya kalau pagu.json memang ada. Tanpa berkas itu
+     /metrics tidak boleh memuat satu baris pagu pun (janji 1 di blok pagu).
+     Rasio, bukan angka mentah: 1.0 = pas pagu, jadi satu alert rule berlaku
+     untuk semua proyek berapa pun pagunya. Nama proyek tetap tunduk pada
+     aturan METRICS_PROYEK yang sudah berlaku di fungsi ini.
+
+     KETIGA ANGKA AGREGAT DIAMBIL DARI HIMPUNAN PENUH (rp.jumlah/rp.lewat/
+     rp.maks), bukan dari rp.proyek yang sudah dipotong 20 baris untuk
+     tampilan. Gauge yang jenuh di 20 diam-diam mengecilkan justru waktu
+     keadaannya paling buruk — dan itu persis kebalikan dari gunanya alert.
+     Seri BERLABEL boleh tetap 20 teratas: di sana yang dijaga kardinalitas,
+     dan daftarnya sudah diurut rasio menurun — tapi seri itu tinggal di NAMA
+     METRIK SENDIRI (agent_room_pagu_proyek_*). Satu keluarga yang memuat baris
+     agregat telanjang DAN baris per-proyek membuat sum() menghitung totalnya
+     dua kali: 25 proyek terlampaui terbaca 45. Aturan di sini: satu nama
+     metrik = satu tingkat agregasi.
+
+     Nama juga harus menjanjikan yang benar-benar dihitung. agent_room_pagu_
+     proyek dulu berisi himpunan laporan minggu berjalan sambil ber-HELP
+     "proyek yang punya pagu" — dengan `bawaan` terisi, angkanya jatuh ke 0
+     tiap Senin pagi tanpa satu huruf pun berubah di pagu.json, dan gauge 0
+     gampang dibaca sebagai "pagu tidak aktif". Sekarang tiga hal itu tiga
+     metrik: konfigurasi (proyek + bawaan), dan yang week-scoped (_aktif). */
+  if (pagu) {
+    const rp = paguRingkas();
+    const bulat = (v) => Math.round(v * 10000) / 10000;
+    const rasio = (p) => (p.pagu > 0 ? bulat(p.pakai / p.pagu) : 0);
+    const label = (p) => 'proyek="' + metrikLabel(p.nama) + '"';
+    metrik('agent_room_pagu_proyek', 'gauge',
+      'Proyek yang diberi pagu token eksplisit di pagu.json (angka konfigurasi, bukan pemakaian).',
+      [['', pagu.berpagu]]);
+    metrik('agent_room_pagu_bawaan', 'gauge',
+      'Pagu token bawaan untuk proyek yang tidak disebut di pagu.json (0 = tidak ada pagu bawaan).',
+      [['', pagu.bawaan]]);
+    metrik('agent_room_pagu_proyek_aktif', 'gauge',
+      'Proyek berpagu yang masuk laporan minggu berjalan: yang dipagu eksplisit,'
+      + ' plus yang memakai pagu bawaan dan menyerap token minggu ini.', [['', rp.jumlah]]);
+    metrik('agent_room_pagu_serapan_rasio', 'gauge',
+      'Serapan pagu minggu berjalan sebagai rasio token terpakai / pagu (1.0 = pas pagu).',
+      [['agregat="maks"', bulat(rp.maks)]]);
+    metrik('agent_room_pagu_terlampaui', 'gauge', 'Proyek yang serapan minggu ininya sudah melewati pagu.',
+      [['', rp.lewat]]);
+    /* Bukan hiasan: angka inilah yang membuat cache laporan pagu bisa
+       DITAGIH dari luar (lihat catatan di paguRingkas). Naik sekali per
+       hitung penuh — kalau naik tiap scrape, cachenya sudah tidak bekerja. */
+    metrik('agent_room_pagu_hitung_penuh_total', 'counter',
+      'Berapa kali laporan pagu dihitung penuh (lintasan 7 hari riwayat) sejak proses hidup;'
+      + ' scrape di antara dua giliran memakai hasil yang sudah ada.', [['', paguHitungPenuh]]);
+    if (METRICS_PROYEK) {
+      metrik('agent_room_pagu_proyek_serapan_rasio', 'gauge',
+        'Serapan pagu minggu berjalan per proyek (' + PAGU_RINGKAS_MAX + ' teratas menurut rasio).',
+        rp.proyek.map((p) => [label(p), rasio(p)]));
+      metrik('agent_room_pagu_proyek_terlampaui', 'gauge',
+        'Per proyek (' + PAGU_RINGKAS_MAX + ' teratas menurut rasio): 1 = serapan minggu ini melewati pagu.',
+        rp.proyek.map((p) => [label(p), rasio(p) >= 1 ? 1 : 0]));
+    }
+  }
   metrik('agent_room_galat_halaman', 'gauge', 'Laporan galat halaman yang tersimpan di memori (POST /galat, maks ' + GALAT_SIMPAN + ').',
     [['', galatHalaman.length]]);
   metrik('agent_room_sse_dibuang_total', 'counter', 'Event yang dibuang dari antrean klien SSE lambat (rem SSE).', [['', sseDibuangTotal]]);
@@ -2947,6 +3842,22 @@ const server = http.createServer(async (req, res) => {
       const { sesi, nama } = JSON.parse(body || '{}');
       if (typeof sesi === 'string' && sesi) {
         if (nama) namaSesi.set(sesi, clip(nama, 24)); else namaSesi.delete(sesi);
+        /* Nama yang dipilih manusia menempel di KURSI, bukan cuma di sesi ini:
+           besok pegawai yang sama dipanggil begitu lagi. Mengosongkan nama
+           berarti "kembali ke nama undian", BUKAN "pegawainya jadi anonim" —
+           makanya namaSesi diisi ulang, bukan dibiarkan kosong. Sesi tanpa
+           kursi (tenaga kontrak dari halaman) tetap seperti dulu: memori saja. */
+        const k = pegawaiSlot(sesi);
+        if (k) {
+          if (nama) { k.slot.nama = clip(nama, 24); k.slot.manual = true; }
+          else {
+            k.slot.manual = false;
+            k.slot.nama = pegawaiUndi(k.proyek, k.i, namaDipakai(k.kursi, k.i));
+            namaSesi.set(sesi, k.slot.nama);
+          }
+          formasiKotor = true;
+          formasiJadwalkanTulis();
+        }
         publish({ id: ++seq, ts: Date.now(), kind: 'nama', session: sesi,
                   nama: namaSesi.get(sesi) || '', tool: null, label: '', ok: true });
       }
@@ -2974,6 +3885,17 @@ const server = http.createServer(async (req, res) => {
       if (typeof sesi === 'string' && sesi) {
         if (peran) peranSesi.set(sesi, peran);
         else peranSesi.delete(sesi);
+        /* Jabatan pun menempel di kursi. Server sengaja TIDAK pernah mengundi
+           jabatan sendiri: daftar id JABATAN hidup di halaman, dan menyalinnya
+           ke sini berarti dua daftar yang bisa hanyut. Jadi kursi baru lahir
+           tanpa jabatan, dan menetap begitu manusia memilihkannya sekali. */
+        const k = pegawaiSlot(sesi);
+        if (k) {
+          k.slot.peran = peran ? peran : '';
+          k.slot.peranManual = !!peran;
+          formasiKotor = true;
+          formasiJadwalkanTulis();
+        }
         publish({ id: ++seq, ts: Date.now(), kind: 'peran', session: sesi,
                   peran: peranSesi.get(sesi) || '', tool: null, label: '', ok: true });
       }
@@ -3314,7 +4236,8 @@ const server = http.createServer(async (req, res) => {
       .sort((a, b) => (b.input + b.output) - (a.input + a.output))
       .slice(0, 20);
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
-    res.end(JSON.stringify({ total: riwayatTotal, sejak: riwayatSejak || null, harian, proyek }));
+    // `pagu` null kalau pagu.json tidak ada — halaman membaca itu apa adanya
+    res.end(JSON.stringify({ total: riwayatTotal, sejak: riwayatSejak || null, harian, proyek, pagu: paguRingkas() }));
     return;
   }
 

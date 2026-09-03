@@ -16,25 +16,46 @@ daftarEvent(
   },
   tick(E) {
     const q = E.aktor;
+    // LED merah menyala 1 detik lalu padam. Dulu ditulis pada(E, E.umur + 1, ..)
+    // — targetnya ikut bergerak tiap frame, jadi E.umur < detik SELALU benar dan
+    // callback-nya tidak pernah jalan: lampu merah menggantung sampai orang
+    // berikutnya menimpanya. Tenggat disimpan sekali, lalu dibandingkan manual.
+    if (E.data.merahSampai && E.umur > E.data.merahSampai) {
+      RUANGAN.absensiMerah = false;
+      if (E.data.gagalAktor) { E.data.gagalAktor.pose = null; E.data.gagalAktor = null; }
+      E.data.merahSampai = 0;
+    }
     if (!q.length) return;
     if (E.data.berikut == null) E.data.berikut = 2;
     if (E.umur > E.data.berikut && q[0] && q[0].diam) {
       const a = q.shift();
-      const gagal = Math.random() < 0.2;
+      const gagal = Math.random() < 0.2 && (E.data.ulang || 0) < 2;
       RUANGAN.absensiMerah = gagal;
       if (gagal) {
+        // Jarinya tidak terbaca: dia MENGULANG sekali — masuk lagi ke ekor
+        // antrean, bukan dibuang. q.shift() memutasi E.aktor, jadi tanpa push
+        // ulang orangnya keluar dari daftar aktor event dan tidak pernah kena
+        // lepaskanAktor() — eventKerja/betah-nya menggantung selamanya.
+        E.data.ulang = (E.data.ulang || 0) + 1;
         a.pose = 'angkat';
-        pada(E, E.umur + 1, () => { RUANGAN.absensiMerah = false; a.pose = null; });
         a.say('jarinya kering, ngulang');
+        E.data.gagalAktor = a;
+        E.data.merahSampai = E.umur + 1;
+        q.push(a);
+        E.data.berikut = E.umur + 1.6;
       } else {
         for (let i = 0; i < 3; i++) spawn('ping', 428, 106);
+        a.pose = null;
         lepaskanAktor(a);
+        q.forEach((o, i) => o.goToXY(462 - i * 10, 152, 'up'));
+        E.data.berikut = E.umur + 2.5;
       }
-      if (!gagal) { q.forEach((o, i) => o.goToXY(462 - i * 10, 152, 'up')); E.data.berikut = E.umur + 2.5; }
-      else E.data.berikut = E.umur + 1.6;
     }
   },
-  selesai() { RUANGAN.absensiMerah = false; },
+  selesai(E) {
+    RUANGAN.absensiMerah = false;
+    if (E.data.gagalAktor) E.data.gagalAktor.pose = null;
+  },
 },
 
 {
@@ -217,7 +238,9 @@ daftarEvent(
   },
   tick(E) {
     const ar = E.data.arsiparis;
-    if (ar && ar.diam) {
+    // berhenti menyuruh arsiparisnya bolak-balik begitu tool call sungguhan
+    // merebutnya — tiga ritnya dijadwalkan sampai detik 70 ke depan
+    if (masihMain(E, ar) && ar.diam) {
       for (let rit = 0; rit < 3; rit++) {
         pada(E, 5 + rit * 22, () => { spawn('dust', 60, 130); ar.goTo('rapat'); });
         pada(E, 10 + rit * 22, () => { ar.say('SPJ triwulan tiga ada di dus yang bawah'); });
@@ -256,7 +279,14 @@ daftarEvent(
       E.data.teknisi = teknisi;
       teknisi.eventKerja = E; teknisi.betahAsli = teknisi.betah; teknisi.betah = true; E.aktor.push(teknisi);
       teknisi.doingEvent = 'merapikan kabel'; teknisi.pose = 'jongkok'; teknisi.goTo('server');
-      pada(E, E.umur + 8, () => { RUANGAN.kabelRapi = true; teknisi.pose = null; teknisi.say('minggu ini beres, Bu'); });
+      // tenggat disimpan sekali; pada(E, E.umur + 8, ..) tidak pernah jalan
+      // karena targetnya bergeser tiap frame (E.umur < detik selalu benar)
+      E.data.rapiPada = E.umur + 8;
+    }
+    if (E.data.rapiPada && E.umur > E.data.rapiPada && !E.data.rapiBeres) {
+      E.data.rapiBeres = true;
+      RUANGAN.kabelRapi = true;
+      if (E.data.teknisi) { E.data.teknisi.pose = null; E.data.teknisi.say('minggu ini beres, Bu'); }
     }
     pada(E, 16, () => { a.say('kabel belum berlabel, saya catat ya'); });
     pada(E, 19, () => { spawn('paper', a.x, a.y - 20); a.bawa = null; });
@@ -357,7 +387,12 @@ daftarEvent(
     MOD.pintuKadis = true;
   },
   tick(E, dt, S) {
-    MOD.pintuKadis = E.umur < 0.5;
+    // HANYA true, tidak pernah false. Versi lama `= E.umur < 0.5` menulis
+    // false di tiap frame sesudah detik 0,5 — dan karena MOD milik bersama
+    // dan diisi ulang tiap frame, itu membanting pintu yang sedang ditahan
+    // terbuka event lain (kadis-sekdis-rapat-tertutup menahannya 1,2 detik,
+    // oper-berkas-berantai 3,5 detik). Yang menutup pintunya cukup resetMod().
+    if (E.umur < 0.5) MOD.pintuKadis = true;
     pada(E, 0.5, () => {
       for (let i = 0; i < 4; i++) spawn('ink', 448, 150);
       RUANGAN.propLantai.push({ x: 444, y: 148, jenis: 'map-merah' });
@@ -403,7 +438,10 @@ daftarEvent(
       });
     }
     if (E.data.ambil && a && a.diam && a.station === 'edit' && !E.data.cap) {
-      pada(E, E.umur + 1.5, () => { E.data.cap = true; hentakkanStempel(a); a.bawa = null; });
+      // capnya dulu tidak pernah turun: pada(E, E.umur + 1.5, ..) targetnya
+      // bergerak tiap frame, jadi tenggatnya disimpan sekali di sini
+      if (E.data.capPada == null) E.data.capPada = E.umur + 1.5;
+      else if (E.umur > E.data.capPada) { E.data.cap = true; hentakkanStempel(a); a.bawa = null; }
     }
   },
   selesai(E) { if (E.aktor[0]) E.aktor[0].bawa = null; },

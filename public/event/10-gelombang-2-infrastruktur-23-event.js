@@ -125,7 +125,11 @@ daftarEvent(
         for (let i = 0; i < 8; i++) spawn('data', 390, 122);
       });
     }
-    pada(E, 2, () => a.say('sabar, lagi lemot'));
+    // a = E.aktor[0], dan itu jadi undefined begitu tool call sungguhan
+    // merebut teknisinya (lepasDariEvent → lepaskanAktor memangkas E.aktor).
+    // Tanpa penjaga ini baris di bawah melempar "Cannot read properties of
+    // undefined (reading 'say')" tiap kali itu terjadi sebelum detik 2.
+    pada(E, 2, () => { if (a) a.say('sabar, lagi lemot'); });
   },
   gambarProp(E) {
     for (let i = 0; i < 3; i++) {
@@ -219,13 +223,14 @@ daftarEvent(
     MOD.gordenLepas = true;
     MOD.sinar = 1.4;
     const a = E.aktor[0];
-    if (a && a.diam) {
-      pada(E, 1, () => { a.pose = 'usap'; a.say('silau, Mas.'); });
-      pada(E, 3, () => { a.pose = null; a.goToXY(a.x + 12, a.y, a.face); });
+    if (masihMain(E, a) && a.diam) {
+      pada(E, 1, () => { if (masihMain(E, a)) { a.pose = 'usap'; a.say('silau, Mas.'); } });
+      pada(E, 3, () => { if (masihMain(E, a)) { a.pose = null; a.goToXY(a.x + 12, a.y, a.face); } });
     }
     pada(E, 8, () => {
       const b = pemeranDekat(E, 212, 164, 220);
       if (b) { b.doingEvent = 'mengaitkan gorden'; b.pose = 'duaangkat'; b.goToXY(212, 148, 'up'); E.data.b = b; }
+      else if (masihMain(E, a)) { a.doingEvent = 'mengaitkan gorden'; a.goToXY(212, 148, 'up'); }
     });
     pada(E, 14, () => { if (E.data.b) E.data.b.pose = null; MOD_selesaiGorden(E); });
   },

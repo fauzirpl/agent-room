@@ -15,3 +15,12 @@ agenda/
 # buku induk pegawai: karier per folder proyek, data lokal, bukan kode
 buku-induk.json
 buku-induk.json.tmp
+
+# pagu anggaran token per proyek: setelan + serapan lokal, bukan kode
+# (pagu.contoh.json justru IKUT di-commit; itu contoh untuk dibaca manusia)
+pagu.json
+pagu.json.tmp
+
+# formasi pegawai tetap: nama & jabatan penghuni kursi per folder, data lokal
+formasi.json
+formasi.json.tmp

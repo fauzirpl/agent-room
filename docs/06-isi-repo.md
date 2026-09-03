@@ -12,8 +12,12 @@
 | `hook.mjs` | forwarder cadangan kalau `curl` tidak ada |
 | `install.mjs` | pasang/lepas hook di `settings.json` |
 | `public/room.js` | mesin render canvas + mesin event acak |
-| `public/event-acak.js` | 272 event acak terpasang (dimuat sesudah `room.js`; angka dari `node uji-katalog.mjs`) |
-| `uji-event.mjs`, `uji-zorder.mjs` + `uji-zorder.golden.json`, `uji-katalog.mjs` | harness uji headless: event (syarat/mulai/tick/selesai/gambar*/lanjutan/penjadwal), z-order `frame()` vs golden, papan skor katalog |
+| `public/event/` | 337 event acak terpasang, dipecah per tema; urutan muatnya di `manifest.json` (disambung server jadi satu `/event-acak.js`, dimuat sesudah `room.js`; angka dari `node uji-katalog.mjs`) |
+| `uji-event.mjs`, `uji-zorder.mjs` + `uji-zorder.golden.json`, `uji-tenggat.mjs`, `uji-katalog.mjs` | harness uji headless: event (syarat/mulai/tick/selesai/gambar*/lanjutan/penjadwal), z-order `frame()` vs golden, tenggat `pada()` (lint pola tenggat bergerak + akibat yang dijanjikan benar-benar terjadi), papan skor katalog |
+| `uji-ulang.mjs` + `uji-ulang.fixture.jsonl`, `buat-fixture.mjs` | putar ulang satu hari buku agenda sungguhan (tersamar) ke `frame()`/`handle()` asli, memeriksa invarian sepanjang hari; `buat-fixture.mjs` yang membuat fixture-nya, lengkap dengan pagar privasi |
+| `uji-sisip.mjs` + `uji-sisip.golden.json`, `uji-seragam.mjs`, `uji-pagu.mjs`, `uji-pegawai.mjs` | bukaan ruang kadis (sapuan piksel + batas keras), jarak warna rompi kantor cabang, pagu anggaran token, dan formasi pegawai tetap |
+| `pagu.contoh.json` | contoh `pagu.json` untuk disalin; `pagu.json` sendiri data lokal dan diabaikan `.gitignore` |
+| `selaras-katalog.mjs` | menyelaraskan tanda `**+**` dan angka "N sudah jadi kode" di `EVENT-ACAK.md` dengan registri sungguhan; `--periksa` ikut di `npm test` supaya katalognya tidak pernah lagi basi diam-diam |
 | `public/index.html`, `public/style.css` | rangka halaman + panel |
 | `EVENT-ACAK.md`, `event-acak.json` | katalog rancangan 373 event, hasil rapat desain |
 

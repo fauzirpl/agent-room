@@ -71,12 +71,64 @@ function pemeranStasiun(E, station) {
   return a;
 }
 
-// Orang yang cuma menonton: tidak dipinjam, cuma menoleh sebentar.
+/* --------------------------------------------- pemeran yang sudah direbut ---
+   Aturan pertama proyek ini: tool call sungguhan selalu menang atas event.
+   handle() memanggil lepasDariEvent() → lepaskanAktor(), yang memangkas
+   E.aktor. Tapi POTRET pemeran yang disimpan sendiri oleh event (E.data.a,
+   E.data.antre, atau variabel yang ditangkap closure) TIDAK ikut terpangkas —
+   dan perintah tertunda (pada(), penjaga tenggat) tetap jalan beberapa detik
+   kemudian. Akibatnya ruangan menyeret pegawai yang di panel jelas-jelas
+   sedang mengerjakan tool call, atau melempar karena orangnya sudah undefined.
+
+   Dua penyaring di bawah ini yang dipakai untuk itu. Pakai SEBELUM menyuruh
+   siapa pun bergerak dari dalam callback tertunda. */
+const masihMain = (E, a) => !!a && a.eventKerja === E;
+const yangMasihMain = (E, daftar) => (daftar || []).filter((a) => a && a.eventKerja === E);
+
+/* Untuk antrean yang dimutasi sendiri (q.shift()): buang yang sudah direbut
+   DI TEMPAT, supaya urutan antreannya tetap utuh dan q[0] selalu orang yang
+   benar-benar masih ikut. */
+function pangkasLepas(E, daftar) {
+  if (!daftar) return daftar;
+  for (let i = daftar.length - 1; i >= 0; i--) {
+    if (!daftar[i] || daftar[i].eventKerja !== E) daftar.splice(i, 1);
+  }
+  return daftar;
+}
+
+/* Orang yang cuma menonton: tidak dipinjam, cuma menoleh sebentar.
+
+   Menulis `face` SAJA, tidak pernah `hadap`. Bedanya menentukan: `hadap`
+   itu arah TETAP milik stasiun, dan tidak ada satu pun jalur di room.js
+   yang mengembalikannya untuk orang yang sudah duduk di stasiunnya —
+   handle() cuma memanggil goTo() kalau stasiun tujuannya BEDA, sedangkan
+   stasiunPulang() memulangkan penganggur ke 'think', stasiun yang sedang
+   ditempatinya. Versi lama memanggil hadapkan() (yang menulis keduanya),
+   jadi pegawai yang kebetulan lewat di dekat sebuah event berdiri
+   menyamping di depan laptopnya SELAMANYA. Terukur: masih menyamping 20
+   detik sesudah eventnya mati, dan baru sembuh kalau ada tool call yang
+   kebetulan memetakan ke stasiun lain.
+
+   `face` juga tidak sembuh sendiri, jadi arah lamanya dititipkan di
+   o.tolehBalik dan dikembalikan Agent#tickKongsi() begitu o.tolehSampai
+   lewat — jalur yang sama yang sudah dipakai tolehan "rekan seproyek",
+   dan yang juga membatalkan tolehnya begitu orangnya melangkah.
+
+   Yang sedang mengerjakan tool call TIDAK ikut menoleh: menaikkan
+   busyUntil-nya akan memperpanjang waktu kerja yang dicatat panel, dan
+   aturan 1 melarang event menyentuh pegawai yang sedang bekerja. */
 function menoleh(orang, tx, ty, lama) {
+  const ms = lama || 1200;
   for (const o of orang) {
-    if (o.path.length || o.eventKerja) continue;
-    hadapkan(o, tx, ty);
-    o.busyUntil = Math.max(o.busyUntil, now + (lama || 1200));
+    if (o.path.length || o.eventKerja || o.state === 'work' || o.adaTugas) continue;
+    const dx = tx - o.x, dy = ty - o.y;
+    const arah = Math.abs(dx) > Math.abs(dy)
+      ? (dx > 0 ? 'right' : 'left')
+      : (dy > 0 ? 'down' : 'up');
+    if (o.tolehBalik == null) o.tolehBalik = o.face;   // dipotret sekali saja
+    o.face = arah;
+    o.tolehSampai = Math.max(o.tolehSampai || 0, now + ms);
+    o.busyUntil = Math.max(o.busyUntil, now + ms);
   }
 }
 

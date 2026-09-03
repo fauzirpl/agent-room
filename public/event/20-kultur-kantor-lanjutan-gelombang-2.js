@@ -62,6 +62,11 @@ daftarEvent(
       RUANGAN.nodaMeja = [];
       if (RUANGAN.edaran.length) RUANGAN.edaran.pop();
       RUANGAN.tongPenuh = 0;
+      // Kurva kekusutan harian (room.js) ikut ditarik turun: inilah satu-satunya
+      // event yang membereskan SEISI ruangan, jadi tumpukan di meja & ceceran di
+      // lantai lenyap sekalian. Bukan dikunci — kurvanya menyeretnya naik lagi
+      // pelan-pelan, jadi menjelang pulang mejanya sudah menumpuk lagi.
+      bereskanKusut(0.1);
     });
   },
   selesai(E) { for (const a of E.data.orang) a.pose = null; },
@@ -249,7 +254,9 @@ daftarEvent(
     // sendiri masih hidup sampai durasinya habis — tanpa guard ini,
     // U[E.data.i] keluar indeks dan .diam di bawah meledak tiap frame sisanya.
     if (!U || U.length < 2 || E.data.selesai) return;
+    // yang sudah direbut tool call sungguhan keluar dari rantai serah-amplop
     const bawa = U[E.data.i];
+    if (!masihMain(E, bawa)) { E.data.selesai = true; return; }
     if (bawa.diam && !E.data.tunggu) {
       E.data.tunggu = true;
       E.data.tungguSampai = E.umur + 2.5;
@@ -287,7 +294,7 @@ daftarEvent(
   },
   tick(E) {
     const a = E.data.a;
-    if (!a) return;
+    if (!masihMain(E, a)) return;      // dilepas tool call: berhenti menyuruh
     if (a.diam && !E.data.tekan) {
       E.data.tekan = true;
       a.bawa = 'gelas';
@@ -329,8 +336,12 @@ daftarEvent(
   },
   tick(E) {
     const { lama, baru } = E.data;
-    if (!lama) return;
-    if (!baru) { pada(E, 2, () => { lama.say('itu jam berapa ya'); }); return; }
+    // Dua-duanya diperiksa terpisah: yang tinggal di loket dan yang datang
+    // menggantikan bisa direbut tool call sendiri-sendiri. Kalau yang lama
+    // hilang, tidak ada lagi yang digantikan — adegannya batal, bukan
+    // dilanjutkan setengah.
+    if (!masihMain(E, lama)) return;
+    if (!masihMain(E, baru)) { pada(E, 2, () => { lama.say('itu jam berapa ya'); }); return; }
     if (baru.diam && !E.data.tukar) {
       E.data.tukar = true;
       spawn('paper', lama.x, lama.y - 20);
@@ -543,8 +554,10 @@ daftarEvent(
   },
   tick(E) {
     const a = E.data.a;
-    if (!a) return;
-    if (a.diam && !E.data.putar) {
+    // Orang pertama boleh hilang tanpa membatalkan adegan — arah kipasnya
+    // sudah terlanjur diputar, dan orang KEDUA-lah punchline-nya. Jadi yang
+    // dijaga per-pemakaian, bukan satu return di atas.
+    if (masihMain(E, a) && a.diam && !E.data.putar) {
       E.data.putar = true;
       RUANGAN.kipasArah = a.x < 400 ? -1 : 1;
       a.goTo('think');
@@ -553,7 +566,7 @@ daftarEvent(
       const b = pinjamAktor(E, 1, (o) => o.station === 'think' && o !== a);
       if (b.length) { E.data.b = b[0]; E.data.b.goToXY(400, 280, 'up'); }
     }
-    if (E.data.b && E.data.b.diam && !E.data.putar2) {
+    if (masihMain(E, E.data.b) && E.data.b.diam && !E.data.putar2) {
       E.data.putar2 = true;
       RUANGAN.kipasArah *= -1;
       spawn('talk', E.data.b.x, E.data.b.y - 24);
@@ -603,7 +616,7 @@ daftarEvent(
   },
   tick(E) {
     const a = E.data.a;
-    if (!a) return;
+    if (!masihMain(E, a)) return;      // dilepas tool call: pencarian kunci berhenti
     if (a.diam && E.umur > 3) {
       if (!E.data.tunggu) { E.data.tunggu = true; E.data.tungguSampai = E.umur + 3; }
       else if (E.umur > E.data.tungguSampai) {
@@ -737,7 +750,7 @@ daftarEvent(
   tick(E) {
     const a = E.data.a;
     const meja = E.data.meja;
-    if (!a || !meja || !meja.length) return;
+    if (!masihMain(E, a) || !meja || !meja.length) return;   // dilepas tool call
     if (a.diam && !E.data.tunggu) { E.data.tunggu = true; E.data.tungguSampai = E.umur + 2; }
     else if (E.data.tunggu && E.umur > E.data.tungguSampai) {
       E.data.tunggu = false;

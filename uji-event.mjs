@@ -399,7 +399,15 @@ export function muatKonteks() {
     globalThis.__jembatan__ = {
       EVENT_ACAK, eventById, MOD, RUANGAN, CUACA, jabatanDari,
       eventHidup, cooldownSampai, agents, peserta, standby, PROPS,
-      SORT_KURSI_DEKAT,
+      SORT_KURSI_DEKAT, MEJA_KERJA_X, MEJA_KERJA_Y, STATIONS,
+      // Kelas: dideklarasikan 'class', jadi TIDAK otomatis jadi properti
+      // context (yang jadi properti cuma 'function'/'var'). Tanpa jembatan
+      // ini, ctx.Agent jatuh ke dummy catch-all global sandbox dan
+      // new ctx.Agent(...) diam-diam menghasilkan objek omong kosong
+      // yang semua propertinya fungsi — gagal tanpa melempar. Diperlukan
+      // untuk uji yang ingin memakai pegawai SUNGGUHAN (update/tickKongsi/
+      // arrive/route asli), bukan orang palsu buatan buatSatuOrang().
+      Agent, Peserta, Standby,
       setS: (v) => { S = v; },
       setNow: (v) => { now = v; },
       setLast: (v) => { last = v; },
@@ -433,14 +441,31 @@ export function buatE(def) {
 }
 
 let idOrangPalsu = 0;
-export function buatSatuOrang(ctx, kerja) {
+/* `jenis` menggantikan boolean `kerja` yang lama, yang cuma punya dua keadaan:
+   'kerja' (station 'think' + state 'work') dan 'nganggur' (station 'idle').
+   Kombinasi ketiga TIDAK PERNAH ADA di fixture padahal ia keadaan paling
+   lumrah di ruangan sungguhan: pegawai yang MENGANGGUR DI MEJANYA SENDIRI
+   (station 'think', state 'idle') — itu yang dibuat stasiunPulang() untuk
+   siapa pun yang sudah selesai tool call-nya.
+
+   Akibat lubang itu tidak kelihatan tapi besar: `bisaDipinjam()` menolak
+   state 'work', jadi syarat sekelas `o.station === 'think' && bisaDipinjam(o)`
+   MUSTAHIL benar di seluruh 36 kombinasi. Event yang memakainya melaporkan
+   "0/36 syarat" dan "perluAktor=true tapi E.aktor kosong" — terbaca seperti
+   event yang salah, padahal fixture-nya yang tidak pernah menyediakan
+   keadaannya. Uji Rebutan di uji-tenggat.mjs ikut melewatkannya diam-diam
+   (`if (!E.aktor.length) continue`), jadi centang hijaunya menyesatkan. */
+export function buatSatuOrang(ctx, jenis) {
   idOrangPalsu++;
   const peran = 'pranata_muda';        // id fallback asli jabatanDari(), lihat room.js
+  // boolean lama tetap diterima supaya pemanggil lain tidak ikut diubah
+  const j = jenis === true ? 'kerja' : (jenis || 'nganggur');
+  const diMeja = j === 'kerja' || j === 'diam-di-meja';
   const o = {
     id: 'palsu-' + idOrangPalsu,
     x: 100, y: 300, slotIdx: 0,
-    station: kerja ? 'think' : 'idle',
-    state: kerja ? 'work' : 'idle',
+    station: diMeja ? 'think' : 'idle',
+    state: j === 'kerja' ? 'work' : 'idle',
     face: 'down', hadap: null,
     path: [],
     busyUntil: 0,
@@ -476,9 +501,28 @@ export function buatSatuOrang(ctx, kerja) {
   Object.defineProperty(o, 'diam', { get() { return !o.path.length; }, enumerable: true });
   return o;
 }
+/* Susunannya: `kerjaCount` orang yang benar-benar sibuk, lalu DUA yang diam
+   di mejanya (station 'think', state 'idle' — bisa dipinjam), sisanya
+   menganggur di ruang tunggu. Dua yang di tengah itu yang dulu tidak pernah
+   ada sama sekali. Dua, bukan satu: syarat sekelas
+   `S.orang.filter((o) => o.station === 'think' && bisaDipinjam(o)).length >= 2`
+   memang lumrah di katalog (adegan yang menggoda beberapa pegawai dari
+   mejanya), dan dengan satu saja lubangnya cuma bergeser, tidak tertutup.
+   Ditaruh di meja sungguhan, bukan di (100,300), karena event yang memilih
+   orang di 'think' hampir selalu lanjut menghitung jarak dari mejanya. */
 export function buatOrangPalsu(ctx, n, kerjaCount) {
   const arr = [];
-  for (let i = 0; i < n; i++) arr.push(buatSatuOrang(ctx, i < kerjaCount));
+  const { MEJA_KERJA_X, MEJA_KERJA_Y } = ctx.__jembatan__;
+  for (let i = 0; i < n; i++) {
+    const diMeja = i >= kerjaCount && i < kerjaCount + 2;
+    const o = buatSatuOrang(ctx, i < kerjaCount ? 'kerja' : (diMeja ? 'diam-di-meja' : 'nganggur'));
+    if (diMeja) {
+      o.slotIdx = i - kerjaCount;
+      o.x = MEJA_KERJA_X[o.slotIdx];
+      o.y = MEJA_KERJA_Y;
+    }
+    arr.push(o);
+  }
   return arr;
 }
 
@@ -494,6 +538,10 @@ export function buatS(ctx, { jam, hujan, petir, ramai }) {
     hujan, petir,
     hari: 3, tanggal: 15,
     kerjaJam: jam >= 7 && jam < 16,
+    // kekusutan harian (room.js: kusutSasaran) — dihitung dari jam fixture
+    // ini juga, jadi event ber-syarat S.kusut ikut disapu di seluruh
+    // JAM_MATRIKS, bukan cuma di satu nilai
+    kusut: ctx.kusutSasaran(),
     orang,
     sesi: 0, standby: orang.length, peserta: 0,
     nganggur: orang.filter((o) => bisaDipinjam(o)),
@@ -769,6 +817,20 @@ export function ujiPenjadwal(ctx, pristine) {
     harus(ctx.bentrok(LB) === true, 'LB seharusnya bentrok saat uji-latar-1 hidup');
     ctx.matikanEvent(eventHidup[0], true);
     harus(ctx.bentrok(LB) === false, 'LB seharusnya bebas lagi sesudah uji-latar-1 mati');
+  });
+
+  // Arah kedua. Dulu bentrok() cuma membaca daftar milik KANDIDAT, jadi
+  // "LB bentrokDengan uji-latar-1" menahan LB selama uji-latar-1 hidup tapi
+  // TIDAK menahan uji-latar-1 selama LB hidup — separuh perlindungan, padahal
+  // setiap penulis event mengira dua arah (tiga peninjau melaporkannya sekaligus).
+  uji('bentrokDengan berlaku DUA ARAH: lawannya juga tertahan', () => {
+    bersih();
+    harus(ctx.bentrok(L1) === false, 'uji-latar-1 seharusnya bebas saat tidak ada apa-apa');
+    ctx.nyalakanEvent(LB);
+    harus(ctx.bentrok(L1) === true, 'uji-latar-1 seharusnya tertahan saat LB (yang menyebutnya) hidup');
+    harus(ctx.bentrok(L2) === false, 'event lain yang tidak disebut LB seharusnya tetap bebas');
+    ctx.matikanEvent(eventHidup[0], true);
+    harus(ctx.bentrok(L1) === false, 'uji-latar-1 seharusnya bebas lagi sesudah LB mati');
   });
 
   uji('mulai() melempar → event batal + cooldown 20 s', () => {

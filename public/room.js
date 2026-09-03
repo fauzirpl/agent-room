@@ -85,6 +85,21 @@ for (const el of [document.documentElement, document.body]) {
   if (MODE_OVERLAY) el.classList.add('mode-overlay', 'mode-' + MODE_OVERLAY);
 }
 
+/* PERINGATAN NAMA — jebakan yang pasti memakan korban berikutnya:
+   `?kadis=1` (MODE_KADIS di atas) adalah MODE HP berupa daftar teks lewat
+   kadisGambar(); kanvasnya justru disembunyikan CSS. Itu BUKAN ruangan.
+   RUANG KADIS sebagai tempat sungguhan ada di blok "ruang kadis" tepat
+   sesudah drawKadis() — konstanta SISIP/SISIP_DALAM/RUANG_KADIS — dan
+   parameter URL-nya `?ruang=kadis`, bukan `?kadis=`. Jangan pernah
+   mencampur keduanya, dan jangan memberi nama baru berawalan MODE_.
+   `?ruang=mati` memaksa bukaannya tidak pernah terbuka (layar kedua yang
+   memang cuma mau melihat ruang utama).
+   ?ulang=/&laju= dibaca di sini juga (bukan di blok EventSource di bawah)
+   karena penjaga putar ulang cepat dipakai jauh sebelum stream tersambung. */
+const RUANG_URL = MODE_URL.get('ruang') || '';
+const ULANG_URL = MODE_URL.get('ulang') || '';
+const ULANG_LAJU = Number(MODE_URL.get('laju')) || 0;
+
 function fit() {
   // overlay: stageInner full-bleed (padding 0), jadi tepi 36 px yang biasa
   // disisakan buat bayangan kanvas justru menyusutkan kanvasnya
@@ -185,7 +200,17 @@ const STATIONS = {
   // empat: yang kelima jatuh tepat di atas ember penadah tetesan AC.
   server: { x: 390, y: 141, lane: LANE_UP,   step: 20, slots: 4,
             face: 'up', name: 'PC server',      fx: 'data'  },
-  agent:  { x: 452, y: 140, lane: LANE_UP,   face: 'up',   name: 'ruang kadis',    fx: 'paper' },
+  /* (452,140) itu AMBANG PINTU, bukan ruangannya: ruang kadisnya ada di balik
+     bukaan SISIP (blok "ruang kadis" sesudah drawKadis).
+     slots+step MENAMBAL CACAT YANG SUDAH ADA, bukan bagian dari bukaan itu:
+     tanpa `slots`, slotBebas() memakai bawaan 12 dengan langkah 19 px, jadi
+     tamu berikutnya berbaris ke kiri sampai x=357 — berdiri menempel di rak
+     PC server dan meja stempel, jauh dari pintu yang katanya dia tuju.
+     slots:3 + step:12 memberi tepat tiga titik (440, 452, 464) yang semuanya
+     di depan daun pintu dan lolos saringan tepi slotBebas (16..464), dan
+     tamu keempat memakai mekanisme antre yang sudah ada (ANTRE_JARAK 10). */
+  agent:  { x: 452, y: 140, lane: LANE_UP,   step: 12, slots: 3,
+            face: 'up',   name: 'ruang kadis',    fx: 'paper' },
   rapat:  { x: 246, y: 192, lane: LANE_UP,   face: 'down', name: 'meja rapat',     fx: 'talk'  },
   // meja kerja; slotsX dipakai karena jaraknya tidak seragam.
   // face 'up': berdiri membelakangi penonton, menghadap laptop di mejanya —
@@ -413,10 +438,18 @@ function ambien() {
   return ambKini;
 }
 
+/* Jam desimal 0..24 di mesin penonton, dengan ?jam= sudah diperhitungkan.
+   Dipisah dari hitungAmbien() supaya yang cuma butuh jamnya (kurva kekusutan
+   harian) tidak ikut kena cache per-detik ambien() — cache itu dikunci ke
+   `now` (stempel rAF), yang di harness uji tidak selalu berjalan. */
+function jamKini(d) {
+  if (Number.isFinite(JAM_PAKSA)) return ((JAM_PAKSA % 24) + 24) % 24;
+  d = d || new Date();
+  return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+}
+
 function hitungAmbien() {
-  const d = new Date();
-  let jam = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
-  if (Number.isFinite(JAM_PAKSA)) jam = ((JAM_PAKSA % 24) + 24) % 24;
+  const jam = jamKini();
   let a = FASE_HARI[FASE_HARI.length - 1];
   let b = { ...FASE_HARI[0], jam: 24 };                    // lewat tengah malam
   for (let i = 0; i < FASE_HARI.length - 1; i++) {
@@ -782,12 +815,16 @@ function drawFloor() {
   ctx.fillStyle = fg;
   ctx.fillRect(0, FLOOR_TOP, W, FH);
 
-  // karpet merah membingkai meja rapat
+  // Karpet merah membingkai meja rapat. RUANGAN.karpetCerah dipasang
+  // karpet-rapat-digulung-dijemur: sesudah dijemur warnanya naik satu tingkat
+  // dan TIDAK turun lagi — bekas yang hidup lebih lama dari eventnya, sama
+  // seperti plang baru dan noda plafon.
+  const kc = RUANGAN.karpetCerah ? 1.14 : 1;
   ctx.globalAlpha = 0.94;
-  r(152, 176, 188, 76, '#743030');
-  r(155, 179, 182, 70, '#8d3a3a');
-  r(160, 184, 172, 60, '#743030');
-  r(164, 188, 164, 52, '#984545');
+  r(152, 176, 188, 76, sh('#743030', kc));
+  r(155, 179, 182, 70, sh('#8d3a3a', kc));
+  r(160, 184, 172, 60, sh('#743030', kc));
+  r(164, 188, 164, 52, sh('#984545', kc));
   ctx.globalAlpha = 1;
   for (let x = 176; x < 316; x += 24) {           // motif emas
     r(x + 3, 244, 2, 2, P.gold);
@@ -808,6 +845,8 @@ function drawFloor() {
     ctx.globalAlpha = 1;
   }
 
+  gambarKusutLantai();      // ceceran yang menumpuk sepanjang hari
+
   // berkas cahaya jendela — warnanya ikut langit di luar
   const A = ambien();
   ctx.globalAlpha = A.sinarA;
@@ -817,6 +856,60 @@ function drawFloor() {
   ctx.lineTo(266, 196); ctx.lineTo(164, 196);
   ctx.closePath(); ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+/* Lembaran & gumpalan kertas yang tercecer sepanjang hari. BUKAN
+   RUANGAN.kertasLantai — itu punya event dan meluruh sendiri dalam hitungan
+   detik. Yang ini murni turunan kurva kusut, TANPA state: muncul sendiri
+   waktu ruangan makin kusut, hilang sendiri waktu dibereskan. Jadi tidak ada
+   array yang bisa bocor kalau tabnya dibiarkan terbuka semalam, dan
+   bereskanKusut() otomatis menyapunya tanpa perlu tahu apa-apa soal titiknya.
+
+   Titiknya TABEL TETAP, bukan acak: lantai yang titik sampahnya berpindah
+   tiap frame kebaca sebagai kedipan, bukan sebagai kotor. `a` = ambang kusut
+   tempat tiap titik mulai muncul, diurutkan supaya cecerannya menyebar
+   pelan-pelan dari tengah ruangan ke pinggir, bukan muncul serempak.
+   Digambar di drawFloor (sebelum semua prop & pegawai), jadi yang lewat
+   menutupinya — bukan mengambang di atas orang. */
+const KUSUT_LANTAI = [
+  { x: 126, y: 296, a: 0.24, gumpal: false },
+  { x: 246, y: 302, a: 0.31, gumpal: false },
+  { x: 356, y: 292, a: 0.38, gumpal: true  },
+  { x: 424, y: 300, a: 0.44, gumpal: false },   // sebelah tong sampah pantry
+  { x: 232, y: 128, a: 0.50, gumpal: false },   // celah antara meja printer & meja stempel
+  { x: 74,  y: 308, a: 0.55, gumpal: true  },
+  { x: 300, y: 314, a: 0.60, gumpal: false },
+  { x: 104, y: 156, a: 0.65, gumpal: true  },   // depan filing kabinet
+  { x: 190, y: 318, a: 0.70, gumpal: true  },
+  { x: 452, y: 286, a: 0.75, gumpal: false },
+  { x: 340, y: 158, a: 0.80, gumpal: false },   // lajur atas, sebelum rak server
+  { x: 112, y: 322, a: 0.85, gumpal: false },
+  { x: 268, y: 288, a: 0.90, gumpal: true  },
+  { x: 402, y: 322, a: 0.95, gumpal: false },
+];
+
+function gambarKusutLantai() {
+  const k = kusutKini();
+  for (const c of KUSUT_LANTAI) {
+    if (k <= c.a) continue;
+    // memudar masuk sepanjang 0.05 kusut (±20 menit jam kantor) supaya tidak
+    // ada lembaran yang muncul mendadak di lantai kosong
+    const alpha = Math.min(1, (k - c.a) / 0.05);
+    ctx.globalAlpha = alpha * 0.3;                        // bayangan kontak: menempel di lantai, bukan decal
+    r(c.x + 1, c.y + 3, c.gumpal ? 3 : 5, 1, '#2f3a2c');
+    ctx.globalAlpha = alpha;
+    if (c.gumpal) {                                       // kertas dikepal, buangannya meleset dari tong
+      r(c.x + 1, c.y, 2, 1, '#f6f3e9');
+      r(c.x, c.y + 1, 4, 2, '#e4ddc8');
+      r(c.x, c.y + 2, 4, 1, '#c9c2ac');
+    } else {                                              // selembar rebah, sudutnya terangkat
+      r(c.x, c.y + 1, 6, 2, P.paper);
+      r(c.x, c.y + 1, 6, 1, '#f6f3e9');
+      r(c.x + 5, c.y, 1, 2, '#d9d4c2');
+      r(c.x + 1, c.y + 2, 3, 1, '#d9d4c2');
+    }
+    ctx.globalAlpha = 1;
+  }
 }
 
 /* ------------------------------------------------------------------ props */
@@ -1354,6 +1447,659 @@ function drawKadis(active) {
     for (let i = 0; i < 6; i++) r(x - 1 + i * 6, y + h + 3, 4, 1, sh('#3f4a3a', 0.85));
   }
   if (active) glow(x + w / 2, y + 50, 36, '#ffd88a', 0.2);
+  // Titik kuningan kecil di plat tendang: berapa orang sedang MENGHADAP di
+  // dalam. Satu-satunya hal yang membuat pintu tertutup terbaca "ada isinya"
+  // sekaligus mengundang klik ke bukaan di sebelahnya (lihat blok ruang kadis).
+  const tamuDalam = Math.min(3, tamuKadis());
+  for (let i = 0; i < tamuDalam; i++) r(x + 9 + i * 6, y + h - 5, 2, 2, P.gold);
+}
+
+/* ========================================================== ruang kadis ===
+   Ruang kepala dinas sebagai BUKAAN BERBINGKAI di dinding, DI DALAM dunia
+   480x356 yang sama. Bukan panggung kedua, bukan dunia yang diperlebar,
+   bukan lantai dua: kotak SISIP ADALAH wilayah dunia biasa. Pegawai yang
+   menghadap kadis benar-benar dipindah ke koordinat dunia di dalam bukaan
+   itu, jadi kamera, keLayar/dariLayar, kameraTampak, agenDiTitik,
+   taruhKartu, drawSorot, dan balon DOM semuanya sudah benar tanpa satu
+   baris pun diubah di sana.
+
+   JANGAN TERTUKAR DENGAN MODE_KADIS. `?kadis=1` (const MODE_KADIS, dekat
+   bagian atas berkas) adalah MODE HP berupa daftar teks lewat kadisGambar()
+   — sama sekali BUKAN ruangan. Parameter URL bukaan ini `?ruang=kadis`, dan
+   semua nama baru di sini berawalan SISIP_/RUANG_KADIS/masukKadis/
+   keluarKadis, tidak pernah MODE_*.
+
+   LETAK & UKURAN — kenapa 72x46 di x290..362, bukan 154x94 di x284..438.
+   Rancangan menyebut kotak 284,22,154,94; dinding itu TIDAK KOSONG. Sapuan
+   piksel atas seluruh perabot lama (27 entri PROPS + drawWall/drawFloor + 99
+   gambarProp + 67 hook lapis event + keempat dekor tema dinding) menghitung
+   kotak rancangan menimpa 9.165 piksel milik 17 perabot berbeda:
+   drawServer 4.985 px (rak PC server, rangka luar mulai x=362 — bukan 364),
+   drawPlakatNilai 1.080, drawStempel 680, garis pilar drawWall 442,
+   token-listrik-hampir-habis 400, wifi-megap-megap 320, stabilizer 216,
+   telepon-kantor 196, drawFloor 157, drawAbsensi 117, titip-absen 117,
+   wifi-sudut 80, matahari-silau 80, layar-server-idle 72,
+   kucing-tidur-di-rak 65, halal-bihalal (ketupat) 29, kabel-lan-lepas 12.
+   Jadi kotak rancangan MUSTAHIL: yang paling besar, rak PC server, adalah
+   stasiun 'server' yang dipakai tiap hari.
+   Sapuan yang sama atas kotak 320,28,44,72 yang sempat dibangun: 191 piksel
+   hilang — 170 milik drawServer (kepala APAR ketimpa ambang bawah, dan tiang
+   kanan kusen menimpa 2 kolom tepi rak) dan 21 milik ketupat halal-bihalal.
+   Atas kotak yang dipakai sekarang: NOL.
+   Yang bisa dilakukan: mencari PERSEGI KOSONG TERBESAR di pita dinding itu.
+   Jawabannya x289..362 y33..79 = 73x46 = 3.358 px, nol piksel prop lama.
+
+   SATU KOLOM DIKEMBALIKAN: x=290, BUKAN 289. Persegi kosong terbesar memang
+   mulai di 289, tapi "kosong" itu diukur dengan mencuplik umur event di
+   0/5/12 detik — dan ada satu event yang cuma lewat sekejap. Ekor cicak
+   'cicak-jatuh-ke-berkas' (gambarProp: r(x+5, y-1, 2, 2), x = 262 +
+   round(umur*7)) berdiri di kolom 288..289 selama umur 2,93..3,00 detik —
+   ±70 ms, 2 dari 14 piksel cicaknya, tiap kali event itu jalan. Kolom 289
+   dikembalikan kepadanya: bukaan jadi 290..361 = 72x46 = 3.312 px, kusen
+   kiri tetap 1 px dari garis pilar drawWall di x=288, tepi kanan tidak
+   bergerak sama sekali, dan SISIP_DALAM tidak ikut bergeser (kolom 292
+   sekarang berada di bawah tiang kiri — dinding dalamnya memang tidak
+   pernah terlihat di situ, jadi foto pejabat digeser 1 px supaya tidak
+   terpotong kusen).
+   Sapuannya sekarang mencuplik umur 0..14 detik tiap 0,02 detik (uji-sisip
+   bagian 1a), jadi klaim NOL di atas dijaga uji, bukan diasumsikan.
+   Batas-batasnya, satu per satu: kiri x=288 garis pilar samar drawWall
+   (drawWall menaruh garis tiap 96 px: 96, 192, 288, 384); kanan x=362 rangka
+   luar rak PC server; atas y=33 karena y14..27 AC split 336..374, y20..30
+   wifi-sudut-lemah 300..309, dan y26..32 ketupat halal-bihalal (gantungan
+   kedua di cx=322); bawah y=79 karena telepon-kantor-berdering 299..317
+   mulai y79 dan kepala APAR (drawServer: leher 332..342 y94..100, naik ke
+   y87 saat RUANGAN.aparAngkat=7) menempel di bawahnya. Melebar 1 px ke mana
+   pun berarti menimpa salah satunya.
+
+   PENYIMPANGAN YANG DICATAT, BUKAN DISEMBUNYIKAN. Rancangan menyebut
+   "jendela kaca SAMPING PINTU". Pintu kadis ada di x440..474; dinding di
+   antara rak server dan pintu itu sudah penuh (plakat nilai 376..424,
+   rambu larangan merokok 425..435, mesin absen 424..433, kabel LAN 417).
+   Celah bebas terlebar di sana cuma 16x8 px di x418..439 y43..50 — tidak
+   muat bukaan apa pun. Jadi bukaan ini adalah JENDELA KACA DI DINDING SAYAP
+   TIMUR, 78 px di kiri pintu kadis, dan yang menyambungkannya ke pintu itu
+   bukan "leher" kusen (mustahil: rak server berdiri persis di antaranya)
+   melainkan isinya — daun pintu dalam di tepi kanan ruangan plus titik
+   kuningan di plat tendang pintu kadis (drawKadis).
+   AC split tergantung tepat di atas ujung kanan bukaan: tetesan yang
+   di-spawn di (347,30) jatuh DI DEPAN kaca menuju ember di y=124 — gag ember
+   bocor selamat.
+
+   BATAS KERAS (diuji di uji-sisip.mjs, dengan sapuan piksel sungguhan):
+   SISIP.x >= 290, SISIP.x + SISIP.w <= 362, SISIP.y >= 33,
+   SISIP.y + SISIP.h <= 79. */
+const SISIP = { x: 290, y: 33, w: 72, h: 46 };          // bukaan luar termasuk bingkai
+const SISIP_DALAM = { x: 292, y: 39, w: 67, h: 36 };    // isi ruangan, di dalam clip
+const SISIP_BUKA_MS = 220, SISIP_TUTUP_MS = 180, SISIP_PUDAR_MS = 180;
+/* 6000, bukan 2500: `tool.startsWith('mcp__') ? 'agent'` memetakan SETIAP
+   tool MCP ke stasiun ini, ditambah Skill dan SendMessage. Stasiun ini
+   RAMAI, dan tahan 2,5 detik bikin gordennya berkedip sepanjang sesi.
+   Karena itu ONGKOSNYA DITULIS APA ADANYA — bukaan ini jauh lebih sering
+   terbuka daripada kesannya.
+
+   CARA MENGHITUNGNYA IKUT DITULIS, karena angkanya berbeda jauh tergantung
+   apa yang disebut "panggilan gambar". Diukur di halaman sungguhan (rAF
+   distub, frame() dipanggil manual +16,7 ms, ruangan kosong): pembungkusnya
+   mencatat total per frame DAN bagian yang terjadi di dalam
+   gambarSisipKadis() sendiri, jadi tidak ada derau antar-frame — sepuluh
+   frame berturut-turut memberi angka bukaan yang persis sama.
+     yang dihitung          tertutup (t=0)      terbuka (ruang kosong)
+     8 metode yang MELUKIS  42 dari 1.669       169 dari 1.805
+     (fillRect/strokeRect/clearRect/fillText/strokeText/fill/stroke/drawImage)
+     46 metode ctx 2D       42 dari 1.826       176 dari 1.969
+     (seluruh fungsi di CanvasRenderingContext2D.prototype peramban ini,
+      termasuk save/restore/clip/translate)
+   Dibanding sisa frame-nya: +2,6 % saat tertutup, +10 % saat terbuka.
+   Perhatikan baris tertutup: angkanya SAMA di kedua hitungan — saat t=0
+   fungsinya pulang sebelum klipSisip(), jadi nol save/restore/clip. Selisih
+   dua hitungan cuma muncul saat terbuka, dan cuma 7 panggilan.
+   Tamu yang berdiri di dalam tidak ditambahkan ke tabel ini: mereka toh
+   digambar ke mana pun mereka berdiri, jadi bukan ongkos bukaan. */
+const SISIP_TAHAN_MS = 6000;
+const SISIP_ZOOM = 4;      // klik bukaan: bidikan 120x89 px; bukaan 72x46 muat lega
+const SISIP_LANTAI = 58;   // garis lantai DI DALAM bukaan
+const RUANG_KADIS = { t: 0, buka: false, kosongSejak: 0, zoom: false, paksaSampai: 0 };
+
+/* Setelan (index.html #setSisipKadis): 'auto' membuka saat ada tamu,
+   'selalu' membiarkannya terbuka, 'mati' membuat perilakunya PERSIS seperti
+   sebelum fitur ini ada (pegawai berhenti di ambang pintu, tidak ada yang
+   dipindah). Diisi malas karena `ingatan` baru dideklarasikan jauh di bawah
+   berkas ini — memanggilnya di top-level sini kena TDZ.
+
+   SEJAUH MANA "PERSIS" ITU BENAR, DIUKUR: dengan 'mati', gambarSisipKadis()
+   pulang di baris pertama (`if (!sisipBoleh()) return;`), jadi DINDINGNYA
+   nol piksel berbeda dari ruangan sebelum fitur ini ada — seluruh kanvas,
+   diukur di tiga jam berbeda. Sembilan titik sentuh lain juga diam:
+   tamuKadis() 0, tidak ada p.sisip, a.diKadis tidak pernah true, prolog
+   keluarKadis() langsung return, RUANG_KADIS.zoom false, klikSisip() false.
+   SATU yang TIDAK ikut mati, dan disebut supaya tidak ada yang mengira
+   'mati' berarti nol jejak: STATIONS.agent.slots=3/step=12 berlaku di
+   ketiga setelan, jadi tempat berdiri antrean di depan pintu kadis memang
+   berubah (dulu menyebar ke kiri sampai x=357, sekarang 440/452/464).
+   Itu tambalan cacat lama yang berdiri sendiri — alasannya ditulis di
+   tabel STATIONS — bukan bagian dari bukaan, dan sengaja tidak digerbangi
+   setelan ini. */
+let sisipMode = null;
+function sisipSetelan() {
+  if (sisipMode == null) {
+    const dariUrl = RUANG_URL === 'kadis' ? 'selalu' : RUANG_URL === 'mati' ? 'mati' : '';
+    const v = dariUrl || ingatan.baca('sisipKadis', 'auto');
+    sisipMode = v === 'selalu' || v === 'mati' ? v : 'auto';
+  }
+  return sisipMode;
+}
+function sisipSetel(v) {
+  sisipMode = v === 'selalu' || v === 'mati' ? v : 'auto';
+  if (sisipMode !== 'mati') return;
+  RUANG_KADIS.paksaSampai = 0;
+  /* Yang sedang di dalam TIDAK CUKUP dikeluarkan: keluarKadis() menaruhnya di
+     (452, LANE_UP) dengan path kosong, dan handle() cuma memanggil goTo saat
+     STASIUNNYA berganti (`if (a.station !== st) a.goTo(st)`), jadi tool call
+     mcp__ berikutnya tidak akan memindahkannya — dia mematung di lajur sampai
+     ada tool call stasiun lain. Suruh dia berbaris lagi di ambang pintu. */
+  for (const a of penghuni()) {
+    if (!a.diKadis && !a.sisipFase) continue;
+    const st = a.station;
+    keluarKadis(a);
+    if (st === 'agent') a.goTo('agent');
+  }
+}
+/* Putar ulang cepat (?ulang=YYYY-MM-DD&laju=8): pembukaan otomatis dimatikan
+   dan tidak ada yang dipindah ke dalam — tanpa ini bukaannya berkedip
+   puluhan kali per detik. Klik untuk zoom tetap bekerja. */
+const sisipUlangCepat = () => !!ULANG_URL && ULANG_LAJU > 2;
+function sisipBoleh() {
+  return !MODE_KADIS && sisipSetelan() !== 'mati' && !sisipUlangCepat();
+}
+
+function tamuKadis() {
+  let n = 0;
+  for (const a of penghuni()) if (a.diKadis) n++;
+  return n;
+}
+/* Orang yang BERHENTI di ambang pintu kadis (452,140). Termasuk pemeran
+   event ambient yang memakai goToXY(452,152,'up') dengan doingEvent
+   'melapor ke kadis' / 'menghadap kadis'. Fungsi ini TIDAK MEMINDAHKAN
+   siapa pun — dia cuma menyibak gordennya, jadi berkas event yang sudah ada
+   dapat pembayaran visualnya tanpa satu byte pun diubah di public/event/. */
+function pintuSibuk() {
+  let n = 0;
+  for (const a of penghuni()) {
+    if (a.diKadis || a.path.length) continue;
+    if (Math.abs(a.x - 452) <= 14 && Math.abs(a.y - 140) <= 14) n++;
+  }
+  return n;
+}
+function sisipHidup() {
+  if (!sisipBoleh()) return false;
+  if (sisipSetelan() === 'selalu') return true;
+  // diklik saat tertutup: sibakkan gordennya sebentar. Tanpa ini klik pada
+  // bukaan yang sedang tertutup tidak memberi umpan balik apa pun — zoomnya
+  // menyala lalu dilepas lagi oleh tickSisip di ketukan yang sama.
+  if (now < RUANG_KADIS.paksaSampai) return true;
+  return tamuKadis() > 0 || pintuSibuk() > 0;
+}
+
+function tickSisip(dt) {
+  const R = RUANG_KADIS;
+  if (!kadisNpc) buatKadis();
+  tickSisipOrang();
+  const mau = sisipHidup();
+  if (mau) R.kosongSejak = 0;
+  else if (!R.kosongSejak) R.kosongSejak = now;
+  // Tahan SISIP_TAHAN_MS sesudah ruangan kosong — TAPI cuma selama bukaannya
+  // memang masih boleh hidup: memilih setelan 'mati' (atau membuka ?kadis=1,
+  // atau putar ulang cepat) harus menutupnya SEKARANG, bukan enam detik lagi.
+  R.buka = !!(mau || (sisipBoleh() && R.t > 0 && R.kosongSejak
+    && now - R.kosongSejak < SISIP_TAHAN_MS));
+  // prefers-reduced-motion & kunci kroma: POTONGAN, bukan animasi. Gorden
+  // yang beranimasi di atas kunci kroma muncul sebagai kilatan di OBS.
+  const potong = geraKurang.matches || MODE_OVERLAY === 'chroma';
+  const ms = R.buka ? SISIP_BUKA_MS : SISIP_TUTUP_MS;
+  const langkah = potong ? 1 : Math.max(0, dt) * 1000 / ms;
+  R.t = Math.max(0, Math.min(1, R.t + (R.buka ? langkah : -langkah)));
+  if (!R.buka && R.t === 0) R.zoom = false;      // bukaan tertutup: lepas zoom
+}
+
+/* Klip ke bukaan yang SEDANG tersibak: gorden vitrase ditarik ke dua sisi,
+   jadi yang terbuka adalah pita di tengah yang melebar. Dipakai isi ruangan
+   DAN partikel bercap p.sisip. */
+function klipSisip(fn) {
+  const D = SISIP_DALAM, t = RUANG_KADIS.t;
+  if (t <= 0) return;
+  const lebar = Math.max(1, Math.round(D.w * t));
+  const kiri = Math.round(D.x + (D.w - lebar) / 2);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(kiri, D.y, lebar, D.h);
+  ctx.clip();
+  fn();
+  ctx.restore();
+}
+
+/* Titik berdiri tamu, koordinat DUNIA sungguhan (bukan koordinat lokal
+   bukaan). Semua y <= 100: agenDiTitik() memakai kotak klik cy dalam
+   [a.y-30, a.y+5], sedangkan pegawai di stasiun dinding ruang utama berdiri
+   di y=138..141 (kotak 108..146). y=73 memberi kotak 43..78 yang tidak
+   pernah beririsan — dan itu berlaku juga untuk pegawai stasiun 'edit' yang
+   slot ke-4/ke-6-nya kebetulan mendarat di x=324 dan x=343.
+   Bukaannya mendatar (67x36 di dalam), jadi tamunya BERJAJAR, tidak
+   bertumpuk: drawPerson memakan 16 px lebar, jarak antar slot 16..24 px.
+   Slot ketiga berdiri semeter lebih ke belakang supaya barisannya tetap
+   punya kedalaman, bukan tiga sosok sejajar.
+
+   YANG DIURUS BELAKANGAN: tamu saling tidak menutupi, tapi slot kedua dulu
+   berdiri di x=322 sementara kadis berdiri di x=325 — selisih 3 px pada
+   sprite selebar 16 px, jadi tamu itu sendiri menutup separuh badan
+   kadisnya. Diukur di halaman sungguhan (diff piksel di dalam SISIP_DALAM:
+   kadis digambar sendirian, lalu tiga tamu ditumpuk di atasnya):
+     kadis 325 · tamu 302/322/342   355 px badan, 171 tertutup  (48 %)
+     kadis 329 · tamu 302/318/342   355 px badan,  55 tertutup  (15 %)
+   Slot kedua turun ke 318 dan kadis bergeser ke 329; kursi masing-masing
+   ikut pindah (drawKursiTamu 317->313, drawKursiKadis 319->323) supaya tidak
+   ada yang berdiri di sebelah kursinya sendiri. Sisa 15 % itu bahu yang
+   memang bersinggungan — barisan empat orang di ruangan selebar 67 px. */
+const KADIS_TITIK = [
+  { x: 302, y: 73, hadap: 'up' },
+  { x: 318, y: 73, hadap: 'up' },
+  { x: 342, y: 69, hadap: 'up' },
+];
+// ambang dalam: tepi kanan bukaan, sisi yang menghadap pintu kadis sungguhan
+const SISIP_AMBANG = { x: 350, y: 71 };
+
+/* Tabel sort SENDIRI. Sengaja TIDAK memakai PROPS, TIDAK memakai aturan pita
+   lajur bawah 230..266, dan TIDAK memakai SORT_KURSI_DEKAT — ruangan ini
+   punya denahnya sendiri. Memisahkan tabelnya juga yang membuat golden
+   uji-zorder.mjs tidak bergeser satu baris pun.
+   Urutan: kursi kadis 56 < kadis 65 < meja jati 68 < tamu (a.y mentah,
+   69..73) < kursi tamu 74 (sandarannya di depan tamu yang duduk). */
+const PROPS_KADIS = [
+  { sortY: 56, draw: drawKursiKadis },
+  { sortY: 68, draw: drawMejaKadis },
+  { sortY: 74, draw: drawKursiTamu },
+];
+
+/* ---------------------------------------------------- kadis NPC permanen ---
+   JANGAN masukkan ke penghuni() — kalau masuk, dia bocor ke S.orang,
+   bisaDipinjam(), daftar kru, hitungan kamera 'ikut', dan bisa diseret event
+   acak ke pantry; itu melanggar Aturan 2 lewat pintu belakang. Dia bukan
+   sesi, bukan peserta, bukan standby: cuma satu objek berbentuk pegawai yang
+   dibaca drawPerson(). Tidak masuk log, tidak menaikkan statistik apa pun.
+   Dibuat MALAS (dari tickSisip) karena jabatanDari() dideklarasikan sesudah
+   blok ini di berkas — memanggilnya di top-level sini kena TDZ. */
+let kadisNpc = null;
+function buatKadis() {
+  kadisNpc = {
+    id: 'kadis-npc',
+    peran: 'kadis',
+    // pal DIAMBIL LANGSUNG dari tabel jabatan (bukan disalin) supaya dia ikut
+    // terapkanSeragamHarian(): Rabu putih, Jumat batik, sama seperti seluruh
+    // warga kantor ini. Pimpinan yang tidak ikut aturan seragam bikin
+    // ruangannya langsung terbaca sebagai set panggung.
+    pal: jabatanDari('kadis').pal,
+    // 329, bukan 325: kursinya ikut pindah ke 323..334 supaya badannya
+    // (324..333) bebas dari tamu slot kedua di 318 — lihat KADIS_TITIK.
+    x: 329, y: 65,           // berdiri di balik meja jati (sortY 68 menutup kakinya)
+    slot: 0, slotIdx: 0,
+    station: 'kadis-meja',        // BUKAN kunci STATIONS mana pun: slotBebas() tidak pernah menghitungnya
+    state: 'idle',
+    face: 'down', hadap: 'down',
+    path: [], phase: 3.1,
+    busyUntil: 0, arrivedAt: 0, lastEvent: 0,
+    adaTugas: false, betah: true, standby: false, keluar: false,
+    eventKerja: null, doing: '', doingEvent: '',
+    alpha: 1, miring: 0, mulut: false, sandal: false,
+    bawa: null, bawaSampai: 0, pose: null, laju: 1, bekuSampai: 0,
+    butuh: null, macet: null, fx: null, stampUp: false,
+    stamina: 1, antre: 0, tibaSampai: 0, dudukSejak: 0, bangunSejak: 0,
+    tolehSampai: 0, tolehRekan: null, tolehBalik: null, legaSampai: 0, gagalBerturut: 0,
+    tungguSejak: 0, tungguTotal: 0, calls: 0, gagal: 0,
+    pulang: '', diKadis: false, sisipFase: '', sisipT: 0, sisipKeluar: 0,
+    say() {}, goTo() {}, goToXY() {},
+  };
+  Object.defineProperty(kadisNpc, 'diam', { get() { return !kadisNpc.path.length; } });
+  return kadisNpc;
+}
+
+/* --------------------------------------------------- masuk & keluar ruang ---
+   ATURAN 1 UTUH. Kontrak stasiun 'agent' tidak berubah: titik tujuannya
+   tetap (452,140), route()/goTo()/slotBebas() tidak disentuh, arrive() tetap
+   terjadi DI DEPAN PINTU dan di situlah state jadi 'work'. Semua yang
+   sesudah arrive() murni kosmetik: station, doing, busyUntil, calls, token,
+   log, dan statistik apa pun TIDAK DISENTUH (Aturan 2). Keluarnya nol
+   milidetik — alpha dipulihkan SAMBIL route() sudah berjalan. */
+function masukKadis(a) {
+  if (a.diKadis || a.sisipFase || !sisipBoleh()) return;
+  a.sisipFase = 'pudar';        // memudar DI AMBANG dulu, baru muncul di dalam
+  a.sisipT = now;
+}
+/* SATU penolong, dipanggil dari SEMUA jalur mutasi posisi (goTo, goToXY,
+   pulangKantor, setelan 'mati'). Jangan menaburkan logika pembersihan: satu
+   jalur yang lolos berarti pegawai yang tidak pernah digambar lagi padahal
+   tetap hidup, tetap di-update, dan tetap masuk statistik. */
+function keluarKadis(a) {
+  if (!a || (!a.diKadis && !a.sisipFase)) return;
+  if (a.diKadis) {
+    a.diKadis = false;
+    a.x = 452;
+    a.y = LANE_UP;
+    a.path = [];
+    a.alpha = 0.4;              // dipulihkan tickSisipOrang() SAMBIL route() sudah jalan
+    a.sisipKeluar = now;
+  } else {
+    a.alpha = 1;                // batal memudar di ambang: kembali utuh seketika
+    a.sisipKeluar = 0;
+  }
+  a.sisipFase = '';
+  a.sisipT = 0;
+}
+/* Satu tempat untuk seluruh peralihan alpha masuk/keluar, dipanggil
+   tickSisip() dari frame() SEBELUM loop update — jadi ritual pulang
+   (tickPulang) yang juga menulis a.alpha tetap menang di frame yang sama. */
+function tickSisipOrang() {
+  for (const a of penghuni()) {
+    if (a.sisipFase === 'pudar') {
+      // ada yang menyuruhnya jalan di tengah memudar (event menulis a.path
+      // langsung): batalkan, jangan menyeretnya masuk dari tengah ruangan
+      if (a.path.length) { a.sisipFase = ''; a.sisipT = 0; a.alpha = 1; continue; }
+      const k = Math.min(1, (now - a.sisipT) / SISIP_PUDAR_MS);
+      a.alpha = 1 - k * 0.85;
+      if (k >= 1) {
+        const titik = KADIS_TITIK[Math.min(a.slotIdx || 0, KADIS_TITIK.length - 1)];
+        a.diKadis = true;
+        a.x = SISIP_AMBANG.x;
+        a.y = SISIP_AMBANG.y;
+        a.hadap = titik.hadap;
+        a.face = 'left';
+        // jalan lurus di dalam ruangan; JANGAN route() — route() memutari
+        // meja rapat ruang utama dan akan menyeretnya keluar bukaan
+        a.path = [{ x: titik.x, y: titik.y }];
+        a.sisipFase = 'terang';
+        a.sisipT = now;
+      }
+    } else if (a.sisipFase === 'terang') {
+      const k = Math.min(1, (now - a.sisipT) / SISIP_PUDAR_MS);
+      a.alpha = 0.15 + 0.85 * k;
+      if (k >= 1) { a.alpha = 1; a.sisipFase = ''; a.sisipT = 0; }
+    } else if (a.sisipKeluar) {
+      const k = Math.min(1, (now - a.sisipKeluar) / 160);
+      a.alpha = 0.4 + 0.6 * k;
+      if (k >= 1) { a.alpha = 1; a.sisipKeluar = 0; }
+    }
+  }
+}
+
+/* Bidikan kamera ke bukaan (klik). Dipanggil dari gerbang paling awal
+   kameraBidik() — satu-satunya sentuhan blok kamera dari fitur ini. */
+function sisipBidik() {
+  KAMERA.targetX = SISIP.x + SISIP.w / 2;
+  KAMERA.targetY = SISIP.y + SISIP.h / 2;
+  KAMERA.targetZoom = SISIP_ZOOM;
+}
+/* Klik di dalam kotak bukaan yang TIDAK mengenai pegawai (pegawai menang
+   dulu, aturan yang sudah ada di canvas click) menyalakan / mematikan zoom. */
+function klikSisip(cx, cy) {
+  if (!sisipBoleh()) return false;      // setelan 'mati' / ?kadis=1: tidak ada bukaan untuk diklik
+  if (cx < SISIP.x || cx > SISIP.x + SISIP.w || cy < SISIP.y || cy > SISIP.y + SISIP.h) return false;
+  RUANG_KADIS.zoom = !RUANG_KADIS.zoom;
+  // Menyalakan zoom sekaligus MENYIBAK gordennya selama SISIP_TAHAN_MS,
+  // walau ruangannya sedang kosong: zoom ke gorden tertutup itu umpan balik
+  // yang mati. Mematikan zoom melepas paksaan itu — bukaannya kembali
+  // menutup sendiri lewat tahan biasa.
+  RUANG_KADIS.paksaSampai = RUANG_KADIS.zoom ? now + SISIP_TAHAN_MS : 0;
+  return true;
+}
+
+/* Jendela BACA untuk harness uji (uji-sisip.mjs). Deklarasi FUNGSI, bukan
+   const: di classic script cuma function declaration yang otomatis jadi
+   properti objek global, jadi harness bisa mengambil konstanta blok ini
+   tanpa menyentuh __jembatan__ milik uji-event.mjs (berkas orang lain).
+   Tidak ada jalur MUTASI khusus uji di sini: yang dikembalikan objek
+   aslinya, dan yang mengubah keadaan tetap sisipSetel()/klikSisip()/
+   tickSisip() yang dipakai halaman sungguhan. */
+function sisipRujukan() {
+  return {
+    SISIP, SISIP_DALAM, SISIP_AMBANG, SISIP_ZOOM, SISIP_TAHAN_MS, SISIP_PUDAR_MS,
+    SISIP_LANTAI, KADIS_TITIK, PROPS_KADIS, RUANG_KADIS, kadisNpc,
+    KAMERA, LANE_UP, LANE_DOWN, parts,
+  };
+}
+
+/* ------------------------------------------------------------- gambar isi --- */
+function gambarSisipKadis() {
+  const D = SISIP_DALAM;
+  /* Setelan 'mati' (dan ?kadis=1, dan putar ulang cepat) berarti BENAR-BENAR
+     TIDAK ADA JEJAK VISUAL: bukan bukaan tertutup, melainkan dinding polos
+     seperti sebelum fitur ini ada. Tanpa gerbang ini bingkai + gorden tetap
+     terlukis permanen dan "mati" bohong. */
+  if (!sisipBoleh()) return;
+  // tertutup: bingkai + gorden saja, nol pemanggilan drawPerson
+  if (RUANG_KADIS.t <= 0) { drawKusenSisip(); drawGordenSisip(); return; }
+  klipSisip(() => {
+    drawDindingKadis();
+    drawKarpetKadis();
+    const lapis = [];
+    for (const p of PROPS_KADIS) lapis.push({ y: p.sortY, fn: p.draw });
+    if (kadisNpc) lapis.push({ y: kadisNpc.y, fn: () => drawPerson(kadisNpc) });
+    for (const a of penghuni()) {
+      if (!a.diKadis) continue;
+      lapis.push({ y: a.y, fn: () => { if (a === terpilih) drawSorot(a); drawPerson(a); } });
+    }
+    lapis.sort((m, n2) => m.y - n2.y);
+    for (const l of lapis) l.fn();
+    // Selubung dalam: ruangan di balik dinding sedikit lebih redup daripada
+    // ruang utama — itu yang bikin bukaan terbaca sebagai LUBANG, bukan
+    // poster yang ditempel.
+    ctx.globalAlpha = 0.16;
+    r(D.x, D.y, D.w, D.h, '#1c2a20');
+    ctx.globalAlpha = 1;
+  });
+  drawKusenSisip();
+  drawGordenSisip();
+}
+
+/* Kusen: dua tiang jati 3 px + 'reveal' (sisi dalam tembok) yang lebih gelap
+   di tepi dalam. Reveal itulah yang mengubah bingkai datar jadi bukaan
+   bertebal — beda antara "gambar tergantung" dan "lubang tembus". */
+function drawKusenSisip() {
+  const S1 = SISIP;
+  const x2 = S1.x + S1.w, y2 = S1.y + S1.h;
+  r(S1.x, S1.y, S1.w, 6, P.woodD);                       // ambang atas
+  r(S1.x, S1.y, S1.w, 1, sh(P.wood, 1.15));
+  r(S1.x, S1.y, 3, S1.h, P.woodD);                       // tiang kiri
+  r(x2 - 3, S1.y, 3, S1.h, P.woodD);                     // tiang kanan
+  r(S1.x + 1, S1.y + 6, 1, S1.h - 10, sh(P.wood, 1.1));  // sorot di tiang kiri
+  r(S1.x, y2 - 4, S1.w, 4, P.wood);                      // ambang bawah
+  r(S1.x, y2 - 4, S1.w, 1, sh(P.wood, 1.25));
+  r(S1.x, y2 - 1, S1.w, 1, sh(P.woodD, 0.75));
+  // reveal: tepi dalam yang lebih gelap, memberi tebal tembok
+  ctx.globalAlpha = 0.42;
+  r(S1.x + 3, S1.y + 6, 2, S1.h - 10, '#1a140d');
+  r(x2 - 5, S1.y + 6, 2, S1.h - 10, '#1a140d');
+  r(S1.x + 3, S1.y + 6, S1.w - 6, 2, '#1a140d');
+  ctx.globalAlpha = 1;
+  // Plang kuningan di ambang atas. Bukti "tidak ada lantai dua" lewat
+  // tipografi, bukan lewat komentar kode — gaya papan denah evakuasi kantor
+  // dinas. Courier 5px memakan ~3 px per huruf: 16 huruf = 48 px, muat di
+  // pelat 58 px yang disediakan lebar 72 px.
+  r(S1.x + 7, S1.y + 1, S1.w - 14, 4, sh(P.gold, 0.82));
+  ctx.fillStyle = '#3a2c05';
+  ctx.font = '5px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SAYAP TIMUR LT 1', S1.x + 9, S1.y + 3.5);
+  /* TIDAK ADA "leher" yang menjulur ke kusen pintu kadis seperti rancangan
+     awal, dan itu bukan kemalasan: pintunya 78 px di sebelah kanan, dan rak
+     PC server (rangka luar 362..420, y31..120) berdiri PERSIS di antaranya —
+     apa pun yang menjulur ke sana mendarat di rak. Yang menyambungkan bukaan
+     ini ke pintu itu bukan garis, melainkan isinya: daun pintu dalam di tepi
+     kanan ruangan (drawPintuDalam) plus titik kuningan di plat tendang pintu
+     kadis (drawKadis). Diukur: seluruh gambar fungsi ini berada di dalam
+     kotak SISIP, nol piksel keluar — DAN kotak SISIP sendiri tidak menimpa
+     satu piksel pun milik prop lama (lihat uji-sisip.mjs "sapuan prop lama"). */
+}
+
+/* Gorden vitrase yang DISIBAK ke dua sisi (bukan digulung): lebarnya
+   menyusut dari setengah bukaan ke 2 px saat t naik. */
+function drawGordenSisip() {
+  const D = SISIP_DALAM, t = RUANG_KADIS.t;
+  const penuh = Math.ceil(D.w / 2);
+  const lebar = Math.max(2, Math.round(penuh - (penuh - 2) * t));
+  for (const kiri of [true, false]) {
+    const gx = kiri ? D.x : D.x + D.w - lebar;
+    r(gx, D.y, lebar, D.h, '#c9d3c0');
+    r(gx, D.y, lebar, 1, '#e2e8dc');
+    for (let i = 1; i < lebar; i += 3) r(gx + i, D.y + 1, 1, D.h - 1, sh('#c9d3c0', 0.88));
+    r(kiri ? gx + lebar - 1 : gx, D.y, 1, D.h, sh('#c9d3c0', 0.72));   // lipatan tepi dalam
+  }
+  r(D.x, D.y, D.w, 1, sh(P.woodD, 1.1));                 // rel gorden
+}
+
+/* Dinding belakang ruang kadis. Pita warnanya SAMA dengan ruang utama
+   (krem — wainscot mint — plin) supaya terbaca sebagai lantai yang sama;
+   garis lantainya diangkat ke SISIP_LANTAI karena yang kita lihat cuma
+   sepotong ruangan lewat lubang 67x36. Bukaannya MENDATAR — persis seperti
+   jendela kaca kantor sungguhan yang lebar dan pendek — jadi denahnya juga
+   mendatar: dekor dinding berjajar, bukan bertumpuk. */
+function drawDindingKadis() {
+  const D = SISIP_DALAM;
+  r(D.x, D.y, D.w, SISIP_LANTAI - D.y, sh(P.cream, 0.93));
+  r(D.x, 50, D.w, SISIP_LANTAI - 50, sh(P.mint, 0.9));   // wainscot
+  r(D.x, 50, D.w, 1, sh(P.rail, 0.9));
+  r(D.x, SISIP_LANTAI - 2, D.w, 2, sh(P.base, 0.9));     // plin
+  drawFotoPejabat();
+  drawLemariPiala();
+  drawPintuDalam();
+}
+
+/* Foto Presiden dan Wakil Presiden mengapit Garuda — formasi wajib tiap
+   ruang pejabat. 7x9 per bingkai, trio-nya berjajar di 293..318 (sepertiga
+   kiri dinding); yang penting formasinya, bukan detail wajahnya. */
+function drawFotoPejabat() {
+  const bingkai = (x, y) => {
+    r(x, y, 7, 9, '#6d5535');
+    r(x + 1, y + 1, 5, 7, P.paper);
+    r(x + 2, y + 2, 3, 2, '#1d1712');
+    r(x + 2, y + 4, 3, 2, '#e0ae80');
+    r(x + 1, y + 6, 5, 2, '#2c3440');
+  };
+  // Digeser 1 px ke kanan bersama-sama waktu SISIP.x pindah 289 -> 290:
+  // kolom 292 sekarang ada di bawah tiang kiri kusen, dan bingkai foto yang
+  // mulai persis di situ akan kehilangan garis tepi kirinya.
+  bingkai(293, 40);
+  bingkai(312, 40);
+  const g = P.gold, gd = sh(P.gold, 0.75);
+  const cx = 306, gy = 40;
+  r(cx - 5, gy + 1, 10, 2, g);                           // sayap terbentang
+  r(cx - 3, gy + 3, 6, 1, g);
+  r(cx - 1, gy + 2, 2, 5, g);                            // badan
+  r(cx - 1, gy, 2, 2, g);                                // kepala
+  r(cx - 2, gy + 7, 4, 1, gd);                           // pita semboyan
+}
+
+/* Lemari piala kaca dua rak — penanda ruang pejabat yang paling murah dan
+   paling terbaca. Menempel di dinding antara kepala kadis dan daun pintu
+   dalam, tidak ikut depth sort. */
+function drawLemariPiala() {
+  const x = 336, y = 44, w = 9, h = 14;
+  r(x - 1, y - 1, w + 2, h + 2, P.woodD);
+  r(x, y, w, h, '#2f3a34');
+  for (let i = 0; i < 2; i++) {
+    const ry = y + 1 + i * 6;
+    r(x, ry + 4, w, 1, P.woodD);                         // papan rak
+    r(x + 1 + i, ry, 2, 4, i === 1 ? '#cfcfd6' : P.gold);   // piala
+    if (i !== 1) r(x + 5, ry + 1, 3, 3, '#e8d873');      // piagam kecil
+  }
+  ctx.globalAlpha = 0.18;
+  r(x, y, w, h, '#dff0ff');                              // pantulan kaca
+  ctx.globalAlpha = 1;
+}
+
+/* Sisi DALAM pintu kadis, di tepi kanan bukaan — daun pintu cermin dengan
+   ENGSEL DI SISI BERLAWANAN dari daun luar (drawKadis menaruh gagangnya di
+   kanan, jadi engsel luar di kiri; dilihat dari dalam engselnya jadi di
+   kanan). Prop kecil ini yang menanggung seluruh beban ilusi "ini ruangan
+   di balik pintu itu" — dan sekaligus alasan kenapa tamu MUNCUL di tepi
+   kanan bukaan (SISIP_AMBANG) lalu berjalan ke kiri. */
+function drawPintuDalam() {
+  const x = 346, y = 41, w = 12, h = 17;
+  r(x, y, w, h, '#4a3626');
+  r(x + 1, y + 1, w - 2, h - 1, '#6b4a30');
+  r(x + 2, y + 3, w - 4, 5, sh('#6b4a30', 0.86));        // panel atas
+  r(x + 2, y + 10, w - 4, 5, sh('#6b4a30', 0.86));       // panel bawah
+  r(x + 2, y + 11, 2, 2, P.gold);                        // gagang: sisi KIRI, cermin dari daun luar
+  r(x + w - 1, y, 1, h, sh('#4a3626', 1.3));             // engsel di kanan
+}
+
+/* Karpet merah tua khas ruang pejabat, di atas ubin yang sama dengan ruang
+   utama. Digambar di lapisan lantai, tidak ikut depth sort. */
+function drawKarpetKadis() {
+  const D = SISIP_DALAM;
+  const bawah = D.y + D.h;
+  r(D.x, SISIP_LANTAI, D.w, bawah - SISIP_LANTAI, P.tile);
+  for (let y = SISIP_LANTAI + 5; y < bawah; y += 9) r(D.x, y, D.w, 1, P.grout);
+  r(D.x + 3, 62, D.w - 6, bawah - 62, '#743030');        // karpet merah tua
+  r(D.x + 5, 64, D.w - 10, bawah - 64, '#8d3a3a');
+  r(D.x + 5, 64, D.w - 10, 1, '#a04747');
+}
+
+function drawMejaKadis() {
+  const x = 306, y = 62, w = 36, h = 8;
+  r(x, y, w, h, P.woodD);                                // papan meja jati
+  r(x, y, w, 2, sh(P.wood, 1.05));
+  r(x, y + h - 1, w, 1, sh(P.woodD, 0.7));
+  r(x + 2, y + h, 2, 4, sh(P.woodD, 0.8));               // kaki
+  r(x + w - 4, y + h, 2, 4, sh(P.woodD, 0.8));
+  r(x, y + 1, w, 1, P.gold);                             // lis kuningan
+  r(x + 3, y + 3, 8, 3, P.paper);                        // tumpukan map disposisi
+  r(x + 3, y + 3, 8, 1, '#c9a03a');
+  r(x + 27, y + 3, 6, 2, '#2c3440');                     // telepon kabel
+  r(x + 32, y + 1, 1, 3, '#2c3440');
+  drawBenderaMeja(x + 16, y);
+}
+
+/* Sepasang bendera meja: merah putih + panji dinas, di ujung meja. */
+function drawBenderaMeja(x, y) {
+  r(x, y - 7, 1, 8, '#9aa1a6');
+  r(x + 1, y - 7, 3, 2, P.red);
+  r(x + 1, y - 5, 3, 2, '#f4f2ec');
+  r(x + 5, y - 6, 1, 7, '#9aa1a6');
+  r(x + 6, y - 6, 3, 2, '#c9a03a');
+  r(x + 6, y - 4, 3, 2, '#1c4e8a');
+}
+
+/* Kursi kadis sandaran tinggi, di belakang mejanya. sortY 56: digambar
+   SEBELUM kadis (y=65), jadi badan kadisnya menutupi dudukan — dia berdiri
+   di depan kursinya, bukan menempel di sandaran. */
+function drawKursiKadis() {
+  // 323, bukan 319: kursi ikut kadisnya waktu dia bergeser ke x=329, jadi
+  // dia tetap berdiri PERSIS di depan kursinya. 323..334 masih berhenti
+  // sebelum lemari piala (335..345).
+  const x = 323, y = 45, w = 12;
+  r(x, y, w, 9, '#3a3f45');                              // sandaran
+  r(x, y, w, 1, '#5a6068');
+  r(x + 1, y + 2, w - 2, 5, sh('#3a3f45', 1.25));
+  r(x + 1, y + 9, w - 2, 3, '#2c3038');                  // dudukan
+  r(x + 5, y + 12, 2, 5, '#5a6068');                     // tiang
+}
+
+/* Dua kursi tamu kayu. sortY 74: sandarannya digambar DI DEPAN tamu di
+   y=69..73, idiom yang sama dengan SORT_KURSI_DEKAT di meja rapat — itu yang
+   bikin tamunya terbaca duduk menghadap kadis. Sandarannya sengaja rendah
+   supaya kepala dan bahu tetap kelihatan, dan kakinya memang terpotong
+   ambang bawah bukaan: itu memang yang terlihat dari sebuah jendela. */
+function drawKursiTamu() {
+  const kursi = (x) => {
+    r(x, 67, 10, 5, P.wood);                             // sandaran rendah
+    r(x, 67, 10, 1, sh(P.wood, 1.2));
+    r(x, 72, 10, 2, P.woodD);                            // dudukan
+    r(x + 1, 74, 1, 1, sh(P.woodD, 0.8));
+    r(x + 8, 74, 1, 1, sh(P.woodD, 0.8));
+  };
+  // Tengah kursi menempel ke titik berdiri tamunya: 296..305 untuk slot 302,
+  // 313..322 untuk slot 318 (dulu 317, ikut turun bersama slot keduanya).
+  kursi(296);
+  kursi(313);
 }
 
 function drawEmber() {
@@ -1549,9 +2295,15 @@ function drawDispenserPantry() {
   r(dx + 2, dy - 1, 11, 2, '#c9cdd1');
   r(dx, dy + 4, 18, 1, '#c9cdd1');
   r(dx + 7, dy + 8, 4, 1, '#c9cdd1');
-  r(dx + 2, dy - 30, 14, 12, '#7db8e8');
-  r(dx + 4, dy - 28, 2, 7, '#b8dcf4');
-  r(dx + 7, dy - 34, 4, 4, '#5f9fd4');
+  // galon: dicabut tukang galon (MOD.galonLepas) — kepala dispenser kosong,
+  // dan itu justru bagian yang bikin penggantiannya terasa
+  if (!MOD.galonLepas) {
+    r(dx + 2, dy - 30, 14, 12, '#7db8e8');
+    r(dx + 4, dy - 28, 2, 7, '#b8dcf4');
+    r(dx + 7, dy - 34, 4, 4, '#5f9fd4');
+  } else {
+    r(dx + 5, dy - 20, 8, 2, '#9aa1a6');       // dudukan galon telanjang
+  }
   for (let g = 0; g < Math.min(6, RUANGAN.gelasDispenser); g++) {
     r(dx + 7, dy - 40 - g * 2, 4, 3, g % 2 ? '#f2f0e6' : '#e4e0d2');
   }
@@ -1575,6 +2327,35 @@ function drawTongSampah() {
         ['#f2f0e6', '#d9b96a', '#c9cdd1'][i % 3]);
     }
   }
+}
+
+/* Meja buku tamu di pojok kiri bawah — satu-satunya bekas permanen yang
+   dibuat oleh TAMU, bukan pegawai. Diletakkan di x52..66 dan bukan di
+   x185..199 seperti rancangan awal: slotKe(k,23) dari STATIONS.idle.x=282
+   menghasilkan 282,305,259,328,236,351,213,374,190,... — slot ke-8 jatuh
+   tepat di x=190, jadi meja di sana akan berdiri di atas kepala pegawai
+   ke-9 yang menganggur. Di x52..66 tidak ada slot mana pun (rentang slot
+   yang wajar 167..420), tanaman berhenti di x=44, dan papan meja kerja
+   slot cx=86 baru mulai di y=322 — sementara meja ini berakhir di y=296. */
+function drawBukuTamu() {
+  const x = 52, y = 296;                       // y = garis kaki meja
+  r(x, y - 8, 14, 3, '#8d5738');               // papan
+  r(x, y - 8, 14, 1, '#a56a46');
+  r(x + 1, y - 5, 2, 5, '#6b4126');            // dua kaki
+  r(x + 11, y - 5, 2, 5, '#6b4126');
+  // buku terbuka: dua halaman 5px, punggung 1px di tengah
+  r(x + 2, y - 11, 5, 3, '#f2f0e6');
+  r(x + 8, y - 11, 5, 3, '#f2f0e6');
+  r(x + 7, y - 11, 1, 3, '#cfc9b4');
+  // Baris tinta yang MENUMPUK sepanjang sesi. Lima baris pertama mengisi
+  // halaman kiri sampai penuh, sisanya pindah ke halaman kanan — jadi
+  // halaman kiri memang terlihat lebih padat, persis buku tamu sungguhan.
+  const n = Math.min(10, RUANGAN.bukuTamu | 0);
+  for (let i = 0; i < n; i++) {
+    const kiri = i < 5;
+    r(kiri ? x + 3 : x + 9, y - 11 + (kiri ? i : i - 5) % 3, 3, 1, '#3a4a86');
+  }
+  if (n > 0) r(x + 13, y - 12, 1, 4, '#2f3640');   // bolpoin bertali
 }
 
 function drawMejaKerja() {
@@ -1607,12 +2388,20 @@ function drawMejaKerja() {
     // Sengaja selalu digambar, bukan cuma waktu meja kosong: waktu ditempati
     // pegawainya digambar SESUDAH ini (sortY meja < sortY pegawai) jadi
     // badannya menutupi kursi persis seperti orang yang benar-benar duduk.
-    r(cx - 4, 347, 8, 2, '#7c838a');                      // kaki roda
-    r(cx - 1, 341, 2, 6, '#9aa1a6');                      // tiang
-    r(cx - 6, 337, 12, 4, '#2a4f8a');                     // dudukan
-    r(cx - 6, 337, 12, 1, '#3f74c4');
-    r(cx - 5, 329, 10, 8, '#2a4f8a');                     // sandaran dari belakang
-    r(cx - 5, 329, 10, 2, '#3f74c4');
+    // Makin kusut, kursi yang mejanya sedang kosong ditinggal serong — tidak
+    // ada yang mendorongnya balik ke kolong. Cuma yang KOSONG: kursi yang
+    // sedang diduduki tertutup badan pegawainya, jadi menggesernya cuma
+    // membuat kakinya menyembul di sisi yang salah. Offsetnya dari tabel
+    // (turunan slotIdx), bukan Math.random(), supaya tidak bergeser sendiri
+    // tiap frame.
+    const serong = kusutKini() > 0.42 && !terpakai.has(i) ? (KUSUT_KURSI[i] || 0) : 0;
+    const kx = cx + serong;
+    r(kx - 4, 347, 8, 2, '#7c838a');                      // kaki roda
+    r(kx - 1, 341, 2, 6, '#9aa1a6');                      // tiang
+    r(kx - 6, 337, 12, 4, '#2a4f8a');                     // dudukan
+    r(kx - 6, 337, 12, 1, '#3f74c4');
+    r(kx - 5, 329, 10, 8, '#2a4f8a');                     // sandaran dari belakang
+    r(kx - 5, 329, 10, 2, '#3f74c4');
 
     // Laptop ditaruh di sisi kanan meja, bukan di tengah: kalau di tengah, dia
     // menutupi dada pegawai yang duduk dan orangnya jadi tidak terbaca.
@@ -1665,8 +2454,93 @@ function drawMejaKerja() {
     // sekarang tiap slotIdx punya "kepribadian" sendiri lewat drawMejaTema —
     // requested biar keenam meja tidak terasa kopi-tempel satu sama lain.
     drawMejaTema(i, x, y);
+    gambarKusutMeja(i, x, y);                             // tumpukan dokumen yang menumpuk sepanjang hari
     gambarTemaMeja(x, y);                                 // bendera kecil agustusan (tema kalender)
   });
+}
+
+/* Tumpukan dokumen yang menumpuk sepanjang hari (RUANGAN.kusut, lihat blok
+   "kekusutan harian"). Ditumpuk DI ATAS pernak-pernik tema meja, bukan di
+   sebelahnya: zona identitas x+6..+29 sudah terisi penuh di keenam tema, dan
+   begitulah meja kantor sungguhan jadi penuh — berkas baru ditaruh di atas
+   yang sudah ada, bukan dicarikan tempat kosong. Naik 2 px per lapis seperti
+   tumpukanStempel di drawStempel; paling tinggi (4 lapis + lembar teratas)
+   mentok y-13, masih di bawah baris gelas event gelas-kopi-menumpuk-senior
+   (y=300 = y-22 di meja yang sama) dan tetap di dalam zona bebas x+6..+29.
+
+   Tiap meja dapat urutan warna & zigzag sendiri dari slotIdx supaya keenamnya
+   tidak menumpuk seragam — turunan i, bukan Math.random(), jadi tumpukannya
+   tidak berkedip tiap frame. */
+const KUSUT_MAP = ['#c9a03a', '#e4ddc8', '#b03030', '#3e6b4f', '#8a6844', '#dcd3b8'];
+// Berapa lapis MAKSIMUM yang boleh menumpuk di tiap meja — sekaligus lajunya:
+// yang kapasitasnya kecil baru mulai menumpuk sesudah tengah hari, yang besar
+// sudah menumpuk sejak pagi. Angkanya mengikuti kepribadian meja di
+// drawMejaTema, jadi tumpukannya memperkuat karakter yang sudah ada, bukan
+// menyeragamkannya: 0 meja rapi (paling tahan), 1 meja berantakan (paling
+// cepat menyerah), 5 meja PNS klasik (termos & toples, mejanya memang ramai).
+const KUSUT_MEJA_MAKS = [2, 4, 3, 3, 2, 4];
+// Offset serong kursi per slotIdx, px. Ada yang ke kiri ada yang ke kanan,
+// besarnya beda-beda — kalau seragam kebaca "semua kursi digeser", bukan
+// "tidak ada yang membereskannya".
+const KUSUT_KURSI = [-3, 2, 3, -2, 2, -3];
+
+function gambarKusutMeja(i, x, y) {
+  const k = kusutKini();
+  const maks = KUSUT_MEJA_MAKS[i] || 3;
+  // +0.45 = pembulatan ke lapis terdekat. Efeknya lapis pertama jatuh di
+  // k≈0.14 untuk meja berkapasitas 4 (menjelang jam 10) tapi baru di k≈0.28
+  // untuk yang berkapasitas 2 (sesudah tengah hari) -- meja yang pemiliknya
+  // rajin memang lebih lama bertahan rapi.
+  const lapis = Math.min(maks, Math.floor(k * maks + 0.45));
+  if (lapis <= 0) return;
+
+  ctx.globalAlpha = 0.14;                                 // bayangan yang dijatuhkan tumpukan ke barang di bawahnya
+  r(x + 7, y - 2, 19, 1, '#3a2f22');
+  ctx.globalAlpha = 1;
+  // Basisnya y-5, sengaja MENINDIH 1-2 px benda tertinggi tiap tema (bohlam
+  // lightstick & daun tanaman mentok y-4, map meja rapi y-3): yang bersentuhan
+  // kebaca bertumpu, yang bersih jaraknya kebaca melayang.
+  for (let l = 0; l < lapis; l++) {
+    const warna = KUSUT_MAP[(i + l * 2) % KUSUT_MAP.length];
+    const geser = (i + l) % 3;                            // zigzag: tepinya tidak rata
+    const lebar = 20 - l * 2;                             // meruncing ke atas -> tumpukan, bukan balok
+    r(x + 6 + geser, y - 5 - l * 2, lebar, 2, warna);
+    r(x + 6 + geser, y - 5 - l * 2, lebar, 1, sh(warna, 1.18));
+  }
+  const atas = y - 5 - (lapis - 1) * 2;                   // baris atas lapis teratas
+
+  // Map yang tidak kebagian tempat disandarkan miring di sisi kanan tumpukan,
+  // tangga 2 px ke atas — bersandar, bukan melayang. Ambang & warnanya
+  // digilir per meja: enam map merah yang muncul serempak di jam yang sama
+  // kebaca sebagai satu efek yang ditempel, bukan enam meja yang kebetulan
+  // sama-sama kewalahan.
+  if (k > 0.62 + (i % 3) * 0.06) {
+    const mw = ['#b03030', '#2f5f8a', '#3e6b4f'][i % 3];
+    r(x + 22, atas + 4, 4, 3, mw);
+    r(x + 23, atas + 2, 3, 3, mw);
+    r(x + 24, atas, 2, 2, sh(mw, 0.82));
+  }
+  // Lembar teratas nyeruak keluar dari bundelnya, sudutnya terlipat.
+  if (k > 0.82) {
+    r(x + 8, atas - 2, 12, 2, P.paper);
+    r(x + 8, atas - 2, 12, 1, '#f6f3e9');
+    r(x + 18, atas - 2, 2, 1, '#c9c2ac');
+  }
+
+  // Yang tidak kebagian tempat di atas meja turun ke KOLONG, bertumpu di
+  // palang bawah (y+22): dus arsip di kolong meja, pemandangan wajib kantor
+  // dinas. x+9..+24 sengaja berhenti sebelum tiang kursi (x+26..+38) dan kaki
+  // pegawai yang berdiri di depan mejanya.
+  if (k > 0.55) {
+    const dus = Math.min(3, Math.floor((k - 0.55) * 6) + 1);
+    for (let l = 0; l < dus; l++) {
+      const w = 14 - l * 2;
+      const dx = x + 9 + (l % 2), dy = y + 20 - l * 2;
+      r(dx, dy, w, 2, l % 2 ? '#c2b393' : '#a8977a');
+      r(dx, dy, w, 1, l % 2 ? '#d4c5a5' : '#bcab8c');
+      r(dx, dy + 1, w, 1, '#6f6350');                     // garis sela: kebaca dus bertumpuk, bukan satu balok
+    }
+  }
 }
 
 // Zona bebas untuk pernak-pernik identitas: x+6..+29 dan y-4..+8 (relatif
@@ -2093,6 +2967,7 @@ const PROPS = [
   { sortY: 270, station: null,     draw: drawPantry },
   { sortY: 288, station: null,     draw: drawDispenserPantry },
   { sortY: 288, station: null,     draw: drawTongSampah },
+  { sortY: 296, station: null,     draw: drawBukuTamu },
   { sortY: 274, station: null,     draw: drawBendera },
   { sortY: 294, station: null,     draw: drawPlant },
   { sortY: 295, station: null,     draw: drawKipas },
@@ -2136,7 +3011,7 @@ const JABATAN = [
   { id: 'analis_sistem', nama: 'Analis Sistem Informasi', singkat: 'Analis Sistem',
     padanan: 'Arsitek Sistem',
     tugas: 'merancang bentuk sistem sebelum ada yang mulai mengetik',
-    pal: { main: '#3f6285', pants: '#2a3646', skin: '#e0ae80', hair: '#241a12', head: 'hair' } },
+    pal: { main: '#3f6285', pants: '#2a3646', skin: '#e0ae80', hair: '#241a12', head: 'hair', kacamata: true } },
   { id: 'pranata_madya', nama: 'Pranata Komputer Ahli Madya', singkat: 'Pranata Madya',
     padanan: 'Senior Engineer',
     tugas: 'menggarap bagian yang paling sulit dan membenahi warisan lama',
@@ -2156,11 +3031,11 @@ const JABATAN = [
   { id: 'auditor', nama: 'Auditor Internal', singkat: 'Auditor',
     padanan: 'QA Engineer',
     tugas: 'menguji hasil kerja dan mencatat temuan sebelum dikirim keluar',
-    pal: { main: '#4c5570', pants: '#2f3444', skin: '#eec39a', head: 'jilbab', jilbab: '#2b3145' } },
+    pal: { main: '#4c5570', pants: '#2f3444', skin: '#eec39a', head: 'jilbab', jilbab: '#2b3145', kacamata: true } },
   { id: 'statistisi', nama: 'Statistisi', singkat: 'Statistisi',
     padanan: 'Data Analyst',
     tugas: 'mengolah angka jadi tabel dan grafik yang bisa dibaca pimpinan',
-    pal: { main: '#5b4d86', pants: '#332c4d', skin: '#d9a273', hair: '#1d1712', head: 'hair' } },
+    pal: { main: '#5b4d86', pants: '#332c4d', skin: '#d9a273', hair: '#1d1712', head: 'hair', kacamata: true } },
   { id: 'arsiparis', nama: 'Arsiparis', singkat: 'Arsiparis',
     padanan: 'Technical Writer',
     tugas: 'menata dokumentasi supaya orang berikutnya tidak mulai dari nol',
@@ -2172,7 +3047,7 @@ const JABATAN = [
   { id: 'analis_kebijakan', nama: 'Analis Kebijakan', singkat: 'Analis Kebijakan',
     padanan: 'Product Manager',
     tugas: 'menerjemahkan kebutuhan jadi rumusan kerja yang bisa dieksekusi',
-    pal: { main: '#4f6b3c', pants: '#2e3a28', skin: '#e0ae80', hair: '#241a12', head: 'hair', pattern: '#a8c98a' } },
+    pal: { main: '#4f6b3c', pants: '#2e3a28', skin: '#e0ae80', hair: '#241a12', head: 'hair', pattern: '#a8c98a', kacamata: true } },
   { id: 'teknisi', nama: 'Teknisi Jaringan', singkat: 'Teknisi',
     padanan: 'DevOps / SRE',
     tugas: 'menjaga server, jaringan, dan penyaluran hasil kerja ke produksi',
@@ -2251,6 +3126,70 @@ function terapkanSeragamHarian() {
 terapkanSeragamHarian();
 setInterval(terapkanSeragamHarian, 30000);
 
+/* ------------------------------------------------------ seragam kantor cabang
+   Pegawai yang sesinya datang dari MESIN LAIN (a.mesin terisi; server
+   mengosongkannya kalau nama mesin pengirim sama dengan hostname server)
+   memakai ROMPI DINAS di atas seragam hariannya, plus tanda pangkat terang
+   di kedua bahu.
+
+   KEPUTUSAN INTI -- kenapa rompi, bukan ganti warna baju. terapkanSeragamHarian()
+   di atas menimpa main/pants/pattern di OBJEK j.pal yang DIPAKAI BERSAMA semua
+   pegawai berjabatan sama (this.pal = j.pal di constructor Agent dan di
+   setPeran; kontraknya ditulis eksplisit di komentar blok seragam harian).
+   Kalau seragam cabang ikut main di kanal yang sama, cuma ada dua jalan dan
+   dua-duanya rugi: menyalin pal per-agent (memutus kontrak "sekali ditimpa
+   langsung ikut ke mana-mana"), atau menimpa pal jabatan (merusak makna Rabu
+   -- "batik biru SERENTAK" jadi tidak serentak). Jadi rompi dijadikan KANAL
+   KETIGA yang tidak pernah dipakai hari mana pun: hari tetap menang untuk
+   BAJU, mesin cuma menambah ROMPI di atasnya, persis seperti petugas dinas
+   dari kantor lain yang sedang bertugas di kantor tuan rumah. Blok ini TIDAK
+   PERNAH menulis ke a.pal / j.pal -- kalau suatu saat terpaksa, baca dulu
+   paragraf ini.
+
+   Warnanya bukan hasil undian: FNV-1a atas nama mesin (huruf besar/kecil
+   diabaikan). Mesin yang sama = rompi yang sama tiap hari, tiap tab, tiap
+   reload, dan sama juga di putar ulang agenda (server ikut mencatat ev.mesin).
+
+   Warna dipilih supaya jarak RGB-nya >= 60 terhadap SELURUH warna baju harian
+   (putih, batik Rabu, kelima batik Jumat) dan >= 60 antar sesama rompi --
+   dijaga uji-seragam.mjs, jangan diubah dengan mata saja. Usul awal rancangan
+   (#41603c hijau, #4f545c kelabu, #7a4f2e cokelat) semuanya JATUH di uji itu:
+   masing-masing cuma berjarak 7 / 41 / 16 dari batik hijau Jumat, navy Rabu,
+   dan batik cokelat Jumat -- rompi yang warnanya setara bajunya tidak menandai
+   apa pun. Yang dipakai sekarang sengaja lebih terang dari semua baju gelap
+   dan tetap lebih gelap dari kemeja putih. Tidak ada cokelat: setiap cokelat
+   yang cukup jauh dari batik cokelat sudah menjadi khaki. */
+const SERAGAM_CABANG = [
+  { id: 'khaki',  nama: 'khaki',         rompi: '#b09a63', pangkat: '#f2d675' },
+  { id: 'kelabu', nama: 'kelabu dinas',  rompi: '#9aa0a6', pangkat: '#b9c9dc' },
+  { id: 'hijau',  nama: 'hijau lapangan', rompi: '#6f9463', pangkat: '#cfe89a' },
+  { id: 'biru',   nama: 'biru dinas',    rompi: '#5f7fa8', pangkat: '#a9cdf0' },
+];
+
+// FNV-1a 32-bit, ditulis tangan (nol dependency). Math.imul supaya perkalian
+// 32-bit tidak bocor ke double, >>> 0 supaya hasilnya tak pernah negatif.
+function kodeMesin(nama) {
+  const s = String(nama == null ? '' : nama).toLowerCase();
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+}
+
+// Deklarasi `function`, bukan `const` arrow: cuma deklarasi fungsi yang
+// otomatis jadi properti context vm, jadi uji-seragam.mjs bisa memanggil
+// ctx.seragamCabang(...) tanpa menambah jembatan di uji-event.mjs.
+const SERAGAM_CABANG_MEMO = new Map();
+function seragamCabang(mesin) {
+  const nama = String(mesin == null ? '' : mesin).trim().toLowerCase();
+  if (!nama) return null;                       // pegawai lokal tidak pernah berompi
+  let s = SERAGAM_CABANG_MEMO.get(nama);
+  if (!s) {
+    s = SERAGAM_CABANG[kodeMesin(nama) % SERAGAM_CABANG.length];
+    SERAGAM_CABANG_MEMO.set(nama, s);
+  }
+  return s;
+}
+
 /* -------------------------------------------------------------- model ----
    Pilihan model untuk sesi yang dilahirkan dari halaman ini. Id-nya dikirim
    apa adanya ke `claude --model`; yang kosong berarti flag itu tidak dikirim
@@ -2285,6 +3224,12 @@ const PECI = { isi: '#17171c', tepi: '#0a0a0e', kilap: '#34343e', pita: '#202028
 const SEPATU = '#26221c', SANDAL = '#8a6844', TALI_SANDAL = '#d9b96a';
 const KUMIS = '#2b2118', MASKER = '#e8ece8', MASKER_LIPAT = '#cfd5d0', MULUT_NGUAP = '#3a2a24';
 const PULPEN_TELINGA = '#1c4e8a';
+// Kacamata: atribut jabatan (pal.kacamata), bukan aksesori acak — auditor,
+// statistisi, dan kedua analis memakainya, jadi siluetnya ikut membedakan
+// peran dari kejauhan. Rimnya digambar DI ATAS baris mata, bukan menimpanya:
+// wajah cuma 8 px, kalau lensanya diisi penuh matanya hilang dan orangnya
+// jadi tidak terbaca sedang kedip/fokus/lelah.
+const KACAMATA = '#2f3640', KACAMATA_KILAP = '#8f9aa6';
 
 /* Gumpalan bersudut bulat bergaris tepi: isi w×h dari pojok kiri-atas
    (xL, yT), keempat sudut isinya dipangkas satu piksel, garis tepi satu
@@ -2374,6 +3319,21 @@ function drawHead(a, x, yDagu) {
 
   if (!back) {
     drawEyes(a, x, yT + 4, arah);
+    // dilepas sebentar waktu dilap (lap-kacamata-di-ujung-baju)
+    if (p.kacamata && !a.kacamataLepas) {
+      if (arah) {
+        rm(1, yT + 3, 4, 1, KACAMATA);            // rim, dari samping cuma satu
+        rm(1, yT + 3, 1, 1, KACAMATA_KILAP);
+        rm(-1, yT + 3, 1, 1, KACAMATA);           // gagang ke telinga
+      } else {
+        r(x - 4, yT + 3, 3, 1, KACAMATA);         // rim kiri
+        r(x + 2, yT + 3, 3, 1, KACAMATA);         // rim kanan
+        r(x - 1, yT + 3, 2, 1, KACAMATA);         // jembatan
+        r(x - 4, yT + 3, 1, 1, KACAMATA_KILAP);   // kilau di lensa kiri
+        r(x - 5, yT + 3, 1, 2, KACAMATA);         // gagang kiri
+        r(x + 4, yT + 3, 1, 2, KACAMATA);         // gagang kanan
+      }
+    }
     if (arah) { rm(4, yT + 5, 1, 1, kulit); rm(5, yT + 5, 1, 1, tk); }   // hidung
     if (a.masker || MOD.masker) {                                      // masker kabut asap
       if (arah) { rm(0, yT + 6, 5, 3, MASKER); rm(0, yT + 7, 5, 1, MASKER_LIPAT); }
@@ -2503,6 +3463,9 @@ function drawPerson(a) {
   const x = Math.round(a.x) + (a.miring ? 4 : 0), y = Math.round(a.y);
   const xKaki = Math.round(a.x);
   const p = a.pal;
+  // rompi kantor cabang: kanal terpisah dari p.main/p.pattern, tidak pernah
+  // menulis balik ke pal (lihat blok "seragam kantor cabang")
+  const rc = a.mesin ? seragamCabang(a.mesin) : null;
   const t = a.phase;
   const back = a.face === 'up';
   const arah = arahDari(a.face);
@@ -2533,8 +3496,23 @@ function drawPerson(a) {
   const duduk = turunDuduk(a);
   bob += duduk;
 
-  ctx.globalAlpha = 0.18 * alphaDasar;
+  // Bayangan kaki. MOD.bayangPanjang (senja, matahari rendah di balik jendela)
+  // menggantinya dengan jajaran genjang yang menjulur MENJAUHI jendela: arahnya
+  // dihitung dari posisi orangnya terhadap sumbu kaca, jadi yang di kiri
+  // ruangan berbayang ke kiri dan yang di kanan ke kanan — bukan satu arah
+  // seragam yang malah terbaca seperti salah gambar.
   ctx.fillStyle = '#20301f';
+  const bp = MOD.bayangPanjang;
+  if (bp > 0.01) {
+    const arahB = xKaki < JENDELA.x + JENDELA.w / 2 ? -1 : 1;
+    const baris = Math.round(12 * bp);
+    for (let i = 0; i < baris; i++) {
+      const t = i / Math.max(1, baris);
+      ctx.globalAlpha = (0.18 - 0.14 * t) * alphaDasar;
+      r(xKaki - 4 + arahB * i * 2, y + 1 + Math.round(i * 0.4), Math.max(2, 10 - i * 0.5), 1, '#20301f');
+    }
+  }
+  ctx.globalAlpha = 0.18 * alphaDasar;
   ctx.beginPath();
   ctx.ellipse(xKaki + 1, y + 1, 9, 2.6, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -2577,6 +3555,13 @@ function drawPerson(a) {
     : (kerja ? workArms(a) : { l: armL, r: armR });
 
   // ---- badan: bahu membulat, pinggang lurus ke sabuk berkepala emas
+  // Baris tanda pangkat rompi cabang: normalnya di bahu (yb-15), tapi kerudung
+  // digambar SESUDAH badan dan gumpal()-nya memakan yb-16 sampai yb-12 (isi 4
+  // baris plus garis tepi bawahnya), jadi di bahu pangkatnya terkubur habis.
+  // Untuk yang berjilbab dia turun ke yb-11, baris pertama yang masih
+  // kelihatan di bawah juntaian — tetap ada penandanya, cuma jadi pita terang
+  // di dada, bukan di pundak.
+  const yPangkat = p.head === 'jilbab' ? yb - 11 : yb - 15;
   const badan = () => {
     if (arah) {
       r(x - 2, yb - 16, 4, 1, tm);
@@ -2587,6 +3572,21 @@ function drawPerson(a) {
       r(x + 2, yb - 14, 1, 6, mainG);
       if (p.pattern) for (let i = 0; i < 5; i++) r(x - 3 + ((i * 3) % 6), yb - 14 + ((i * 5) % 6), 1, 1, p.pattern);
       else r(x - 1, yb - 15, 2, 1, sh(main, 0.62));
+      if (rc) {
+        // Samping: badannya cuma 6 px (x-3..x+2) dan LENGAN DEKAT digambar
+        // sesudah badan(), menutup 4 px tengahnya (x-2..x+1). Yang tersisa
+        // untuk rompi persis dua kolom tepi torso — pita di tengah badan
+        // akan lenyap seluruhnya di balik lengan, jadi sengaja tidak digambar
+        // di situ. Koordinat absolut, bukan rm(): kolom kanan tetap yang
+        // teduh dari arah hadap mana pun, sama seperti mainG di atas.
+        r(x - 3, yb - 14, 1, 6, rc.rompi);
+        r(x + 2, yb - 14, 1, 6, sh(rc.rompi, 0.85));
+        r(x - 4, yb - 14, 1, 6, garisTepi(rc.rompi));
+        r(x + 3, yb - 14, 1, 6, garisTepi(rc.rompi));
+        // Tanda pangkat ikut ke dua kolom itu: petak bahu lainnya (x-2..x+1
+        // di yb-15) juga tertutup lengan dekat.
+        r(x - 3, yPangkat, 1, 1, rc.pangkat); r(x + 2, yPangkat, 1, 1, rc.pangkat);
+      }
       r(x - 4, yb - 8, 8, 1, sabuk); rm(1, yb - 8, 1, 1, P.gold);
       return;
     }
@@ -2606,6 +3606,22 @@ function drawPerson(a) {
       for (let i = 0; i < 8; i++) r(x - 4 + ((i * 3) % 8), yb - 14 + ((i * 5) % 6), 1, 1, p.pattern);
     } else {                                                           // lidah bahu PNS
       r(x - 4, yb - 15, 2, 1, sh(main, 0.62)); r(x + 2, yb - 15, 2, 1, sh(main, 0.62));
+    }
+    if (rc) {
+      // Rompi tampak depan/belakang: dua pita vertikal 2 px di kolom TERLUAR
+      // badan (x-4..x-3 dan x+2..x+3), garis tepi badan ikut jadi tepi rompi.
+      // 4 px tengah (x-2..x+1) sengaja DISISAKAN tetap baju supaya kerah,
+      // kancing, dan motif batik masih terbaca di 28 px — yang hilang cuma
+      // separuh saku dada kiri, dan pita 1 px tidak terbaca sama sekali.
+      // Kasus utamanya justru punggung: di meja kerja STATIONS.think face 'up'.
+      r(x - 4, yb - 14, 2, 6, rc.rompi); r(x + 2, yb - 14, 2, 6, rc.rompi);
+      r(x + 3, yb - 14, 1, 6, sh(rc.rompi, 0.85));                     // cahaya kiri-atas
+      r(x - 5, yb - 14, 1, 6, garisTepi(rc.rompi));
+      r(x + 4, yb - 14, 1, 6, garisTepi(rc.rompi));
+      // Tanda pangkat: tanpa syarat p.pattern, jadi hari batik pun tetap ada
+      // penandanya (di hari putih dia menggantikan lidah bahu PNS di petak
+      // yang sama persis).
+      r(x - 4, yPangkat, 2, 1, rc.pangkat); r(x + 2, yPangkat, 2, 1, rc.pangkat);
     }
     r(x - 5, yb - 8, 10, 1, sabuk); r(x - 1, yb - 8, 2, 1, P.gold);
   };
@@ -2652,12 +3668,18 @@ function drawPerson(a) {
   // disposisi dilewati: mapnya menutupi separuh badan.
   const rim = a.butuh ? null : rimPegawai(a);
   if (rim) {
-    const wr = lerpHex(main, rim.warna, 0.35 + 0.4 * rim.kuat);
+    const campur = 0.35 + 0.4 * rim.kuat;
+    // Tepi badan pegawai cabang adalah tepi ROMPI, bukan tepi baju: rim jatuh
+    // persis di kolom garis tepi rompi (x-5/x+4 depan, x-4/x+3 samping), jadi
+    // kalau dasarnya tetap `main` tepi rompinya berkedip tiap matahari/neon
+    // bergeser. Lengan tidak pernah berompi, jadi tepi luarnya tetap dari baju.
+    const wr = lerpHex(rc ? rc.rompi : main, rim.warna, campur);
+    const wl = rc ? lerpHex(main, rim.warna, campur) : wr;
     if (arah) r(rim.arah < 0 ? x - 4 : x + 3, yb - 14, 1, 6, wr);
     else {
       r(rim.arah < 0 ? x - 5 : x + 4, yb - 14, 1, 6, wr);                      // tepi badan
       const lift = rim.arah < 0 ? pose.l : pose.r;
-      r(rim.arah < 0 ? x - 8 : x + 7, yb - 15 + lift + 1, 1, 6, wr);          // tepi luar lengan
+      r(rim.arah < 0 ? x - 8 : x + 7, yb - 15 + lift + 1, 1, 6, wl);          // tepi luar lengan
     }
   }
 
@@ -2677,6 +3699,17 @@ function drawPerson(a) {
     r(x - 3, yb - 13, 6, 1, P.paper);                       // lembar di dalamnya
     r(x - 3, yb - 11, 4, 1, P.paper);
     r(x + 1, yb - 11, 3, 3, '#c03030');                     // cap merah, belum diteken
+    /* TANDA PANGKAT DIKEMBALIKAN DI ATAS MAP. Kotak map (x-5..x+4, yb-15..
+       yb-8) menutup PERSIS seluruh petak rompi, jadi tanpa dua petak ini
+       pegawai cabang kehilangan seluruh penanda kantornya — 0 px rompi, 0 px
+       pangkat — tepat di pose yang paling perlu dikenali: menunggu keputusan
+       kamu, dan kamu harus tahu itu sesi mesin yang mana. Rompinya sendiri
+       memang mengalah ke map (map dipegang di depan dada; itu memang yang
+       terjadi), tapi pangkatnya naik ke tepi atas map: baris yb-15 dan
+       kolom yang sama persis dengan pose lain (x-4..x-3 / x+2..x+3), jadi
+       matanya tidak perlu belajar tempat baru. Dari samping pun kotak mapnya
+       tetap 10 px, jadi koordinat yang sama tetap jatuh di atas map. */
+    if (rc) { r(x - 4, yb - 15, 2, 1, rc.pangkat); r(x + 2, yb - 15, 2, 1, rc.pangkat); }
   }
 
   // kepala peserta yang ketiduran turun beberapa piksel, lalu tersentak naik
@@ -3088,13 +4121,27 @@ function updateParts(dt) {
   }
 }
 function drawParts() {
-  for (const p of parts) {
-    // p.a: plafon opsional dari event (kertas pudar karena toner tipis).
-    // Dikalikan, bukan ditimpa, supaya peluruhan life tetap terlihat di akhir hidupnya.
+  // p.a: plafon opsional dari event (kertas pudar karena toner tipis).
+  // Dikalikan, bukan ditimpa, supaya peluruhan life tetap terlihat di akhir hidupnya.
+  const satu = (p) => {
     ctx.globalAlpha = Math.min(1, p.life * 1.6) * (p.a == null ? 1 : p.a);
     r(p.x, p.y, p.s, p.s, p.c);
-  }
+  };
+  /* Dua lintasan atas larik `parts` YANG SAMA. p.sisip dicap per partikel di
+     pemanggil spawn() (Agent.update), bukan lewat variabel modul: spawn()
+     dipanggil dari puluhan tempat termasuk tick event di frame yang sama,
+     jadi "pasang lalu kembalikan" pasti salah cap suatu saat, dan gagalnya
+     senyap total.
+     YANG DIGERBANGI HANYA PENGGAMBARAN, TIDAK PERNAH PEMBARUAN — jangan
+     pernah menaruh if seperti ini di updateParts() atau di update(). */
+  for (const p of parts) if (!p.sisip) satu(p);
   ctx.globalAlpha = 1;
+  // milik orang di dalam bukaan: di dalam klip, supaya kertas fx 'paper'
+  // yang melayang ±10 px tidak bocor keluar bingkai
+  if (parts.some((p) => p.sisip)) {
+    klipSisip(() => { for (const p of parts) if (p.sisip) satu(p); });
+    ctx.globalAlpha = 1;
+  }
 }
 
 /* ------------------------------------------------------------------ agents */
@@ -3158,10 +4205,65 @@ function slotBebas(id, diri) {
   return -1;
 }
 
+/* ------------------------------------------------------------- sisi meja ---
+   Pegawai lokal digiring ke sisi KIRI ruangan, pegawai kantor cabang ke sisi
+   KANAN, supaya satu kantor bisa menampung dua mesin tanpa penontonnya harus
+   membaca chip di panel. MEJA_KERJA_X = [176, 374, 86, 444, 242, 308], jadi
+   urutan lama sudah selang-seling kiri-kanan — itu sebabnya "dua sisi" tidak
+   pernah terbentuk kalau urutannya dibiarkan.
+
+   Keduanya PERMUTASI dari indeks 0..5 yang sama: kantor penuh tetap memakai
+   keenam meja, tidak ada meja mubazir, dan jawaban "ada meja kosong?" persis
+   sama dengan slotBebas('think') — itu sebabnya stasiunPulang() di bawah tidak
+   perlu ikut diubah.
+
+   PERUBAHAN PERILAKU YANG TERLIHAT TANPA MESIN KEDUA: sesi pertama sekarang
+   duduk di x=86 (meja paling kiri), bukan x=176 seperti dulu. Disengaja, dan
+   disebut terang-terangan di sini karena semua orang akan melihatnya walaupun
+   tidak pernah punya kantor cabang. Efek samping kedua: slotIdx 3 (x=444) —
+   meja pojok yang dikunci event wifi-sudut-lemah — jadi PILIHAN PERTAMA
+   pegawai cabang, jadi event itu akan lebih sering kena mereka. Identitas
+   slotIdx-nya sendiri tidak berpindah; yang berubah cuma urutan pencarian.
+
+   ARAH SEBALIKNYA, DAN INI YANG MAHAL: di kantor MURNI LOKAL (satu mesin —
+   bawaan hampir semua orang) meja pojok itu justru jadi jauh lebih sepi.
+   Diukur dengan mengisi meja satu per satu:
+     sekarang  x 86 · 176 · 242 · 308 · 374 · 444   <- 444 baru terisi sesi ke-6
+     dulu      x 176 · 374 · 86 · 444 · 242 · 308   <- 444 sudah terisi sesi ke-4
+   Jadi wifi-sudut-lemah (syaratnya station 'think' + slotIdx 3) butuh SEMUA
+   enam meja terisi, dulu cukup empat: 1,5x lebih sulit terpicu di kantor
+   satu mesin. Itu harga yang tidak bisa ditawar, bukan kelalaian — sapuan
+   kiri→kanan yang rapi mensyaratkan x terbesar (444) ada di urutan terakhir,
+   jadi TIDAK ADA permutasi yang sekaligus menyapu kiri→kanan dan menaruh
+   444 di urutan keempat. Yang mengembalikan frekuensinya cuma menyerah pada
+   sapuannya (mis. [2, 0, 4, 3, 5, 1]) — dan dua sisi yang rapi lebih sering
+   dilihat orang daripada satu event langka. Dicatat di sini supaya yang
+   membaca berikutnya tidak mengira efeknya cuma satu arah. */
+const URUT_MEJA_LOKAL = [2, 0, 4, 5, 1, 3];    // x 86, 176, 242, 308, 374, 444
+const URUT_MEJA_CABANG = [3, 1, 5, 4, 0, 2];   // x 444, 374, 308, 242, 176, 86
+function slotMeja(diri) {
+  const s = STATIONS.think;
+  const dipakai = new Set();
+  for (const other of penghuni()) {
+    // sama persis dengan slotBebas: yang mengantre berdiri di lajur, bukan di slot
+    if (other !== diri && other.station === 'think' && !other.antre) dipakai.add(other.slotIdx);
+  }
+  for (const k of (diri && diri.mesin ? URUT_MEJA_CABANG : URUT_MEJA_LOKAL)) {
+    if (dipakai.has(k)) continue;
+    const x = s.slotsX[k];
+    if (x < 16 || x > W - 16) continue;        // penjaga tepi, dibawa dari slotBebas
+    return k;
+  }
+  return -1;
+}
+
 /* Tempat pulang pegawai yang lagi tidak dapat tugas adalah MEJA KERJANYA,
    bukan sudut tunggu: yang enak dilihat itu ruangan yang orangnya sibuk di
    mejanya masing-masing, bukan yang antre. Sudut tunggu tinggal jadi limpahan,
-   dipakai cuma kalau semua meja sudah terisi. */
+   dipakai cuma kalau semua meja sudah terisi.
+   Tetap lewat slotBebas('think'): di sini yang ditanya cuma "ada meja kosong?",
+   dan jawabannya identik dengan slotMeja karena URUT_MEJA_* cuma permutasi
+   dari enam slot yang sama. */
 function stasiunPulang(diri) {
   return slotBebas('think', diri) >= 0 ? 'think' : 'idle';
 }
@@ -3195,11 +4297,21 @@ function rekanSeproyek(diri, harusDiam) {
 }
 function slotKongsi(diri) {
   const rekan = sesiNyata(diri) ? rekanSeproyek(diri, false) : null;
-  if (!rekan) return slotBebas('think', diri);
+  // Tanpa rekan seproyek, aturan sisi meja yang berlaku (slotMeja). Dengan
+  // rekan, kongsi seproyek menang MUTLAK: dua sesi yang menggarap folder yang
+  // sama tetap bersebelahan walaupun mesinnya beda — justru kasus itu yang
+  // paling menarik dari kantor cabang, jadi cabang `if (rekan)` di bawah
+  // sengaja tidak tahu-menahu soal a.mesin.
+  if (!rekan) return slotMeja(diri);
   const dipakai = new Set();
   for (const o of penghuni()) if (o !== diri && o.station === 'think' && !o.antre) dipakai.add(o.slotIdx);
   const xr = MEJA_KERJA_X[rekan.slotIdx];
-  let k = -1, jarak = Infinity;
+  // Number.POSITIVE_INFINITY, bukan `Infinity` polos: di sandbox vm harness uji
+  // (uji-event.mjs) global bawaan yang tidak didaftarkan sandbox jatuh ke objek
+  // stub, jadi `d < Infinity` selalu false dan seluruh pencarian meja terdekat
+  // diam-diam mengembalikan -1 — kongsi seproyek jadi tak bisa diuji sama sekali.
+  // Di peramban keduanya nilai yang sama persis; perilakunya nol berubah.
+  let k = -1, jarak = Number.POSITIVE_INFINITY;
   MEJA_KERJA_X.forEach((x, i) => {
     if (dipakai.has(i)) return;
     const d = Math.abs(x - xr);
@@ -3243,6 +4355,10 @@ class Agent {
     this.betah = false;      // true = duduk terus sampai disuruh bubar
     this.hadap = null;       // arah hadap khusus, kalau stasiunnya punya
     this.alpha = 1;          // dipakai event: memudar di ambang pintu kadis
+    this.diKadis = false;    // sedang di dalam bukaan ruang kadis (blok "ruang kadis")
+    this.sisipFase = '';     // '' | 'pudar' (di ambang) | 'terang' (baru muncul di dalam)
+    this.sisipT = 0;         // now-timestamp mulai fase di atas
+    this.sisipKeluar = 0;    // now-timestamp mulai pulih alpha sesudah keluar bukaan
     this.eventKerja = null;  // event acak yang sedang meminjamnya, kalau ada
     this.doingEvent = '';    // keterangan kartu selama dipinjam event
     this.bawa = null;        // barang bawaan sementara (map, gelas, jerigen)
@@ -3257,8 +4373,9 @@ class Agent {
     this.legaSampai = 0;     // now-timestamp: wajah 'lega' sesudah menyerahkan hasil / selesai giliran
     this.gagalBerturut = 0;  // tool call gagal berturut-turut yang SEDANG berlangsung; nol begitu ada yang berhasil
     this.kongsiCek = 0;      // now-timestamp: kapan berikutnya melirik rekan seproyek (0 = belum dijadwalkan)
-    this.tolehSampai = 0;    // now-timestamp: sedang menoleh ke rekan seproyek sampai lewat ini
-    this.tolehRekan = null;  // rekan yang sedang ditoleh
+    this.tolehSampai = 0;    // now-timestamp: sedang menoleh sampai lewat ini
+    this.tolehRekan = null;  // rekan yang sedang ditoleh (null = tolehan dari event)
+    this.tolehBalik = null;  // face sebelum ditoleh, dikembalikan waktu tolehnya habis
     this.stamina = 1;        // 0..1, lihat STAMINA_*; reset per sesi karena satu Agent = satu sesi
     this.antre = 0;          // 0 = punya slot; n = urutan ke-n di antrean stasiun penuh (tickAntre)
     this.antreUrut = 0;      // nomor giliran global (antreSeq) — yang kecil maju duluan
@@ -3322,6 +4439,14 @@ class Agent {
   goTo(id) {
     const s = STATIONS[id];
     if (!s) return;
+    /* Bukaan ruang kadis. Yang sudah DI DALAM lalu disuruh ke 'agent' lagi
+       (Task/mcp beruntun) tidak boleh berkedip keluar-masuk pintu: dia sudah
+       di tempat. Selain itu keluar dulu SEBELUM route() dihitung — titik
+       berangkatnya wajib ambang pintu (452, LANE_UP), bukan koordinat di
+       dalam bukaan, dan alpha-nya pulih SAMBIL route() sudah berjalan
+       sehingga penundaannya nol milidetik (Aturan 1). */
+    if (id === 'agent' && this.diKadis) { this.antre = 0; return; }
+    keluarKadis(this);
     if (id !== this.station) this.antre = 0;   // antrean lama tidak dibawa ke stasiun lain
     this.bangkit();
     const off = this.slotOffset(id);
@@ -3346,6 +4471,7 @@ class Agent {
      supaya slotBebas() tidak menghitungnya sebagai penghuni meja mana pun —
      pemeran event yang berdiri di tengah ruangan tidak boleh memblokir slot. */
   goToXY(tx, ty, hadap) {
+    keluarKadis(this);        // lihat catatan di goTo(): keluar sebelum route() dihitung
     const fromLane = this.y < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
     const bLane = ty < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
     this.bangkit();
@@ -3461,7 +4587,11 @@ class Agent {
         // Zona senyap: waktu ada rapat daring, yang lewat depan meja rapat
         // memelankan langkah. Debunya ikut hilang, bukan cuma suaranya.
         const senyap = this.x >= MOD.senyapDari && this.x <= MOD.senyapSampai;
-        if (this.stepT > 0.26) { this.stepT = 0; if (!senyap) spawn('step', this.x, this.y); }
+        if (this.stepT > 0.26) {
+          this.stepT = 0;
+          // cap per partikel, bukan variabel modul — lihat catatan di drawParts()
+          if (!senyap) { const p = spawn('step', this.x, this.y); if (p && this.diKadis) p.sisip = true; }
+        }
       }
     } else {
       if (this.antre) this.tickAntre();          // stasiun penuh: maju begitu ada slot
@@ -3502,7 +4632,8 @@ class Agent {
         // bekerja. Semuanya kosmetik; tool call-nya sendiri tetap jalan.
         const putusInternet = MOD.internetMati && (fx === 'ping' || fx === 'scan');
         if (fx && !MOD.hening && !putusInternet && Math.random() < 0.3 * (1 - MOD.lemot)) {
-          spawn(fx, this.x, this.y - 24);
+          const p = spawn(fx, this.x, this.y - 24);
+          if (p && this.diKadis) p.sisip = true;      // lihat catatan di drawParts()
         }
       }
     } else if (this.station === 'idle' && !this.path.length && Math.random() < 0.02) {
@@ -3515,6 +4646,12 @@ class Agent {
     // Semua titik DOM di bawah lewat keLayar(): ikut kamera (zoom/pan), bukan
     // offX/scale mentah. Yang di luar bidikan kamera disembunyikan — kalau
     // tidak, jagaBingkai() menariknya ke tepi dan jadi balon tanpa orang.
+    // Titik cekik tunggal, sudah diverifikasi: kameraTampak() cuma punya SATU
+    // pemanggil di seluruh berkas — baris ini — dan variabel `tampak` inilah
+    // yang menggerbangi balon ucap, balon pikir, DAN lencana macet sekaligus.
+    // Kalau suatu hari ketiganya perlu digerbangi syarat baru (misalnya
+    // menyembunyikan balon penghuni bukaan ruang kadis saat gordennya
+    // tertutup), cukup satu baris di sini, nol riak ke pemanggil lain.
     const tampak = kameraTampak(this.x, this.y);
     if (now > this.bubbleUntil || !tampak) {
       if (this.el.style.display !== 'none') this.el.style.display = 'none';
@@ -3577,12 +4714,33 @@ class Agent {
     const diam = kongsiDiam(this);
     if (this.tolehSampai) {
       const r = this.tolehRekan;
-      if (!diam || now > this.tolehSampai || !r || !kongsiDiam(r)) {
+      /* Dua macam tolehan lewat jalur yang sama.
+         - Rekan seproyek (r terisi): syaratnya dua-duanya menganggur di meja.
+         - Tolehan dari event acak (r null, dipasang menoleh() di
+           00-dasar.js): penontonnya boleh di mana saja — duduk di kursi
+           rapat, berdiri di pantry — jadi kongsiDiam() TIDAK dituntut.
+           Dulu menoleh() menulis a.hadap, yang LENGKET dan tidak pernah
+           dikembalikan siapa pun: pegawai yang sudah di stasiunnya tidak
+           pernah dapat goTo() baru (handle() cuma memanggilnya kalau
+           stasiunnya BEDA, dan stasiunPulang selalu 'think'/'idle'), jadi
+           dia berdiri menyamping di depan laptopnya tanpa batas waktu.
+           Sekarang menoleh() cuma menulis face dan menitipkan face lamanya
+           di tolehBalik — dikembalikan di sini. */
+      const habis = r
+        ? (!diam || now > this.tolehSampai || !kongsiDiam(r))
+        : (now > this.tolehSampai || this.path.length || this.state === 'work');
+      if (habis) {
         this.tolehSampai = 0;
         this.tolehRekan = null;
+        const balik = this.tolehBalik;
+        this.tolehBalik = null;
         // balik menghadap laptop — kecuali sudah berjalan (face diatur langkah)
         // atau sedang menunggu kamu (setButuh sudah memasang 'down')
-        if (!this.path.length && !this.butuh) this.face = this.hadap || STATIONS.think.face;
+        if (!this.path.length && !this.butuh) {
+          this.face = r
+            ? (this.hadap || STATIONS.think.face)
+            : (balik || this.hadap || (STATIONS[this.station] || {}).face || 'down');
+        }
       }
       return;
     }
@@ -3600,6 +4758,16 @@ class Agent {
 
   arrive() {
     if (this.pulang) { this.tibaPulang(); return; }
+    /* Tiba di kursi tamu DI DALAM bukaan ruang kadis. Perjalanan itu murni
+       kosmetik: yang boleh dipulihkan cuma arah hadap dan state gambar.
+       arrivedAt (jam menganggur), busyUntil (jatah minimum 1,8 detik), dan
+       tibaSampai TIDAK boleh disentuh — kalau disentuh, jalan-jalan hias di
+       dalam ruangan ikut memperpanjang waktu kerja yang dicatat. */
+    if (this.diKadis) {
+      this.face = this.hadap || 'up';
+      this.state = now < this.busyUntil ? 'work' : 'idle';
+      return;
+    }
     this.arrivedAt = now;
     this.face = this.butuh
       ? 'down'
@@ -3614,6 +4782,13 @@ class Agent {
     this.tibaSampai = now + TIBA_JEDA_MS;
     // duduk ke kursi rapat: 3 frame turun (turunDuduk); yang mengantre berdiri
     if (this.station === 'rapat' && !this.antre) { this.dudukSejak = now; this.bangunSejak = 0; }
+    /* Bukaan ruang kadis, PALING AKHIR supaya state/busyUntil/statistik di
+       atas sudah final: yang tiba di ambang pintu kadis dipindah ke dalam
+       ruangan. Gerbang !eventKerja WAJIB — event disposisi/ember/tong
+       sampah/rapat memakai a.alpha dan a.path yang sama dan akan berebut. */
+    if (this.station === 'agent' && !this.diKadis && !this.antre && !this.eventKerja && sisipBoleh()) {
+      masukKadis(this);
+    }
   }
 
   // Meninggalkan kursi rapat: berdiri 3 frame (turunDuduk), dipanggil dari
@@ -3669,6 +4844,7 @@ class Agent {
   pulangKantor() {
     if (this.pulang) return;
     lepasDariEvent(this);
+    keluarKadis(this);        // ritual pulang berangkat dari ambang pintu, bukan dari dalam bukaan
     this.setButuh(null); this.setMacet(null);
     this.betah = false; this.adaTugas = false; this.busyUntil = 0;
     this.fx = null; this.doing = 'pulang'; this.antre = 0;
@@ -4929,9 +6105,17 @@ function formatToken(t, ket) {
 
 /* Nama yang dipakai baris panel DAN kepala modal kabar: nama panggilan kalau
    sudah diberi, kalau belum nama project + potongan id sesinya. Satu tempat
-   saja, supaya orang yang sama tidak muncul dengan dua nama berbeda. */
-const namaKru = (a) => namaPanggilan.get(a.id)
-  || ((a.project ? a.project.slice(0, 12) + '·' : '') + a.id.slice(0, 4));
+   saja, supaya orang yang sama tidak muncul dengan dua nama berbeda.
+
+   PENGIRIM STUB TIDAK PUNYA ID. Nota milik FOLDER (SK kenaikan pangkat,
+   nota pagu) meminjam pegawai seproyek sebagai pengirim; kalau ruangan sudah
+   kosong, yang dipakai stub { id: '', project, peran }. Tanpa cabang `a.id`
+   di bawah, stub itu terbaca "proyek-hantu·" — pemisah menggantung tanpa apa
+   pun di belakangnya. Diperbaiki di SINI, sekali untuk semua stub, supaya
+   kartu SK dan kartu pagu tidak berbeda gaya. */
+const namaKru = (a) => (a.id && namaPanggilan.get(a.id))
+  || (a.id ? (a.project ? a.project.slice(0, 12) + '·' : '') + a.id.slice(0, 4)
+           : (a.project ? a.project.slice(0, 12) : '-'));
 
 function pushLog(ev, kindClass, frasa) {
   const [v, o] = frasa || kegiatan(ev.tool, ev.label);
@@ -4969,12 +6153,27 @@ function barisKru(a, kelas, who, what) {
   // menumpang di sebelah nama supaya lebar panel tidak bertambah
   const induk = rekamInduk(a);
   const lencana = induk ? LENCANA_GOLONGAN[induk.golongan] : '';
+  // Chip mesin memakai warna rompi pegawainya supaya panel dan ruangan cocok
+  // tanpa penontonnya perlu membaca nama mesin. .crew-row .mesin sudah
+  // `border: 1px dashed`, jadi cukup menimpa border-color — public/style.css
+  // nol baris disentuh. Warnanya dari tabel SERAGAM_CABANG, bukan dari data
+  // masuk, jadi tidak ada yang perlu di-esc di situ.
+  //
+  // SYARAT CHIPNYA TETAP `a.mesin`, BUKAN `rc`. seragamCabang() menolak nama
+  // yang kosong sesudah trim (mis. '   '), dan kalau chipnya digerbangi rc
+  // nama seperti itu kehilangan chipnya sama sekali — bukan cuma warnanya.
+  // Server hari ini memang sudah menyaring nama mesin, tapi chip "ada atau
+  // tidak" tidak boleh bergantung pada apakah tabel warna kebetulan punya
+  // jawaban. Jadi: chip dari a.mesin, warna dari rc kalau ada.
+  const rc = a.mesin ? seragamCabang(a.mesin) : null;
   row.innerHTML =
     '<span class="chip" style="background:' + j.pal.main + '"></span>' +
     '<span class="who">' + esc(who) + '</span>' +
     (lencana ? '<span class="lencana" title="golongan ' + esc(induk.golongan) + ' (buku induk, sejak dipantau)">' + lencana + '</span>' : '') +
     (a.cabang ? '<span class="cabang" title="cabang git: ' + esc(a.cabang) + '">⎇ ' + esc(a.cabang) + '</span>' : '') +
-    (a.mesin ? '<span class="mesin" title="kantor cabang: ' + esc(a.mesin) + '">⌂ ' + esc(a.mesin) + '</span>' : '') +
+    (a.mesin ? '<span class="mesin"' + (rc ? ' style="border-color:' + rc.rompi + '"' : '')
+      + ' title="kantor cabang: ' + esc(a.mesin) + (rc ? ' (' + esc(rc.nama) + ')' : '') + '">⌂ '
+      + esc(a.mesin) + '</span>' : '') +
     '<span class="jab">' + esc(j.singkat) + '</span>' +
     '<span class="what">' + esc(what) + '</span>';
   row.addEventListener('click', (e) => {
@@ -5053,7 +6252,6 @@ function renderCrew() {
     const seksi = susunan.seksiDari(a);
     if (seksi !== seksiKini) { seksiKini = seksi; if (seksi) crewEl.appendChild(kruKepalaSeksi(seksi)); }
     if (seksi && kruLipatSet().has(seksi.proyek)) continue;   // seksi terlipat: baris & pesertanya disembunyikan
-    const panggilan = namaPanggilan.get(a.id);
     const who = namaKru(a);
     // Yang menunggu keputusan kamu tidak boleh terbaca sedang bekerja — kegiatan
     // terakhirnya memang belum berubah, tapi kegiatan itu justru yang tertahan.
@@ -5061,7 +6259,14 @@ function renderCrew() {
       : a.macet ? 'berhenti — ' + (a.macet.label || a.macet.jenis || 'galat')
       : a.doing || (STATIONS[a.station] || {}).name || '';
     const row = barisKru(a, 'crew-row', who, apa);
-    if (panggilan) row.classList.add('tugas');
+    /* Sorot emas = sesi yang DILAHIRKAN halaman ini (formulir tugas / loket
+       disposisi), bukan sekadar sesi yang punya nama panggilan. Dulu syaratnya
+       memang ada-tidaknya nama, dan itu benar selama cuma tugas halaman yang
+       diberi nama. Sejak formasi pegawai tetap memberi nama ke hampir SEMUA
+       sesi terminal, syarat lama menyorot seluruh daftar sekaligus — penanda
+       yang menyala untuk semua orang tidak menandai apa-apa. sesiHalaman
+       adalah sumber yang sama yang dipakai blok paraf di kartu. */
+    if (sesiHalaman.has(a.id)) row.classList.add('tugas');
     const bNama = document.createElement('button');
     bNama.className = 'aksi'; bNama.textContent = 'nama'; bNama.title = 'beri nama pegawai ini';
     bNama.onclick = () => beriNama(a.id);
@@ -5181,11 +6386,23 @@ function titikKanvas(e) {
 canvas.addEventListener('click', (e) => {
   const [cx, cy] = titikKanvas(e);
   const a = agenDiTitik(cx, cy);
-  if (a) bukaKartu(a); else tutupKartu();
+  // pegawai menang dulu (aturan yang sudah ada); klik kosong di dalam kotak
+  // bukaan ruang kadis baru menyalakan/mematikan zoom ke bukaan itu
+  if (a) { bukaKartu(a); return; }
+  tutupKartu();
+  klikSisip(cx, cy);
 });
 canvas.addEventListener('mousemove', (e) => {
   const [cx, cy] = titikKanvas(e);
-  canvas.style.cursor = agenDiTitik(cx, cy) ? 'pointer' : '';
+  const diSisip = RUANG_KADIS.t > 0 && cx >= SISIP.x && cx <= SISIP.x + SISIP.w
+    && cy >= SISIP.y && cy <= SISIP.y + SISIP.h;
+  canvas.style.cursor = agenDiTitik(cx, cy) || diSisip ? 'pointer' : '';
+});
+// Esc melepas zoom bukaan. Dialog lain punya handler Escape-nya sendiri dan
+// tidak terganggu: gerbang RUANG_KADIS.zoom bikin handler ini diam kalau
+// zoomnya memang tidak menyala.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && RUANG_KADIS.zoom) RUANG_KADIS.zoom = false;
 });
 
 function bukaKartu(a) {
@@ -5326,6 +6543,22 @@ function perbaruiKartu() {
     || (a.doingEvent ? a.doingEvent + ' (suasana)' : '')
     || (a.path.length ? 'dalam perjalanan' : 'menunggu arahan')]);
   if (jenis === 'sesi') {
+    /* Kursi formasi menempel pada PROYEK, bukan pada sesi ini: "sejak" di bawah
+       bisa jauh lebih tua dari "di kantor" berikutnya, dan itu memang maksudnya
+       — orangnya yang tetap, gilirannya yang berganti. Sesi tanpa kursi (tugas
+       dari halaman, atau ruangan yang formasinya penuh) tidak menambah baris.
+
+       FOLDER KURSINYA, BUKAN FOLDER YANG SEDANG DIKERJAKAN. Server melantik
+       sekali lalu tidak pernah melantik ulang walau cwd sesinya pindah
+       (server.mjs: `if (slotSesi.has(ev.session)) return null;`), jadi
+       `a.project` bisa sudah bergerak ke folder lain sementara kursi #N tetap
+       milik folder pelantikan. Yang benar dibaca dari kursinya sendiri;
+       `a.project` cuma cadangan untuk kursi lama yang belum menyimpannya. */
+    const kursi = pegawaiTetap.get(a.id);
+    if (kursi) {
+      baris.push(['formasi', namaKru(a) + ' · staf #' + kursi.slot
+        + ' di ' + (kursi.proyek || a.project || '-') + ' · sejak ' + tanggalID(kursi.sejak)]);
+    }
     baris.push(['di kantor', durasiSingkat(Date.now() - a.sejak) + ' (sejak ' + jam(a.sejak) + ')']);
     baris.push(['kondisi', a.suasana]);      // suasana hati dari stamina — kosmetik, bukan statistik
     if (a.model) baris.push(['model', namaModel(a.model)]);
@@ -5536,6 +6769,13 @@ function handle(ev) {
   // SK kenaikan pangkat dari buku induk: milik satu FOLDER, bukan satu sesi
   // (session kosong) — jangan sampai agentFor() melahirkan pegawai hantu.
   if (ev.kind === 'promosi') { terimaPromosi(ev); return; }
+
+  /* Nota pagu anggaran token: sama seperti promosi, kejadiannya milik satu
+     FOLDER dan `session`-nya SENGAJA kosong (lihat paguPeriksa() di
+     server.mjs). Cabang ini WAJIB tetap di atas agentFor() — di bawahnya,
+     setiap nota anggaran melahirkan pegawai hantu bernama sesi kosong yang
+     tidak pernah pulang. */
+  if (ev.kind === 'pagu') { terimaPagu(ev); return; }
 
   const a = agentFor(ev.session);
   // Tool call selalu menang atas event acak. Kalau pegawainya sedang jadi
@@ -5777,6 +7017,25 @@ function handle(ev) {
     case 'nama': {
       if (ev.nama) namaPanggilan.set(ev.session, ev.nama);
       else namaPanggilan.delete(ev.session);
+      /* Cuma PELANTIKAN kursi formasi yang membawa `tetap` (server:
+         pegawaiTetapPasang). Ganti nama lewat kartu pegawai datang tanpa
+         field itu, dan memang tidak pantas menerbitkan nota lapor masuk. */
+      if (ev.tetap) {
+        /* Sapuan malas, bukan timer: sesi yang orangnya sudah tidak ada di
+           ruangan dibuang di sini juga, supaya peta ini tidak menumpuk satu
+           entri permanen per sesi yang pernah lewat seharian. */
+        for (const s of pegawaiTetap.keys()) if (!agents.has(s)) pegawaiTetap.delete(s);
+        pegawaiTetap.set(ev.session, {
+          slot: Number(ev.tetap.slot) || 0,
+          sejak: Number(ev.tetap.sejak) || (ev.ts || Date.now()),
+          baru: ev.tetap.baru === true,
+          // Folder PEMILIK kursi, dibekukan di detik pelantikan. Sesi yang
+          // pindah cwd nanti menggeser a.project, tapi kursinya tidak ikut
+          // pindah — kartu pegawai membaca field ini, bukan a.project.
+          proyek: ev.cwd || '',
+        });
+        terimaPerkenalan(ev);
+      }
       break;
     }
     // jabatannya sudah dipasang di atas switch; case ini cuma menahan supaya
@@ -5820,6 +7079,13 @@ function handle(ev) {
    lain boleh mem-POST tapi tidak boleh MEMBACA balasan lintas-asal, jadi
    tokennya tidak bisa mereka pungut. */
 const namaPanggilan = new Map();     // sesi 12-char -> nama yang kamu berikan
+/* Kursi formasi yang SERVER lantikkan untuk sesi ini — datang menumpang event
+   kind:'nama' yang membawa `tetap` (lihat pegawaiTetapPasang di server.mjs).
+   Isinya keterangan tampilan saja: nomor staf, kapan kursinya dilantik,
+   folder pemilik kursinya, dan apakah kursinya baru dibuka. Bukan identitas
+   — namanya tetap tinggal di namaPanggilan — dan tidak pernah ditulis ke
+   mana pun. */
+const pegawaiTetap = new Map();      // sesi 12-char -> { slot, sejak, baru, proyek }
 let kendali = { izin: false, token: null };
 let antrean = [];                    // loket disposisi: [{ id, nama, cwd, sejak, sifat, posisi }]
 /* Paraf dari ruangan. `sesiHalaman` = sesi yang dilahirkan halaman ini (dari
@@ -6335,6 +7601,21 @@ const KABAR_JENIS = {
   // sering sekali per proyek per beberapa hari — jadi boleh menyela seperti hasil.
   sk:      { tajuk: 'SK kenaikan pangkat', cls: 'hasil',  auto: true,  emoji: '📜',
              perihal: 'Petikan SK Kenaikan Pangkat' },
+  /* Nota anggaran token (lihat terimaPagu). Kelasnya sengaja memakai warna yang
+     SUDAH ada — 'tunggu' kuning, 'galat' merah — jadi fitur ini tidak menambah
+     satu baris pun ke style.css. Peringatan 80% menumpuk diam di kotak kabar
+     (auto:false): ia tidak menutup giliran siapa pun dan tidak menahan sesi,
+     jadi tidak berhak menodong. Yang TERLAMPAUI boleh menyela sekali — itu pun
+     tetap cuma nota, bukan rem: tidak ada pegawai yang berhenti karenanya. */
+  pagu:    { tajuk: 'peringatan pagu',    cls: 'tunggu', auto: false, emoji: '🧾',
+             perihal: 'Peringatan serapan pagu token' },
+  'pagu-lewat': { tajuk: 'pagu terlampaui', cls: 'galat', auto: true, emoji: '📛',
+             perihal: 'Pemberitahuan pagu token terlampaui' },
+  /* Lapor masuk pegawai tetap yang baru dilantik ke kursi formasi. auto:false
+     WAJIB: satu sesi baru sudah cukup sering, dan modal yang terbuka sendiri
+     tepat waktu orangnya harus berangkat ke stasiun melanggar Aturan 1. */
+  perkenalan: { tajuk: 'lapor masuk',     cls: 'lapor',  auto: false, emoji: '🙋',
+             perihal: 'Izin melapor masuk kerja' },
 };
 
 const tanggalID = (ts) => new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -6628,6 +7909,110 @@ function terimaPromosi(ev) {
   pushLog(ev, 'mark', ['SK kenaikan pangkat', (ev.cwd || '') + (g ? ' → ' + g : '')]);
   muatBukuInduk(true);
 }
+
+/* Nota pagu anggaran token. Polanya PERSIS terimaPromosi(): kejadian milik
+   satu FOLDER, `session` kosong, jadi "pengirim" notanya dipinjam dari pegawai
+   seproyek yang kebetulan ada di ruangan; kalau semuanya sudah pulang, Auditor
+   yang membacakannya.
+
+   NOTA, BUKAN REM. Fungsi ini tidak menyentuh a.calls, a.token, toolCount,
+   maupun statistik apa pun (Aturan 2), dan tidak mengubah state, station, atau
+   busyUntil siapa pun — serapan lewat pagu bukan alasan berhenti bekerja,
+   cuma alasan memberi tahu.
+
+   PAGU ITU ANGKA TOKEN. Tidak ada satu pun satuan uang di sini, dan tidak
+   akan pernah ada: harga berubah, angka token dari API tidak (Aturan 4).
+
+   ANGKANYA BISA TIDAK ADA. Event yang diputar ulang dari buku agenda lama
+   datang tanpa `pakai`/`pagu`/`persen` — yang tersisa cuma `label`. Kalimatnya
+   turun ke label itu apa adanya, bukan menulis "NaN dari NaN token". */
+// `minggu` dari server berupa tanggal Senin ('YYYY-MM-DD', lihat mingguLokal);
+// yang dibaca orang tanggal Indonesia, bukan kode.
+const paguMingguTeks = (m) => (m ? tanggalID(new Date(m + 'T00:00:00').getTime()) : 'ini');
+
+/* Kalimat penutup blok pagu di modal Statistik. DUA HIMPUNAN YANG BERBEDA,
+   dan modal ini dulu memakai yang salah:
+     `berpagu` = KONFIGURASI — berapa folder yang dituliskan pagunya di
+       pagu.json. Tidak bergerak tiap Senin.
+     `bawaan`  = pagu untuk folder yang TIDAK disebut namanya. Kalau terisi,
+       "berapa yang berpagu" sebenarnya "semua yang bekerja".
+     `jumlah`  = himpunan LAPORAN minggu berjalan; Senin pagi angkanya 0
+       walau pagunya jelas-jelas aktif — persis salah-baca yang bikin server
+       mulai mengirim dua field di atas.
+   Server lama (atau putar ulang agenda) belum membawa `berpagu`; kalau
+   begitu kalimatnya turun ke `jumlah` seperti dulu, bukan menulis 0. */
+function paguKetTeks(pg) {
+  const aktif = Number(pg.jumlah) || 0;
+  const bawaan = Number(pg.bawaan) || 0;
+  if (!Number.isFinite(Number(pg.berpagu))) return aktif + ' proyek berpagu';
+  const berpagu = Number(pg.berpagu);
+  return berpagu + ' proyek berpagu'
+    + (bawaan ? ' (+ bawaan ' + angkaID(bawaan) + ' token untuk yang lain)' : '')
+    + ' · ' + aktif + ' menyerap minggu ini';
+}
+
+function terimaPagu(ev) {
+  const rekan = [...agents.values()].filter((a) => a.project === ev.cwd);
+  const pengirim = rekan[0] || { id: '', project: ev.cwd || '', peran: 'auditor' };
+  const ambang = Number.isFinite(Number(ev.ambang)) ? Number(ev.ambang) : null;
+  const lewat = ambang !== null && ambang >= 100;
+  const proyek = ev.cwd || '-';
+  const adaAngka = Number.isFinite(ev.pakai) && Number.isFinite(ev.pagu);
+  const rincian = adaAngka
+    ? angkaID(ev.pakai) + ' dari ' + angkaID(ev.pagu) + ' token'
+    : (ev.label || '');
+  /* PERSENNYA BISA TIDAK ADA, DAN `ambang` BUKAN GANTINYA. Baris agenda lama
+     yang cuma membawa `label` tidak punya `persen`; menuliskannya sebagai 0
+     menghasilkan nota yang membantah dirinya sendiri di satu kalimat
+     ("telah mencapai 0% (serapan pagu 92% …)"). Memakai `ambang` sebagai
+     ganti juga membantah: ambang itu GARIS YANG DILEWATI, bukan serapannya,
+     jadi nota TERLAMPAUI berbunyi "serapan pagu 140% … (100%)". Jadi: dua
+     angka yang berbeda, dan masing-masing disebut dengan namanya sendiri —
+     persen kalau ada, kalau tidak cukup sebut ambangnya sebagai ambang. */
+  const persen = Number.isFinite(ev.persen) ? ev.persen : null;
+  const minggu = paguMingguTeks(ev.minggu);
+  const teks = lewat
+    ? 'Diberitahukan bahwa pagu token proyek ' + proyek + ' minggu ini TERLAMPAUI: '
+      + (rincian || 'serapan sudah melewati pagu')
+      + (persen === null ? '' : ' (' + persen + '%)') + '.'
+      + ' Kegiatan tetap berjalan — nota ini pemberitahuan, bukan penghentian.'
+    : 'Dengan hormat, sampai hari ini serapan pagu token proyek ' + proyek
+      + ' pada minggu ' + minggu
+      + (persen !== null ? ' telah mencapai ' + persen + '%'
+        : ambang !== null ? ' sudah melewati ambang ' + ambang + '%'
+        : ' sudah menyentuh ambang pemantauan')
+      + (rincian ? ' (' + rincian + ')' : '') + '. Mohon menjadi perhatian.';
+  kabarMasuk({ ...ev, session: rekan[0] ? rekan[0].id : '', teks },
+             pengirim, lewat ? 'pagu-lewat' : 'pagu');
+  for (const a of rekan) {
+    a.say(lewat ? 'pagu token minggu ini <b>terlampaui</b> 📛'
+      : (persen === null ? 'serapan pagu <b>menyentuh ambang</b> 🧾'
+                         : 'serapan pagu <b>' + persen + '%</b> 🧾'));
+  }
+  pushLog(ev, lewat ? 'err' : 'mark',
+          [lewat ? 'pagu token terlampaui' : 'peringatan serapan pagu',
+           proyek + (persen === null ? '' : ' · ' + persen + '%')]);
+}
+
+/* Lapor masuk pegawai tetap. Kursinya sudah dilantik server (satu event
+   kind:'nama' ber-`tetap` per penempatan), halaman cuma seremoninya: satu nota
+   yang menumpuk diam di kotak kabar, satu balon ucapan, satu baris log.
+   Tidak menyentuh statistik apa pun, dan TIDAK menahan orangnya sedetik pun —
+   notanya auto:false justru supaya modal tidak terbuka tepat waktu dia harus
+   berangkat ke stasiun (Aturan 1). */
+function terimaPerkenalan(ev) {
+  const a = agents.get(ev.session);
+  const tetap = pegawaiTetap.get(ev.session);
+  if (!a || !tetap) return;
+  const nama = ev.nama || namaPanggilan.get(ev.session) || 'pegawai';
+  const proyek = ev.cwd || a.project || '-';
+  const teks = tetap.baru
+    ? 'Izin melapor, saya ' + nama + ', pegawai baru pada ' + proyek + ', mulai bertugas hari ini.'
+    : 'Assalamualaikum, saya ' + nama + ', kembali bertugas di ' + proyek + ' hari ini.';
+  kabarMasuk({ ...ev, teks }, a, 'perkenalan');
+  a.say('assalamualaikum, saya <b>' + esc(nama) + '</b>');
+  pushLog(ev, 'mark', ['lapor masuk', nama + ' · staf #' + tetap.slot + ' di ' + proyek]);
+}
 muatBukuInduk(true);
 
 const tanggalLokal = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
@@ -6705,6 +8090,30 @@ function statsGambar() {
   } else {
     blok.push('<p class="stat-ket">belum ada riwayat token yang tersimpan — mulai tercatat begitu'
       + ' ada giliran asisten yang membawa usage.</p>');
+  }
+
+  /* Serapan pagu token minggu ini — OPSIONAL. `r.pagu` null berarti server
+     memang tidak punya pagu.json, dan yang tidak memakai fiturnya tidak perlu
+     melihat judul kosong yang selamanya nol. Batangnya memakai .stat-bar yang
+     sudah dipakai efisiensi cache: nol baris CSS baru.
+     Angka di sini TOKEN, dan cuma token. */
+  const pg = r && r.pagu;
+  if (pg && Array.isArray(pg.proyek) && pg.proyek.length) {
+    const rinci = pg.proyek.slice(0, 5).map((p) => {
+      const persen = Number(p.persen) || 0;
+      const lebar = Math.max(0, Math.min(100, persen));   // yang lewat 100% tetap penuh, tidak meluber
+      return '<div class="stat-cache" title="' + esc(p.nama) + ': ' + esc(angkaID(p.pakai))
+        + ' dari ' + esc(angkaID(p.pagu)) + ' token"><span class="kk">' + esc(p.nama) + '</span>'
+        + '<div class="stat-bar"><div class="stat-bar-isi" style="width:' + lebar + '%"></div></div>'
+        + '<span class="stat-cache-pct">' + persen + '%</span></div>';
+    }).join('');
+    blok.push('<div class="stat-blok"><h3>pagu token · minggu ' + esc(paguMingguTeks(pg.minggu)) + '</h3>'
+      + rinci
+      // TANPA <b>: di dalam modal ini `.stat b` dipaksa display:block oleh
+      // style.css, jadi satu kata tebal memutus kalimatnya jadi tiga baris.
+      + '<p class="stat-ket">' + paguKetTeks(pg)
+      + (pg.lewat ? ' · ' + Number(pg.lewat) + ' MELEWATI PAGU' : ' · belum ada yang melewati pagu')
+      + ' — nota pagu memberi tahu, tidak pernah menghentikan pekerjaan.</p></div>');
   }
 
   if (biayaCount) {
@@ -7225,6 +8634,12 @@ function kameraKe(a) {
 }
 function kameraBidik() {
   const K = KAMERA;
+  /* SATU-SATUNYA sentuhan blok kamera dari bukaan ruang kadis. Gerbangnya
+     harus paling awal: kameraBidik() dipanggil tiap frame dari tickKamera()
+     dan akan menimpa bidikan klik kalau ditaruh di bawah. Penjepitan
+     tickKamera tetap sahih — pusat bukaan (342,69) dengan zoom 4 memberi
+     setengah bidikan 60x44,5 yang tidak menabrak batas mana pun. */
+  if (RUANG_KADIS.zoom) { sisipBidik(); return; }
   if (K.mode === 'ikut') {
     // satu pegawai aktif → ikuti; dua atau lebih → tampak penuh, jangan
     // bolak-balik antar orang tiap tool call datang
@@ -7373,6 +8788,18 @@ if (!kameraSinematikBoleh()) {
   if (o) { o.disabled = true; o.textContent += ' (gerak dikurangi)'; }
 }
 setKamera.onchange = () => { kameraSet(setKamera.value); ingatan.tulis('kamera', KAMERA.mode); };
+
+/* Bukaan ruang kadis (blok "ruang kadis" sesudah drawKadis). 'mati' membuat
+   perilakunya persis seperti sebelum fitur ini ada — sakelar, bukan revert.
+   ?ruang=kadis / ?ruang=mati mengalahkan tampilan sesi ini tanpa menulis
+   ulang setelan, sama polanya dengan ?kamera=. */
+const setSisipKadis = document.getElementById('setSisipKadis');
+setSisipKadis.value = sisipSetelan();
+// ?ruang= mengunci setelannya lewat URL; ?kadis=1 (MODE HP daftar teks)
+// membuat sisipBoleh() selalu false, jadi select-nya tidak bisa berpengaruh
+// apa pun — biarkan mati, jangan pura-pura bisa dipilih.
+if (RUANG_URL || MODE_KADIS) setSisipKadis.disabled = true;
+setSisipKadis.onchange = () => { sisipSetel(setSisipKadis.value); ingatan.tulis('sisipKadis', sisipSetelan()); };
 
 // Mode ringan: centangnya = pilihan manual; sebab otomatis (baterai/URL/
 // gerak dikurangi) cuma ditulis di keterangan, tidak memaksa centangnya.
@@ -7801,6 +9228,19 @@ function kadisGambar() {
     tokenHariIni = angkaID(h ? (h.input || 0) + (h.output || 0) : 0) + ' token';
   }
   out.push('<section class="kadis-blok token"><h3>token hari ini</h3><p class="kadis-token">' + esc(tokenHariIni) + '</p></section>');
+  /* Serapan pagu — OPSIONAL, persis seperti di modal statistik: tanpa pagu.json
+     di server, `riwayatToken.pagu` null dan blok ini tidak digambar sama sekali.
+     Kelas bloknya yang sudah ada: .tunggu (kuning) selama semua masih di bawah
+     pagu, .galat (merah) begitu ada yang melewatinya. Yang naik ke HP cuma
+     yang paling mendesak — lima teratas sudah diurutkan server. */
+  const pgKadis = riwayatToken && riwayatToken.pagu;
+  if (pgKadis && Array.isArray(pgKadis.proyek) && pgKadis.proyek.length) {
+    const isi = pgKadis.proyek.slice(0, 5).map((p) => '<li><b>' + esc(p.nama) + '</b><span>'
+      + (Number(p.persen) || 0) + '% · ' + esc(angkaID(p.pakai)) + ' dari ' + esc(angkaID(p.pagu))
+      + ' token</span></li>');
+    out.push(blok('serapan pagu · minggu ' + esc(paguMingguTeks(pgKadis.minggu)),
+                  pgKadis.lewat ? 'galat' : 'tunggu', isi, 'belum ada serapan'));
+  }
   out.push('<button type="button" class="kadis-muat">⟳ muat ulang</button>');
   kadisEl.innerHTML = out.join('');
   kadisEl.querySelector('.kadis-muat').onclick = () => location.reload();
@@ -7971,7 +9411,6 @@ const MOD = {
   jamOffset: 0,
   slotTerkunci: -1,   // indeks meja kerja yang layarnya "terkunci" (sandiman)
   sidak: false,        // kadis sidak: laptop menyala penuh, badan tegak
-  absensiMerah: false, // mesin absen sidik jari (prop permanen) berkedip merah
   mejaGetar: -1,     // indeks meja kerja yang bergoyang
   mejaPadam: -1,     // indeks meja kerja yang laptopnya mati
   // gelombang 2
@@ -7986,6 +9425,10 @@ const MOD = {
   masker: false,     // semua wajah digambar pakai masker (kabut asap)
   crtAktif: false,   // layar CRT di atas filing menampilkan bar guling (bukan idle diam)
   mejaHantu: -1,     // indeks meja kerja yang laptopnya "nyala" tanpa penghuni nyata
+  // gelombang 3
+  galonLepas: false, // galon dicabut dari dispenser pantry: kepalanya kosong
+  karpetGulung: 0,   // 0..1, karpet meja rapat sedang digulung/dijemur (hilang dari lantai)
+  bayangPanjang: 0,  // 0..1, bayangan kaki jadi jajaran genjang menjauhi jendela (senja)
 };
 const MOD_AWAL = { ...MOD, neonMati: [0, 0] };
 function resetMod() {
@@ -7999,6 +9442,7 @@ function resetMod() {
 const RUANGAN = {
   mapDisposisi: 0,        // tumpukan map di meja stempel, 0..5
   tumpukanFiling: 0,      // map menumpuk di atas filing kabinet, 0..6
+  bukuTamu: 0,            // baris tanda tangan di buku tamu, 0..10 (menetap)
   laciBuka: 0,            // sisa detik laci kabinet tertarik keluar
   bantalanKering: false,
   hentakStempel: 0,
@@ -8079,6 +9523,20 @@ const RUANGAN = {
   // menempel di ruangan, atau null. Dievaluasi saat muat & tiap ganti hari.
   tema: null,
   temaTahun: 0,            // tahun saat tema dievaluasi — buat "ke-N" di spanduk
+  // Dibaca drawAbsensi(). Dulu cuma dideklarasikan di MOD padahal semua yang
+  // menulis/membacanya memakai RUANGAN — jadi field MOD-nya mati dan yang ini
+  // hidup tanpa deklarasi. Rumahnya memang di sini: event yang menyalakannya
+  // (absen-fingerprint, absensi-ngambek) mematikannya sendiri di selesai().
+  absensiMerah: false,     // mesin absen sidik jari berkedip merah
+  // Sesudah dijemur, karpet meja rapat tetap satu tingkat lebih cerah — bekas
+  // yang sengaja hidup lebih lama dari eventnya (lihat drawFloor).
+  karpetCerah: false,
+  // Kekusutan harian, 0..1 — satu-satunya field RUANGAN yang berjalan
+  // sendiri mengikuti jam, bukan bekas sebuah kejadian. Lihat blok
+  // "kekusutan harian" di bawah. null = belum pernah di-tick; tick pertama
+  // menyetelnya langsung ke sasaran, jadi halaman yang dibuka jam 15.00
+  // tidak pernah tampil bersih dulu.
+  kusut: null,
 };
 
 /* -------------------------------------------------------------- penjadwal */
@@ -8090,8 +9548,12 @@ let S = null;               // potret ruangan, disegarkan tiap percobaan
 /* Yang boleh dipinjam jadi pemain: benar-benar menganggur, bukan peserta rapat
    yang memang harus duduk, bukan yang sedang dipakai event lain. */
 function bisaDipinjam(a) {
+  // !a.diKadis: event ambient TIDAK BOLEH PERNAH menyeret orang keluar dari
+  // dalam bukaan ruang kadis — goToXY() akan menjepit tujuannya ke dalam
+  // kanvas dan dia berjalan menembus dinding. Ada kasus ujinya sendiri di
+  // uji-sisip.mjs supaya konsumen penghuni() berikutnya langsung merah.
   return !a.eventKerja && !a.adaTugas && a.state !== 'work'
-    && a.station !== 'keluar' && !a.keluar;
+    && a.station !== 'keluar' && !a.keluar && !a.diKadis;
 }
 
 /* Laju token: contoh (t, jumlah) diambil tiap ±1 detik dari tokenTotal, jendela
@@ -8147,6 +9609,98 @@ function babakHari(jam, d) {
   return 'kerja';
 }
 
+/* ---------------------------------------------------- kekusutan harian ---
+   Kantor yang pagi-pagi rapi lalu makin kusut menjelang sore. Satu angka
+   0..1 di `RUANGAN.kusut`, dibaca fungsi gambar yang sudah ada -- BUKAN
+   belasan field terpisah: berkas yang menumpuk di meja, dus di kolong,
+   kursi yang tidak didorong balik, dan lembaran yang tercecer di lantai
+   semuanya tumbuh dari kurva yang sama, jadi ruangan mengusut serempak.
+   Kalau tiap benda punya jamnya sendiri, yang kebaca cuma "ada yang
+   berubah", bukan "sudah sore".
+
+   Kurvanya patokan per jam, idiom sama seperti FASE_HARI. Dua hal yang
+   membedakannya:
+
+   * Dia BUKAN fungsi murni dari jam. Nilainya disimpan dan diseret pelan ke
+     sasaran, jadi event yang membereskan ruangan (lihat bereskanKusut)
+     menyisakan jejak "sempat bersih" beberapa menit sebelum tumpukannya
+     kembali -- bukan terhapus di frame berikutnya oleh kurva.
+   * Tick pertama menyetel langsung tanpa diseret. Membuka halaman jam 15.00
+     harus dapat kantor yang SUDAH kusut, bukan kantor bersih yang baru mulai
+     berantakan di depan mata penonton.
+
+   Uji cepat tanpa menunggu jamnya tiba: `?kusut=0.9` (boleh digabung dengan
+   `?jam=`; `?kusut=` menang, jam cuma mengatur cahayanya). */
+const KUSUT_PAKSA = parseFloat(new URLSearchParams(location.search).get('kusut'));
+const KUSUT_JAM = [
+  [0,    0.06],   // sisa lembur semalam, belum ada yang menyapu
+  [5.2,  0.02],   // petugas kebersihan lewat sebelum apel
+  [7,    0.04],   // apel pagi: meja masih rapi
+  [8.3,  0.12],   // berkas pertama keluar dari lemari
+  [10,   0.32],
+  [11.5, 0.48],
+  [13,   0.56],   // balik dari istirahat, tumpukan siang menumpuk lagi
+  [14.5, 0.76],
+  [16,   0.95],
+  [16.8, 1],      // jam pulang: paling kusut
+  [17.6, 0.82],   // yang pulang membereskan mejanya sendiri, sebagian saja
+  [19,   0.38],
+  [21,   0.14],
+  [24,   0.06],
+];
+// Naik lambat (tumpukan butuh waktu), turun cepat (membereskan itu sengaja
+// dan kelihatan). Satuannya per detik, jadi 0.004 = 0..1 dalam ~4 menit --
+// jauh lebih cepat dari geser kurvanya sendiri (0.95 dalam 10 jam), jadi di
+// hari biasa nilainya praktis selalu menempel di sasaran; lajunya baru
+// terasa sesudah bereskanKusut menariknya turun.
+const KUSUT_NAIK = 0.004, KUSUT_TURUN = 0.03;
+
+function kusutSasaran() {
+  if (Number.isFinite(KUSUT_PAKSA)) return Math.max(0, Math.min(1, KUSUT_PAKSA));
+  const jam = jamKini();
+  let a = KUSUT_JAM[0], b = KUSUT_JAM[KUSUT_JAM.length - 1];
+  for (let i = 0; i < KUSUT_JAM.length - 1; i++) {
+    if (jam >= KUSUT_JAM[i][0] && jam < KUSUT_JAM[i + 1][0]) { a = KUSUT_JAM[i]; b = KUSUT_JAM[i + 1]; break; }
+  }
+  let k = b[0] === a[0] ? a[1] : a[1] + (b[1] - a[1]) * ((jam - a[0]) / (b[0] - a[0]));
+  // Hari libur tidak ada yang mengusutkan ruangan -- yang tersisa cuma
+  // tumpukan hari Jumat yang belum disapu.
+  if (hariLibur(new Date())) k = Math.min(k, 0.1);
+  // Sesi ramai mengusutkan lebih cepat. Pengalinya berhenti di 0.7, bukan 0:
+  // kantor tanpa sesi nyata TETAP dihuni pegawai standby yang mondar-mandir,
+  // jadi sore tetap sore -- cuma tumpukannya berhenti satu-dua lapis lebih
+  // rendah dan ceceran yang ambangnya tinggi tidak pernah muncul. Jenuh di
+  // tiga sesi, bukan empat: itu sudah "ruangan sibuk" untuk enam meja.
+  const ramai = Math.min(1, agents.size / 3);
+  return Math.max(0, Math.min(1, k * (0.7 + 0.3 * ramai)));
+}
+
+let kusutCache = 0, kusutCacheDetik = -1;
+function tickKusut(dt) {
+  // Sasarannya dihitung sekali per detik, idiom sama seperti ambBasis di
+  // ambien(): kurvanya bergeser 0.95 dalam sepuluh jam, jadi menghitungnya
+  // 60x per detik cuma memboroskan dua alokasi Date tiap frame.
+  const detik = (now / 1000) | 0;
+  if (detik !== kusutCacheDetik) { kusutCacheDetik = detik; kusutCache = kusutSasaran(); }
+  const sasaran = kusutCache;
+  if (RUANGAN.kusut == null) { RUANGAN.kusut = sasaran; return; }
+  const laju = (sasaran > RUANGAN.kusut ? KUSUT_NAIK : KUSUT_TURUN) * dt;
+  RUANGAN.kusut += Math.max(-laju, Math.min(laju, sasaran - RUANGAN.kusut));
+}
+
+/* Dipakai event yang membereskan ruangan (jumat bersih, petugas kebersihan,
+   apel pagi): menurunkan kekusutan tanpa MENGUNCI-nya. Kurvanya menyeret
+   naik lagi pelan-pelan sesudah itu, jadi "sudah dibereskan" jadi keadaan
+   yang sungguh terasa hilang lagi menjelang sore, bukan tombol permanen. */
+function bereskanKusut(sisa) {
+  const s = Math.max(0, Math.min(1, sisa || 0));
+  RUANGAN.kusut = RUANGAN.kusut == null ? s : Math.min(RUANGAN.kusut, s);
+}
+
+// Dipakai fungsi gambar. null (belum pernah di-tick, mis. hook gambar
+// dipanggil harness sebelum frame pertama) dibaca 0 = ruangan bersih.
+const kusutKini = () => RUANGAN.kusut || 0;
+
 /* Potret ruangan: apa yang dilihat penjadwal event tiap percobaan. Bagian
    pertama suasana (jam, lampu, cuaca, siapa yang menganggur); bagian kedua
    FAKTA SESI, dihitung dari agen nyata saja (agents, bukan peserta rapat /
@@ -8184,6 +9738,7 @@ function potretRuangan() {
     hari: d.getDay(), tanggal: d.getDate(),
     kerjaJam: A.jam >= 7 && A.jam < 16,
     babak: babakHari(A.jam, d),          // 'apel'|'kerja'|'istirahat'|'pulang'|'lembur'|'malam'|'libur'
+    kusut: kusutKini(),                  // kekusutan harian 0..1 (pagi rapi → sore penuh tumpukan)
     tema: RUANGAN.tema,                  // id tema kalender yang menempel, atau null
     orang,
     sesi: agents.size, standby: standby.length, peserta: peserta.length,
@@ -8352,6 +9907,13 @@ function bentrok(def) {
   if (sedangJalan(def.id)) return true;
   if (def.kelas === 'panggung' && eventHidup.some((E) => E.def.kelas === 'panggung')) return true;
   if (def.bentrokDengan && def.bentrokDengan.some(sedangJalan)) return true;
+  // ...dan sebaliknya. Dulu daftar ini cuma dibaca dari sisi KANDIDAT, jadi
+  // "A bentrokDengan B" menahan A selama B hidup tapi tidak menahan B selama A
+  // hidup — separuh perlindungan, dan setiap penulis event mengira dua arah.
+  // Contoh yang benar-benar rusak karenanya: kadis-sekdis-rapat-tertutup
+  // bergantung pada pintu kadis yang TETAP tertutup, tapi event lain yang
+  // memaksa MOD.pintuKadis tetap boleh menyala di tengah adegannya.
+  if (eventHidup.some((E) => E.def.bentrokDengan && E.def.bentrokDengan.includes(def.id))) return true;
   return false;
 }
 
@@ -8397,6 +9959,7 @@ function hentakkanStempel(a) {
 /* Bekas yang meluruh sendiri. Dipisah dari event supaya cap basah tetap
    mengering walau eventnya sudah lama selesai. */
 function tickRuangan(dt) {
+  tickKusut(dt);        // kurva kekusutan harian — jalan walau ?event=0
   for (let i = RUANGAN.bekasStempel.length - 1; i >= 0; i--) {
     if ((RUANGAN.bekasStempel[i].sisa -= dt) <= 0) RUANGAN.bekasStempel.splice(i, 1);
   }
@@ -8806,6 +10369,7 @@ function frame(ts) {
 
   tickEvent(dt);        // sebelum update: MOD dipasang di sini, dibaca di bawah
   tickKamera(dt);       // sebelum update pegawai: balon DOM-nya dihitung lewat keLayar()
+  tickSisip(dt);        // bukaan ruang kadis: gorden + peralihan alpha masuk/keluar
   // prefers-reduced-motion: kipas plafon dibekukan (animasi non-esensial);
   // kedip neon & langkah pegawai tetap — itu isi ruangannya, bukan hiasan
   if (!geraKurang.matches) putarKipas += dt * 11 * MOD.kipas;
@@ -8848,6 +10412,11 @@ function frame(ts) {
   // tepat di bawah 240 lama — sandaran kursi jauh ke depan/atas dan menelan
   // separuh badannya, cuma kaki yang tersisa kelihatan.
   for (const a of [...agents.values(), ...peserta, ...standby]) {
+    // Yang sedang di dalam bukaan ruang kadis digambar oleh gambarSisipKadis()
+    // dengan tabel sortnya sendiri, di dalam klip bukaan.
+    // YANG DIGERBANGI HANYA PENGGAMBARAN, TIDAK PERNAH PEMBARUAN — jangan
+    // pernah menaruh if seperti ini di loop update() di atas.
+    if (a.diKadis) continue;
     const diPitaBawah = a.y >= 230 && a.y < 266;
     // Yang sudah duduk di kursi rapat sisi dekat justru harus tenggelam DI
     // BELAKANG sandarannya — itu yang bikin dia terbaca duduk, bukan berdiri.
@@ -8862,6 +10431,19 @@ function frame(ts) {
   }
   layers.sort((m, n2) => m.y - n2.y);
   for (const l of layers) l.fn();
+
+  /* Bukaan ruang kadis. SESUDAH layers: bukaan menang atas apa pun yang
+     ditumpanginya — dan justru karena itu kotak SISIP (x290..362, y33..79)
+     dipilih dari sapuan piksel seluruh perabot lama: NOL prop lama yang
+     tertimpa — termasuk keempat dekor tema dinding (agustusan, ramadan,
+     korpri, tahun-anggaran) dan ekor cicak yang cuma lewat 70 ms di kolom
+     289 — dijaga kasus "sapuan prop lama" di uji-sisip.mjs, yang sekarang
+     mencuplik umur event tiap 0,02 detik. SEBELUM drawParts: tetesan AC yang
+     di-spawn di (347,30) jatuh DI DEPAN kaca menuju ember di y=124 — benar
+     secara fisik dan gag ember bocor selamat. drawAmbien()/drawDebu()/vignette
+     tetap sesudahnya, jadi bukaannya ikut tergelapkan malam dan ikut berdebu:
+     itu yang bikin dia terbaca menempel di dinding, bukan HUD. */
+  gambarSisipKadis();
 
   drawParts();
   drawAmbien();

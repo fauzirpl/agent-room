@@ -28,6 +28,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "pita-bawah-234-hari-korpri": [
@@ -57,6 +58,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "pita-bawah-230-batas-bawah": [
@@ -86,6 +88,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "luar-pita-229": [
@@ -115,6 +118,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "pita-bawah-265-batas-atas": [
@@ -144,6 +148,7 @@
       "orang:A",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "luar-pita-266": [
@@ -173,6 +178,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "duduk-kursi-rapat-dekat": [
@@ -202,6 +208,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "duduk-dekat-berdiri-menunggu-keputusan": [
@@ -231,6 +238,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "duduk-dekat-masih-berjalan": [
@@ -260,6 +268,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "duduk-kursi-rapat-jauh": [
@@ -289,6 +298,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "meja-kerja-berdiri-350": [
@@ -317,6 +327,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja",
       "orang:A"
     ],
@@ -346,6 +357,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "orang:A",
       "prop:drawMejaKerja"
     ],
@@ -376,6 +388,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "dua-pegawai-tumpang-tindih-y-sama": [
@@ -407,6 +420,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "dua-pegawai-selisih-satu-piksel": [
@@ -437,6 +451,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "standby-ruang-tunggu-288": [
@@ -466,6 +481,7 @@
       "orang:S1",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "event-prop-sortY-250-vs-pegawai-pita": [
@@ -496,6 +512,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ],
     "event-prop-tanpa-sortY-118": [
@@ -526,6 +543,7 @@
       "prop:drawTongSampah",
       "prop:drawPlant",
       "prop:drawKipas",
+      "prop:drawBukuTamu",
       "prop:drawMejaKerja"
     ]
   }
