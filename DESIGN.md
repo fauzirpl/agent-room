@@ -113,6 +113,8 @@ node agent-room/install.mjs --remove
 
 Installer selalu bikin backup (`settings.json.bak-<waktu>`, disimpan 3 terbaru),
 aman dijalankan berulang, dan tidak menghapus hook lain yang sudah ada.
+`--coba` cuma mencetak perintah hook yang akan ditanam (berikut header mesin,
+kunci, dan alamat kantor pusat kalau env-nya ada) tanpa menyentuh berkas apa pun.
 
 **Restart sesi Claude Code setelah install** — hook dibaca waktu sesi mulai.
 
@@ -197,6 +199,10 @@ nama tool-nya (lihat **Balon pikiran & kotak kabar**).
 Sembilan `notification_type` sisanya cuma kabar lewat — `auth_success`
 memberitahu login berhasil, `agent_completed` memberitahu subagent kelar,
 `quota_*` memberitahu kuota — dan tidak satu pun menahan sesinya.
+Pemicu keenam datang bukan dari hook: sesi lahiran halaman yang lahir dengan
+`paraf:true` mengajukan izinnya lewat `POST /izin/tanya`, dan untuk itu
+kartunya menawarkan tombol Paraf/Tolak yang sungguhan (lihat **Paraf dari
+ruangan** di Kendali web).
 
 Tandanya dibuat supaya terbaca **tanpa membaca teks**: pegawainya berdiri dari
 kursinya, mengangkat map disposisi bercap merah dengan dua tangan, dan
@@ -592,6 +598,17 @@ sengaja hidup **di memori saja**: prompt yang menunggu giliran tidak pernah
 ditulis ke disk, jadi tidak ada berkas berisi perintah eksekusi yang
 tertinggal setelah server mati.
 
+Dua hal lagi sejak **gerbang & multi-mesin** (lihat **Konfigurasi**): ada
+**satu pintu masuk baru yang hanya-baca**, `GET /ruangan` (dipakai
+`mcp-room.mjs`), yang membawa metadata sesi hidup — id, proyek, cabang, nama
+mesin, tool terakhir, sebab tertahan — tanpa label, alasan, apalagi isi. Dan
+event sekarang bisa membawa `mesin`, nama host mesin pengirim, yang ikut ke
+`/stream` dan buku agenda; itu hanya terisi untuk hook dari mesin lain. Yang
+**tidak** berubah: server tetap mendengar di 127.0.0.1 saja. Membukanya ke
+jaringan adalah keputusan sadar yang menuntut `AGENT_ROOM_KUNCI`, dan tanpa
+tunnel/TLS seluruh isi di atas — `pikir`, `ucap`, prompt — ikut lewat
+jaringan apa adanya.
+
 ## Buku agenda
 
 Ring 400 event di memori itu daya ingat ikan mas: restart server, ruangan hari
@@ -807,6 +824,51 @@ saat detached, atau kosong kalau bukan repo. Di-cache per cwd 15 detik, dan
 di luar itu cukup cek mtime HEAD — checkout selalu menulis ulang berkas itu.
 Yang keluar ke halaman hanya nama cabangnya, bukan path.
 
+### Buku induk pegawai
+
+Kartu di atas cuma tahu **satu sesi**: tutup terminalnya, angkanya ikut
+pulang. Buku induk (`buku-induk.json`, `AGENT_ROOM_BUKU_INDUK`) adalah arsip
+kariernya — lintas sesi, lintas restart — dan kuncinya **nama folder
+proyek**, bukan sesi: session id selalu baru, nama panggilan diacak, jabatan
+bisa diganti dari dropdown kapan saja. Satu-satunya identitas yang bertahan
+dari hari ke hari adalah folder tempat dia bekerja, jadi "pegawai" di buku
+ini artinya *siapa pun yang bekerja di folder itu*.
+
+Per proyek dicatat: jumlah sesi, tool call, yang gagal, **jam dinas** (jumlah
+celah antar event hook yang masih ≤ 5 menit — jam *aktif*, bukan jam
+kalender, jadi sesi yang dibiarkan terbuka semalaman tidak naik pangkat
+karenanya), **fan-out** (berapa kali memanggil Task/Agent/Workflow), event
+pertama dan terakhir, cabang git yang pernah disinggahi, dan tabel tool
+(dibatasi 40 kunci teratas, sisanya dilebur ke `(lain)`). Bahannya **hanya
+event hook nyata** lewat `/event` — event ambient tidak pernah sampai ke
+sini, dan peserta rapat bukan sesi: yang dihitung cuma fan-out pemanggilnya.
+Ditulis debounce ≤ 20 detik dan saat server keluar, dibaca sekali saat start.
+
+Dari jam dinas itu server menghitung **golongan** ala ASN, dan angkanya
+selalu berlabel *sejak dipantau*:
+
+| Golongan | Jam dinas |
+|---|---|
+| CPNS | < 2 jam (atau belum ada tool call) |
+| Pengatur | ≥ 2 jam |
+| Penata Muda | ≥ 10 jam |
+| Penata | ≥ 40 jam |
+| Pembina | ≥ 120 jam |
+
+Kenaikan golongan dideteksi server saat mencatat, satu event `promosi` per
+kenaikan; halaman menjawabnya dengan satu nota **SK Kenaikan Pangkat** di
+kotak kabar dan pegawai seproyek bersyukur di balonnya. Proyek dengan fan-out
+tertinggi (≥ 10) diusulkan jadi **Kepala Bidang** — dan itu berhenti di kata
+*usul*: label di kartu bertambah "usul: Kepala Bidang", tapi jabatan, seragam,
+dan meja tidak berubah dari data. Aturan 1 berlaku di sini juga: pangkat tidak
+boleh menyandera pekerjaan. Aturan 2 juga: angka karier tampil sebagai baris
+terpisah di kartu, tidak dicampur ke tool call sesi maupun `/kendali`.
+
+Yang keluar ke disk dan ke `GET /buku-induk` (tanpa token, sekelas
+`/token-riwayat`) cuma angka dan nama — folder, cabang, tool. Tidak ada label,
+tidak ada isi, jadi tidak ada yang perlu tunduk ke `AGENT_ROOM_ISI`. Berkasnya
+tidak di-commit (`.gitignore`), sama seperti riwayat token.
+
 ## Bahasa yang tampil
 
 Yang kamu baca bukan nama tool, tapi kegiatannya: `Read` jadi "membaca berkas
@@ -848,6 +910,29 @@ Orang luar (tamu, kurir, ojol) memakai penggambar yang sama lewat
 `gambarOrangLuar`, jadi tidak ada tamu bergaya balok di antara pegawai bergaya
 sprite.
 
+### Kamera
+
+Kanvasnya tetap 480×356 dan `fit()` tetap cuma memilih skala integer ke CSS;
+kameranya (`KAMERA` di room.js) hidup di koordinat dunia dan dipasang di
+`frame()` lewat `setTransform` sebelum segala gambar, jadi lantai, props,
+pegawai, dan partikel tidak tahu ada kamera. Zoom bidikannya cuma 1 atau 2 —
+bulat — karena satu piksel dunia harus tetap jadi kotak piksel layar yang
+utuh; zoom 1,4 bikin garis tepi sprite belang walau smoothing sudah mati.
+Nilai pecahan cuma lewat sebentar selagi easing (±600 ms), geserannya pun
+dibulatkan ke piksel kanvas.
+
+Semua yang menempel ke kanvas dari DOM — balon ucap, balon pikiran, lencana
+galat, kartu pegawai — dan hit-test klik lewat SATU pasang fungsi,
+`keLayar()`/`dariLayar()`. Dulu tiap-tiap menghitung `offX + x * scale`
+sendiri; begitu kamera bergeser, satu saja yang lupa dan kartunya meleset
+dari orangnya. Tiga mode di ⚙️ (mati / ikut pegawai / sinematik; `?kamera=`
+di URL mengalahkannya). Bawaannya **mati**: halaman ini alat pantau dulu,
+baru tontonan — kamera yang bergerak sendiri mengejutkan orang yang cuma mau
+melirik siapa yang sedang macet. *Ikut* membidik pegawai yang baru tool call
+selama 4 detik, tapi mundur ke tampak penuh begitu dua orang sama-sama
+aktif (jangan bolak-balik). *Sinematik* berkeliling stasiun sesudah 60 detik
+sepi, dan dimatikan kalau `prefers-reduced-motion` menyala.
+
 ## Suasana ikut jam
 
 Ruangan mengikuti jam di mesin penontonnya, digeser mulus antar patokan jam —
@@ -867,6 +952,56 @@ Semuanya dihitung dari `FASE_HARI` di [public/room.js](public/room.js) —
 patokan warna langit, selubung ruangan, intensitas lampu, dan berkas cahaya
 per jam. Mau memeriksa suasana tertentu tanpa menunggu jamnya tiba? Tambah
 `?jam=18.4` di URL (boleh digabung: `?demo=1&jam=22`).
+
+### Babak hari kerja
+
+Jam saja tidak cukup buat menjawab "sekarang kantor sedang apa": jam 12 hari
+Rabu itu istirahat, jam 12 hari Minggu itu libur. `babakHari()` di
+[public/room.js](public/room.js) menyimpulkannya jadi satu status yang dibaca
+event lewat `S.babak`:
+
+| Babak | Kapan |
+|---|---|
+| `apel` | 07:00–07:45 hari kerja |
+| `kerja` | 06:00–16:00 selebihnya |
+| `istirahat` | 12:00–13:00; Jumat 11:30–13:00 |
+| `pulang` | 16:00–17:00 |
+| `lembur` | 17:00–22:00 |
+| `malam` | 22:00–06:00 |
+| `libur` | Sabtu/Minggu, hari kejepit (`HARI_KEJEPIT`), libur nasional (`LIBUR_NASIONAL`) — sepanjang hari |
+
+`S.jam` dan `S.kerjaJam` **tetap ada**: tidak ada `syarat` event lama yang
+diubah. Babak cuma masuk lewat pintu kedua — field opsional `babak` pada
+definisi event, pengali bobot per babak (`{ istirahat: 2, lembur: .3 }`;
+yang tidak disebut = 1, nol = tidak ikut undian di babak itu). Dipasang ke
+belasan event yang paling jelas: gorengan, ngerumpi di pantry, ojol, dan
+tukang bakso lebih mungkin saat istirahat; kopi pagi & rapat pimpinan saat
+kerja; lembur-sampai-malam saat lembur; sandal jepit saat pulang/lembur.
+Pengali diterapkan di `pilihBerbobot`, bukan di `syarat`, supaya event yang
+bobotnya nol di satu babak tidak menghabiskan cooldown dan `uji-event.mjs`
+(yang merakit `S` sendiri tanpa `babak`) tetap jalan.
+
+### Tema kalender
+
+Dekor musiman yang menempel sepanjang tanggalnya berlaku — bukan event yang
+lewat lalu hilang — didaftar di tabel `TEMA` (id + syarat tanggal) dan
+menempel di `RUANGAN.tema`, dievaluasi saat muat dan tiap ganti hari:
+
+- **`agustusan`** (1–17 Agustus): umbul-umbul merah-putih di dinding atas,
+  bendera lidi di tiap meja kerja, spanduk "DIRGAHAYU RI KE-N" (N dari tahun)
+- **`ramadan`** (`taksirHijri` bulan 9): papan jadwal imsak/berbuka di celah
+  dinding antara rak server dan pintu kadis — jam saja, taksiran per bulan
+- **`korpri`** (29 November): spanduk "HUT KORPRI KE-N"
+- **`tahun-anggaran`** (1–7 Januari): spanduk "TAHUN ANGGARAN <tahun>"
+
+Digambar oleh `gambarTemaDinding()` (satu baris di `drawWall`, di bawah
+neon) dan `gambarTemaMeja()` (satu baris di `drawMejaKerja`). Event acak
+bertema sama — `hormat-bendera`, `ramadan-siang-sunyi`, `hari-korpri`,
+`tahun-anggaran-baru` — **tetap jalan tanpa saling kunci**: dekor mereka
+tidak ada yang dobel dengan ini (sajadah ramadan di lantai vs jadwal di
+dinding; seragam Korpri vs spanduk; hormat & beres-beres arsip tanpa dekor).
+`S.tema` tersedia kalau suatu hari ada yang dobel. Uji: `?tema=agustusan`,
+`?tema=ramadan`, `?tema=korpri`, `?tema=tahun-anggaran`.
 
 ### Hujan ikut cuaca sungguhan
 
@@ -988,6 +1123,41 @@ lewat `pinjamAktor` untuk berkumpul di depan meja kafenya — beda dari
 `ngobrol-di-dispenser` yang orangnya kebetulan sudah berdiri di situ.
 Isinya gosip kantor (rotasi, mutasi), bukan obrolan kopi biasa.
 
+### Apel pagi
+
+Sekali sehari, di babak `apel` (07:00–07:45 hari kerja) dan hanya kalau
+halamannya sedang terbuka: pegawai nyata yang menganggur plus standby berbaris
+dua saf di bawah tiang bendera menghadap ke atas, bendera naik pelan dari
+kaki tiang (`apelBendera` di `drawBendera`), Indonesia Raya diputar lewat
+`mainkanIndonesiaRaya()` kalau audio sudah pernah dibuka pengguna, lalu
+pembina apel — kadis kalau ada personanya, kalau tidak standby berjabatan
+tertinggi — memberi amanat. Amanatnya dirakit di klien dari buku agenda
+kemarin (`GET /agenda?dari=<kemarin>&sampai=<kemarin>`): "Kemarin N tool
+call dari M sesi, terbanyak <tool>." — kalau kosong atau gagal, kalimat
+generik. Senin lebih formal: 40 detik dan ada pembacaan Panca Prasetya
+Korpri sebagai balon berurutan; hari lain 20 detik. Sesudah itu bubar ke
+tempat semula.
+
+Kenapa **bukan event acak**: apel itu jadwal, bukan kebetulan — tidak boleh
+ikut undian bobot, tidak boleh kalah dari event `panggung` lain yang
+kebetulan sedang jalan, dan tidak boleh dilaporkan ke arsip kliping
+(`/ambien`) seolah kejadian suasana. Dia jalan dari `tickApel()` walau
+`?event=0`, tidak masuk log, tidak menaikkan statistik. Kenapa **sekali
+sehari**: penanda tanggal di localStorage (`apelTerakhir`) — tab yang dimuat
+ulang jam 07:20 tidak apel dua kali, dan tab yang dibuka jam 9 tidak apel
+sama sekali; kalau semua orang sedang sibuk saat dicek, penandanya tidak
+ditulis dan dicoba lagi tiap detik selama babaknya masih `apel`.
+
+Aturan 1 berlaku mutlak. Peserta apel dipegang lewat `eventKerja` yang sama
+dengan event acak, jadi `handle()` melepasnya persis seperti biasa begitu
+tool call datang — dia keluar barisan saat itu juga menuju stasiun tool-nya,
+dan barisan yang bolong dibiarkan bolong. Pembina yang dipanggil tool call
+digantikan yang tertinggi di sisa barisan, dari tempatnya berdiri. Satu
+pengecualian sengaja atas "standby tidak pernah bicara": pembina standby
+diberi balon lewat `Agent.prototype.say` selama apel saja — amanat tanpa
+balon bukan amanat. Uji: `?apel=1` memaksa apel sekarang, `?apel=senin`
+memaksa varian Senin (keduanya mengabaikan babak & penanda).
+
 ### Kenapa hujan tidak ada di daftar itu
 
 Rapat desainnya mengusulkan `hujan-deras` dan `hujan-petir-kedip` sebagai event
@@ -1049,8 +1219,122 @@ Dua hal yang bikin ini aman buat sesi kamu:
 | `AGENT_ROOM_TOKEN_LOG` | `token-riwayat.jsonl` | tempat riwayat token lintas sesi ditulis (lihat **Riwayat lintas sesi**) |
 | `AGENT_ROOM_AGENDA_DIR` | `agenda/` | folder buku agenda harian (lihat **Buku agenda**) |
 | `AGENT_ROOM_AGENDA_HARI` | `30` | berkas agenda lebih tua dari ini dibuang saat start |
+| `AGENT_ROOM_BUKU_INDUK` | `buku-induk.json` | tempat buku induk pegawai (karier per folder proyek) ditulis (lihat **Buku induk pegawai**) |
+| `AGENT_ROOM_BUKU_INDUK_UJI` | *(kosong)* | **uji saja**: pengali jam dinas (mis. `100000`) supaya kenaikan golongan bisa dipaksa; nilainya ikut tampil di `/buku-induk` sebagai `uji` |
 | `AGENT_ROOM_CUACA` | *(nyala, tebak dari IP)* | `off` mematikan cek cuaca; `lat,lon` menetapkan lokasi |
 | `AGENT_ROOM_ISI` | *(nyala)* | `off` menutup transkrip sesi: ruangan kembali cuma menyiarkan metadata, tanpa pikiran dan kalimat agen |
+| `AGENT_ROOM_KUNCI` | *(kosong)* | kalau diisi, `POST /event` wajib membawa header `x-agent-room-kunci` yang sama; **wajib** begitu bind dibuka ke jaringan (lihat **Kantor pusat & kantor cabang**) |
+| `AGENT_ROOM_URL` | *(kosong)* | dibaca **installer** & `mcp-room.mjs`: alamat kantor pusat yang dituju hook mesin ini, mis. `http://kantor.lan:4517` |
+| `AGENT_ROOM_HOST_IZIN` | *(kosong)* | nama Host tambahan yang diterima penjaga Host, dipisah koma (nama mesin di LAN, nama tunnel) |
+
+### Gerbang: penjaga Host & kunci event
+
+Ada dua pemeriksaan di pintu depan, berlaku sebelum route mana pun:
+
+**Penjaga Host.** Semua permintaan yang header `Host`-nya bukan
+`127.0.0.1[:port]`, `localhost[:port]`, `[::1][:port]`, alamat bind
+(`AGENT_ROOM_HOST`), atau salah satu isi `AGENT_ROOM_HOST_IZIN` ditolak 403.
+Alasannya **DNS rebinding**: bind ke 127.0.0.1 tidak menghalangi situs jahat
+yang kebetulan dibuka pemilik mesin mengarahkan domainnya sendiri ke 127.0.0.1
+lalu membaca `/stream` dari skripnya — `/stream` memang tidak pernah memeriksa
+Origin karena halaman kita sendiri membacanya lewat `EventSource`. Yang pasti
+beda pada permintaan seperti itu adalah `Host`: domain si penyerang, bukan
+alamat kita. Hook `curl` mengirim `Host: 127.0.0.1:port`, halaman mengirim
+alamat yang diketik di peramban; keduanya lolos tanpa perubahan apa pun.
+
+**Kunci event.** `AGENT_ROOM_KUNCI` kosong = perilaku lama, hook yang sudah
+terpasang tetap diterima. Diisi = `POST /event` tanpa `x-agent-room-kunci` yang
+cocok ditolak 403 (satu peringatan per menit di konsol), dibandingkan lewat
+hash supaya panjang kuncinya tidak bocor lewat waktu. Installer menanamkan
+header itu ke perintah `curl` kalau env-nya ada saat `--pasang`, jadi kuncinya
+**harus sama** di server dan di mesin yang memasang hook. Nilainya dibatasi
+8–128 karakter `[A-Za-z0-9_.-]` karena masuk ke satu baris shell di
+`settings.json` — kutipan yang pecah lebih berbahaya daripada kunci yang ditolak.
+
+Installer juga selalu menanam `-H "x-agent-room-mesin: <hostname>"`. Server
+menyalin nilainya ke `ev.mesin` **hanya kalau berbeda** dari hostname-nya
+sendiri; sesi lokal tidak pernah membawa field itu, jadi chip `⌂ mesin` di
+panel kru dan baris "mesin" di kartu cuma muncul untuk pegawai dari kantor
+cabang.
+
+### Kantor pusat & kantor cabang
+
+Multi-mesin dibangun dari yang sudah ada, bukan protokol baru: hook di mesin
+B mengirim ke server di mesin A. Di mesin B, pasang hook dengan alamat kantor
+pusat dan kuncinya:
+
+```bash
+AGENT_ROOM_URL=http://kantor.lan:4517 AGENT_ROOM_KUNCI=kunci-yang-sama node install.mjs --global
+```
+
+Di mesin A, server harus mendengar di antarmuka jaringan **dan** memegang kunci
+yang sama:
+
+```bash
+AGENT_ROOM_HOST=0.0.0.0 AGENT_ROOM_KUNCI=kunci-yang-sama AGENT_ROOM_HOST_IZIN=kantor.lan node server.mjs
+```
+
+Yang harus tegas: **membuka bind ke LAN tanpa `AGENT_ROOM_KUNCI` berarti
+menyiarkan isi kerja.** Bukan cuma metadata — `/stream` membawa `pikir`,
+`ucap`, dan prompt (kecuali `AGENT_ROOM_ISI=off`), dan `/event` tanpa kunci
+membiarkan siapa pun di jaringan memalsukan sesi. Server mencetak peringatan
+keras saat start kalau bind bukan loopback dan kuncinya kosong, dan
+`dinas --periksa` menandainya merah. Kunci itu pun cuma menjaga **pintu masuk
+event**; `/stream`, `/agenda`, `/token-riwayat` tetap terbuka bagi siapa pun
+yang bisa mencapai port-nya, dan HTTP polos berarti kuncinya sendiri lewat
+jaringan tanpa dienkripsi. Karena itu susunan yang disarankan: bind tetap
+127.0.0.1 dan sambungkan mesin lewat tunnel (`ssh -L 4517:127.0.0.1:4517
+kantor`, Tailscale, atau reverse-proxy TLS) — di situ `AGENT_ROOM_URL` di
+cabang cukup menunjuk ujung tunnel-nya. Kendali web (`--izinkan-perintah`)
+tidak pernah boleh dinyalakan di server yang terbuka ke jaringan: token
+per-jalannya bisa dibaca siapa pun lewat `GET /kendali` dari alamat yang lolos
+penjaga Host.
+
+## Agent Room sebagai MCP server
+
+Semua yang lain di repo ini berjalan **satu arah**: Claude Code bicara ke
+kantor (hook → `/event`), kantor bicara ke halaman (`/stream`). `mcp-room.mjs`
+membalik arahnya — kantor bisa **ditanya** oleh sesi Claude mana pun, tanpa
+membuka halaman:
+
+```bash
+dinas --mcp          # cetak perintah `claude mcp add …` dan blok JSON mcpServers
+dinas --mcp --json   # blok JSON-nya saja
+```
+
+`dinas` sengaja tidak menjalankan `claude mcp add` sendiri: itu mengubah
+konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
+
+| Tool | Sumber | Isi |
+|---|---|---|
+| `ruangan_siapa_tertahan` | `GET /ruangan` | sesi yang butuh manusia / macet, dan antrean disposisi |
+| `ruangan_sesi_aktif` | `GET /ruangan` | sesi hidup: id, proyek, cabang, mesin, tool terakhir, sejak |
+| `ruangan_token_hari_ini` | `GET /token-riwayat` | total hari ini + rincian per proyek, total sepanjang masa |
+| `ruangan_agenda_cari` | `GET /agenda` | cari buku agenda: `q`, `proyek`, `sesi`, `kind`, `dari`, `sampai`, `limit` |
+| `ruangan_kesehatan` | `GET /health` | server hidup atau tidak |
+
+Servernya stdio JSON-RPC polos tanpa dependency (`initialize`, `tools/list`,
+`tools/call`, `ping`; notifikasi diabaikan), log hanya ke stderr karena stdout
+adalah kanal protokolnya. Tiap tool cuma satu GET ke server ruangan yang sudah
+jalan — alamatnya dari `AGENT_ROOM_URL`, bawaan `http://127.0.0.1:4517` — lalu
+hasilnya satu kalimat ringkasan Indonesia di atas JSON ringkas. `GET /ruangan`
+baru dibuat untuk ini: tanpa token, sekelas `/health`, isinya sesi hidup
+(diisi tiap hook masuk, dihapus saat `SessionEnd`, dibuang setelah tiga jam
+diam) plus jumlah antrean, proses jalan, dan penonton.
+
+Yang **sengaja tidak diekspos**: `pikir`, `ucap`, prompt, isi balon halaman,
+token per-jalan kendali web, dan route apa pun yang bisa melahirkan atau
+menghentikan sesi. Sesi Claude yang memasang MCP ini dapat *keadaan* kantor,
+bukan *isi kerja* sesi lain — yang butuh isi sudah punya jalannya sendiri
+lewat halaman. Bahkan `butuh`/`macet` di `/ruangan` cuma membawa `sebab`/
+`jenis`, tanpa `alasan` maupun `label`.
+
+Tanpa autentikasi, dan itu konsisten dengan sisanya: `mcp-room.mjs` bicara ke
+server lewat HTTP biasa, jadi dia hanya bisa mencapai apa yang bisa dicapai
+`curl` dari mesin yang sama — yaitu localhost. Kalau kantornya dibuka ke
+jaringan (bagian di atas), yang menjaga tetap tunnel/kunci di server, bukan
+MCP-nya; MCP tidak menambah pintu baru karena semua route yang dipakainya
+memang sudah ada dan sudah tanpa token.
 
 ## Isi
 
@@ -1114,6 +1398,8 @@ dipakai ulang.
 | `POST /perintah` | lahirkan sesi baru dengan nama + prompt + folder kerja |
 | `POST /perintah/hentikan` | hentikan tugas yang sedang jalan |
 | `POST /perintah/batal` · `DELETE /perintah/antre/<id>` | tarik tugas yang masih antre di loket disposisi |
+| `POST /izin/jawab` | paraf atau tolak permintaan izin sesi halaman yang lahir dengan `paraf:true` (lihat **Paraf dari ruangan**) |
+| `POST /izin/tanya` · `GET /izin/tunggu` | pintu proses MCP anak (`mcp-izin.mjs`); dijaga kunci per-tugas, bukan token halaman |
 | `POST /nama` | beri nama panggilan ke sesi mana pun, termasuk sesi terminal |
 | `POST /peran` | tetapkan jabatan sesi mana pun; id yang tidak dikenal ditolak |
 | `POST /kredensial` | pasang atau hapus token headless; nilainya tidak pernah bisa dibaca kembali |
@@ -1149,6 +1435,86 @@ membawa potret seluruh loket, jadi halaman tinggal mengganti daftarnya tanpa
 polling. Di daftar kru barisnya tampil bergaris putus-putus di bawah standby:
 *antre #posisi · nama · proyek · sifat*, dengan tombol **batal** yang
 menariknya dari loket lewat gerbang yang sama dengan `/perintah`.
+
+### Paraf dari ruangan
+
+Sesi yang dilahirkan halaman selama ini jalan `bypassPermissions`: tidak
+pernah minta izin, jadi tidak pernah tertahan. Sekarang ada pilihan kedua —
+`paraf: true` di body `/perintah` — yang melahirkan sesinya dengan
+`--permission-mode default`, dan tiap permintaan izinnya bisa **dijawab dari
+kartu pegawai**: dua tombol, **Paraf** dan **Tolak** (plus catatan opsional
+yang diteruskan ke agennya kalau ditolak). Bawaannya tetap jalur lama; tanpa
+`paraf:true` tidak ada yang berubah.
+
+**Hanya untuk sesi lahiran halaman.** Sesi terminal tetap menampilkan catatan
+*sesi terminal · jawab di terminal*, dan itu bukan pilihan desain yang bisa
+dilonggarkan nanti: halaman ini tidak punya pegangan apa pun ke proses
+terminal itu — bukan stdin-nya, bukan protokol izinnya. Yang lahir dari
+`/perintah` adalah anak server ini, jadi cuma untuk mereka server bisa
+menyisipkan diri di antara CLI dan keputusan izinnya. Kartu membedakan
+keduanya dengan label yang berbeda (*sesi halaman · bisa diparaf di sini*),
+karena pose di ruangannya persis sama.
+
+**Lewat tool izin MCP, bukan stdin.** `claude -p` tidak membaca jawaban izin
+dari stdin — stdin-nya memang kita tutup sejak awal (lihat `lahirkanTugas()`).
+Yang disediakan CLI untuk mode non-interaktif adalah
+`--permission-prompt-tool <mcp_tool>`: tiap kali sebuah tool butuh izin, CLI
+memanggil tool MCP itu dan membaca jawabannya sebagai teks JSON
+`{"behavior":"allow","updatedInput":{…}}` atau `{"behavior":"deny","message":"…"}`.
+Flag ini ada di biner (2.1.258: *MCP tool to use for permission prompts, only
+works with --print*) walau tidak tercetak di `--help`. Jadi server melahirkan
+sesinya dengan tiga tambahan: `--permission-mode default`,
+`--permission-prompt-tool mcp__agent-room-izin__izin`, dan `--mcp-config` berisi
+JSON inline yang mendaftarkan [mcp-izin.mjs](mcp-izin.mjs) — server MCP stdio
+tanpa dependency, satu tool bernama `izin`. Tidak ada berkas sementara; JSON-nya
+satu elemen argv seperti prompt.
+
+Urutan pesannya, dari sisi proses MCP:
+
+1. CLI → `initialize`, `notifications/initialized`, `tools/list` — jabat tangan MCP biasa
+2. tool butuh izin → CLI → `tools/call izin {tool_name, input, tool_use_id}`
+3. mcp-izin → `POST /izin/tanya {tugas, kunci, tool_name, ringkasan, tool_use_id}`;
+   server mencatat permintaannya, menyalakan **butuh manusia**, dan menyiarkan
+   `izin-minta` yang membawa `paraf:{id, tool}` — pose map disposisi, pengingat
+   terkatung, dan nota dinas keluar semuanya ikut jalan tanpa perlu tahu dari
+   mana izinnya datang
+4. mcp-izin → `GET /izin/tunggu?tugas&kunci&id` berulang; server menahan tiap
+   poll paling lama 25 detik lalu menjawab `{tunggu:true}`
+5. kamu menekan Paraf/Tolak → halaman `POST /izin/jawab {token, id, keputusan, pesan?}`
+   → server melepas long-poll dengan `{keputusan}`, menyiarkan `izin-jawab`, dan
+   mencabut butuh manusia (kalau ditolak, tool-nya tidak pernah jalan, jadi
+   tidak ada `PostToolUse` yang akan mencabutnya)
+6. mcp-izin membalas `tools/call` dengan `allow` (input diteruskan apa adanya)
+   atau `deny` beserta catatanmu; CLI melanjutkan atau melewati tool itu
+
+**Dua gerbang yang berbeda.** `/izin/tanya` dan `/izin/tunggu` dijaga **kunci
+per-tugas** — 16 byte acak yang cuma ada di env proses claude anak (diwarisi
+proses MCP-nya), tidak pernah di argv, tidak pernah di disk, tidak pernah ke
+halaman — jadi yang bisa *mengajukan* izin hanya proses yang memang kita
+lahirkan. `/izin/jawab` dijaga gerbang yang sama persis dengan `/perintah`:
+`--izinkan-perintah`, token per-jalan, cek `Origin`. Yang sudah bisa menyuruh
+mesin ini bekerja memang pantas memparaf pekerjaannya; sebaliknya, situs lain
+yang kebetulan terbuka tidak bisa memparaf apa pun. Yang naik ke halaman cuma
+**ringkasan** input tool (≤300 karakter: perintah shell, nama berkas, pola),
+bukan argumen utuhnya.
+
+**Batas waktu 15 menit**, dihitung di dua tempat yang saling mengunci: server
+menolak sendiri (`izin-jawab` dengan *tidak ada paraf*) kalau 15 menit tidak
+ada jawaban, dan mcp-izin berhenti mengulang poll setelah batas yang sama
+(`AGENT_ROOM_IZIN_TIMEOUT_MS` untuk uji). Perlu diingat batas umur tugas juga
+15 menit — menunggu paraf ikut menghabiskannya. Tugas yang berakhir (selesai,
+dihentikan, timeout) membersihkan permintaan yang masih menggantung, supaya
+kartu tidak menawarkan tombol untuk proses yang sudah tidak ada. `GET /kendali`
+mengembalikan `izinTunggu` supaya halaman yang dibuka belakangan tetap dapat
+tombolnya.
+
+**Yang tidak bisa.** Ini paraf izin *tool*, bukan percakapan. `AskUserQuestion`
+dan `ExitPlanMode` di sesi headless tidak punya jalur jawaban — CLI tidak
+mengalihkannya ke permission tool — jadi untuk sesi halaman kartunya menulis
+*pertanyaannya tidak bisa dijawab dari sini*, dan untuk sesi terminal tetap
+*jawab di terminal*. Formulir tugas di halaman masih disembunyikan tanpa syarat
+(lihat atas), jadi `paraf:true` untuk sekarang hanya bisa dikirim lewat body
+`/perintah` langsung.
 
 ### Model yang dipakai
 

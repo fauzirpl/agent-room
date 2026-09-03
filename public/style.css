@@ -424,12 +424,23 @@ body {
 }
 .crew-row.pilih { border-color: var(--amber); }
 .crew-row.pilih .jab { color: var(--amber); border-color: #4a3a1c; }
+/* lencana golongan dari buku induk: satu karakter emas di sebelah nama, tanpa
+   kotak — bukan papan nama, cuma pin kecil di dada; margin negatif supaya
+   tidak memakan lebar panel */
+.crew-row .lencana { color: var(--emas-tua); font-size: 8px; flex: none; margin-left: -4px; }
 /* cabang git di baris kru: cap tinta pudar di sebelah nama, sengaja bukan
    papan hitam seperti .jab supaya tidak bersaing dengan jabatan. flex: 0 0 auto
    supaya namanya tidak terjepit jadi "⎇ m…" di panel sempit — biar .what yang
    ellipsis-nya mengalah; max-width menjaga nama cabang panjang tetap satu chip. */
 .crew-row .cabang {
   color: var(--tinta-pudar); border: 1px solid var(--khaki-tua); border-radius: 2px;
+  font-size: 8.5px; letter-spacing: .03em; padding: 0 4px; flex: 0 0 auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 76px;
+}
+/* mesin pengirim (kantor cabang): kembaran chip cabang, cuma tampil kalau
+   event datang dari mesin lain — pegawai lokal tidak perlu ditandai. */
+.crew-row .mesin {
+  color: var(--tinta-pudar); border: 1px dashed var(--khaki-tua); border-radius: 2px;
   font-size: 8.5px; letter-spacing: .03em; padding: 0 4px; flex: 0 0 auto;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 76px;
 }
@@ -477,6 +488,31 @@ body {
   flex: 1; min-width: 0; background: #0c1219; border: 1px solid var(--line);
   border-radius: 5px; color: var(--ink); font: inherit; font-size: 10.5px; padding: 4px 5px;
 }
+/* loket paraf di kartu: cuma sesi lahiran halaman yang dapat tombolnya;
+   sesi terminal dapat catatan "jawab di terminal" supaya keduanya tidak
+   terbaca sama walau posenya di ruangan persis sama */
+.kartu-paraf {
+  margin-top: 7px; padding: 6px 7px; border: 1px dashed var(--khaki-tua); border-radius: 3px;
+  background: #fff8; display: flex; flex-direction: column; gap: 4px;
+}
+.kartu-paraf[hidden] { display: none; }
+.paraf-nota { color: var(--tinta-pudar); font-size: 9.5px; letter-spacing: .03em; }
+.paraf-nota.bisa { color: var(--emas-tua); }
+.paraf-rinci { font-size: 10px; color: var(--tinta); word-break: break-word; font-family: ui-monospace, monospace; }
+.paraf-pesan {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 10px; padding: 3px 5px; min-width: 0;
+}
+.paraf-tombol { display: flex; gap: 5px; }
+.paraf-tombol button {
+  flex: 1; border: 1px solid var(--khaki-tua); border-radius: 3px; font: inherit; font-size: 10.5px;
+  padding: 4px 5px; cursor: pointer; background: none; color: var(--tinta);
+}
+.paraf-tombol .paraf-ya { background: var(--navy); border-color: var(--navy); color: var(--putih); }
+.paraf-tombol .paraf-ya:hover { filter: brightness(1.15); }
+.paraf-tombol .paraf-tidak:hover { border-color: var(--merah); color: var(--merah); }
+.paraf-tombol button:disabled { opacity: .5; cursor: default; }
+
 .kartu-aksi { display: flex; gap: 5px; }
 .kartu-aksi:empty { display: none; }
 .kartu-aksi button {
@@ -693,6 +729,10 @@ body {
 }
 .pengaturan-baris:last-child { border-bottom: 0; }
 .pengaturan-baris input { accent-color: var(--amber); width: 15px; height: 15px; margin: 0; }
+.pengaturan-baris select {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 11px; padding: 2px 4px;
+}
 /* Tiga baris suara: checkbox + slider volume digabung dalam satu blok, garis
    pemisahnya pindah ke pembungkusnya supaya baris checkbox & slider kelihatan
    satu kesatuan, bukan dua baris terpisah. */

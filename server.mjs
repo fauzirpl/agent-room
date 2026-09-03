@@ -14,6 +14,66 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.AGENT_ROOM_PORT || 4517);
 const HOST = process.env.AGENT_ROOM_HOST || '127.0.0.1';
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+/* ------------------------------------------------------------ gerbang ---
+   Dua penjaga di pintu depan, keduanya berlaku SEBELUM route mana pun:
+
+   1. Penjaga Host. Server ini cuma mendengar di 127.0.0.1, tapi itu tidak
+      menghalangi DNS rebinding: situs jahat yang dibuka pemilik mesin bisa
+      mengarahkan nama domainnya sendiri ke 127.0.0.1 lalu membaca /stream
+      dari skripnya — Origin-nya bukan milik kita, tapi /stream memang tidak
+      pernah memeriksa Origin. Yang pasti berbeda pada permintaan seperti itu
+      adalah header Host: dia berisi nama domain si penyerang, bukan
+      127.0.0.1/localhost. Jadi Host yang bukan alamat kita ditolak 403,
+      untuk semua route. Hook curl mengirim Host 127.0.0.1:port, halaman
+      mengirim alamat yang diketik di peramban — keduanya lolos. Daftar
+      tambahan (nama mesin di LAN, nama tunnel) lewat AGENT_ROOM_HOST_IZIN.
+
+   2. Kunci event. Kalau AGENT_ROOM_KUNCI diisi, POST /event wajib membawa
+      header x-agent-room-kunci yang sama. Ini syarat mutlak begitu bind
+      dibuka ke LAN (kantor pusat menerima hook dari kantor cabang): tanpa
+      kunci, siapa pun di jaringan bisa memalsukan sesi. Tanpa env, perilaku
+      lama tetap — hook yang sudah terpasang tanpa kunci diterima. Dibanding-
+      kan lewat hash supaya panjangnya tidak bocor lewat waktu.            */
+const KUNCI = (process.env.AGENT_ROOM_KUNCI || '').trim();
+const MESIN_INI = os.hostname().toLowerCase();
+const HOST_IZIN = new Set(['127.0.0.1', 'localhost', '[::1]', HOST.toLowerCase(),
+  ...(process.env.AGENT_ROOM_HOST_IZIN || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)]);
+let gerbangWarnTs = 0;                      // console.warn tolakan: maks 1/menit
+function hostSah(req) {
+  const h = String(req.headers.host || '').trim().toLowerCase();
+  if (!h) return true;                      // klien HTTP/1.0 tanpa Host: bukan peramban
+  const m = h.match(/^(\[[0-9a-f:.]+\]|[^:]+)(?::\d{1,5})?$/);
+  return !!m && HOST_IZIN.has(m[1]);
+}
+function kunciSah(req) {
+  if (!KUNCI) return true;
+  const bawa = String(req.headers['x-agent-room-kunci'] || '');
+  const a = crypto.createHash('sha256').update(bawa).digest();
+  const b = crypto.createHash('sha256').update(KUNCI).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+function gerbangWarn(pesan) {
+  const kini = Date.now();
+  if (kini - gerbangWarnTs < 60 * 1000) return;
+  gerbangWarnTs = kini;
+  console.warn('[agent-room] ' + pesan);
+}
+/* Nama mesin pengirim, dari header x-agent-room-mesin yang ditanam installer.
+   Kosong kalau sama dengan mesin server: chip "mesin" di halaman cuma perlu
+   muncul untuk sesi yang datang dari kantor cabang, bukan untuk semua. */
+function mesinDari(req) {
+  const m = String(req.headers['x-agent-room-mesin'] || '').trim().replace(/[^\w.-]/g, '').slice(0, 32);
+  return m && m.toLowerCase() !== MESIN_INI ? m : '';
+}
+
+/* Peta sesi hidup untuk GET /ruangan (dan lewat itu, MCP): sesi 12-char ->
+   metadata terakhir yang terlihat. Diisi tiap hook masuk, dihapus saat
+   session-end, dan yang sudah lama diam dibuang waktu dibaca — sesi yang mati
+   tanpa SessionEnd (terminal ditutup paksa) tidak boleh dilaporkan hidup
+   selamanya. */
+const sesiHidup = new Map();                // sesi -> { cwd, cabang, mesin, tool, kind, sejak, terakhir }
+const SESI_HIDUP_SEPI_MS = 3 * 60 * 60 * 1000;
 const RING_SIZE = 400;
 
 /* ---------------------------------------------------------- kendali web ---
@@ -630,6 +690,59 @@ function normalize(raw) {
   return ev;
 }
 
+/* Isi peta sesi hidup dari event yang sudah dinormalisasi. Yang disimpan cuma
+   yang boleh keluar lewat /ruangan: tidak ada label, alasan, pikir, ucap. */
+function catatSesiHidup(ev) {
+  if (ev.kind === 'session-end') { sesiHidup.delete(ev.session); return; }
+  const s = sesiHidup.get(ev.session) || { sejak: ev.ts };
+  s.terakhir = ev.ts;
+  s.kind = ev.kind;
+  if (ev.cwd) s.cwd = ev.cwd;
+  if (ev.cabang !== undefined) s.cabang = ev.cabang || '';
+  if (ev.mesin) s.mesin = ev.mesin;
+  if (ev.tool) { s.tool = ev.tool; s.toolTs = ev.ts; }
+  sesiHidup.set(ev.session, s);
+}
+
+/* Potret ruangan untuk GET /ruangan: metadata saja, sekelas /health. */
+function potretRuangan() {
+  const kini = Date.now();
+  const sesi = [];
+  for (const [id, s] of sesiHidup) {
+    if (kini - s.terakhir > SESI_HIDUP_SEPI_MS) { sesiHidup.delete(id); continue; }
+    const butuh = butuhManusia.get(id);
+    const macet = macetSesi.get(id);
+    sesi.push({
+      sesi: id,
+      nama: namaSesi.get(id) || '',
+      peran: peranSesi.get(id) || '',
+      model: modelSesi.get(id) || '',
+      proyek: s.cwd || '',
+      cabang: s.cabang || '',
+      mesin: s.mesin || '',
+      tool: s.tool || '',
+      toolTs: s.toolTs || null,
+      kind: s.kind || '',
+      sejak: s.sejak,
+      terakhir: s.terakhir,
+      butuh: butuh ? { sebab: butuh.sebab } : null,
+      macet: macet ? { jenis: macet.jenis } : null,
+    });
+  }
+  sesi.sort((a, b) => b.terakhir - a.terakhir);
+  return {
+    ok: true,
+    ts: kini,
+    mesin: os.hostname(),
+    sesi,
+    tertahan: sesi.filter((s) => s.butuh || s.macet).length,
+    antrean: { jumlah: antrean.length, nama: antrean.map((t) => t.nama || '').filter(Boolean) },
+    jalan: { jumlah: jalan.size },
+    viewers: clients.size,
+    kendali: IZIN,
+  };
+}
+
 /* Sesi yang mengirim hook berarti benar-benar hidup: batalkan penjaga bisu. */
 function tandaiHidup(sesi) {
   for (const [id, j] of jalan) {
@@ -755,6 +868,11 @@ function riwayatTambah(ts, proyek, d) {
   riwayatHarian.set(hari, h);
 
   const nama = proyek || '(tanpa proyek)';
+  // rincian per proyek di dalam hari yang sama — dipakai /ruangan & MCP
+  // ("token hari ini per proyek"), bukan cuma total sepanjang masa per proyek
+  const hp = h.proyek || (h.proyek = {});
+  const hq = hp[nama] || (hp[nama] = { input: 0, output: 0 });
+  hq.input += d.input; hq.output += d.output;
   const p = riwayatProyek.get(nama) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0, terakhir: 0 };
   p.input += d.input; p.output += d.output; p.cacheTulis += d.cacheTulis; p.cacheBaca += d.cacheBaca;
   p.terakhir = Math.max(p.terakhir, ts);
@@ -916,10 +1034,13 @@ function agendaBaris(ev) {
   if (ev.model) b.model = ev.model;
   if (ev.nama) b.nama = ev.nama;
   if (ev.peran) b.peran = ev.peran;
+  if (ev.mesin) b.mesin = ev.mesin;
   if (ev.jenis) b.jenis = ev.jenis;
   if (ev.agen) b.agen = ev.agen;
   if (ev.agenId) b.agenId = ev.agenId;
   if (ev.panggilan) b.panggilan = ev.panggilan;
+  if (ev.golongan) b.golongan = ev.golongan;              // kind:'promosi' (buku induk)
+  if (ev.sebelumnya) b.sebelumnya = ev.sebelumnya;
   if (Array.isArray(ev.peserta)) b.peserta = ev.peserta.slice(0, 12).map((p) => clip(p, 40));
   for (const k of ['butuh', 'macet']) {
     const v = ev[k];
@@ -1024,6 +1145,205 @@ function putarUlang(req, res, tanggal, laju) {
   };
   req.on('close', () => { putus = true; clearTimeout(timer); pemutarUlang = Math.max(0, pemutarUlang - 1); });
   langkah();
+}
+
+/* ------------------------------------------------------ buku induk pegawai ---
+   Kartu pegawai cuma tahu SATU sesi; kliping cuma tahu SATU minggu. Buku induk
+   ini arsip karier lintas sesi & lintas restart, dikunci per NAMA FOLDER
+   PROYEK — satu-satunya identitas yang bertahan: session id selalu baru,
+   nama panggilan acak, jabatan bisa diganti kapan saja. "Pegawai" di sini
+   berarti "siapa pun yang bekerja di folder itu".
+
+   Bahannya HANYA event hook nyata yang lewat /event (pre/post/stop/session-
+   start/session-end). Event ambient tidak pernah sampai ke sini (POST /ambien
+   tidak memanggil apa pun di blok ini), dan peserta rapat (subagent) tidak
+   dihitung sebagai sesi — cuma fan-out-nya (Task/Agent/Workflow) yang ditulis
+   ke rekening proyek pemanggilnya.
+
+   Yang disimpan: angka dan nama (folder, cabang, tool). Tidak ada label, tidak
+   ada isi — jadi tidak perlu tunduk ke AGENT_ROOM_ISI: tidak ada isi yang
+   bisa dimatikan. Angkanya "sejak dipantau", dan label itu ikut ke halaman. */
+const BERKAS_BUKU_INDUK = process.env.AGENT_ROOM_BUKU_INDUK
+  || path.join(__dirname, 'buku-induk.json');
+const BUKU_INDUK_KIND = new Set(['pre', 'post', 'stop', 'session-start', 'session-end']);
+const BUKU_INDUK_FANOUT = new Set(['Task', 'Agent', 'Workflow']);
+const BUKU_INDUK_JEDA = 5 * 60 * 1000;      // celah antar event lebih dari ini bukan jam dinas
+const BUKU_INDUK_TOOL_MAX = 40;             // kunci tool per proyek dibatasi, sisanya dilebur ke '(lain)'
+/* Pengali jam dinas untuk UJI SAJA (AGENT_ROOM_BUKU_INDUK_UJI=<angka>): tanpa
+   ini kenaikan golongan butuh berjam-jam kerja sungguhan dan mustahil diuji.
+   Nilainya ikut ditulis ke /buku-induk supaya angka palsu tidak menyamar. */
+const BUKU_INDUK_UJI = Math.max(0, Number(process.env.AGENT_ROOM_BUKU_INDUK_UJI) || 0);
+if (BUKU_INDUK_UJI > 1) console.warn('[agent-room] buku induk MODE UJI: jam dinas dikalikan ' + BUKU_INDUK_UJI);
+
+/* Jenjang ala ASN dari jam dinas. Batasnya jam AKTIF (celah ≤5 menit antar
+   event), bukan jam kalender — sesi yang dibiarkan terbuka semalaman tidak
+   naik pangkat karenanya. Urutan array = urutan pangkat, dipakai membandingkan. */
+const GOLONGAN = [
+  { nama: 'CPNS',        jam: 0 },
+  { nama: 'Pengatur',    jam: 2 },
+  { nama: 'Penata Muda', jam: 10 },
+  { nama: 'Penata',      jam: 40 },
+  { nama: 'Pembina',     jam: 120 },
+];
+const USUL_FANOUT_MIN = 10;                 // fan-out minimal supaya layak diusulkan Kepala Bidang
+
+function golonganDari(p) {
+  // tanpa satu pun tool call belum bisa disebut bekerja, apa pun jam dinasnya
+  if (!p.toolCall) return GOLONGAN[0].nama;
+  const jam = p.jamDinas / 3600000;
+  let g = GOLONGAN[0].nama;
+  for (const t of GOLONGAN) if (jam >= t.jam) g = t.nama;
+  return g;
+}
+const golonganUrut = (nama) => GOLONGAN.findIndex((g) => g.nama === nama);
+
+const bukuInduk = { v: 1, proyek: {} };
+const bukuIndukSesi = new Map();            // proyek -> Set sesi 12-char yang sudah dihitung di proses ini
+let bukuIndukTimer = null;
+let bukuIndukKotor = false;
+
+const bukuIndukKosong = () => ({
+  sesi: 0, toolCall: 0, gagal: 0, jamDinas: 0, fanOut: 0,
+  pertama: 0, terakhir: 0, cabang: {}, tool: {}, golongan: GOLONGAN[0].nama,
+});
+
+/* Tabel tool dibatasi 40 kunci: proyek yang memakai puluhan tool MCP tidak
+   boleh menggemukkan berkas. Yang tersingkir dilebur ke '(lain)', jadi total
+   hitungannya tetap sama dengan toolCall. */
+function bukuIndukPangkasTool(tool) {
+  const kunci = Object.keys(tool).filter((k) => k !== '(lain)');
+  if (kunci.length <= BUKU_INDUK_TOOL_MAX) return;
+  kunci.sort((a, b) => tool[b] - tool[a]);
+  for (const k of kunci.slice(BUKU_INDUK_TOOL_MAX)) {
+    tool['(lain)'] = (tool['(lain)'] || 0) + tool[k];
+    delete tool[k];
+  }
+}
+
+function bukuIndukCatat(ev) {
+  if (!BUKU_INDUK_KIND.has(ev.kind) || !ev.cwd) return;
+  let p = bukuInduk.proyek[ev.cwd];
+  if (!p) p = bukuInduk.proyek[ev.cwd] = bukuIndukKosong();
+  const ts = ev.ts;
+  // jam dinas: jumlah celah antar event yang masih ≤5 menit — hanya celah,
+  // bukan durasi tool, supaya sesi terminal yang tidak melaporkan durasi pun adil
+  if (p.terakhir && ts > p.terakhir && ts - p.terakhir <= BUKU_INDUK_JEDA) {
+    p.jamDinas += (ts - p.terakhir) * (BUKU_INDUK_UJI > 1 ? BUKU_INDUK_UJI : 1);
+  }
+  if (!p.pertama || ts < p.pertama) p.pertama = ts;
+  if (ts > p.terakhir) p.terakhir = ts;
+  // sesi dihitung sekali per proses server: id-nya tidak disimpan ke disk
+  // (buku induk bukan daftar hadir), jadi sesi yang melintasi restart bisa
+  // terhitung dua kali — itu harga yang dipilih daripada menulis id sesi
+  let set = bukuIndukSesi.get(ev.cwd);
+  if (!set) bukuIndukSesi.set(ev.cwd, set = new Set());
+  if (!set.has(ev.session)) { set.add(ev.session); p.sesi++; }
+  if (ev.kind === 'pre' && ev.tool) {
+    p.toolCall++;
+    p.tool[ev.tool] = (p.tool[ev.tool] || 0) + 1;
+    bukuIndukPangkasTool(p.tool);
+    if (BUKU_INDUK_FANOUT.has(ev.tool)) p.fanOut++;
+  }
+  if (ev.kind === 'post' && ev.ok === false) p.gagal++;
+  if (ev.cabang) p.cabang[ev.cabang] = (p.cabang[ev.cabang] || 0) + 1;
+
+  // Kenaikan pangkat dideteksi di sini, bukan di halaman: satu sumber, satu
+  // event per kenaikan, sama di semua penonton. Hanya USUL & seremoni — tidak
+  // menyentuh peranSesi, tidak memindahkan meja siapa pun.
+  const g = golonganDari(p);
+  if (golonganUrut(g) > golonganUrut(p.golongan)) {
+    const sebelumnya = p.golongan;
+    p.golongan = g;
+    publish({ id: ++seq, ts, kind: 'promosi', session: '', cwd: ev.cwd,
+              golongan: g, sebelumnya, tool: null, label: 'naik pangkat ' + sebelumnya + ' → ' + g, ok: true });
+  }
+  bukuIndukKotor = true;
+  bukuIndukJadwalkanTulis();
+}
+
+function bukuIndukTulis(sinkron) {
+  if (!bukuIndukKotor) return;
+  bukuIndukKotor = false;
+  clearTimeout(bukuIndukTimer);
+  const isi = JSON.stringify(bukuInduk);
+  if (sinkron) {
+    try { fs.writeFileSync(BERKAS_BUKU_INDUK, isi); }
+    catch (err) { console.warn('[agent-room] gagal menulis buku induk: ' + err.message); }
+    return;
+  }
+  // .tmp lalu rename: berkas satu objek JSON, setengah jadi = tidak terbaca sama sekali
+  const tmp = BERKAS_BUKU_INDUK + '.tmp';
+  fs.writeFile(tmp, isi, (err) => {
+    if (err) { console.warn('[agent-room] gagal menulis buku induk: ' + err.message); bukuIndukKotor = true; return; }
+    fs.rename(tmp, BERKAS_BUKU_INDUK, (e2) => {
+      if (e2) { console.warn('[agent-room] gagal menulis buku induk: ' + e2.message); bukuIndukKotor = true; }
+    });
+  });
+}
+
+// Debounced ≤20 detik, sama alasannya dengan checkpoint kliping: dipanggil
+// tiap tool call, tidak boleh menulis disk sesering itu.
+function bukuIndukJadwalkanTulis() {
+  if (bukuIndukTimer) return;
+  bukuIndukTimer = setTimeout(() => { bukuIndukTimer = null; bukuIndukTulis(false); }, 20000);
+  bukuIndukTimer.unref?.();
+}
+
+function bukuIndukMuat() {
+  let o = null;
+  try { o = JSON.parse(fs.readFileSync(BERKAS_BUKU_INDUK, 'utf8')); }
+  catch { return; }                 // belum ada: wajar, karier baru mulai
+  if (!o || o.v !== 1 || !o.proyek || typeof o.proyek !== 'object') {
+    console.warn('[agent-room] buku induk diabaikan: bentuk berkas tidak dikenal');
+    return;
+  }
+  let n = 0;
+  for (const [nama, r] of Object.entries(o.proyek)) {
+    if (!r || typeof r !== 'object' || !nama) continue;
+    const p = bukuIndukKosong();
+    for (const k of ['sesi', 'toolCall', 'gagal', 'jamDinas', 'fanOut', 'pertama', 'terakhir']) {
+      p[k] = Math.max(0, Number(r[k]) || 0);
+    }
+    for (const k of ['cabang', 'tool']) {
+      if (r[k] && typeof r[k] === 'object') {
+        for (const [nm, v] of Object.entries(r[k])) if (nm && Number(v) > 0) p[k][clip(nm, 64)] = Number(v);
+      }
+    }
+    bukuIndukPangkasTool(p.tool);
+    // golongan tersimpan dipercaya kalau sah; kalau tidak, dihitung ulang tanpa
+    // menerbitkan event — berkas lama bukan kenaikan pangkat
+    p.golongan = golonganUrut(r.golongan) >= 0 ? r.golongan : golonganDari(p);
+    bukuInduk.proyek[clip(nama, 120)] = p;
+    n++;
+  }
+  if (n) console.log('[agent-room] buku induk dimuat: ' + n + ' proyek dari ' + BERKAS_BUKU_INDUK);
+}
+bukuIndukMuat();
+
+/* Bentuk yang dilayani /buku-induk: rekaman mentah + `golongan` per proyek
+   (sudah tersimpan) + `usulPromosi`: proyek dengan fan-out tertinggi (≥10)
+   diusulkan jadi Kepala Bidang — USUL, bukan pengangkatan: peranSesi tidak
+   pernah disentuh dari sini. */
+function bukuIndukRingkas() {
+  let usul = null;
+  for (const [nama, p] of Object.entries(bukuInduk.proyek)) {
+    if (p.fanOut >= USUL_FANOUT_MIN && (!usul || p.fanOut > usul.fanOut)) usul = { proyek: nama, fanOut: p.fanOut };
+  }
+  return {
+    v: bukuInduk.v,
+    keterangan: 'sejak dipantau',
+    ...(BUKU_INDUK_UJI > 1 ? { uji: BUKU_INDUK_UJI } : {}),
+    golongan: GOLONGAN,
+    proyek: bukuInduk.proyek,
+    usulPromosi: usul ? { ...usul, jabatan: 'Kepala Bidang', jabatanId: 'kabid' } : null,
+  };
+}
+
+// Tulis saat keluar: 'exit' cuma boleh sinkron, dan SIGINT/SIGTERM harus
+// diubah jadi exit() supaya 'exit' sempat jalan. Dipasang sekali saja.
+process.on('exit', () => bukuIndukTulis(true));
+for (const sinyal of ['SIGINT', 'SIGTERM']) {
+  process.on(sinyal, () => process.exit(0));
 }
 
 /** Rangka event untuk sesi yang identitasnya sudah tercatat di server. */
@@ -1515,6 +1835,71 @@ function lahirkanAntrean() {
   }
 }
 
+/* ----------------------------------------------------- paraf dari ruangan ---
+   Sesi yang dilahirkan halaman dengan `paraf:true` tidak lagi jalan
+   bypassPermissions: dia lahir dengan --permission-mode default dan
+   --permission-prompt-tool yang menunjuk ke server MCP kecil milik kita
+   (mcp-izin.mjs). Tiap kali satu tool butuh izin, proses MCP itu mem-POST ke
+   /izin/tanya lalu long-poll /izin/tunggu; kamu menjawab dari kartu pegawai
+   lewat /izin/jawab. Kuncinya per-tugas, acak, cuma ada di env anak — jadi
+   yang bisa MENGAJUKAN izin hanya proses yang memang kita lahirkan, dan yang
+   bisa MENJAWAB hanya pemegang token halaman (gerbang yang sama dengan
+   /perintah). Hanya di memori: server mati, permintaan yang menggantung ikut
+   hangus, dan CLI-nya menerima deny. */
+const IZIN_TUNGGU_MS = 15 * 60 * 1000;      // tanpa paraf selama ini -> ditolak
+const IZIN_POLL_MS = 25 * 1000;             // satu long-poll ditahan paling lama segini
+const izinTunggu = new Map();               // id 12-hex -> { id, tugas, sesi, tool, ringkasan, sejak, jawab, penunggu:Set<res>, timer }
+const BERKAS_MCP_IZIN = path.join(__dirname, 'mcp-izin.mjs');
+
+const kunciCocok = (a, b) => {
+  const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || ''));
+  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y);
+};
+
+function ringkasIzin(p) {
+  return { id: p.id, sesi: p.sesi, tool: p.tool, ringkasan: p.ringkasan, sejak: p.sejak };
+}
+
+/* Menjawab satu permintaan: melepas semua long-poll yang menunggunya, menyiarkan
+   `izin-jawab`, dan mencabut keadaan butuh manusia. Dipakai tiga jalur —
+   tombol di halaman, timeout 15 menit, dan proses tugas yang keburu berakhir. */
+function jawabIzin(p, keputusan, pesan, sumber) {
+  if (p.jawab) return;
+  clearTimeout(p.timer);
+  p.jawab = { keputusan, pesan: clip(pesan || '', 200) };
+  izinTunggu.delete(p.id);
+  const badan = JSON.stringify({ ok: true, ...p.jawab });
+  for (const res of p.penunggu) {
+    try { res.writeHead(200, { 'content-type': 'application/json' }); res.end(badan); } catch { /* sudah putus */ }
+  }
+  p.penunggu.clear();
+  const ev = {
+    id: ++seq, ts: Date.now(), kind: 'izin-jawab', session: p.sesi,
+    nama: namaSesi.get(p.sesi) || '', tool: p.tool, ok: keputusan === 'paraf',
+    keputusan, sumber, paraf: { id: p.id, tool: p.tool },
+    // keputusannya sudah ada di `keputusan`; label cuma tool + catatan penolakan
+    label: clip(p.tool + (pesan ? ' — ' + pesan : ''), 120),
+    ...(peranSesi.has(p.sesi) ? { peran: peranSesi.get(p.sesi) } : {}),
+    ...(modelSesi.has(p.sesi) ? { model: modelSesi.get(p.sesi) } : {}),
+  };
+  // Keadaan butuh manusia dicabut di sini, bukan menunggu PostToolUse: kalau
+  // ditolak, tool-nya tidak pernah jalan, jadi tidak ada hook yang menyusul.
+  if (butuhManusia.delete(p.sesi)) ev.butuh = false;
+  publish(ev);
+  console.log('[agent-room] izin ' + p.id + ' (' + p.tool + ', sesi ' + p.sesi + ') '
+    + keputusan + (sumber ? ' oleh ' + sumber : ''));
+}
+
+/* Tugas berakhir — selesai, dihentikan, timeout — sementara ada permintaan
+   yang belum dijawab: proses MCP-nya juga sudah mati, jadi tidak ada yang
+   perlu diberi tahu; cukup dibersihkan supaya kartu tidak menawarkan tombol
+   paraf untuk sesi yang sudah tidak ada. */
+function bersihkanIzin(sid) {
+  for (const p of [...izinTunggu.values()]) {
+    if (p.tugas === sid) jawabIzin(p, 'tolak', 'tugasnya sudah berakhir', 'server');
+  }
+}
+
 /* Jalur lahir yang SATU-SATUNYA: dipakai /perintah waktu slot masih ada, dan
    lahirkanAntrean() waktu giliran tiba. `t` adalah bahan yang sudah disaring
    di /perintah — di sini tidak ada lagi keputusan soal apa yang boleh. */
@@ -1544,12 +1929,34 @@ function lahirkanTugas(t) {
   if (model) args.push('--model', model);
   if (t.pagu) args.push('--max-budget-usd', t.pagu);
 
+  /* Paraf dari ruangan: mode izin bawaan, dan tiap permintaan izin dialihkan
+     ke tool MCP kita. Konfigurasi MCP-nya JSON inline satu elemen argv (bukan
+     berkas sementara — tidak ada yang tertinggal di disk). Yang masuk ke
+     JSON itu cuma alamat server dan id tugas; KUNCINYA TIDAK, karena argv
+     proses bisa dibaca proses lain di mesin yang sama. Kunci dititipkan lewat
+     env proses claude (di bawah, bersama kredensial) dan diwarisi proses MCP
+     anaknya — CLI meneruskan env induk ke server MCP stdio. */
+  const kunciIzin = t.paraf ? crypto.randomBytes(16).toString('hex') : '';
+  if (t.paraf) {
+    const mcp = { mcpServers: { 'agent-room-izin': {
+      command: process.execPath, args: [BERKAS_MCP_IZIN],
+      env: { AGENT_ROOM_URL: 'http://127.0.0.1:' + PORT, AGENT_ROOM_TUGAS: sid },
+    } } };
+    args.push('--permission-prompt-tool', 'mcp__agent-room-izin__izin',
+              '--mcp-config', JSON.stringify(mcp));
+    // --permission-mode di atas sudah terpasang; 'default' yang dipakai kalau
+    // pemanggil tidak memaksa mode lain, supaya izin benar-benar ditanyakan.
+    const iMode = args.indexOf('--permission-mode');
+    if (iMode >= 0 && !t.mode) args[iMode + 1] = 'default';
+  }
+
   let anak;
   try {
     // Kredensial lewat env, tidak pernah lewat argv: baris perintah proses
     // bisa dibaca proses lain di mesin yang sama, isi env-nya tidak.
     const lingkungan = { ...process.env };
     if (kredensial) lingkungan[kredensial.envKey] = kredensial.nilai;
+    if (kunciIzin) lingkungan.AGENT_ROOM_KUNCI_IZIN = kunciIzin;
     anak = spawn(CLAUDE, args, {
       cwd: kerja, shell: false, windowsHide: true, env: lingkungan,
       // stdin ditutup sejak awal. Kalau dibiarkan berupa pipa yang tidak
@@ -1565,6 +1972,8 @@ function lahirkanTugas(t) {
 
   const rec = {
     anak, nama, mulai: Date.now(), cwd: kerja, keluar: '', galat: '', hidup: false,
+    paraf: Boolean(t.paraf), // izin ditanyakan ke ruangan, bukan bypass
+    kunciIzin,               // kunci /izin/tanya — cuma dibandingkan, tidak pernah keluar
     streamMasuk: 0,          // berapa pesan stream-json yang sudah terbaca
     hasil: null,             // pesan `result` terakhir — sumber sebab gagal & biaya
     biaya: null,
@@ -1667,6 +2076,7 @@ function lahirkanTugas(t) {
     clearTimeout(batas);
     clearTimeout(rec.bisu);
     jalan.delete(sid);
+    bersihkanIzin(sid);      // permintaan paraf yang menggantung ikut ditutup
     // Jangan diam kalau gagal: sesi yang tidak pernah lahir tidak akan
     // memunculkan pegawai apa pun, jadi kegagalannya harus terlihat.
     const gagal = kode !== 0;
@@ -1700,15 +2110,31 @@ function lahirkanTugas(t) {
 
   publish({ id: ++seq, ts: Date.now(), kind: 'tugas-mulai',
             session: sid.slice(0, 12), nama, tool: null, label: nama, ok: true,
-            peran: peranSesi.get(sid.slice(0, 12)) || '', model });
+            peran: peranSesi.get(sid.slice(0, 12)) || '', model, paraf: rec.paraf });
 
   return { ok: true, sesi: sid.slice(0, 12) };
 }
 
 const server = http.createServer(async (req, res) => {
+  // Penjaga Host jalan paling depan, untuk SEMUA route — lihat blok gerbang.
+  if (!hostSah(req)) {
+    gerbangWarn('permintaan ditolak: Host "' + clip(req.headers.host, 80) + '" bukan alamat kantor ini'
+      + ' (izinkan lewat AGENT_ROOM_HOST_IZIN kalau memang milikmu)');
+    req.resume();
+    res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('Host tidak dikenal');
+    return;
+  }
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/event' && req.method === 'POST') {
+    if (!kunciSah(req)) {
+      gerbangWarn('event ditolak: x-agent-room-kunci tidak cocok/kosong — pasang ulang hook dengan'
+        + ' AGENT_ROOM_KUNCI yang sama (dinas --pasang)');
+      req.resume();
+      res.writeHead(403).end();
+      return;
+    }
+    const mesin = mesinDari(req);
     const body = await readBody(req, BATAS_EVENT);
     // Balas 204 tanpa isi: apa pun yang ditulis hook ke stdout bisa dibaca
     // Claude Code sebagai perintah kontrol, jadi jangan kirim body sama sekali.
@@ -1729,9 +2155,13 @@ const server = http.createServer(async (req, res) => {
     try {
       const raw = JSON.parse(body.teks || '{}');
       const ev = normalize(raw);
+      if (mesin) ev.mesin = mesin;
       tandaiHidup(ev.session);
+      catatSesiHidup(ev);
       publish(ev);
       laporKeluar(ev);          // nota dinas keluar: hanya kalau AGENT_ROOM_LAPOR diisi
+      // Buku induk pegawai: karier per folder proyek, hanya dari hook nyata di sini
+      bukuIndukCatat(ev);
       /* Jalur transkrip cuma diketahui dari sini. Waktu sesinya habis
          pemantauannya tidak langsung dicabut: kalimat penutup agen sering baru
          mendarat di berkas beberapa saat sesudah hook terakhir. */
@@ -1798,7 +2228,11 @@ const server = http.createServer(async (req, res) => {
         cabang: cabangGit(j.cwd),
         peran: peranSesi.get(id.slice(0, 12)) || '',
         model: modelSesi.get(id.slice(0, 12)) || '',
+        paraf: Boolean(j.paraf),
       })),
+      // Permintaan izin yang masih menunggu paraf dari ruangan — supaya halaman
+      // yang dibuka belakangan tetap bisa menawarkan tombolnya.
+      izinTunggu: [...izinTunggu.values()].map(ringkasIzin),
       // Loket disposisi: yang menunggu slot. Prompt-nya tidak ikut — cukup
       // nama, proyek, sifat, dan posisinya.
       antrean: antrean.map(ringkasAntre),
@@ -2019,6 +2453,9 @@ const server = http.createServer(async (req, res) => {
       model,
       mode: typeof p.mode === 'string' && p.mode ? p.mode : '',
       pagu: p.pagu ? String(Number(p.pagu) || 1) : '',
+      // paraf:true = izin ditanyakan ke ruangan (lihat "paraf dari ruangan");
+      // bawaan tetap jalur lama bypassPermissions.
+      paraf: p.paraf === true,
       sifat, sejak: Date.now(),
     };
 
@@ -2071,6 +2508,101 @@ const server = http.createServer(async (req, res) => {
     return balas(200, { ok: true, id: t.id, nama: t.nama });
   }
 
+  /* ------------------------------------------------- paraf dari ruangan ---
+     Tiga pintu. Dua yang pertama dipakai proses MCP anak (mcp-izin.mjs) dan
+     dijaga kunci per-tugas; yang ketiga dipakai halaman dan dijaga gerbang
+     yang sama persis dengan /perintah — yang boleh menyuruh mesin bekerja,
+     boleh juga memparaf pekerjaannya. */
+  if (url.pathname === '/izin/tanya' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = (await readBody(req)).teks;
+    let p;
+    try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400).end(); return; }
+    const balas = (kode, obj) => {
+      res.writeHead(kode, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(obj));
+    };
+    const rec = jalan.get(String(p.tugas || ''));
+    if (!rec || !rec.paraf || !kunciCocok(p.kunci, rec.kunciIzin)) {
+      return balas(403, { ok: false, pesan: 'kunci izin tidak cocok' });
+    }
+    const sesi = String(p.tugas).slice(0, 12);
+    const tool = clip(p.tool_name || '?', 64);
+    const ringkasan = clip(p.ringkasan || '', 300);
+    const izin = {
+      id: crypto.randomBytes(6).toString('hex'), tugas: String(p.tugas), sesi, tool, ringkasan,
+      panggilan: clip(p.tool_use_id || '', 64), sejak: Date.now(), jawab: null,
+      penunggu: new Set(), timer: null,
+    };
+    izin.timer = setTimeout(() => jawabIzin(izin, 'tolak', 'tidak ada paraf', 'waktu habis'), IZIN_TUNGGU_MS);
+    izin.timer.unref?.();
+    izinTunggu.set(izin.id, izin);
+    // Event yang sama bentuknya dengan izin-minta dari hook, ditambah `paraf`:
+    // pose butuh manusia, pengingat terkatung, dan nota dinas keluar semuanya
+    // ikut jalan tanpa perlu tahu dari mana izinnya datang.
+    const keadaan = { sebab: 'izin', alasan: ringkasan, label: ringkasan };
+    butuhManusia.set(sesi, keadaan);
+    const ev = {
+      id: ++seq, ts: izin.sejak, kind: 'izin-minta', session: sesi,
+      nama: namaSesi.get(sesi) || rec.nama, cwd: baseName(rec.cwd),
+      ...(rec.cwd ? { cabang: cabangGit(rec.cwd) } : {}),
+      tool, label: ringkasan, ok: true, sebab: 'izin', alasan: ringkasan,
+      ...(izin.panggilan ? { panggilan: izin.panggilan } : {}),
+      paraf: { id: izin.id, tool }, butuh: keadaan,
+      ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
+      ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
+    };
+    tandaiHidup(sesi);       // proses MCP-nya sudah bicara: sesinya jelas hidup
+    publish(ev);
+    laporKeluar(ev);
+    console.log('[agent-room] izin ' + izin.id + ' diajukan: ' + tool + ' (sesi ' + sesi + ')');
+    return balas(200, { ok: true, id: izin.id });
+  }
+
+  if (url.pathname === '/izin/tunggu' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const balas = (kode, obj) => {
+      res.writeHead(kode, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(obj));
+    };
+    const tugas = url.searchParams.get('tugas') || '';
+    const rec = jalan.get(tugas);
+    if (!rec || !rec.paraf || !kunciCocok(url.searchParams.get('kunci'), rec.kunciIzin)) {
+      return balas(403, { ok: false, pesan: 'kunci izin tidak cocok' });
+    }
+    const p = izinTunggu.get(url.searchParams.get('id') || '');
+    if (!p || p.tugas !== tugas) return balas(404, { ok: false, pesan: 'permintaan izin tidak ada' });
+    if (p.jawab) return balas(200, { ok: true, ...p.jawab });
+    // Ditahan sampai dijawab atau IZIN_POLL_MS lewat — yang kedua menjawab
+    // {tunggu:true} supaya klien mengulang, bukan menggantung tanpa batas.
+    p.penunggu.add(res);
+    const lepas = setTimeout(() => {
+      if (!p.penunggu.delete(res)) return;
+      try { balas(200, { ok: true, tunggu: true }); } catch { /* sudah putus */ }
+    }, IZIN_POLL_MS);
+    req.on('close', () => { clearTimeout(lepas); p.penunggu.delete(res); });
+    return;
+  }
+
+  if (url.pathname === '/izin/jawab' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = (await readBody(req)).teks;
+    let p;
+    try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400).end(); return; }
+    const balas = (kode, obj) => {
+      res.writeHead(kode, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(obj));
+    };
+    if (!IZIN) return balas(403, { ok: false, pesan: 'kendali web mati' });
+    if (p.token !== TOKEN) return balas(403, { ok: false, pesan: 'token tidak cocok' });
+    const keputusan = p.keputusan === 'paraf' ? 'paraf' : p.keputusan === 'tolak' ? 'tolak' : '';
+    if (!keputusan) return balas(400, { ok: false, pesan: 'keputusan harus paraf atau tolak' });
+    const izin = izinTunggu.get(String(p.id || ''));
+    if (!izin) return balas(404, { ok: false, pesan: 'permintaan izin tidak ada (sudah dijawab atau tugasnya berakhir)' });
+    jawabIzin(izin, keputusan, keputusan === 'tolak' ? clip(p.pesan || 'ditolak dari ruangan', 200) : '', 'halaman');
+    return balas(200, { ok: true, id: izin.id, keputusan });
+  }
+
   if (url.pathname === '/perintah/hentikan' && req.method === 'POST') {
     if (!asalSah(req)) { res.writeHead(403).end(); return; }
     const body = (await readBody(req)).teks;
@@ -2115,6 +2647,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Buku induk pegawai — tanpa token, sekelas /token-riwayat: isinya angka
+     dan nama folder/cabang/tool yang toh sudah lewat /stream juga. */
+  if (url.pathname === '/buku-induk') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify(bukuIndukRingkas()));
+    return;
+  }
+
   /* Buku agenda — tanpa token, sekelas /token-riwayat: isinya metadata yang
      toh sudah lewat /stream tanpa autentikasi juga. Terbaru dulu. */
   if (url.pathname === '/agenda') {
@@ -2152,6 +2692,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Potret ruangan — tanpa token, sekelas /health: siapa yang hidup, siapa
+     yang tertahan, berapa yang antre. Metadata saja; ini yang dibaca
+     mcp-room.mjs supaya sesi Claude lain bisa "menanyakan kantornya". */
+  if (url.pathname === '/ruangan') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify(potretRuangan()));
+    return;
+  }
+
   if (url.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, events: seq, viewers: clients.size, pemutarUlang, port: PORT }));
@@ -2174,6 +2723,11 @@ if (IZIN) muatKredensial();     // hanya berguna kalau halaman boleh melahirkan 
 server.listen(PORT, HOST, () => {
   console.log(`[agent-room] ruangan siap  ->  http://${HOST}:${PORT}`);
   console.log('[agent-room] menunggu event dari Claude Code hooks...');
+  if (KUNCI) console.log('[agent-room] kunci event AKTIF — POST /event tanpa x-agent-room-kunci ditolak');
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !KUNCI) {
+    console.warn('[agent-room] PERINGATAN: bind ke ' + HOST + ' tanpa AGENT_ROOM_KUNCI — siapa pun di jaringan'
+      + ' bisa memalsukan sesi dan membaca isi kerja lewat /stream. Isi AGENT_ROOM_KUNCI, atau kembali ke 127.0.0.1.');
+  }
   if (IZIN) {
     if (CLAUDE) {
       console.log(`[agent-room] kendali web AKTIF — halaman boleh melahirkan sesi`);

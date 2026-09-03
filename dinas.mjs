@@ -12,6 +12,8 @@
 //   dinas --layanan       -> daftarkan supaya kantornya nyala sendiri tiap login
 //   dinas --layanan --lepas -> cabut pendaftaran itu
 //   dinas --layanan --coba  -> cuma cetak yang akan dijalankan, tidak mendaftar
+//   dinas --mcp           -> cara mendaftarkan kantor sebagai MCP server ke Claude Code
+//   dinas --mcp --json    -> cuma JSON mcpServers-nya
 //
 // Gunanya bukan menghemat ketikan. Ada tiga hal yang tidak bisa dilihat
 // `node server.mjs` sendirian dan justru itu yang paling sering bikin orang
@@ -53,6 +55,41 @@ const VERSI = versiPaket();
 if (ada('--versi', '--version')) {
   if (!VERSI) { console.error('package.json tidak ketemu di ' + DIR); process.exit(1); }
   console.log(VERSI);
+  process.exit(0);
+}
+
+/* ————— MCP: kantor yang bisa ditanya sesi lain —————
+   Tidak menjalankan `claude mcp add` sendiri — mendaftarkan MCP server itu
+   mengubah konfigurasi Claude Code milik pengguna, dan itu keputusan yang
+   pantas diketik sendiri. Yang dicetak dua-duanya: perintah CLI, dan JSON
+   untuk ditempel ke .mcp.json / settings kalau lebih suka begitu. */
+if (ada('--mcp')) {
+  const skrip = path.join(DIR, 'mcp-room.mjs');
+  const url = (process.env.AGENT_ROOM_URL || '').trim() || 'http://127.0.0.1:' + PORT;
+  const env = url !== 'http://127.0.0.1:4517' ? { AGENT_ROOM_URL: url } : {};
+  const json = { mcpServers: { 'agent-room': { command: process.execPath, args: [skrip], ...(Object.keys(env).length ? { env } : {}) } } };
+  if (ada('--json')) {
+    console.log(JSON.stringify(json, null, 2));
+    process.exit(0);
+  }
+  const q = (t) => '"' + String(t).replace(/"/g, '\\"') + '"';
+  const envCli = Object.entries(env).map(([k, v]) => ' -e ' + k + '=' + v).join('');
+  console.log();
+  console.log('  Agent Room sebagai MCP server — supaya sesi Claude lain bisa menanyakan kantornya.');
+  console.log('  Tools: ruangan_siapa_tertahan, ruangan_sesi_aktif, ruangan_token_hari_ini,');
+  console.log('         ruangan_agenda_cari, ruangan_kesehatan  (hanya-baca, metadata saja)');
+  console.log();
+  console.log('  1. lewat CLI (daftarkan untuk pengguna ini):');
+  console.log();
+  console.log('     claude mcp add agent-room -s user' + envCli + ' -- ' + q(process.execPath) + ' ' + q(skrip));
+  console.log();
+  console.log('  2. atau tempel ke .mcp.json (proyek) / ~/.claude.json (mcpServers):');
+  console.log();
+  for (const b of JSON.stringify(json, null, 2).split('\n')) console.log('     ' + b);
+  console.log();
+  console.log('  Kantornya harus sedang jalan (`dinas`) di ' + url + ' saat tool dipanggil.');
+  console.log('  Uji cepat: echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | node ' + q(skrip));
+  console.log();
   process.exit(0);
 }
 
@@ -204,6 +241,20 @@ function laporan(bin, hook, token) {
     : abu('mati') + abu('  (nyalakan: dinas --kendali)'));
 
   baris('alamat', putih('http://127.0.0.1:' + PORT));
+
+  // gerbang: kunci event & kantor pusat (multi-mesin) — dibaca dari env yang
+  // sama yang dipakai server dan installer, supaya laporannya tidak bohong
+  const kunci = (process.env.AGENT_ROOM_KUNCI || '').trim();
+  const kantor = (process.env.AGENT_ROOM_URL || '').trim();
+  baris('kunci event', kunci
+    ? hijau('terpasang') + abu('  (AGENT_ROOM_KUNCI; hook harus membawa header yang sama)')
+    : abu('tidak') + abu('  — cukup selama bind tetap 127.0.0.1'));
+  if (kantor) baris('kantor pusat', kuning(kantor) + abu('  (AGENT_ROOM_URL: hook mesin ini lapor ke sana)'));
+  const bind = (process.env.AGENT_ROOM_HOST || '127.0.0.1').trim();
+  if (bind !== '127.0.0.1' && bind !== 'localhost') {
+    baris('bind', kunci ? kuning(bind) + abu('  — terbuka ke jaringan, dikunci')
+      : merah(bind + '  TANPA KUNCI') + abu('  — isi AGENT_ROOM_KUNCI atau kembali ke 127.0.0.1'));
+  }
   console.log(abu('  ' + '-'.repeat(52)));
   console.log();
 }

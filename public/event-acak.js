@@ -1162,6 +1162,7 @@ daftarEvent(
 
 {
   id: 'rapat-daring',
+  babak: { kerja: 1.5, istirahat: .3, apel: 0 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sedang, cooldown: 1080, durasi: 55,
   perluAktor: true,
   syarat: (S) => S.jam >= 9 && S.jam < 15 && kursiKosong() >= 8,
@@ -1258,6 +1259,7 @@ daftarEvent(
 
 {
   id: 'kopi-jam-sepuluh',
+  babak: { kerja: 1.5, istirahat: .5, apel: 0 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sering, cooldown: 180, durasi: 25,
   perluAktor: true,
   syarat: (S) => (S.jam >= 9.6 && S.jam < 10.4) || (S.jam >= 14.5 && S.jam < 15),
@@ -1317,6 +1319,7 @@ daftarEvent(
 
 {
   id: 'ngerumpi-di-pantry',
+  babak: { istirahat: 2.5, apel: 0, lembur: .5, malam: .3 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'latar', bobot: B.sedang, cooldown: 260, durasi: 20,
   perluAktor: true,
   syarat: (S) => S.orang.filter(bisaDipinjam).length >= 2,
@@ -1398,6 +1401,7 @@ daftarEvent(
 
 {
   id: 'gorengan-di-meja-rapat',
+  babak: { istirahat: 2, apel: 0, lembur: .5, malam: .2 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sering, cooldown: 300, durasi: 22,
   perluAktor: true,
   syarat: (S) => S.orang.length >= 3
@@ -1437,6 +1441,7 @@ daftarEvent(
 
 {
   id: 'ojol-datang-bawa-pesanan',
+  babak: { istirahat: 2.5, apel: 0 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sedang, cooldown: 360, durasi: 14,
   perluAktor: true,
   syarat: (S) => S.jam >= 9 && S.jam < 15,
@@ -1474,6 +1479,7 @@ daftarEvent(
 
 {
   id: 'tukang-bakso-lewat',
+  babak: { istirahat: 2.5, pulang: 1.5 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'latar', bobot: B.sedang, cooldown: 720, durasi: 18,
   syarat: (S) => S.jam >= 10 && S.jam < 16 && S.luar > 0.4,
   mulai(E) {
@@ -1866,6 +1872,7 @@ daftarEvent(
 
 {
   id: 'sandal-jepit-sore',
+  babak: { pulang: 2, lembur: 2, kerja: .7 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'latar', bobot: B.sedang, cooldown: 1800, durasi: 8,
   syarat: (S) => S.jam >= 14.5 && S.orang.some((o) => o.station === 'think' && o.diam && !o.sandal),
   mulai(E, S) {
@@ -4803,6 +4810,7 @@ daftarEvent(
 
 {
   id: 'pengarahan-kadis',
+  babak: { kerja: 1.5, apel: 0, istirahat: .3, lembur: .2, malam: 0, libur: .2 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sedang, cooldown: 360, durasi: 22,
   syarat: (S) => S.orang.filter((o) => o.x > 240).length >= 2,
   bentrokDengan: ['rapat-pimpinan-dadakan'],
@@ -4898,6 +4906,7 @@ daftarEvent(
 
 {
   id: 'rapat-pimpinan-dadakan',
+  babak: { kerja: 1.5, istirahat: .3, apel: 0, pulang: .5, lembur: .3, malam: 0, libur: .2 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sedang, cooldown: 480, durasi: 50,
   syarat: (S) => S.orang.filter((o) => o.standby || o.station === 'idle').length >= 3,
   mulai(E, S) {
@@ -6454,6 +6463,7 @@ daftarEvent(
 
 {
   id: 'lembur-sampai-malam',
+  babak: { lembur: 2, malam: 1 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'latar', bobot: B.sedang, cooldown: 900, durasi: 120,
   syarat: (S) => S.jam > 20 || S.jam < 4,
   mulai() { minDiLayarTimpa = 0; },
@@ -7252,6 +7262,7 @@ daftarEvent(
 
 {
   id: 'kopi-pagi-dispenser',
+  babak: { kerja: 1.5, apel: .3 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'latar', bobot: B.sering, cooldown: 300, durasi: 20,
   syarat: (S) => S.jam > 7 && S.jam < 9.5 && S.nganggur.length >= 2,
   perluAktor: true,
@@ -7357,6 +7368,7 @@ daftarEvent(
 
 {
   id: 'makan-siang-bareng',
+  babak: { istirahat: 2, apel: 0 },   // pengali bobot per babak hari kerja (S.babak)
   kelas: 'panggung', bobot: B.sering, cooldown: 420, durasi: 26,
   perluAktor: true,
   syarat: (S) => S.orang.length >= 3 && S.jam >= 11.5 && S.jam < 13.5,

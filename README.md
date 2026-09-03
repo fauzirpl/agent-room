@@ -53,6 +53,14 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   semua bunyi disintesis langsung, nol file audio eksternal
 - Opsional: tugaskan pekerjaan baru dan telusuri folder langsung dari halaman
 
+### Tanya kantornya dari sesi lain
+
+Kantor ini juga bisa jadi **MCP server**: sesi Claude Code mana pun bisa
+bertanya "siapa yang lagi tertahan?", "sesi mana yang hidup?", "token hari
+ini berapa?", atau mencari buku agenda — tanpa membuka halaman. Jalankan
+`node dinas.mjs --mcp` untuk perintah `claude mcp add`-nya (atau `--mcp --json`
+untuk blok `mcpServers`). Hanya-baca, metadata saja; kantornya harus sedang jalan.
+
 Tanpa dependency — cuma butuh Node dan `curl`. Alasan di balik tiap
 keputusan desain (kenapa `curl` bukan Node, kenapa hujan bukan event acak,
 kenapa perintah shell dipecah dua meja, dst.) ada di **[DESIGN.md](DESIGN.md)**.
@@ -106,6 +114,14 @@ removes it, `--coba` only shows what would be run).
 - A sound notification when a session finishes, and optional lofi office
   music — all synthesized on the fly, zero external audio files
 - Optional: assign new tasks and browse folders straight from the page
+
+### Ask the office from another session
+
+The office doubles as an **MCP server**: any Claude Code session can ask
+"who is waiting on me?", "which sessions are alive?", "how many tokens today?",
+or search the activity log — without opening the page. Run
+`node dinas.mjs --mcp` to get the `claude mcp add` command (or `--mcp --json`
+for an `mcpServers` block). Read-only, metadata only; the office must be running.
 
 Zero dependencies — just Node and `curl`. The reasoning behind every design
 choice (why `curl` instead of Node, why rain isn't a random event, why shell

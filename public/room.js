@@ -665,6 +665,8 @@ function drawWall() {
     r(420, 13, 5, 1, '#9aa1a6');
   }
 
+  gambarTemaDinding();      // dekor tema kalender (agustusan, korpri, ...) — di bawah neon
+
   // lampu neon TL gantung
   NEON_X.forEach((cx, i) => {
     const fl = kedipNeon(i);
@@ -1597,6 +1599,7 @@ function drawMejaKerja() {
       }
       r(x + 24, y + 4, 5, 5, '#dfe7ef');                  // gelas
     }
+    gambarTemaMeja(x, y);                                 // bendera kecil agustusan (tema kalender)
   });
 }
 
@@ -1771,14 +1774,19 @@ function drawKursiDekat() {
   }
 }
 
+// 0 = bendera di puncak tiang (biasa), 1 = di kaki tiang. Digeser pelan oleh
+// apel pagi (tickApel) saat bendera dinaikkan; di luar apel selalu 0.
+let apelBendera = 0;
+
 function drawBendera() {
   const x = 132;
   r(x - 5, 270, 12, 4, '#7c838a');                         // alas
   r(x - 3, 268, 8, 2, '#9aa1a6');
   r(x, 216, 2, 54, '#c9ced4');                             // tiang
   r(x - 1, 213, 4, 3, P.gold);                             // kepala tiang
+  const turun = Math.round(apelBendera * 38);              // 38 = tiang 54 - bendera 12 - alas
   for (let i = 0; i < 16; i++) {                           // merah putih berkibar
-    const dy = Math.round(Math.sin(now / 300 + i * 0.55) * 1.4);
+    const dy = Math.round(Math.sin(now / 300 + i * 0.55) * 1.4) + turun;
     r(x + 2 + i, 218 + dy, 1, 6, P.red);
     r(x + 2 + i, 224 + dy, 1, 6, '#f4f2ec');
   }
@@ -3088,19 +3096,25 @@ class Agent {
       spawn('steam', this.x + 10, this.y - 14);
     }
 
-    // posisi balon teks
-    if (now > this.bubbleUntil) {
-      this.el.style.display = 'none';
+    // Posisi balon teks lewat keLayar(): ikut kamera (zoom/pan), bukan
+    // offX/scale mentah. Yang di luar bidikan kamera disembunyikan — kalau
+    // tidak, balonnya menempel di tepi tanpa orang.
+    const tampak = kameraTampak(this.x, this.y);
+    if (now > this.bubbleUntil || !tampak) {
+      if (this.el.style.display !== 'none') this.el.style.display = 'none';
     } else {
-      this.el.style.left = Math.round(offX + this.x * scale) + 'px';
-      this.el.style.top = Math.round(offY + (this.y - 30) * scale) + 'px';
+      if (this.el.style.display === 'none') this.el.style.display = '';
+      const [tengah, atas] = keLayar(this.x, this.y - 30);
+      this.el.style.left = Math.round(tengah) + 'px';
+      this.el.style.top = Math.round(atas) + 'px';
     }
 
     // Balon pikiran menggantung DI ATAS balon ucap, bukan menimpanya. Tingginya
     // tetap dalam piksel CSS (bukan piksel kanvas) karena teksnya juga begitu.
-    if (now > this.pikirUntil) {
+    if (now > this.pikirUntil || !tampak) {
       if (this.elPikir.style.display !== 'none') this.elPikir.style.display = 'none';
     } else {
+      if (this.elPikir.style.display === 'none') this.elPikir.style.display = '';
       if (this.pikirIdx < this.pikirBagian.length - 1 && now > this.pikirGanti) {
         this.pikirIdx++;
         this.pikirGanti = now + PIKIR_GANTI;
@@ -3109,22 +3123,24 @@ class Agent {
       const naik = now < this.bubbleUntil ? TINGGI_UCAP : 0;
       // separuh lebar balon + sedikit jarak; tanpa ini pegawai di tepi kiri
       // ruangan memikirkan sesuatu yang kalimatnya terpotong bingkai
+      const [tengah, atas] = keLayar(this.x, this.y - 31);
       const tepi = Math.min(118, panggungW / 2);
-      const tengah = offX + this.x * scale;
       const kiri = Math.max(tepi, Math.min(panggungW - tepi, tengah));
       // balon yang digeser masuk bingkai ekornya ikut bergeser balik, supaya
       // gelembungnya tetap menunjuk kepala orangnya
       this.elPikir.style.setProperty('--geser',
         Math.max(-92, Math.min(92, tengah - kiri)) + 'px');
       this.elPikir.style.left = Math.round(kiri) + 'px';
-      this.elPikir.style.top = Math.round(offY + (this.y - 31) * scale) - naik + 'px';
+      this.elPikir.style.top = Math.round(atas) - naik + 'px';
     }
 
     // Lencana galat: kecil, jadi tidak perlu digeser masuk bingkai seperti
     // balon pikiran — yang penting selalu tepat di atas kepala orangnya.
     if (this.macet) {
-      this.elMacet.style.left = Math.round(offX + this.x * scale) + 'px';
-      this.elMacet.style.top = Math.round(offY + (this.y - 34) * scale) + 'px';
+      const [lx, ly] = keLayar(this.x, this.y - 34);
+      this.elMacet.style.visibility = tampak ? '' : 'hidden';
+      this.elMacet.style.left = Math.round(lx) + 'px';
+      this.elMacet.style.top = Math.round(ly) + 'px';
     }
   }
 
@@ -3367,7 +3383,9 @@ class Standby extends Agent {
         return;
       }
     }
-    if (!this.path.length && now > this.nextMove) {
+    // eventKerja: sedang dipinjam event acak / apel pagi — jangan mondar-mandir
+    // di tengah adegan; lepaskanAktor() mengosongkannya lagi begitu selesai.
+    if (!this.eventKerja && !this.path.length && now > this.nextMove) {
       this.goTo(MAMPIR[(Math.random() * MAMPIR.length) | 0]);
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
@@ -4389,10 +4407,16 @@ function barisKru(a, kelas, who, what) {
   const row = document.createElement('div');
   row.className = kelas + (a === terpilih ? ' pilih' : '');
   row.title = j.nama + ' · ' + j.padanan;
+  // lencana golongan dari buku induk: satu karakter, hanya ≥ Penata Muda,
+  // menumpang di sebelah nama supaya lebar panel tidak bertambah
+  const induk = rekamInduk(a);
+  const lencana = induk ? LENCANA_GOLONGAN[induk.golongan] : '';
   row.innerHTML =
     '<span class="chip" style="background:' + j.pal.main + '"></span>' +
     '<span class="who">' + esc(who) + '</span>' +
+    (lencana ? '<span class="lencana" title="golongan ' + esc(induk.golongan) + ' (buku induk, sejak dipantau)">' + lencana + '</span>' : '') +
     (a.cabang ? '<span class="cabang" title="cabang git: ' + esc(a.cabang) + '">⎇ ' + esc(a.cabang) + '</span>' : '') +
+    (a.mesin ? '<span class="mesin" title="kantor cabang: ' + esc(a.mesin) + '">⌂ ' + esc(a.mesin) + '</span>' : '') +
     '<span class="jab">' + esc(j.singkat) + '</span>' +
     '<span class="what">' + esc(what) + '</span>';
   row.addEventListener('click', (e) => {
@@ -4515,7 +4539,8 @@ function agenDiTitik(cx, cy) {
 function titikKanvas(e) {
   // dari rect, bukan dari offX/offY: rect ikut benar walau halaman di-scroll
   const rect = canvas.getBoundingClientRect();
-  return [(e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale];
+  // lalu kebalikan kamera: yang diklik itu piksel layar, yang dicari orang di dunia
+  return dariLayar((e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale);
 }
 
 canvas.addEventListener('click', (e) => {
@@ -4540,11 +4565,13 @@ function bukaKartu(a) {
     '<div class="kartu-jab" id="kartuJab"></div>' +
     '<div class="kartu-tugas" id="kartuTugas"></div>' +
     '<div class="kartu-info" id="kartuInfo"></div>' +
+    '<div class="kartu-paraf" id="kartuParaf" hidden></div>' +
     '<label class="kartu-pilih">jabatan<select id="kartuPeran">' + opsiJabatan() + '</select></label>' +
     '<div class="kartu-aksi" id="kartuAksi"></div>' +
     '<div class="kartu-riwayat"><h3>riwayat</h3><ul id="kartuRiwayat"></ul></div>';
 
   document.getElementById('kartuTutup').onclick = tutupKartu;
+  muatBukuInduk(false);                       // blok "buku induk" di kartu; cache 30 detik
   const sel = document.getElementById('kartuPeran');
   sel.value = a.peran;
   sel.onchange = () => gantiPeran(a, sel.value);
@@ -4625,7 +4652,11 @@ function perbaruiKartu() {
   const jenis = jenisAgen(a);
   document.getElementById('kartuChip').style.background = j.pal.main;
   document.getElementById('kartuNama').textContent = namaTampil(a);
-  document.getElementById('kartuJab').textContent = j.nama + ' · ' + j.padanan;
+  // "usul: Kepala Bidang" dari buku induk cuma USUL di label — jabatan
+  // sesungguhnya (dropdown, seragam, meja) tidak disentuh dari data.
+  const usul = usulInduk(a);
+  document.getElementById('kartuJab').textContent = j.nama + ' · ' + j.padanan
+    + (usul && j.id !== usul.jabatanId ? ' · usul: ' + usul.jabatan : '');
   document.getElementById('kartuTugas').textContent = j.tugas;
 
   const baris = [];
@@ -4638,6 +4669,7 @@ function perbaruiKartu() {
     baris.push(['sesi', a.id]);
     if (a.project) baris.push(['proyek', a.project]);
     if (a.cabang) baris.push(['cabang', a.cabang]);
+    if (a.mesin) baris.push(['mesin', a.mesin]);
   }
   baris.push(['posisi', (STATIONS[a.station] || {}).name || a.station]);
   // Alasan penolakan ditulis apa adanya dari Claude Code — itu satu-satunya
@@ -4669,9 +4701,18 @@ function perbaruiKartu() {
     if (a.token) baris.push(['token', formatToken(a.token)]);
     if (a.biaya) baris.push(['biaya', formatBiaya(a.biaya)]);
   }
+  // Buku induk: karier FOLDER-nya, bukan sesi ini — sengaja baris terpisah
+  // dengan label "sejak dipantau", supaya tidak tertukar dengan tool call di atas.
+  const induk = rekamInduk(a);
+  if (induk) {
+    const lencana = LENCANA_GOLONGAN[induk.golongan] || '';
+    baris.push(['buku induk', 'masa dinas ' + jamDinasTeks(induk.jamDinas) + ' · ' + induk.sesi + ' sesi · '
+      + (lencana ? lencana + ' ' : '') + induk.golongan + ' (sejak dipantau)']);
+  }
   document.getElementById('kartuInfo').innerHTML = baris
     .map(([k, v]) => '<span class="kk">' + esc(k) + '</span><span class="vv">' + esc(v) + '</span>')
     .join('');
+  if (jenis === 'sesi') perbaruiParaf(a);
 
   document.getElementById('kartuRiwayat').innerHTML =
     a.riwayat.slice(-6).reverse().map((h) =>
@@ -4685,13 +4726,91 @@ function perbaruiKartu() {
   if (sel && document.activeElement !== sel) sel.value = a.peran;
 }
 
+/* Blok paraf di kartu. Tiga keadaan yang harus TERLIHAT BEDA, karena
+   pose di ruangannya sama persis:
+   - sesi halaman + izin bertanda paraf  -> tombol Paraf / Tolak yang sungguhan
+   - sesi halaman tanpa izin paraf       -> catatan (mis. pertanyaan AskUserQuestion:
+                                            tidak ada jalur menjawabnya dari sini)
+   - sesi terminal                        -> "jawab di terminal": halaman ini
+                                            tidak punya pegangan ke proses itu.
+   Dibangun ulang HANYA kalau keadaannya berubah — perbaruiKartu() jalan tiap
+   800 ms, dan input pesan yang sedang diketik tidak boleh ikut dikosongkan. */
+function perbaruiParaf(a) {
+  const el = document.getElementById('kartuParaf');
+  if (!el) return;
+  const z = izinTunggu.get(a.id);
+  const halaman = sesiHalaman.has(a.id);
+  const keadaan = !a.butuh ? ''
+    : z ? 'paraf:' + z.id
+    : halaman ? 'halaman:' + a.butuh.sebab
+    : 'terminal:' + a.butuh.sebab;
+  if (el.dataset.keadaan === keadaan) return;
+  el.dataset.keadaan = keadaan;
+  el.innerHTML = '';
+  el.hidden = !keadaan;
+  if (!keadaan) return;
+
+  const catat = (teks, cls) => {
+    const p = document.createElement('div');
+    p.className = 'paraf-nota' + (cls ? ' ' + cls : '');
+    p.textContent = teks;
+    el.appendChild(p);
+  };
+  if (!z) {
+    catat(halaman
+      ? 'sesi halaman · ' + (a.butuh.sebab === 'tanya'
+          ? 'pertanyaannya tidak bisa dijawab dari sini'
+          : 'izinnya tidak lewat loket paraf')
+      : 'sesi terminal · jawab di terminal tempat sesinya jalan');
+    return;
+  }
+  catat('sesi halaman · bisa diparaf di sini', 'bisa');
+  const rinci = document.createElement('div');
+  rinci.className = 'paraf-rinci';
+  rinci.textContent = (z.tool ? z.tool + ' · ' : '') + (z.ringkasan || '');
+  el.appendChild(rinci);
+  const pesan = document.createElement('input');
+  pesan.type = 'text'; pesan.maxLength = 200; pesan.className = 'paraf-pesan';
+  pesan.placeholder = 'catatan kalau ditolak (opsional)';
+  const tombol = document.createElement('div');
+  tombol.className = 'paraf-tombol';
+  const bParaf = document.createElement('button');
+  bParaf.type = 'button'; bParaf.className = 'paraf-ya'; bParaf.textContent = 'Paraf';
+  bParaf.title = 'izinkan tool ini jalan';
+  const bTolak = document.createElement('button');
+  bTolak.type = 'button'; bTolak.className = 'paraf-tidak'; bTolak.textContent = 'Tolak';
+  bTolak.title = 'tolak; catatannya diteruskan ke agennya';
+  const kunci = (mati) => { bParaf.disabled = bTolak.disabled = mati; };
+  bParaf.onclick = () => { kunci(true); jawabParaf(z.id, 'paraf', '').finally(() => kunci(false)); };
+  bTolak.onclick = () => { kunci(true); jawabParaf(z.id, 'tolak', pesan.value.trim()).finally(() => kunci(false)); };
+  tombol.append(bParaf, bTolak);
+  el.append(pesan, tombol);
+}
+
+/* Jawaban ke loket paraf. Gerbangnya sama dengan /perintah: token halaman.
+   Server yang menyiarkan izin-jawab — di sini tidak ada yang diubah lokal,
+   supaya dua halaman yang sama-sama terbuka melihat keadaan yang sama. */
+async function jawabParaf(id, keputusan, catatan) {
+  if (!kendali.token) { pesan('token halaman tidak ada — muat ulang', 'err'); return; }
+  try {
+    const res = await fetch('/izin/jawab', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: kendali.token, id, keputusan, pesan: catatan || '' }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!d.ok) pesan('paraf gagal: ' + (d.pesan || res.status), 'err');
+    else pesan(keputusan === 'paraf' ? 'diparaf' : 'ditolak', 'ok');
+  } catch (err) {
+    pesan('gagal mengirim paraf: ' + err.message, 'err');
+  }
+}
+
 // Kartunya mengikuti orangnya. Kalau ruang di kanan tidak cukup, pindah ke
 // kiri; kalau tetap tidak muat, ditempel ke tepi panggung.
 function taruhKartu() {
   if (!terpilih || kartuEl.hidden) return;
   const w = kartuEl.offsetWidth, h = kartuEl.offsetHeight;
-  const px = offX + terpilih.x * scale;
-  const py = offY + (terpilih.y - 14) * scale;
+  const [px, py] = keLayar(terpilih.x, terpilih.y - 14);   // ikut kamera, bukan offX/scale mentah
   let left = px + 20;
   if (left + w > stageInner.clientWidth - 8) left = px - 20 - w;
   kartuEl.style.left =
@@ -4745,6 +4864,10 @@ function handle(ev) {
     return;
   }
 
+  // SK kenaikan pangkat dari buku induk: milik satu FOLDER, bukan satu sesi
+  // (session kosong) — jangan sampai agentFor() melahirkan pegawai hantu.
+  if (ev.kind === 'promosi') { terimaPromosi(ev); return; }
+
   const a = agentFor(ev.session);
   // Tool call selalu menang atas event acak. Kalau pegawainya sedang jadi
   // pemeran, dia dilepas saat itu juga — halaman ini melaporkan pekerjaan
@@ -4754,14 +4877,20 @@ function handle(ev) {
   // cuma mengikuti. `false` berarti tunggunya sudah lewat, `undefined` berarti
   // event ini tidak mengubah apa-apa soal itu.
   if (ev.butuh !== undefined) a.setButuh(ev.butuh);
+  // tunggunya lewat berarti permintaan parafnya pun sudah tidak ada
+  if (ev.butuh === false) izinTunggu.delete(ev.session);
   if (ev.macet !== undefined) a.setMacet(ev.macet);
   if (ev.butuh !== undefined || ev.macet !== undefined) pantauTerkatung(a);
   a.lastEvent = now;
   toolTerakhir = now;
+  // kamera mode ikut: cuma tool call yang membidik, bukan pikiran/ucapan
+  if (ev.kind === 'pre' || ev.kind === 'post') KAMERA.aktif.set(a.id, now);
   if (ev.cwd) a.project = ev.cwd;
   // cabang git ikut cwd: server yang membacanya, halaman cuma menyimpan.
   // undefined = event ini tidak bicara soal cabang; '' = bukan repo git.
   if (ev.cabang !== undefined) a.cabang = ev.cabang || '';
+  // mesin pengirim: hanya ada kalau sesinya datang dari kantor cabang
+  if (ev.mesin) a.mesin = ev.mesin;
   if (ev.model) a.model = ev.model;
   if (ev.nama) namaPanggilan.set(ev.session, ev.nama);
   // jabatan disimpan server, jadi ikut menempel walau halaman dibuka ulang
@@ -4913,12 +5042,30 @@ function handle(ev) {
        statistik apa pun — yang terjadi bukan pekerjaan, justru pekerjaan yang
        tertahan. Yang dicatat cuma satu baris log dan pose di ruangan. */
     case 'izin-minta': {
+      // `paraf` cuma dibawa sesi lahiran halaman yang lahir dengan paraf:true —
+      // berarti tombol Paraf/Tolak di kartunya benar-benar bisa menjawab.
+      if (ev.paraf && ev.paraf.id) {
+        izinTunggu.set(ev.session, { id: ev.paraf.id, tool: ev.paraf.tool || ev.tool || '', ringkasan: ev.label || '' });
+        sesiHalaman.add(ev.session);
+      }
       a.say('minta izin: <b>' + esc(ev.label || ev.tool || '') + '</b>', 'say');
-      pushLog(ev, 'mark', ['minta izin', [ev.tool, ev.label].filter(Boolean).join(' ')]);
+      pushLog(ev, 'mark', [ev.paraf ? 'minta paraf' : 'minta izin', [ev.tool, ev.label].filter(Boolean).join(' ')]);
       kabarMasuk(ev, a, 'izin');
-      nowDoing.textContent = 'menunggu izin kamu';
+      nowDoing.textContent = ev.paraf ? 'menunggu paraf kamu — buka kartunya' : 'menunggu izin kamu';
       foley('panggil', a);
       if (notifOn) notifKonfirmasi();
+      break;
+    }
+    // Jawaban paraf dari ruangan (halaman ini, halaman lain, atau waktu habis).
+    // Kalau diparaf, PostToolUse-nya menyusul sendiri; kalau ditolak, tool-nya
+    // tidak pernah jalan — makanya server ikut mengirim butuh:false di sini.
+    case 'izin-jawab': {
+      izinTunggu.delete(ev.session);
+      const ok = ev.keputusan === 'paraf';
+      a.say((ok ? 'diparaf' : 'ditolak') + ': <b>' + esc(ev.tool || '') + '</b>', ok ? 'say' : 'err');
+      pushLog(ev, ok ? 'mark' : 'err', [ok ? 'izin diparaf' : 'izin ditolak', ev.label || '']);
+      nowDoing.textContent = ok ? 'izin diparaf — lanjut' : 'izin ditolak dari ruangan';
+      foley(ok ? 'panggil' : 'gagal', a);
       break;
     }
     case 'izin-tolak': {
@@ -4965,6 +5112,7 @@ function handle(ev) {
     // tidak jatuh ke default dan menulis baris log "bekerja" yang kosong
     case 'peran': break;
     case 'tugas-mulai': {
+      sesiHalaman.add(ev.session);
       namaPanggilan.set(ev.session, ev.nama || 'tugas');
       pushLog(ev, 'mark', ['tugas baru dikirim', ev.nama || '']);
       break;
@@ -4978,6 +5126,7 @@ function handle(ev) {
       break;
     }
     case 'tugas-selesai': {
+      izinTunggu.delete(ev.session);       // prosesnya tidak ada lagi: tidak ada yang bisa diparaf
       // Disimpan di orangnya, bukan cuma lewat di log: kartu yang dibuka
       // belakangan harus tetap bisa menjawab "sesi ini habis berapa".
       if (ev.biaya) { a.biaya = ev.biaya; tambahBiayaTotal(ev.biaya); }
@@ -5002,6 +5151,13 @@ function handle(ev) {
 const namaPanggilan = new Map();     // sesi 12-char -> nama yang kamu berikan
 let kendali = { izin: false, token: null };
 let antrean = [];                    // loket disposisi: [{ id, nama, cwd, sejak, sifat, posisi }]
+/* Paraf dari ruangan. `sesiHalaman` = sesi yang dilahirkan halaman ini (dari
+   /kendali.berjalan dan event tugas-mulai) — cuma mereka yang izinnya bisa
+   dijawab dari sini. `izinTunggu` = permintaan izin yang sedang menunggu
+   paraf, per sesi; hanya diisi oleh izin-minta yang membawa `paraf`, jadi
+   sesi terminal tidak pernah masuk walau sama-sama berpose butuh manusia. */
+const sesiHalaman = new Set();       // sesi 12-char
+const izinTunggu = new Map();        // sesi 12-char -> { id, tool, ringkasan }
 
 const elKendaliMati = document.getElementById('kendaliMati');
 const elForm = document.getElementById('formTugas');
@@ -5027,6 +5183,11 @@ async function muatKendali() {
     for (const j of d.berjalan || []) {
       namaPanggilan.set(j.sesi, j.nama);
       if (j.peran) peranAwal.set(j.sesi, j.peran);
+      sesiHalaman.add(j.sesi);
+    }
+    // izin yang sudah menunggu paraf sebelum halaman ini dibuka
+    for (const z of d.izinTunggu || []) {
+      if (z && z.sesi && z.id) izinTunggu.set(z.sesi, { id: z.id, tool: z.tool || '', ringkasan: z.ringkasan || '' });
     }
     // potret awal loket; selanjutnya diikuti lewat event `antre` di stream
     antrean = Array.isArray(d.antrean) ? d.antrean : [];
@@ -5489,6 +5650,10 @@ const KABAR_JENIS = {
              perihal: 'Pengajuan rencana kerja',             sifat: 'SEGERA' },
   galat:   { tajuk: 'berhenti',           cls: 'galat',  auto: true,
              perihal: 'Laporan kendala pelaksanaan tugas',   sifat: 'PENTING' },
+  // SK kenaikan pangkat dari buku induk (lihat terimaPromosi): langka — paling
+  // sering sekali per proyek per beberapa hari — jadi boleh menyela seperti hasil.
+  sk:      { tajuk: 'SK kenaikan pangkat', cls: 'hasil',  auto: true,
+             perihal: 'Petikan SK Kenaikan Pangkat',       sifat: 'BIASA'  },
 };
 
 // Stempel di sudut kertas: satu kata per `cls`, warnanya dipakai ulang dari
@@ -5703,6 +5868,53 @@ async function muatRiwayatToken() {
 }
 muatRiwayatToken();
 
+/* ------------------------------------------------------ buku induk pegawai ---
+   Karier per FOLDER proyek, lintas sesi & restart, dihitung server dari hook
+   nyata (lihat bukuIndukCatat() di server.mjs). Angkanya "sejak dipantau" —
+   labelnya wajib ikut tampil. Terpisah dari statistik sesi di kartu: a.calls
+   dkk. tetap milik sesi ini saja. Di-cache 30 detik: kartu dibuka-tutup
+   berkali-kali tidak boleh jadi hujan fetch. */
+let bukuInduk = null;
+let bukuIndukTs = 0;
+const LENCANA_GOLONGAN = { 'Penata Muda': '▲', Penata: '◆', Pembina: '★' };   // < Penata Muda: tanpa lencana
+async function muatBukuInduk(paksa) {
+  if (!paksa && bukuInduk && Date.now() - bukuIndukTs < 30000) return;
+  bukuIndukTs = Date.now();
+  try {
+    const r = await fetch('/buku-induk');
+    bukuInduk = await r.json();
+  } catch { bukuIndukTs = 0; return; }        // server lokal lagi restart — coba lagi nanti
+  renderCrew();
+  if (terpilih) perbaruiKartu();
+}
+const rekamInduk = (a) => (jenisAgen(a) === 'sesi' && a.project && bukuInduk?.proyek?.[a.project]) || null;
+const usulInduk = (a) => (a.project && bukuInduk?.usulPromosi?.proyek === a.project) ? bukuInduk.usulPromosi : null;
+const jamDinasTeks = (ms) => {
+  const jam = ms / 3600000;
+  return (jam >= 10 ? Math.round(jam) : Math.round(jam * 10) / 10) + ' jam';
+};
+
+/* SK kenaikan pangkat: server sudah memutuskan (satu event per kenaikan).
+   Halaman cuma seremoninya: satu nota di kotak kabar, pegawai seproyek
+   bersyukur, dan cache buku induk disegarkan. Jabatan TIDAK berubah, meja
+   TIDAK pindah — pangkat tidak boleh menyandera pekerjaan. */
+function terimaPromosi(ev) {
+  const rekan = [...agents.values()].filter((a) => a.project === ev.cwd);
+  const g = ev.golongan || '';
+  // kabarMasuk butuh "pengirim": pegawai seproyek kalau ada; kalau semuanya
+  // sudah pulang, Sekretaris Dinas yang membacakan petikannya
+  const pengirim = rekan[0] || { id: '', project: ev.cwd || '', peran: 'sekdis' };
+  kabarMasuk({ ...ev, session: rekan[0] ? rekan[0].id : '',
+               teks: 'Terhitung mulai hari ini, pegawai pada proyek ' + (ev.cwd || '-')
+                 + ' dinaikkan pangkatnya' + (ev.sebelumnya ? ' dari ' + ev.sebelumnya : '')
+                 + ' menjadi ' + g + ' (jam dinas sejak dipantau). Selamat, semoga amanah.' },
+             pengirim, 'sk');
+  for (const a of rekan) a.say('alhamdulillah naik pangkat 🙏 <b>' + esc(g) + '</b>');
+  pushLog(ev, 'mark', ['SK kenaikan pangkat', (ev.cwd || '') + (g ? ' → ' + g : '')]);
+  muatBukuInduk(true);
+}
+muatBukuInduk(true);
+
 const tanggalLokal = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
   + '-' + String(d.getDate()).padStart(2, '0');
 const labelTanggal = (tgl) => new Date(tgl + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -5818,6 +6030,138 @@ statsBtn.onclick = () => {
 document.getElementById('statsTutup').onclick = statsTutupDialog;
 dlgStats.onclick = (e) => { if (e.target === dlgStats) statsTutupDialog(); };
 
+/* ------------------------------------------------------------------ kamera */
+/* Kamera hidup, sengaja dipisah dari fit(). fit() cuma mengurus skala integer
+   kanvas→CSS (itu urusan piksel layar); kamera bekerja di koordinat dunia
+   480×356 dan dipasang di frame() lewat setTransform SEBELUM segala gambar,
+   jadi lantai/dinding/props/pegawai/partikel tidak perlu tahu ada kamera.
+
+   Zoom bidikannya cuma 1 atau 2 — bulat — supaya satu piksel dunia tetap
+   jadi kotak piksel layar yang utuh (imageSmoothingEnabled=false tidak bisa
+   menolong kalau zoomnya 1,37). Nilai pecahan hanya lewat sebentar selagi
+   easing (~600 ms), lalu dijepret ke bulat. Geserannya (tx/ty) juga dibulatkan
+   ke piksel kanvas dengan alasan yang sama.
+
+   Segala yang menempel ke kanvas dari DOM — balon ucap, balon pikiran, lencana
+   galat, kartu pegawai — dan hit-test klik memakai SATU pasang fungsi,
+   keLayar()/dariLayar(). Dulu semuanya menghitung `offX + x * scale` sendiri-
+   sendiri; begitu ada kamera, satu saja yang lupa dan kartunya meleset dari
+   orangnya. Satu fungsi = satu tempat yang harus benar.
+
+   Mode (setelan ⚙️, diingat localStorage; ?kamera=ikut|sinematik|mati di URL
+   mengalahkannya). Bawaannya MATI: halaman ini alat pantau dulu, baru
+   tontonan — kamera yang bergerak sendiri mengejutkan orang yang cuma mau
+   melirik siapa yang sedang macet. */
+const KAMERA = {
+  x: W / 2, y: H / 2, zoom: 1,                       // yang sedang tampil (di-ease)
+  targetX: W / 2, targetY: H / 2, targetZoom: 1,     // bidikan
+  tx: 0, ty: 0,                                      // geseran kanvas (px bulat), dihitung tickKamera
+  mode: 'mati',                                      // mati | ikut | sinematik
+  aktif: new Map(),                                  // session → `now` tool call terakhir (mode ikut)
+  sinematikIdx: -1, sinematikSejak: 0,
+  mulai: performance.now(),                          // jam mulai hitung "60 s tanpa event"
+};
+const KAMERA_IKUT_TAHAN_MS = 4000;          // tahan bidikan sejak tool call terakhir
+const KAMERA_SINEMATIK_DIAM_MS = 60000;     // tanpa event selama ini → berkeliling
+const KAMERA_SINEMATIK_PINDAH_MS = 8000;    // lama singgah per stasiun
+const KAMERA_LAJU = 5;                      // lerp/detik: ~600 ms sampai 95% jalan
+// urutan keliling tetap: searah jarum jam dari lemari arsip, berakhir di ruang tunggu
+const KAMERA_RUTE = ['read', 'search', 'web', 'edit', 'server', 'agent', 'rapat', 'think', 'idle'];
+const geraKurang = matchMedia('(prefers-reduced-motion: reduce)');
+const kameraSinematikBoleh = () => !geraKurang.matches;
+
+// titik dunia → px CSS relatif stageInner (yang dipakai DOM di overlay)
+function keLayar(x, y) {
+  return [offX + (x * KAMERA.zoom + KAMERA.tx) * scale,
+          offY + (y * KAMERA.zoom + KAMERA.ty) * scale];
+}
+// px kanvas (sudah dibagi scale) → titik dunia; kebalikan setTransform di frame()
+function dariLayar(cx, cy) {
+  return [(cx - KAMERA.tx) / KAMERA.zoom, (cy - KAMERA.ty) / KAMERA.zoom];
+}
+// masih di dalam bidikan (plus sedikit tepi)? Balon pegawai yang di luar
+// bidikan disembunyikan — jagaBingkai() akan menariknya ke tepi panggung
+// dan dia jadi balon tanpa orang.
+function kameraTampak(x, y) {
+  if (KAMERA.zoom === 1) return true;
+  const hw = W / (2 * KAMERA.zoom) + 6, hh = H / (2 * KAMERA.zoom) + 6;
+  return Math.abs(x - KAMERA.x) <= hw && Math.abs(y - KAMERA.y) <= hh;
+}
+
+function kameraBidikPenuh() {
+  KAMERA.targetX = W / 2; KAMERA.targetY = H / 2; KAMERA.targetZoom = 1;
+}
+// pusat bidikan = pegawai + sedikit ke arah stasiunnya: yang menghadap meja
+// (up) dibidik agak ke atas supaya mejanya ikut masuk, yang menghadap
+// penonton (down: kursi rapat sisi jauh, ruang tunggu) agak ke bawah
+function kameraKe(a) {
+  KAMERA.targetX = a.x;
+  KAMERA.targetY = a.y + (a.hadap === 'down' ? 6 : -14);
+  KAMERA.targetZoom = 2;
+}
+function kameraBidik() {
+  const K = KAMERA;
+  if (K.mode === 'ikut') {
+    // satu pegawai aktif → ikuti; dua atau lebih → tampak penuh, jangan
+    // bolak-balik antar orang tiap tool call datang
+    const batas = now - KAMERA_IKUT_TAHAN_MS;
+    let satu = null, n = 0;
+    for (const [id, t] of K.aktif) {
+      const a = agents.get(id);
+      if (t < batas || !a) { K.aktif.delete(id); continue; }
+      n++; satu = a;
+    }
+    if (n === 1) kameraKe(satu); else kameraBidikPenuh();
+    return;
+  }
+  if (K.mode === 'sinematik' && kameraSinematikBoleh()) {
+    // window.KAMERA_UJI_MS: memendekkan 60 detiknya waktu diuji
+    const diam = window.KAMERA_UJI_MS || KAMERA_SINEMATIK_DIAM_MS;
+    const pindah = window.KAMERA_UJI_PINDAH_MS || KAMERA_SINEMATIK_PINDAH_MS;
+    if (now - Math.max(toolTerakhir, K.mulai) < diam) {
+      K.sinematikIdx = -1;               // ada kegiatan: mundur, keliling ulang dari awal nanti
+      kameraBidikPenuh();
+      return;
+    }
+    if (K.sinematikIdx < 0 || now - K.sinematikSejak > pindah) {
+      K.sinematikIdx = (K.sinematikIdx + 1) % KAMERA_RUTE.length;
+      K.sinematikSejak = now;
+    }
+    const s = STATIONS[KAMERA_RUTE[K.sinematikIdx]];
+    K.targetX = s.x; K.targetY = s.y - 12; K.targetZoom = 2;
+    return;
+  }
+  kameraBidikPenuh();
+}
+function tickKamera(dt) {
+  const K = KAMERA;
+  kameraBidik();
+  // prefers-reduced-motion: tanpa easing, langsung ke bidikan
+  const k = geraKurang.matches ? 1 : Math.min(1, Math.max(0, dt) * KAMERA_LAJU);
+  K.zoom += (K.targetZoom - K.zoom) * k;
+  K.x += (K.targetX - K.x) * k;
+  K.y += (K.targetY - K.y) * k;
+  if (Math.abs(K.targetZoom - K.zoom) < 0.01) K.zoom = K.targetZoom;   // jepret ke bulat
+  if (Math.abs(K.targetX - K.x) < 0.05) K.x = K.targetX;
+  if (Math.abs(K.targetY - K.y) < 0.05) K.y = K.targetY;
+  // dijepit: bidikan tidak boleh melihat di luar ruangan. Pada zoom 1 ini
+  // memaksa pusatnya ke tengah, jadi pan & zoom selalu bertemu di tampak penuh.
+  const hw = W / (2 * K.zoom), hh = H / (2 * K.zoom);
+  K.x = Math.max(hw, Math.min(W - hw, K.x));
+  K.y = Math.max(hh, Math.min(H - hh, K.y));
+  K.tx = Math.round(W / 2 - K.x * K.zoom);
+  K.ty = Math.round(H / 2 - K.y * K.zoom);
+}
+function kameraSet(mode) {
+  KAMERA.mode = mode === 'ikut' || mode === 'sinematik' ? mode : 'mati';
+  KAMERA.sinematikIdx = -1;
+  KAMERA.mulai = performance.now();
+}
+{
+  const dariUrl = new URLSearchParams(location.search).get('kamera');
+  kameraSet(dariUrl || ingatan.baca('kamera', 'mati'));
+}
+
 /* ------------------------------------------------------------- pengaturan ---
    Satu tombol ⚙️ menggantikan tombol-tombol toggle yang dulu berjejer di
    bilah panggung (💭🔊🔔🎧) plus centang "buka sendiri" yang tadinya cuma
@@ -5852,6 +6196,18 @@ setBalonPikir.checked = balonPikir;
 setBalonPikir.onchange = () => balonPikirSet(setBalonPikir.checked);
 setKabarOtomatis.checked = kabarOtomatis;
 setKabarOtomatis.onchange = () => kabarOtomatisSet(setKabarOtomatis.checked);
+
+/* Kamera: pilihannya diingat; ?kamera= di URL cuma mengalahkan tampilan
+   sesi ini, tidak menulis ulang setelan. Sinematik dimatikan kalau penonton
+   minta gerak dikurangi — kamera yang berkeliling sendiri persis yang tidak
+   diinginkan orang itu. */
+const setKamera = document.getElementById('setKamera');
+setKamera.value = KAMERA.mode;
+if (!kameraSinematikBoleh()) {
+  const o = setKamera.querySelector('option[value="sinematik"]');
+  if (o) { o.disabled = true; o.textContent += ' (gerak dikurangi)'; }
+}
+setKamera.onchange = () => { kameraSet(setKamera.value); ingatan.tulis('kamera', KAMERA.mode); };
 
 // Tiga di bawah sengaja TIDAK diinisialisasi dari ingatan (localStorage) —
 // AudioContext baru boleh jalan sesudah klik pengguna, jadi menyalakan
@@ -6224,6 +6580,10 @@ const RUANGAN = {
   // (NOTULEN_MAKS). Naik tiap Peserta bubar; dibawa arsiparis standby ke
   // lemari arsip tiap ±10 menit kalau ≥3 (lihat class Standby).
   notulen: 0,
+  // Tema kalender (registri TEMA di bawah): id dekor musiman yang sedang
+  // menempel di ruangan, atau null. Dievaluasi saat muat & tiap ganti hari.
+  tema: null,
+  temaTahun: 0,            // tahun saat tema dievaluasi — buat "ke-N" di spanduk
 };
 
 /* -------------------------------------------------------------- penjadwal */
@@ -6255,6 +6615,41 @@ function lajuTokenMenit() {
   const awal = contohToken[0];
   const menit = (t - awal.t) / 60000;
   return menit < 0.05 ? 0 : Math.round((n - awal.n) / menit);
+}
+
+/* ------------------------------------------------------- babak hari kerja ---
+   Satu mesin status jam kantor, dibaca event lewat S.babak. S.jam dan
+   S.kerjaJam TETAP ada — definisi event lama tidak boleh pecah; babak cuma
+   menambah "kapan sebuah kejadian lebih masuk akal" lewat pengali bobot
+   (field opsional `babak` di definisi event, lihat bobotBabak di penjadwal),
+   bukan mengganti syarat.
+     apel       07:00-07:45 hari kerja (apel pagi, lihat di bawah)
+     kerja      06:00-16:00 selebihnya
+     istirahat  12:00-13:00; Jumat 11:30-13:00
+     pulang     16:00-17:00
+     lembur     17:00-22:00
+     malam      22:00-06:00
+     libur      Sabtu/Minggu, hari kejepit (HARI_KEJEPIT, event-acak.js), dan
+                libur nasional di LIBUR_NASIONAL — sepanjang hari */
+const LIBUR_NASIONAL = new Set(['1-1', '1-5', '17-8', '25-12']);   // "tanggal-bulan"
+function hariLibur(d) {
+  const hari = d.getDay();
+  if (hari === 0 || hari === 6) return true;
+  const kunci = d.getDate() + '-' + (d.getMonth() + 1);
+  if (LIBUR_NASIONAL.has(kunci)) return true;
+  // HARI_KEJEPIT ada di event-acak.js yang dimuat SESUDAH berkas ini; dibaca
+  // saat dipanggil (bukan saat muat), jadi typeof-nya aman.
+  return typeof HARI_KEJEPIT !== 'undefined' && HARI_KEJEPIT.has(kunci);
+}
+function babakHari(jam, d) {
+  d = d || new Date();
+  if (hariLibur(d)) return 'libur';
+  if (jam >= 22 || jam < 6) return 'malam';
+  if (jam >= 17) return 'lembur';
+  if (jam >= 16) return 'pulang';
+  if (jam >= (d.getDay() === 5 ? 11.5 : 12) && jam < 13) return 'istirahat';
+  if (jam >= 7 && jam < 7.75) return 'apel';
+  return 'kerja';
 }
 
 /* Potret ruangan: apa yang dilihat penjadwal event tiap percobaan. Bagian
@@ -6293,6 +6688,8 @@ function potretRuangan() {
     hujan: CUACA.hujan, petir: CUACA.petir,
     hari: d.getDay(), tanggal: d.getDate(),
     kerjaJam: A.jam >= 7 && A.jam < 16,
+    babak: babakHari(A.jam, d),          // 'apel'|'kerja'|'istirahat'|'pulang'|'lembur'|'malam'|'libur'
+    tema: RUANGAN.tema,                  // id tema kalender yang menempel, atau null
     orang,
     sesi: agents.size, standby: standby.length, peserta: peserta.length,
     nganggur: orang.filter(bisaDipinjam),
@@ -6398,15 +6795,27 @@ function bentrok(def) {
   return false;
 }
 
+/* Bobot efektif = bobot × pengali babak. Field opsional `babak` di definisi
+   event: { istirahat: 2, lembur: .3 } — babak yang tidak disebut = 1, nol
+   berarti tidak ikut undian sama sekali di babak itu. Aman kalau S.babak
+   tidak ada (harness uji-event.mjs merakit S sendiri): pengalinya 1. */
+function bobotBabak(d) {
+  const b = d.bobot || 1;
+  const m = d.babak && S && S.babak ? d.babak[S.babak] : undefined;
+  return m == null ? b : b * m;
+}
+
 function pilihBerbobot(calon) {
+  const bisa = calon.filter((d) => bobotBabak(d) > 0);
   let total = 0;
-  for (const d of calon) total += d.bobot || 1;
+  for (const d of bisa) total += bobotBabak(d);
+  if (!total) return null;
   let u = Math.random() * total;
-  for (const d of calon) {
-    u -= d.bobot || 1;
+  for (const d of bisa) {
+    u -= bobotBabak(d);
     if (u <= 0) return d;
   }
-  return calon[calon.length - 1];
+  return bisa[bisa.length - 1];
 }
 
 /* Satu-satunya tempat stempel menghantam meja. Dulu isinya enam baris `ink`
@@ -6455,6 +6864,7 @@ function tickRuangan(dt) {
 function tickEvent(dt) {
   resetMod();
   tickRuangan(dt);
+  tickApel(dt);         // apel pagi: bukan event acak — jalan walau ?event=0
   if (EVENT_MATI) return;
 
   S = potretRuangan();
@@ -6480,7 +6890,8 @@ function tickEvent(dt) {
   jedaEvent = JEDA_MIN + Math.random() * (JEDA_MAX - JEDA_MIN);
   const calon = EVENT_ACAK.filter((d) =>
     now > (cooldownSampai.get(d.id) || 0) && !bentrok(d) && (!d.syarat || d.syarat(S)));
-  if (calon.length) nyalakanEvent(pilihBerbobot(calon));
+  const pilihan = calon.length ? pilihBerbobot(calon) : null;   // null: semua bobot 0 di babak ini
+  if (pilihan) nyalakanEvent(pilihan);
 }
 
 /* Nyalakan event tertentu dari luar penjadwal — dipakai event yang menempel
@@ -6523,6 +6934,265 @@ function klipJendela(fn) {
   ctx.restore();
 }
 
+/* -------------------------------------------------------------- apel pagi ---
+   Sekali sehari, saat babak 'apel' (07:00-07:45 hari kerja) dan halaman
+   terbuka: yang menganggur + standby berbaris dua saf di bawah tiang bendera
+   menghadap ke atas, bendera naik pelan (apelBendera → drawBendera),
+   Indonesia Raya kalau audio sudah dibuka pengguna, pembina apel memberi
+   amanat — ringkasan buku agenda kemarin (GET /agenda) kalau ada, kalimat
+   generik kalau tidak. Senin lebih formal: 40 detik + pembacaan Panca
+   Prasetya Korpri; hari lain 20 detik. Penanda tanggalnya di localStorage
+   (apelTerakhir) supaya tab yang dimuat ulang tidak apel dua kali.
+
+   BUKAN event acak: tidak lewat penjadwal (jalan walau ?event=0), tidak
+   menaikkan statistik, tidak dilaporkan ke /ambien. Aturan 1 tetap mutlak:
+   pesertanya dipegang lewat eventKerja yang sama dengan event acak, jadi
+   handle() melepasnya persis seperti biasa begitu tool call datang, dan
+   destroy() ikut melepasnya — apel tidak pernah menahan siapa pun; barisan
+   yang bolong dibiarkan bolong. Uji: ?apel=1 (sekarang), ?apel=senin. */
+const APEL_PAKSA = new URLSearchParams(location.search).get('apel');
+const APEL_TIANG_X = 132;                    // tiang bendera, sama dengan drawBendera
+const APEL_SAF_Y = [290, 306];               // dua saf di lantai bawah tiang, di atas baris meja kerja
+const APEL_SAF_X0 = 96, APEL_JARAK = 18, APEL_PER_SAF = 8;
+const APEL_PESAN = [
+  'Hari ini fokus, jaga kesehatan, dan tutup tugas sebelum jam pulang.',
+  'Yang masih menunggu paraf, tolong dikejar sebelum siang.',
+  'Rapikan meja dan arsip, jangan sampai auditor yang menemukan duluan.',
+  'Kalau macet, bilang — jangan diam sendirian di meja.',
+];
+const APEL_PEMBUKA = 'Selamat pagi. Kemarin belum ada catatan di buku agenda.';
+const PANCA_PRASETYA = [
+  'Panca Prasetya Korpri. Satu: setia dan taat kepada Pancasila, UUD 1945, negara, dan pemerintah.',
+  'Dua: menjunjung tinggi kehormatan bangsa dan negara, serta memegang teguh rahasia jabatan.',
+  'Tiga: mengutamakan kepentingan negara dan masyarakat di atas kepentingan pribadi dan golongan.',
+  'Empat: memelihara persatuan dan kesatuan bangsa serta kesetiakawanan Korpri.',
+  'Lima: menegakkan kejujuran, keadilan, disiplin, serta meningkatkan kesejahteraan dan profesionalisme.',
+];
+let apel = null;                             // { E, senin, durasi, pembina, amanat, umur, naikMulai, naikLama }
+let apelPaksaSudah = false;
+let apelCekBerikut = now + 2500;             // beri waktu sesi & standby lahir dulu
+
+const pangkat = (a) => { const i = JABATAN.findIndex((j) => j.id === a.peran); return i < 0 ? JABATAN.length : i; };
+// peserta apel: yang benar-benar menganggur (bisaDipinjam) dan bukan peserta rapat — mereka memang harus duduk
+const calonApel = () => [...penghuni()].filter((a) => bisaDipinjam(a) && !(a instanceof Peserta));
+// pembina: kadis kalau ada personanya; kalau tidak, standby berjabatan tertinggi; lalu siapa pun tertinggi
+function pilihPembina(orang) {
+  const kadis = orang.find((a) => a.peran === 'kadis');
+  if (kadis) return kadis;
+  const tertinggi = (arr) => arr.slice().sort((p, q) => pangkat(p) - pangkat(q))[0] || null;
+  return tertinggi(orang.filter((a) => a.standby)) || tertinggi(orang);
+}
+
+function mulaiApel(senin, paksa) {
+  const orang = calonApel();
+  if (!orang.length) return false;           // semua sibuk: dicoba lagi, penanda tidak ditulis
+  const E = { def: { id: 'apel-pagi' }, id: 'apel-pagi', umur: 0, sisa: 0, data: {}, aktor: [], tanda: new Set() };
+  for (const a of orang) {
+    a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+    a.doingEvent = 'apel pagi';
+  }
+  const pembina = pilihPembina(orang);
+  apel = { E, senin, durasi: senin ? 40 : 20, pembina, amanat: null, umur: 0, naikMulai: 3, naikLama: 8 };
+  if (pembina) pembina.goToXY(APEL_TIANG_X + 18, 280, 'down');   // di samping tiang, menghadap barisan
+  E.aktor.filter((a) => a !== pembina).forEach((a, i) => {
+    const saf = ((i / APEL_PER_SAF) | 0) % 2, k = i % APEL_PER_SAF;
+    a.goToXY(APEL_SAF_X0 + k * APEL_JARAK + saf * 9, APEL_SAF_Y[saf], 'up');
+  });
+  apelBendera = 1;                            // bendera menunggu di kaki tiang
+  muatAmanat();
+  if (!paksa) ingatan.tulis('apelTerakhir', tanggalLokal(new Date()));
+  return true;
+}
+
+/* Amanat dirakit di klien dari buku agenda kemarin (route /agenda tahap 2):
+   "Kemarin N tool call dari M sesi, terbanyak <tool>." Gagal/404/kosong =
+   kalimat generik; tidak ada route baru. */
+function muatAmanat() {
+  const tgl = tanggalLokal(new Date(Date.now() - 86400000));
+  fetch('/agenda?dari=' + tgl + '&sampai=' + tgl + '&limit=2000')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((j) => {
+      if (!apel || !j || !Array.isArray(j.baris)) return;
+      const call = j.baris.filter((b) => b.kind === 'pre' && b.tool);
+      if (!call.length) return;
+      const sesi = new Set(call.map((b) => b.session)).size;
+      const hitung = new Map();
+      for (const b of call) hitung.set(b.tool, (hitung.get(b.tool) || 0) + 1);
+      let top = '';
+      for (const [t, n] of hitung) if (!top || n > hitung.get(top)) top = t;
+      apel.amanat = 'Kemarin ' + call.length + ' tool call dari ' + sesi + ' sesi, terbanyak ' + top + '.';
+    })
+    .catch(() => {});
+}
+
+// Pembina yang sudah keluar barisan (tool call) diganti yang tertinggi di
+// sisa barisan — dari tempatnya berdiri, tidak dipindah. Standby dibungkam
+// Standby.say(), jadi dipanggil langsung Agent.prototype.say dengan balon
+// yang dipasang ulang ke overlay selama apel (dicopot lagi di bubarApel).
+function ucapPembina(teks) {
+  const A = apel;
+  if (!A) return;
+  if (!A.pembina || !A.E.aktor.includes(A.pembina)) A.pembina = pilihPembina(A.E.aktor);
+  const p = A.pembina;
+  if (!p) return;
+  if (p.standby && !p.el.isConnected) overlay.appendChild(p.el);
+  spawn('talk', p.x, p.y - 24);
+  Agent.prototype.say.call(p, esc(teks));
+}
+
+function tickApel(dt) {
+  if (!apel) {
+    if (now > apelCekBerikut) { apelCekBerikut = now + 1000; cekApel(); }
+    return;
+  }
+  const A = apel, E = A.E;
+  A.umur += dt;
+  E.umur = A.umur;                            // pada() membaca E.umur
+  // bendera naik pelan; yang sudah sampai di barisan hormat selama itu
+  const t = (A.umur - A.naikMulai) / A.naikLama;
+  apelBendera = t <= 0 ? 1 : t >= 1 ? 0 : 1 - t;
+  if (t >= 0 && t < 1) for (const a of E.aktor) if (a.diam) a.pose = 'hormat';
+  pada(E, A.naikMulai, () => { if (audio && audio.state === 'running') mainkanIndonesiaRaya(); });
+  pada(E, A.naikMulai + A.naikLama, () => { for (const a of E.aktor) a.pose = null; });
+  const tAmanat = A.naikMulai + A.naikLama + 1;              // 12
+  pada(E, tAmanat, () => ucapPembina(A.amanat || APEL_PEMBUKA));
+  pada(E, tAmanat + 5, () => ucapPembina(APEL_PESAN[(Math.random() * APEL_PESAN.length) | 0]));
+  if (A.senin) {
+    PANCA_PRASETYA.forEach((baris, i) => pada(E, tAmanat + 9 + i * 3.6, () => ucapPembina(baris)));
+  }
+  if (A.umur >= A.durasi || !E.aktor.length) bubarApel();
+}
+
+function bubarApel() {
+  const A = apel;
+  apel = null;
+  apelBendera = 0;
+  for (const a of [...A.E.aktor]) {
+    lepaskanAktor(a);
+    if (a.standby) {
+      if (a.el.isConnected) a.el.remove();
+      a.nextMove = now + 1000 + Math.random() * 3000;
+    } else {
+      a.goTo(stasiunPulang(a));
+    }
+  }
+}
+
+function cekApel() {
+  if (APEL_PAKSA && !apelPaksaSudah) {
+    apelPaksaSudah = true;
+    mulaiApel(APEL_PAKSA === 'senin', true);   // paksa: abaikan babak & penanda, penanda tidak ditulis
+    return;
+  }
+  const d = new Date();
+  if (babakHari(ambien().jam, d) !== 'apel') return;
+  if (document.hidden) return;                 // "halaman terbuka" — rAF-nya pun berhenti kalau tersembunyi
+  if (ingatan.baca('apelTerakhir', '') === tanggalLokal(d)) return;
+  mulaiApel(d.getDay() === 1, false);
+}
+
+/* ---------------------------------------------------------- tema kalender ---
+   Registri dekor musiman: satu tabel TEMA (id, syarat tanggal), dekornya
+   menempel di RUANGAN.tema, dievaluasi saat muat dan tiap ganti hari, lalu
+   digambar oleh gambarTemaDinding() (sisipan satu baris di drawWall, di
+   bawah neon) dan gambarTemaMeja() (sisipan satu baris di drawMejaKerja).
+   Bukan event: tidak ada durasi, tidak ada aktor, tidak ada cooldown —
+   dekor ini ada sepanjang tanggalnya berlaku, seperti kantor sungguhan.
+   Event acak bertema sama (hormat-bendera, ramadan-siang-sunyi, hari-korpri,
+   tahun-anggaran-baru) tetap jalan: dekor mereka tidak ada yang dobel dengan
+   ini (sajadah ramadan di lantai vs jadwal di dinding, seragam korpri vs
+   spanduk), jadi tidak perlu saling kunci. S.tema tersedia kalau suatu hari
+   perlu. Uji: ?tema=agustusan|ramadan|korpri|tahun-anggaran.
+   Dipoll sendiri (30 detik, sama dengan seragam harian), bukan dari
+   terapkanSeragamHarian(): fungsi itu sudah dipanggil saat muat, jauh sebelum
+   RUANGAN didefinisikan. */
+const TEMA_PAKSA = new URLSearchParams(location.search).get('tema');
+const TEMA = [
+  { id: 'agustusan',      syarat: (d) => d.getMonth() === 7 && d.getDate() <= 17 },
+  // taksirHijri ada di event-acak.js (dimuat sesudah berkas ini) — evaluasi
+  // pertama ditunda setTimeout(0) supaya dia sudah ada
+  { id: 'ramadan',        syarat: (d) => typeof taksirHijri === 'function' && taksirHijri(d).bulan === 9 },
+  { id: 'korpri',         syarat: (d) => d.getMonth() === 10 && d.getDate() === 29 },
+  { id: 'tahun-anggaran', syarat: (d) => d.getMonth() === 0 && d.getDate() <= 7 },
+];
+const TEMA_ID = new Set(TEMA.map((t) => t.id));
+let temaHariTerpasang = null;
+function terapkanTema() {
+  const d = new Date();
+  const kunci = tanggalLokal(d);
+  if (kunci === temaHariTerpasang) return;
+  temaHariTerpasang = kunci;
+  const paksa = TEMA_PAKSA && TEMA_ID.has(TEMA_PAKSA) ? TEMA_PAKSA : null;
+  RUANGAN.tema = paksa || (TEMA.find((t) => t.syarat(d)) || { id: null }).id;
+  RUANGAN.temaTahun = d.getFullYear();
+}
+setTimeout(terapkanTema, 0);
+setInterval(terapkanTema, 30000);
+
+// Taksiran jam imsak/berbuka per bulan (kira-kira Jakarta) — cukup buat papan
+// pengumuman kantor, bukan buat ibadah; "sebut jam saja".
+const RAMADAN_IMSAK = ['04.20', '04.30', '04.35', '04.30', '04.30', '04.35', '04.40', '04.40', '04.30', '04.15', '04.05', '04.05'];
+const RAMADAN_BUKA  = ['18.15', '18.15', '18.05', '17.55', '17.45', '17.45', '17.50', '17.55', '17.50', '17.45', '17.50', '18.05'];
+
+function gambarSpanduk(teks, warna) {
+  const x = 192, y = 4, w = 74, h = 12;       // di atas ceruk jendela, di kanan neon kiri, sebelum foto pejabat
+  r(x - 2, y + 2, 2, 8, '#8b8f86');           // ikatan ke paku
+  r(x + w, y + 2, 2, 8, '#8b8f86');
+  r(x, y, w, h, warna);
+  r(x, y, w, 1, sh(warna, 1.3));
+  r(x, y + h - 1, w, 1, sh(warna, 0.7));
+  ctx.font = '6px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fdf6ec';
+  ctx.fillText(teks, Math.round(x + (w - ctx.measureText(teks).width) / 2), y + h / 2 + 0.5);
+}
+
+function gambarUmbulUmbul() {
+  r(0, 24, W, 1, '#b9bcb2');                  // tali sepanjang dinding
+  for (let x = 2; x < W; x += 8) {
+    const c = ((x / 8) | 0) % 2 === 0 ? P.red : '#f4f2ec';
+    const goyang = Math.sin(now / 500 + x * 0.3) > 0 ? 1 : 0;
+    r(x, 25, 6, 2, c); r(x + 1, 27, 4, 2, c); r(x + 2, 29, 2, 1 + goyang, c);
+  }
+}
+
+function gambarPapanRamadan() {
+  const x = 418, y = 54, w = 20, h = 30;      // celah dinding antara rak server dan pintu kadis, di bawah rambu
+  r(x - 1, y - 1, w + 2, h + 2, '#6d5535');
+  r(x, y, w, h, P.paper);
+  r(x, y, w, 6, '#3e6b4f');                   // kepala hijau + bulan sabit
+  ctx.fillStyle = '#f5d76e'; ctx.beginPath(); ctx.arc(x + 5, y + 3, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3e6b4f'; ctx.beginPath(); ctx.arc(x + 6, y + 2.6, 1.6, 0, Math.PI * 2); ctx.fill();
+  r(x + 9, y + 2, 8, 2, '#f5d76e');
+  const b = new Date().getMonth();
+  ctx.font = '5px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2b2118';
+  ctx.fillText('IMSAK', x + 2, y + 10);
+  ctx.fillText(RAMADAN_IMSAK[b], x + 2, y + 15);
+  ctx.fillText('BUKA', x + 2, y + 21);
+  ctx.fillText(RAMADAN_BUKA[b], x + 2, y + 26);
+}
+
+function gambarTemaDinding() {
+  const t = RUANGAN.tema;
+  if (!t) return;
+  const th = RUANGAN.temaTahun || new Date().getFullYear();
+  if (t === 'agustusan') { gambarUmbulUmbul(); gambarSpanduk('DIRGAHAYU RI KE-' + (th - 1945), P.red); }
+  else if (t === 'korpri') gambarSpanduk('HUT KORPRI KE-' + (th - 1971), '#28406b');
+  else if (t === 'tahun-anggaran') gambarSpanduk('TAHUN ANGGARAN ' + th, '#3e6b4f');
+  else if (t === 'ramadan') gambarPapanRamadan();
+}
+
+// Bendera kecil bertiang lidi di tiap meja kerja, di sebelah pot mini (x+33..37);
+// laptop mulai x+45, jadi x+38..44 memang celah yang tersisa.
+function gambarTemaMeja(x, y) {
+  if (RUANGAN.tema !== 'agustusan') return;
+  r(x + 38, y - 10, 1, 17, '#c9ced4');
+  r(x + 39, y - 10, 5, 2, P.red);
+  r(x + 39, y - 8, 5, 2, '#f4f2ec');
+}
+
 /* -------------------------------------------------------------------- loop */
 let last = performance.now();
 let dripT = 0;
@@ -6534,6 +7204,7 @@ function frame(ts) {
   kilat = kilatAktif();
 
   tickEvent(dt);        // sebelum update: MOD dipasang di sini, dibaca di bawah
+  tickKamera(dt);       // sebelum update pegawai: balon DOM-nya dihitung lewat keLayar()
   putarKipas += dt * 11 * MOD.kipas;
 
   // disalin dulu: peserta yang sampai di pintu menghapus dirinya saat update
@@ -6549,6 +7220,9 @@ function frame(ts) {
   // ctx.restore() ada SEBELUM taruhKartu() — kartu itu div DOM yang diposisikan
   // lewat offX/scale, jadi harus tidak ikut bergeser atau akan meleset dari orangnya.
   ctx.save();
+  // Kamera: sesudah skala integer fit() (yang itu CSS, bukan ctx), sebelum
+  // segala gambar. tx/ty sudah bulat, zoom bulat di luar masa easing.
+  ctx.setTransform(KAMERA.zoom, 0, 0, KAMERA.zoom, KAMERA.tx, KAMERA.ty);
   if (MOD.getar) ctx.translate(0, Math.round(Math.sin(now / 40) * MOD.getar));
 
   drawWall();
@@ -6589,6 +7263,9 @@ function frame(ts) {
   drawAmbien();
   gambarLapis('gambarAtas');
 
+  // vignette milik layar, bukan ruangan: waktu kamera membidik pojok, yang
+  // gelap tetap tepi bidikan — bukan pojok ruangan yang sedang dilihat
+  if (KAMERA.zoom !== 1) ctx.setTransform(1, 0, 0, 1, 0, 0);
   const g = ctx.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, 'rgba(30,40,30,' + MOD.vignette.toFixed(3) + ')');

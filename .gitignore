@@ -7,3 +7,7 @@ token-riwayat.arsip.jsonl
 
 # buku agenda: log event harian (metadata), data lokal, bukan kode
 agenda/
+
+# buku induk pegawai: karier per folder proyek, data lokal, bukan kode
+buku-induk.json
+buku-induk.json.tmp

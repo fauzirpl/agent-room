@@ -5,9 +5,13 @@
 // never block, never print, and never exit non-zero.
 
 import http from 'node:http';
+import os from 'node:os';
 
-const PORT = Number(process.env.AGENT_ROOM_PORT || 4517);
-const HOST = process.env.AGENT_ROOM_HOST || '127.0.0.1';
+// AGENT_ROOM_URL (kantor pusat di mesin lain) menang atas HOST/PORT lokal
+let ALAMAT = null;
+try { if (process.env.AGENT_ROOM_URL) ALAMAT = new URL(process.env.AGENT_ROOM_URL); } catch { ALAMAT = null; }
+const PORT = ALAMAT ? Number(ALAMAT.port || 80) : Number(process.env.AGENT_ROOM_PORT || 4517);
+const HOST = ALAMAT ? ALAMAT.hostname : (process.env.AGENT_ROOM_HOST || '127.0.0.1');
 const BUDGET_MS = 400;
 
 const bail = () => process.exit(0);
@@ -27,7 +31,12 @@ process.stdin.on('end', () => {
       port: PORT,
       path: '/event',
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'content-length': body.length },
+      headers: {
+        'content-type': 'application/json', 'content-length': body.length,
+        // sama seperti jalur curl: nama mesin selalu, kunci hanya kalau env-nya ada
+        'x-agent-room-mesin': os.hostname().replace(/[^\w.-]/g, '').slice(0, 32),
+        ...(process.env.AGENT_ROOM_KUNCI ? { 'x-agent-room-kunci': process.env.AGENT_ROOM_KUNCI.trim() } : {}),
+      },
     },
     (res) => { res.resume(); res.on('end', bail); }
   );

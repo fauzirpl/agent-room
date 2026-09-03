@@ -12,6 +12,7 @@
     "dinas.sh",
     "install.mjs",
     "hook.mjs",
+    "mcp-room.mjs",
     "server.mjs",
     "uji-event.mjs",
     "public/",

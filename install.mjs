@@ -54,13 +54,56 @@ function hasCurl() {
 }
 
 const useCurl = !forceNode && hasCurl();
-// header x-agent-room sekaligus jadi penanda supaya isOurs() bisa mengenali
-// dan melepas hook ini lagi nanti.
-const command = useCurl
-  ? `curl -s -m 2 --connect-timeout 1 -X POST -H "content-type: application/json" ` +
-    `-H "x-agent-room: 1" --data-binary @- http://127.0.0.1:${PORT}/event || exit 0`
-  : `node "${HOOK}"`;
+
+/* ————— kantor pusat & kantor cabang —————
+   Bawaannya hook bicara ke 127.0.0.1 di mesin yang sama. Dua env mengubahnya:
+   - AGENT_ROOM_URL    : alamat kantor pusat (mis. http://kantor.lan:4517) —
+                         hook di mesin INI mengirim event ke sana ("cabang")
+   - AGENT_ROOM_KUNCI  : kunci yang sama dengan yang dipasang di server pusat;
+                         ditanam sebagai header x-agent-room-kunci
+   Nama mesin (os.hostname) SELALU ikut sebagai x-agent-room-mesin: murah, dan
+   di kantor pusat itulah yang membedakan pegawai cabang dari pegawai lokal.
+   Ketiganya masuk ke satu baris shell di settings.json, jadi nilainya dibatasi
+   ke karakter yang tidak mungkin memecah kutipan — kalau tidak lolos, batal,
+   bukan menulis perintah yang rusak.                                        */
+const URL_KANTOR = (process.env.AGENT_ROOM_URL || '').trim().replace(/\/+$/, '');
+const KUNCI = (process.env.AGENT_ROOM_KUNCI || '').trim();
+const MESIN = os.hostname().replace(/[^\w.-]/g, '').slice(0, 32);
+if (URL_KANTOR && !/^https?:\/\/[A-Za-z0-9.\-\[\]:_~%]+(?:\/[A-Za-z0-9.\-_~%\/]*)?$/.test(URL_KANTOR)) {
+  console.error('\n  ✗ AGENT_ROOM_URL tidak sah: ' + URL_KANTOR + '\n    contoh: http://kantor.lan:4517\n');
+  process.exit(1);
+}
+if (KUNCI && !/^[A-Za-z0-9_.\-]{8,128}$/.test(KUNCI)) {
+  console.error('\n  ✗ AGENT_ROOM_KUNCI harus 8–128 karakter huruf/angka/_.- (dipakai di baris shell hook)\n');
+  process.exit(1);
+}
+
+export function bentukPerintah({ curl = useCurl, url = URL_KANTOR, kunci = KUNCI, mesin = MESIN, port = PORT, hook = HOOK } = {}) {
+  if (!curl) return `node "${hook}"`;
+  const tujuan = (url || `http://127.0.0.1:${port}`) + '/event';
+  // header x-agent-room sekaligus jadi penanda supaya isOurs() bisa mengenali
+  // dan melepas hook ini lagi nanti.
+  return `curl -s -m 2 --connect-timeout 1 -X POST -H "content-type: application/json" ` +
+    `-H "x-agent-room: 1"` +
+    (mesin ? ` -H "x-agent-room-mesin: ${mesin}"` : '') +
+    (kunci ? ` -H "x-agent-room-kunci: ${kunci}"` : '') +
+    ` --data-binary @- ${tujuan} || exit 0`;
+}
+
+const command = bentukPerintah();
 const entry = { type: 'command', command, timeout: 5 };
+
+// --coba: cetak yang akan ditulis, jangan sentuh settings — ini jalur uji.
+if (args.includes('--coba')) {
+  console.log(`\n  --coba: tidak menulis apa pun`);
+  console.log(`  target    ${target}`);
+  console.log(`  transport ${useCurl ? 'curl' : 'node hook.mjs'}`);
+  console.log(`  kantor    ${URL_KANTOR || 'http://127.0.0.1:' + PORT + ' (lokal)'}`);
+  console.log(`  kunci     ${KUNCI ? 'terpasang' : 'tidak'}`);
+  console.log(`  mesin     ${MESIN}`);
+  console.log(`  perintah  ${command}\n`);
+  process.exit(0);
+}
 
 const isOurs = (group) =>
   Array.isArray(group?.hooks) && group.hooks.some((h) => String(h?.command || '').includes(TAG));
@@ -128,5 +171,8 @@ if (remove) {
   console.log(`\n  ✓ hooks agent-room terpasang untuk ${scope}`);
   console.log(`    ${target}`);
   console.log(`    transport: ${useCurl ? 'curl (~42ms/panggilan)' : 'node hook.mjs (~153ms/panggilan)'}`);
-  console.log(`\n  Restart sesi Claude Code supaya hooks kebaca, lalu buka http://127.0.0.1:4517\n`);
+  if (URL_KANTOR) console.log(`    kantor pusat: ${URL_KANTOR}  (event dari mesin ini dikirim ke sana)`);
+  if (KUNCI) console.log(`    kunci event: terpasang di perintah hook`);
+  else if (URL_KANTOR) console.log(`    kunci event: TIDAK ADA — kantor pusat yang memakai AGENT_ROOM_KUNCI akan menolak`);
+  console.log(`\n  Restart sesi Claude Code supaya hooks kebaca, lalu buka ${URL_KANTOR || 'http://127.0.0.1:' + PORT}\n`);
 }
