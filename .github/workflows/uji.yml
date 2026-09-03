@@ -1,0 +1,51 @@
+name: Uji
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  uji-event:
+    name: Uji event & smoke server
+    runs-on: ubuntu-latest
+    env:
+      AGENT_ROOM_PORT: "4599"
+    steps:
+      - name: Ambil sumber
+        uses: actions/checkout@v4
+
+      - name: Siapkan Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Repo ini nol dependency dan tanpa package.json — tidak ada npm install.
+      - name: Periksa sintaks server.mjs
+        run: node --check server.mjs
+
+      - name: Periksa sintaks dinas.mjs
+        run: node --check dinas.mjs
+
+      - name: Jalankan harness uji event (semua event)
+        run: node uji-event.mjs --semua
+
+      - name: Smoke server (nyalakan, cek /health, matikan)
+        shell: bash
+        run: |
+          node server.mjs &
+          PID=$!
+          sehat=0
+          for i in $(seq 1 20); do
+            if curl -sf "http://127.0.0.1:${AGENT_ROOM_PORT}/health"; then
+              echo
+              sehat=1
+              break
+            fi
+            sleep 0.5
+          done
+          kill "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          if [ "$sehat" -ne 1 ]; then
+            echo "server tidak menjawab /health dalam ~10 detik" >&2
+            exit 1
+          fi
