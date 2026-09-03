@@ -712,6 +712,41 @@ body {
 .stat-batang-isi { width: 100%; min-height: 1px; background: var(--amber); opacity: .4; border-radius: 2px 2px 0 0; }
 .stat-batang.hari-ini .stat-batang-isi { opacity: 1; }
 .stat-grafik-sumbu { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--dim); margin-top: 2px; }
+
+/* Papan SKP (lihat skpGambar() di room.js): tab kedua di modal statistik.
+   Tabelnya butuh lebar, jadi modalnya dilebarkan hanya saat tab ini aktif
+   (.skp-lebar) — tab Token tetap 400px seperti semula. */
+.stat-tab { display: flex; gap: 2px; }
+.stat-tab button { padding: 2px 8px; font-size: 10px; letter-spacing: .04em; }
+.stat-tab button.aktif { background: var(--tinta); color: var(--krem); border-color: var(--tinta); }
+.dlg.stat.skp-lebar { width: min(780px, 100%); height: min(620px, 100%); }
+.skp-kepala { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 9.5px; color: var(--tinta-pudar); }
+/* .stat b (angka HUD) ikut kena karena modalnya berkelas .stat — di tab ini <b> cuma penekanan teks */
+.skp-badan .skp-kepala b, .skp-badan .stat-ket b { display: inline; font: inherit; font-weight: 700; color: inherit; }
+.skp-kepala .isi { flex: 1; }
+.skp-rentang { display: inline-flex; gap: 2px; }
+.skp-rentang button, .skp-cetak {
+  background: var(--putih); border: 1px solid var(--khaki-tua); color: var(--tinta-pudar);
+  border-radius: 3px; padding: 2px 7px; cursor: pointer; font: inherit; font-size: 10px;
+}
+.skp-rentang button.aktif { background: var(--emas-tua); border-color: var(--emas-tua); color: var(--krem); }
+.skp-cetak { color: var(--tinta); }
+.skp-cetak:hover, .skp-rentang button:hover { border-color: var(--navy); color: var(--navy); }
+.skp-rentang button.aktif:hover { color: var(--krem); }
+.skp-gulir { overflow-x: auto; }
+.skp-tabel { border-collapse: collapse; width: 100%; font-size: 10px; color: var(--tinta); background: var(--putih); }
+.skp-tabel th, .skp-tabel td { border: 1px solid var(--khaki-tua); padding: 3px 6px; text-align: left; white-space: nowrap; }
+.skp-tabel th { background: var(--khaki-muda); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-pudar); font-weight: 600; }
+.skp-tabel td.angka, .skp-tabel th.angka { text-align: right; font-variant-numeric: tabular-nums; }
+.skp-tabel td.nama { color: var(--emas-tua); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.skp-tabel td.gagal-tinggi { color: var(--merah-tua); }
+.skp-tabel tr.kosong td { color: var(--tinta-pudar); font-style: italic; text-align: center; }
+/* Lembar nota ?cetak=mingguan: iframe menutup seluruh halaman; print() dipanggil
+   pada window iframe-nya, jadi yang tercetak cuma notanya, bukan ruangan. */
+.nota-cetak-lapis { position: fixed; inset: 0; z-index: 90; background: #777; display: flex; flex-direction: column; }
+.nota-cetak-lapis .bilah { flex: none; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: var(--khaki-muda); border-bottom: 2px solid var(--tinta); font-size: 11px; color: var(--tinta); }
+.nota-cetak-lapis .bilah button { background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px; padding: 2px 8px; font: inherit; font-size: 11px; cursor: pointer; }
+.nota-cetak-lapis iframe { flex: 1; border: 0; width: 100%; background: #fff; }
 .kbr-kaki button:disabled { opacity: .35; cursor: default; }
 .kbr-kaki button:disabled:hover { border-color: var(--line); }
 
@@ -755,3 +790,172 @@ body {
 .pengaturan-izin button:disabled { opacity: .45; cursor: default; }
 .pengaturan-izin-ket { font-size: 9.5px; color: var(--tinta-pudar); }
 .pengaturan-grup .kartu-info { border-top: 0; padding-top: 0; grid-template-columns: 92px 1fr; }
+
+/* ---------- daftar kru: kepala seksi per proyek & pin ----------
+   Kepala seksi = map gantung di lemari arsip: label khaki tua kecil dengan
+   panah lipat, bukan kartu krem seperti barisnya, supaya tidak dikira orang.
+   Cuma tampil kalau ada ≥2 proyek (lihat kruSusun() di room.js). */
+.crew-seksi {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+  margin: 4px 0 -1px; padding: 2px 4px; font-size: 9.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tinta-pudar); border-bottom: 1px dashed var(--khaki-tua);
+}
+.crew-seksi:hover { color: var(--tinta); }
+.crew-seksi .panah { width: 9px; color: var(--emas-tua); }
+.crew-seksi .nama { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew-seksi .jumlah {
+  margin-left: auto; font-size: 8.5px; color: var(--krem); background: var(--khaki-tua);
+  border-radius: 8px; padding: 0 5px; letter-spacing: 0;
+}
+.crew-seksi.lipat { opacity: .8; margin-bottom: 2px; }
+/* 📌 di baris: samar sampai disorot, nyala terus kalau sedang disematkan */
+.crew-row .aksi.pin { opacity: .35; padding-left: 3px; padding-right: 3px; }
+.crew-row:hover .aksi.pin, .crew-row .aksi.pin.aktif { opacity: 1; }
+.crew-row .aksi.pin.aktif { border-color: var(--emas-tua); background: var(--khaki-muda); }
+
+/* ---------- meja disposisi ----------
+   Tumpukan berkas di meja kadis: kartu-kartu kecil berstempel jenis, terbaru
+   di atas. Krem kertas, bukan wallpaper WA — ini meja, bukan grup chat. */
+.dlg.meja { width: min(640px, 100%); height: min(600px, 100%); }
+.meja-saring { display: flex; gap: 6px; padding: 8px 10px 0; }
+.meja-saring input, .meja-saring select {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 11px; padding: 5px 7px; min-width: 0;
+}
+.meja-saring input { flex: 1; }
+.meja-saring input:focus, .meja-saring select:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px #1f355926; }
+.meja-saring input:disabled { opacity: .55; }
+.meja-saring select { max-width: 42%; }
+.meja-saring button {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 10.5px; padding: 4px 8px; cursor: pointer; white-space: nowrap;
+}
+.meja-saring button:hover { border-color: var(--navy); }
+.meja-saring button:disabled { opacity: .45; cursor: default; }
+/* tab jenis = tab map arsip: yang aktif hitam papan nama, sisanya kertas */
+.meja-tab { display: flex; gap: 4px; padding: 6px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--khaki-tua); }
+.meja-tab button {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta-pudar); font: inherit; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 7px; cursor: pointer; display: inline-flex; gap: 5px; align-items: center;
+}
+.meja-tab button i { font-style: normal; color: var(--emas-tua); font-weight: 700; }
+.meja-tab button:hover { border-color: var(--navy); color: var(--tinta); }
+.meja-tab button.aktif { background: var(--hitam-papan); color: #efe8d5; border-color: var(--hitam-papan); }
+.meja-tab button.aktif i { color: var(--emas); }
+.meja-badan { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 10px 14px; display: flex; flex-direction: column; gap: 5px; }
+.meja-badan::-webkit-scrollbar { width: 8px; }
+.meja-badan::-webkit-scrollbar-thumb { background: var(--khaki-tua); border-radius: 4px; }
+.meja-kartu {
+  display: grid; grid-template-columns: auto 1fr auto; grid-template-areas:
+    "stempel perihal aksi" "nama cuplik aksi" "penuh penuh penuh";
+  align-items: center; column-gap: 8px; row-gap: 3px; cursor: pointer;
+  background: var(--krem); border: 1px solid var(--khaki-tua); border-left-width: 4px; border-radius: 3px; padding: 6px 8px;
+}
+.meja-kartu:hover { border-color: var(--navy); }
+.meja-kartu.hasil { border-left-color: var(--hijau); }
+.meja-kartu.tunggu { border-left-color: var(--emas-tua); }
+.meja-kartu.galat { border-left-color: var(--merah); }
+.meja-kartu.lapor { border-left-color: var(--khaki-tua); }
+.meja-kartu.semat { background: var(--putih); box-shadow: inset 0 0 0 1px var(--emas-tua); }
+.meja-kartu.arsip { border-style: dashed; }
+.meja-stempel {
+  grid-area: stempel; font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  color: var(--tinta-pudar); border: 1px solid var(--khaki-tua); border-radius: 2px; padding: 0 4px; justify-self: start;
+}
+.meja-perihal { grid-area: perihal; font-size: 11px; color: var(--tinta); display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.meja-jam { font-size: 9px; color: var(--tinta-samar); white-space: nowrap; margin-left: auto; }
+.meja-perihal { justify-content: space-between; }
+.meja-nama {
+  grid-area: nama; font-size: 9px; color: var(--tinta-pudar); border-left: 3px solid var(--khaki-tua); padding-left: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+}
+.meja-nama i { font-style: normal; color: var(--tinta-samar); }
+.meja-cuplik { grid-area: cuplik; font-size: 10px; color: var(--tinta-pudar); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.meja-kartu .meja-penuh { grid-area: penuh; display: none; margin: 4px 0 0; font: 10.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--tinta); border-top: 1px dashed var(--khaki-tua); padding-top: 5px; }
+.meja-kartu.buka .meja-penuh { display: block; }
+.meja-aksi { grid-area: aksi; display: flex; gap: 3px; align-self: start; }
+.meja-aksi button {
+  background: none; border: 1px solid var(--khaki-tua); border-radius: 3px; color: var(--tinta-pudar);
+  font: inherit; font-size: 11px; padding: 1px 5px; cursor: pointer; line-height: 1.3;
+}
+.meja-aksi button:hover { border-color: var(--navy); color: var(--tinta); }
+.meja-aksi button.aktif { border-color: var(--emas-tua); background: var(--khaki-muda); }
+.meja-kosong, .meja-nota { margin: 6px 0; font-size: 10.5px; color: var(--tinta-pudar); font-style: italic; line-height: 1.5; }
+.meja-nota { font-style: normal; background: var(--khaki-muda); border: 1px solid var(--khaki-tua); border-radius: 3px; padding: 6px 8px; }
+.meja-seksi {
+  margin: 12px 0 4px; padding-top: 8px; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--tinta-pudar); border-top: 1px solid var(--khaki-tua);
+}
+.meja-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.meja-agenda li { display: flex; gap: 6px; font-size: 10.5px; padding: 2px 0; border-bottom: 1px dotted var(--khaki-muda); }
+.meja-agenda .t { color: var(--tinta-samar); font-size: 9.5px; flex: none; }
+.meja-agenda .s { color: var(--emas-tua); flex: none; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meja-agenda .k { color: var(--navy); font-weight: 600; flex: none; }
+.meja-agenda .l { color: var(--tinta-pudar); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.meja-kaki { justify-content: space-between; }
+.meja-ket { font-size: 10px; color: var(--hijau); }
+.meja-ket.galat { color: var(--merah); }
+.meja-nota-kaki { font-size: 9.5px; color: var(--tinta-samar); margin-left: auto; text-align: right; }
+@media (max-width: 620px) {
+  .meja-saring { flex-wrap: wrap; }
+  .meja-saring input { flex-basis: 100%; }
+  .meja-saring select { max-width: none; flex: 1; }
+  .meja-nota-kaki { display: none; }
+}
+
+/* ---------- ?kadis=1: tampilan HP kepala dinas ----------
+   Kanvas & bilah panggung hilang, panel jadi satu kolom penuh, huruf lebih
+   besar, tombol setinggi jempol. Ringkasan (#kadisRingkas) di atas daftar
+   kru; isinya dari kadisGambar() di room.js. Server tetap bind localhost —
+   halaman ini sampai ke HP cuma lewat tunnel, bukan dengan melonggarkan bind. */
+body.mode-kadis .stage { display: none; }
+body.mode-kadis .app { flex-direction: column; }
+body.mode-kadis .panel {
+  width: auto; max-height: none; flex: 1; border-left: 0; border-top: 0;
+  padding: 14px 12px 0; font-size: 15px;
+}
+body.mode-kadis .panel .kendali, body.mode-kadis .panel h2, body.mode-kadis .panel .log { display: none; }
+body.mode-kadis .stat b { font-size: 26px; }
+body.mode-kadis .stat span { font-size: 11px; }
+body.mode-kadis .crew-row { font-size: 14px; padding: 10px 10px; gap: 9px; flex-wrap: wrap; }
+body.mode-kadis .crew-row .what { max-width: none; white-space: normal; flex-basis: 100%; margin-left: 0; }
+body.mode-kadis .crew-row .jab { font-size: 10px; max-width: none; }
+body.mode-kadis .crew-row .aksi { font-size: 13px; padding: 6px 12px; min-height: 36px; }
+body.mode-kadis .crew-row .aksi.pin { opacity: 1; }
+body.mode-kadis .crew-seksi { font-size: 12px; padding: 6px 4px; }
+.kadis-ringkas { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.kadis-blok { background: var(--krem); border: 1px solid var(--khaki-tua); border-left-width: 5px; border-radius: 4px; padding: 10px 12px; }
+.kadis-blok.tunggu { border-left-color: var(--emas-tua); }
+.kadis-blok.galat { border-left-color: var(--merah); }
+.kadis-blok.kerja { border-left-color: var(--hijau); }
+.kadis-blok.santai, .kadis-blok.antre { border-left-color: var(--khaki-tua); }
+.kadis-blok.token { border-left-color: var(--navy); }
+.kadis-blok h3 {
+  margin: 0 0 6px; font: 700 12px/1.3 var(--serif); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--tinta-pudar); display: flex; align-items: center; gap: 8px;
+}
+.kadis-blok h3 i { font-style: normal; color: var(--emas-tua); font-size: 15px; }
+.kadis-blok ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.kadis-blok li { display: flex; flex-direction: column; gap: 2px; font-size: 15px; padding: 6px 0; border-top: 1px dotted var(--khaki-tua); }
+.kadis-blok li b { color: var(--tinta); }
+.kadis-blok li span { color: var(--tinta-pudar); font-size: 13px; word-break: break-word; }
+.kadis-kosong { margin: 0; font-size: 13px; color: var(--tinta-samar); font-style: italic; }
+.kadis-token { margin: 0; font: 700 26px/1.2 var(--serif); color: var(--emas-tua); }
+.kadis-muat {
+  background: var(--merah); color: var(--putih); border: 0; border-radius: 4px; font: inherit; font-size: 16px;
+  padding: 14px; cursor: pointer; min-height: 48px;
+}
+.kadis-muat:hover { background: var(--merah-tua); }
+
+/* ---------- ?overlay=1 / ?overlay=chroma: layar kedua / OBS ----------
+   Cuma kanvas: panel, bilah panggung, pita merah-putih, dialog apa pun
+   disembunyikan; latar tembus supaya bisa ditumpuk di atas apa saja, atau
+   hijau #00ff00 buat chroma key. Padding stageInner nol dan bayangan kanvas
+   dicabut — fit() sudah menghitung tanpa tepi & mengunci skala bulat.
+   Balon ucap/pikiran tetap tampil (mereka anak stageInner). */
+html.mode-overlay, body.mode-overlay, body.mode-overlay .app, body.mode-overlay .stage { background: transparent; }
+html.mode-chroma, body.mode-chroma, body.mode-chroma .stage { background: #00ff00; }
+body.mode-overlay .app::before, body.mode-overlay .panel, body.mode-overlay .stage-bar, body.mode-overlay .dlg-latar { display: none !important; }
+body.mode-overlay .stage-inner { padding: 0; }
+body.mode-overlay #room { box-shadow: none; border-radius: 0; }

@@ -24,6 +24,7 @@
       <button id="settingBtn" class="ghost" title="pengaturan">⚙️</button>
       <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
       <button id="statsBtn" class="ghost" title="statistik token">📊</button>
+      <button id="mejaBtn" class="ghost" title="meja disposisi">📚</button>
     </div>
   </section>
 
@@ -78,6 +79,9 @@
         <div class="kredensial-status" id="tokenStatus"></div>
       </details>
     </div>
+    <!-- ringkasan ?kadis=1 (tampilan HP): diisi kadisGambar() di room.js, cuma
+         tampil di mode itu; di mode biasa tetap tersembunyi -->
+    <div class="kadis-ringkas" id="kadisRingkas" hidden></div>
     <div class="crew" id="crew"></div>
 
     <h2>Aktivitas</h2>
@@ -134,9 +138,35 @@
   <div class="dlg stat" role="dialog" aria-modal="true" aria-labelledby="statsJudul">
     <header class="dlg-kepala">
       <b id="statsJudul">Statistik token</b>
+      <nav class="stat-tab" id="statsTab" aria-label="tab statistik">
+        <button type="button" data-tab="token" class="aktif">Token</button>
+        <button type="button" data-tab="skp">Papan SKP</button>
+      </nav>
       <button type="button" id="statsTutup" title="tutup (Esc)">✕</button>
     </header>
     <div class="kbr-badan" id="statsBadan"></div>
+    <div class="kbr-badan skp-badan" id="skpBadan" hidden></div>
+  </div>
+</div>
+<!-- Meja disposisi: tumpukan kabar yang bisa dicari/disaring/disematkan/disalin.
+     Berdiri sendiri dari modal kabar (dlgKabar): cuma membaca larik `kabar`. -->
+<div class="dlg-latar" id="dlgMeja" hidden>
+  <div class="dlg meja" role="dialog" aria-modal="true" aria-labelledby="mejaJudul">
+    <header class="dlg-kepala">
+      <b id="mejaJudul">Meja disposisi</b>
+      <button type="button" id="mejaTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="meja-saring">
+      <input id="mejaCari" type="search" placeholder="cari perihal, isi, nama, tool…" spellcheck="false" autocomplete="off" aria-label="cari kabar">
+      <select id="mejaSesi" aria-label="saring per pegawai"><option value="">semua pegawai</option></select>
+      <button type="button" id="mejaAgenda" title="cari kata kunci yang sama di buku agenda server, 7 hari terakhir (Enter)">cari di agenda</button>
+    </div>
+    <nav class="meja-tab" id="mejaTab" aria-label="saring per jenis"></nav>
+    <div class="meja-badan" id="mejaBadan"></div>
+    <footer class="dlg-kaki meja-kaki">
+      <span class="meja-ket" id="mejaKet"></span>
+      <span class="meja-nota-kaki">klik kartu = buka di kotak kabar · 📌 sematkan · ⎘ salin</span>
+    </footer>
   </div>
 </div>
 <div class="dlg-latar" id="dlgSetting" hidden>
@@ -164,6 +194,16 @@
             <option value="sinematik">sinematik</option>
           </select>
         </label>
+        <label class="pengaturan-baris">
+          <span>🔋 mode ringan</span>
+          <input type="checkbox" id="setRingan">
+        </label>
+        <p class="pengaturan-nota" id="setRinganKet">
+          30 fps (15 fps saat tab tersembunyi), pendar neon &amp; vignette dari
+          cache, partikel separuh, tanpa debu. Menyala sendiri kalau baterai
+          &lt;30 % tanpa dicas, <code>?ringan=1</code>, atau gerak dikurangi.
+          <span id="setFps">— fps</span>
+        </p>
         <div class="pengaturan-audio">
           <label class="pengaturan-baris">
             <span>🔊 efek suara</span>

@@ -26,8 +26,16 @@ jobs:
       - name: Periksa sintaks dinas.mjs
         run: node --check dinas.mjs
 
-      - name: Jalankan harness uji event (semua event)
+      - name: Jalankan harness uji event (semua event + hook gambar + lanjutan + penjadwal)
         run: node uji-event.mjs --semua
+
+      - name: Uji z-order deterministik (golden uji-zorder.golden.json)
+        run: node uji-zorder.mjs
+
+      # Papan skor, bukan gerbang: selalu exit 0. Angka "berapa event sudah jadi
+      # kode" dibaca dari sini, bukan ditulis tangan di README/DESIGN.
+      - name: Papan skor katalog event (event-acak.json vs event-acak.js)
+        run: node uji-katalog.mjs
 
       - name: Smoke server (nyalakan, cek /health, matikan)
         shell: bash

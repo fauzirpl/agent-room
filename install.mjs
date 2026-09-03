@@ -83,11 +83,19 @@ export function bentukPerintah({ curl = useCurl, url = URL_KANTOR, kunci = KUNCI
   const tujuan = (url || `http://127.0.0.1:${port}`) + '/event';
   // header x-agent-room sekaligus jadi penanda supaya isOurs() bisa mengenali
   // dan melepas hook ini lagi nanti.
+  /* `-T -`, bukan `--data-binary @-`: keduanya mengirim stdin sebagai body,
+     tapi --data-binary MENGHABISKAN stdin sebelum tersambung, sedangkan -T
+     baru membacanya sesudah koneksi berdiri (dikirim chunked). Jadi waktu
+     server ruangan mati, cabang `||` masih menerima payload utuh dan
+     `hook.mjs --tunda` menyimpannya ke kotak surat ~/.agent-room/tunda —
+     dipungut server saat nyala lagi. `Expect:` dikosongkan supaya curl tidak
+     menunggu 100-continue. Sesi tetap tidak pernah kena warning: hook.mjs
+     selalu keluar 0 dan tidak menulis apa pun ke stdout.                   */
   return `curl -s -m 2 --connect-timeout 1 -X POST -H "content-type: application/json" ` +
-    `-H "x-agent-room: 1"` +
+    `-H "x-agent-room: 1" -H "Expect:"` +
     (mesin ? ` -H "x-agent-room-mesin: ${mesin}"` : '') +
     (kunci ? ` -H "x-agent-room-kunci: ${kunci}"` : '') +
-    ` --data-binary @- ${tujuan} || exit 0`;
+    ` -T - ${tujuan} || node "${hook}" --tunda`;
 }
 
 const command = bentukPerintah();

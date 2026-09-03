@@ -15,6 +15,9 @@
     "mcp-room.mjs",
     "server.mjs",
     "uji-event.mjs",
+    "uji-zorder.mjs",
+    "uji-zorder.golden.json",
+    "uji-katalog.mjs",
     "public/",
     "README.md",
     "DESIGN.md",
@@ -26,7 +29,7 @@
   },
   "scripts": {
     "start": "node dinas.mjs",
-    "test": "node uji-event.mjs --semua"
+    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-katalog.mjs"
   },
   "repository": {
     "type": "git",

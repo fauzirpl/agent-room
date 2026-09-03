@@ -8,6 +8,45 @@ const FLOOR_TOP = 110;
 const IDLE_AFTER = 7000;   // ms tanpa event -> balik ke meja kerja sendiri
 const SPEED = 52;          // px per detik
 
+/* Stamina pegawai (0..1, mulai 1). Turun dari jumlah call, kegagalan (lebih
+   berat), lama di kantor, dan waktu menunggu kamu; naik saat menganggur dan
+   selagi di pantry. Efeknya KOSMETIK saja — langkah 0,85× (tidak lebih
+   lambat: kedatangan ke stasiun tetap cepat, Aturan 1), bahu turun 1 px,
+   dan wajah 'lelah' sebagai ekspresi prioritas terendah. Tidak masuk log,
+   tidak masuk statistik; kartu pegawai cuma menulis satu baris "kondisi". */
+const STAMINA_CALL = 0.012;    // turun per tool call
+const STAMINA_GAGAL = 0.04;    // turun per tool call yang gagal
+const STAMINA_JAM = 0.10;      // turun per jam di kantor
+const STAMINA_TUNGGU = 0.06;   // turun per menit menunggu kamu
+const STAMINA_PULIH = 0.03;    // naik per menit menganggur
+const STAMINA_PANTRY = 0.15;   // naik per menit dipinjam event pantry
+const STAMINA_LELAH = 0.3;     // di bawah ini: 'lelah'
+const STAMINA_SEGAR = 0.7;     // di atas ini: 'segar'
+const LAJU_LELAH = 0.85;
+
+/* Antrean stasiun: kalau slotnya habis (PC server 4, meja rapat 9, ...),
+   pegawai berikutnya berdiri mengantre di lajur di belakang stasiun —
+   berjarak 10 px, paling banyak 3 yang kelihatan (sisanya berimpit di
+   posisi ketiga) — dan maju sendiri begitu ada slot kosong. */
+const ANTRE_JARAK = 10;
+const ANTRE_TAMPAK = 3;
+let antreSeq = 0;              // nomor giliran global: yang lebih kecil lebih dulu maju
+
+/* Transisi duduk/berdiri di kursi rapat: 3 frame × 2 px, ±150 ms — bukan
+   teleport. Jeda antisipasi 150 ms setibanya di stasiun sebelum pose kerja. */
+const DUDUK_PX = 2, DUDUK_FRAME = 3, DUDUK_MS = 150;
+const TIBA_JEDA_MS = 150;
+
+/* Ritual pulang (session-end): salaman ke rekan seproyek yang menganggur
+   (1 s), tempel jari di mesin absen (0,6 s), keluar lewat pintu. Batas total
+   6 s — lewat itu dia hilang di tempat. */
+const PULANG_BATAS_MS = 6000, PULANG_ABSEN_MS = 600, PULANG_SALAM_MS = 1000;
+const ABSEN_X = 424, ABSEN_Y = 152;      // titik berdiri di depan mesin absen (drawAbsensi)
+// Pintu keluar sesudah absen: tepi KANAN lajur atas, di sebelah mesin absen.
+// Bukan tepi kiri seperti peserta rapat — dari mesin absen ke tepi kiri
+// ±530 px (≈10 s), tidak pernah muat di jatah 6 s; ke tepi kanan cuma ±60 px.
+const PINTU_X = W + 20;
+
 // Meja rapat menempati tengah ruangan, jadi tidak bisa ditembus. Semua
 // perpindahan lewat dua lajur mendatar yang disambung dua lajur tegak.
 const LANE_UP = 164;       // lajur di depan meja-meja dinding
@@ -32,11 +71,30 @@ let scale = 2, offX = 0, offY = 0;
 // separuh keluar layar waktu orangnya berdiri di tepi ruangan
 let panggungW = 0;
 
+/* Dua rupa halaman dari URL, dibaca SEBELUM fit() karena fit() ikut berubah:
+   ?kadis=1   — tampilan HP buat kepala dinas: kanvas disembunyikan, panel jadi
+                satu kolom daftar besar (lihat kadisGambar()).
+   ?overlay=1 — layar kedua / OBS: cuma kanvas, latar tembus; ?overlay=chroma
+                latar hijau #00ff00 buat chroma key. Kelas dipasang ke <html>
+                dan <body> di sini supaya CSS-nya menang sebelum gambar pertama. */
+const MODE_URL = new URLSearchParams(location.search);
+const MODE_KADIS = MODE_URL.get('kadis') === '1';
+const MODE_OVERLAY = MODE_URL.get('overlay') === 'chroma' ? 'chroma' : MODE_URL.get('overlay') === '1' ? 'tembus' : '';
+for (const el of [document.documentElement, document.body]) {
+  if (MODE_KADIS) el.classList.add('mode-kadis');
+  if (MODE_OVERLAY) el.classList.add('mode-overlay', 'mode-' + MODE_OVERLAY);
+}
+
 function fit() {
-  const availW = stageInner.clientWidth - 36;
-  const availH = stageInner.clientHeight - 36;
+  // overlay: stageInner full-bleed (padding 0), jadi tepi 36 px yang biasa
+  // disisakan buat bayangan kanvas justru menyusutkan kanvasnya
+  const tepi = MODE_OVERLAY ? 0 : 36;
+  const availW = stageInner.clientWidth - tepi;
+  const availH = stageInner.clientHeight - tepi;
   let s = Math.min(availW / W, availH / H);
-  scale = s >= 2 ? Math.floor(s) : Math.max(0.6, s);
+  // overlay dikunci ke kelipatan piksel bulat: OBS menyusun ulang tiap frame,
+  // skala pecahan bikin garis tepi sprite belang di layar penonton
+  scale = MODE_OVERLAY ? Math.max(1, Math.floor(s)) : s >= 2 ? Math.floor(s) : Math.max(0.6, s);
   canvas.style.width = W * scale + 'px';
   canvas.style.height = H * scale + 'px';
   const cr = canvas.getBoundingClientRect();
@@ -63,14 +121,15 @@ const P = {
 
 const r = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
-function glow(x, y, radius, color, alpha) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+// `k` opsional: konteks lain (kanvas offscreen cache neon di mode ringan)
+function glow(x, y, radius, color, alpha, k = ctx) {
+  const g = k.createRadialGradient(x, y, 0, x, y, radius);
   g.addColorStop(0, color);
   g.addColorStop(1, 'transparent');
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = g;
-  ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-  ctx.globalAlpha = 1;
+  k.globalAlpha = alpha;
+  k.fillStyle = g;
+  k.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  k.globalAlpha = 1;
 }
 
 /* ------------------------------------------------------------- voxel util */
@@ -258,7 +317,9 @@ function kegiatan(tool, label) {
     let srv = (tool.split('__')[1] || '').replace(/[-_]/g, ' ');
     // sebagian server MCP bernama UUID; kalau dipecah jadi deretan kata palsu
     if (!srv || /^[0-9a-f][0-9a-f ]{14,}$/i.test(srv)) srv = 'sistem luar';
-    return ['berkoordinasi dengan', srv];
+    // nama tool-nya ikut: "Claude Browser · navigate", bukan cuma servernya
+    const alat = tool.split('__').slice(2).join('__');
+    return ['berkoordinasi dengan', alat ? srv + ' · ' + alat : srv];
   }
   if (tool === 'Bash' || tool === 'PowerShell') {
     const g = kegiatanGit(o);
@@ -1505,7 +1566,7 @@ function drawMejaKerja() {
   // tiap meja menyala sendiri-sendiri: laptop hanya hidup di meja yang ditempati
   const terpakai = new Set();
   for (const a of penghuni()) {
-    if (a.station === 'think' && !a.path.length) terpakai.add(a.slotIdx);
+    if (a.station === 'think' && !a.path.length && !a.antre) terpakai.add(a.slotIdx);
   }
   MEJA_KERJA_X.forEach((cx0, i) => {
     // meja yang kakinya belum diganjal bergoyang 1 px, tapi HANYA selagi
@@ -1623,6 +1684,13 @@ const KURSI_TOTAL = KURSI_N + KURSI_DEKAT.length;
 const slotKe = (k, step) => {
   const s = step || 19;
   return k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * s;
+};
+// Titik berdiri antrean ke-n (1..) di lajur stasiun: garis dari sumbu stasiun
+// menjauhi tepi kanvas terdekat, ANTRE_JARAK per orang; lewat ANTRE_TAMPAK
+// berimpit di posisi terakhir supaya tidak ada yang berdiri di luar kanvas.
+const titikAntre = (s, n) => {
+  const arah = s.x > W / 2 ? -1 : 1;
+  return Math.max(14, Math.min(W - 12, s.x + arah * ANTRE_JARAK * (Math.min(n, ANTRE_TAMPAK) - 1)));
 };
 
 // Trapesium digambar baris demi baris supaya tepinya tetap tajam.
@@ -2263,12 +2331,15 @@ function sedangKedip(a) {
 
 /* Ekspresi, diurutkan dari yang paling mendesak. 'tegang' = berhenti
    menunggu kamu atau macet karena galat; 'lega' = ±2 detik sesudah
-   menyerahkan hasil / selesai giliran; 'fokus' = sedang bekerja. Semuanya
+   menyerahkan hasil / selesai giliran; 'fokus' = sedang bekerja; 'lelah' =
+   staminanya di bawah STAMINA_LELAH (prioritas terendah). Semuanya
    1–2 piksel di dalam 8 baris kepala, tinggi sprite tidak berubah. */
 function ekspresi(a) {
   if (a.butuh || a.macet) return 'tegang';
   if (a.legaSampai && now < a.legaSampai) return 'lega';
   if (a.state === 'work') return 'fokus';
+  // 'lelah' paling belakang: kelopak turun, staminanya habis (lihat STAMINA_*)
+  if (a.stamina != null && a.stamina < STAMINA_LELAH) return 'lelah';
   return '';
 }
 
@@ -2280,16 +2351,25 @@ function drawEyes(a, x, ey, arah) {
   // cuma baris bawah mata. Dipilih ini, bukan alis, karena baris di atas mata
   // (yT+3) sebelah kiri tertutup poni — alis di situ cuma kelihatan sebelah.
   const kelopak = wajah === 'fokus' ? sh(a.pal.skin, 0.62) : null;
+  // lelah = kelopak turun LEBAR (2 px, lebih gelap dari yang fokus) menutup
+  // baris atas mata; yang tersisa satu titik pupil di baris bawah
+  const lelah = wajah === 'lelah' ? sh(a.pal.skin, 0.5) : null;
   if (arah) {                                                         // samping: satu mata, dekat dahi
     const rm = (k, yy, w, h, c) => r(cermin(arah, x, k, w), yy, w, h, c);
     if (blink) rm(1, ey + 1, 2, 1, P.ink);
     else if (wajah === 'lega') { rm(2, ey, 1, 1, P.ink); rm(3, ey + 1, 1, 1, P.ink); }   // mata menyipit tersenyum
     else if (wajah === 'tegang') rm(1, ey, 2, 2, P.ink);              // melotot
     else if (kelopak) { rm(2, ey, 1, 1, kelopak); rm(2, ey + 1, 1, 1, P.ink); }
+    else if (lelah) { rm(1, ey, 2, 1, lelah); rm(2, ey + 1, 1, 1, P.ink); }
     else rm(2, ey, 1, 2, P.ink);
     return;
   }
   if (blink) { r(x - 3, ey + 1, 2, 1, P.ink); r(x + 1, ey + 1, 2, 1, P.ink); return; }
+  if (lelah) {
+    r(x - 3, ey, 2, 1, lelah); r(x - 2, ey + 1, 1, 1, P.ink);
+    r(x + 1, ey, 2, 1, lelah); r(x + 1, ey + 1, 1, 1, P.ink);
+    return;
+  }
   if (kelopak) {
     r(x - 2, ey, 1, 1, kelopak); r(x - 2, ey + 1, 1, 1, P.ink);
     r(x + 1, ey, 1, 1, kelopak); r(x + 1, ey + 1, 1, 1, P.ink);
@@ -2307,6 +2387,29 @@ function drawEyes(a, x, ey, arah) {
   }
   r(x - 2, ey, 1, 2, P.ink);
   r(x + 1, ey, 1, 2, P.ink);
+}
+
+/* Pose kerja yang TAMPAK. `state === 'work'` tetap jadi patokan logika (kartu,
+   statistik, activeStations); yang ditunda cuma gambarnya: 150 ms jeda
+   antisipasi setibanya di stasiun (TIBA_JEDA_MS) — dilewati kalau sedang beku
+   atau event mengatur pose — dan selama mengantre di belakang stasiun penuh. */
+const poseKerja = (a) => a.state === 'work' && !a.antre
+  && (now >= (a.tibaSampai || 0) || now < a.bekuSampai || !!a.pose);
+
+/* Berapa piksel badan turun ke kursi rapat: 0 berdiri, DUDUK_PX×DUDUK_FRAME
+   duduk penuh, bertahap 2 px per ±50 ms di antaranya (dudukSejak/bangunSejak
+   dipasang arrive()/bangkit()). Beku, pose event, atau menunggu kamu
+   (berdiri dari kursi) melompat langsung ke keadaan akhirnya. */
+function turunDuduk(a) {
+  if (!a.dudukSejak && !a.bangunSejak) return 0;
+  const penuh = DUDUK_PX * DUDUK_FRAME;
+  if (a.butuh) return 0;
+  const lompat = now < a.bekuSampai || !!a.pose;
+  // dijepit ≥0: stempel waktunya dipasang handle() (performance.now()) dan
+  // dibaca frame() (ts rAF) — dua jam sebasis yang bisa selisih belasan ms
+  const langkah = Math.max(0, Math.ceil((now - (a.dudukSejak || a.bangunSejak)) / (DUDUK_MS / DUDUK_FRAME))) * DUDUK_PX;
+  if (a.dudukSejak) return lompat ? penuh : Math.min(penuh, langkah);
+  return lompat ? 0 : Math.max(0, penuh - langkah);
 }
 
 function drawPerson(a) {
@@ -2330,6 +2433,10 @@ function drawPerson(a) {
   const arah = arahDari(a.face);
   const rm = (k, yy, w, h, c) => r(cermin(arah, x, k, w), yy, w, h, c);
 
+  // kerja: pose kerja yang TAMPAK — 'work' logis tetap 'work' (kartu,
+  // statistik), cuma gambarnya yang ditunda 150 ms setibanya (jeda antisipasi)
+  // dan ditahan selagi mengantre di belakang stasiun yang penuh.
+  const kerja = poseKerja(a);
   let bob = 0, liftL = 0, liftR = 0, armL = 0, armR = 0, langkah = 0;
   if (a.state === 'walk') {
     const s = Math.sin(t * 10);
@@ -2339,11 +2446,17 @@ function drawPerson(a) {
     armL = -Math.round(s * 1.6);
     armR = Math.round(s * 1.6);
     langkah = Math.round(s * 2);            // tampak samping: kaki depan maju-mundur
-  } else if (a.state === 'work') {
+  } else if (kerja) {
     bob = Math.sin(t * 4) > 0.85 ? -1 : 0;
   } else {
     bob = Math.sin(t * 1.7) > 0.6 ? -1 : 0;
   }
+  // lelah: bahu & kepala turun 1 px — kakinya tetap, tinggi kotak sprite tetap
+  if (a.stamina != null && a.stamina < STAMINA_LELAH) bob += 1;
+  // duduk di kursi rapat: badan turun bertahap (kaki memendek dari atas),
+  // 0 selagi berdiri/berjalan — lihat turunDuduk()
+  const duduk = turunDuduk(a);
+  bob += duduk;
 
   ctx.globalAlpha = 0.18 * alphaDasar;
   ctx.fillStyle = '#20301f';
@@ -2363,8 +2476,8 @@ function drawPerson(a) {
   // yang bob-nya naik satu piksel tidak membuka celah. Kaki yang terangkat
   // memendek dari bawah: telapaknya yang naik, bukan seluruh kaki melayang.
   const kaki = (px, sx, lift, w, gelap) => {
-    r(px, y - 8, 3, 7 - lift, gelap ? celanaG : celana);
-    if (!gelap) r(px + 2, y - 8, 1, 7 - lift, celanaG);
+    r(px, y - 8 + duduk, 3, Math.max(0, 7 - lift - duduk), gelap ? celanaG : celana);
+    if (!gelap) r(px + 2, y - 8 + duduk, 1, Math.max(0, 7 - lift - duduk), celanaG);
     r(sx, y - 1 - lift, w, 2, alas);
     if (a.sandal) r(px + 1, y - 2 - lift, 1, 1, TALI_SANDAL);
   };
@@ -2386,7 +2499,7 @@ function drawPerson(a) {
   // Menunggu keputusan kamu menang atas semuanya: dua tangan mengangkat map.
   const pose = a.butuh ? { l: -6, r: -6 }
     : a.pose ? posEvent(a)
-    : (a.state === 'work' ? workArms(a) : { l: armL, r: armR });
+    : (kerja ? workArms(a) : { l: armL, r: armR });
 
   // ---- badan: bahu membulat, pinggang lurus ke sabuk berkepala emas
   const badan = () => {
@@ -2457,6 +2570,22 @@ function drawPerson(a) {
     lengan(x + 5, x + 7, pose.r);
   }
 
+  // Rim light: 1 px tepi badan di sisi yang menghadap sumber cahaya dominan
+  // (lihat sumberCahaya). Lewat jalur warna tepi yang sama — lerpHex dari
+  // warna baju ke warna cahaya — bukan lapisan alpha di atas sprite, supaya
+  // tetap satu piksel tegas seperti tepi lainnya. Yang memegang map
+  // disposisi dilewati: mapnya menutupi separuh badan.
+  const rim = a.butuh ? null : rimPegawai(a);
+  if (rim) {
+    const wr = lerpHex(main, rim.warna, 0.35 + 0.4 * rim.kuat);
+    if (arah) r(rim.arah < 0 ? x - 4 : x + 3, yb - 14, 1, 6, wr);
+    else {
+      r(rim.arah < 0 ? x - 5 : x + 4, yb - 14, 1, 6, wr);                      // tepi badan
+      const lift = rim.arah < 0 ? pose.l : pose.r;
+      r(rim.arah < 0 ? x - 8 : x + 7, yb - 15 + lift + 1, 1, 6, wr);          // tepi luar lengan
+    }
+  }
+
   if (p.head === 'jilbab') {                 // kerudung menjuntai menutup bahu, jarum emas di depan
     if (arah) gumpal(x - 4, yb - 16, 8, 4, p.jilbab); else gumpal(x - 5, yb - 16, 10, 4, p.jilbab);
     if (!back) rm(arah ? 1 : 0, yb - 14, 1, 1, P.gold);
@@ -2482,7 +2611,7 @@ function drawPerson(a) {
   // bukan menempel di atasnya. Yang tertunduk dagunya sudah tenggelam di bahu.
   if (p.head !== 'jilbab' && yDagu === yb - 17) r(x - 1, yDagu, 2, 1, sh(kulit, 0.75));
   // perkakas mejanya disembunyikan selagi menunggu: tangannya sedang penuh
-  if (a.state === 'work' && !a.butuh) drawTool(a, x, yb);
+  if (kerja && !a.butuh) drawTool(a, x, yb);
   if (a.bawa) drawBawaan(a, x, yb);
   ctx.globalAlpha = 1;
 }
@@ -2623,8 +2752,15 @@ function drawAmbien() {
     ctx.globalAlpha = 1;
   }
   if (A.lampu < 0.02) return;
+  const ringan = ringanAktif();
   NEON_X.forEach((cx, i) => {
     const a = A.lampu * kedipNeon(i);
+    if (ringan) {                                          // dari cache, cuma alphanya yang hidup
+      ctx.globalAlpha = Math.min(1, a);
+      ctx.drawImage(neonLapis(i), 0, 0);
+      ctx.globalAlpha = 1;
+      return;
+    }
     ctx.globalAlpha = 0.07 * a;                            // kerucut cahaya ke lantai
     ctx.fillStyle = '#ffcf8a';
     ctx.beginPath();
@@ -2637,7 +2773,145 @@ function drawAmbien() {
     glow(cx, 14, 34, '#ffcf8a', 0.3 * a);                  // pendar di plafon
     glow(cx, 190, 160, '#ffbe72', 0.15 * a);               // genangan di lantai
   });
+  if (ringan) {
+    ctx.globalAlpha = Math.min(1, 0.06 * A.lampu * MOD.lampu);
+    ctx.drawImage(neonLapis(NEON_X.length), 0, 0);
+    ctx.globalAlpha = 1;
+    return;
+  }
   glow(W / 2, 210, 200, '#ff9e50', 0.06 * A.lampu * MOD.lampu);   // dua genangan disatukan
+}
+
+/* Mode ringan: pendar neon dari cache. Geometrinya tetap (NEON_X konstan)
+   dan tiap alphanya linear terhadap intensitas, jadi satu neon cukup digambar
+   SEKALI ke kanvas offscreen pada intensitas 1 — kerucut, tabung, dua
+   pendar — lalu tiap frame cuma drawImage dengan globalAlpha = intensitas
+   saat itu. Kedipnya tetap hidup (alphanya yang berkedip), tapi tujuh
+   createRadialGradient per frame jadi nol. Indeks NEON_X.length = genangan
+   gabungan di tengah lantai. Kanvasnya seukuran ruangan supaya ikut transform
+   kamera apa adanya; pada zoom 2 gradasinya jadi blok 2×2, tak terlihat. */
+const neonCache = [];
+function neonLapis(i) {
+  let c = neonCache[i];
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = W; c.height = H;
+  const k = c.getContext('2d');
+  if (i < NEON_X.length) {
+    const cx = NEON_X[i];
+    k.globalAlpha = 0.07; k.fillStyle = '#ffcf8a';
+    k.beginPath();
+    k.moveTo(cx - 17, 13); k.lineTo(cx + 17, 13);
+    k.lineTo(cx + 40, 232); k.lineTo(cx - 40, 232);
+    k.closePath(); k.fill();
+    k.globalAlpha = 1; k.fillStyle = '#ffdfa6'; k.fillRect(cx - 18, 10, 36, 3);
+    glow(cx, 14, 34, '#ffcf8a', 0.3, k);
+    glow(cx, 190, 160, '#ffbe72', 0.15, k);
+  } else {
+    glow(W / 2, 210, 200, '#ff9e50', 1, k);
+  }
+  neonCache[i] = c;
+  return c;
+}
+
+/* Debu di berkas cahaya (II.8). Bukan bagian `parts`: umurnya panjang, tidak
+   kena gravitasi, dan hanya boleh hidup DI DALAM berkas — kerucut neon waktu
+   malam, berkas jendela di lantai waktu siang. Yang keluar dari berkasnya
+   dibunuh, bukan dibiarkan melayang di gelap (debu memang ada di mana-mana,
+   tapi hanya kelihatan waktu ditembus cahaya). Maksimal 40, 1 px, alpha
+   rendah, pelan sekali; mati di mode ringan. */
+const DEBU_MAKS = 40;
+const debu = [];
+// setengah lebar kerucut neon i pada ketinggian y (trapesium 13→232)
+const kerucutSetengah = (y) => 17 + 23 * (y - 13) / 219;
+// setengah lebar berkas jendela pada y (trapesium FLOOR_TOP→196, pusat 215)
+const berkasSetengah = (y) => 25 + 26 * (y - FLOOR_TOP) / (196 - FLOOR_TOP);
+function debuSumber(A) {
+  const s = [];
+  if (A.lampu > 0.3) NEON_X.forEach((cx, i) => {
+    const kuat = A.lampu * kedipNeon(i);
+    if (kuat > 0.2) s.push({ jenis: 'neon', i, kuat });
+  });
+  if (A.sinarA > 0.04 && A.luar > 0.35) s.push({ jenis: 'jendela', kuat: Math.min(1, A.luar) });
+  return s;
+}
+function updateDebu(dt) {
+  if (ringanAktif()) { debu.length = 0; return; }
+  const A = ambien();
+  const sumber = debuSumber(A);
+  // lahir pelan-pelan: ~6 butir/detik sampai penuh, bukan 40 sekaligus
+  if (sumber.length && debu.length < DEBU_MAKS && Math.random() < dt * 6) {
+    const s = sumber[(Math.random() * sumber.length) | 0];
+    let x, y;
+    if (s.jenis === 'neon') {
+      y = 30 + Math.random() * 200;
+      x = NEON_X[s.i] + (Math.random() * 2 - 1) * kerucutSetengah(y);
+    } else {
+      y = FLOOR_TOP + Math.random() * (196 - FLOOR_TOP);
+      x = 215 + (Math.random() * 2 - 1) * berkasSetengah(y);
+    }
+    debu.push({ x, y, jenis: s.jenis, i: s.i, vx: (Math.random() - 0.5) * 2.4, vy: 0.6 + Math.random() * 1.8,
+      fase: Math.random() * 6.28, umur: 0, life: 5 + Math.random() * 6 });
+  }
+  for (let i = debu.length - 1; i >= 0; i--) {
+    const d = debu[i];
+    d.umur += dt;
+    d.x += (d.vx + Math.sin(now / 900 + d.fase) * 1.2) * dt;
+    d.y += d.vy * dt;
+    let mati = d.umur >= d.life;
+    if (d.jenis === 'neon') mati = mati || d.y > 232 || Math.abs(d.x - NEON_X[d.i]) > kerucutSetengah(d.y);
+    else mati = mati || d.y > 196 || Math.abs(d.x - 215) > berkasSetengah(d.y);
+    if (mati) debu.splice(i, 1);
+  }
+}
+function drawDebu() {
+  if (!debu.length) return;
+  const A = ambien();
+  for (const d of debu) {
+    const kuat = d.jenis === 'neon' ? A.lampu * kedipNeon(d.i) : Math.min(1, A.luar);
+    // muncul & lenyap pelan, plus kelap-kelip halus ala debu yang berputar
+    const pudar = Math.min(1, d.umur * 0.8, (d.life - d.umur) * 0.8);
+    const kelip = 0.7 + 0.3 * Math.sin(now / 350 + d.fase * 3);
+    ctx.globalAlpha = 0.22 * kuat * pudar * kelip;
+    r(d.x, d.y, 1, 1, d.jenis === 'neon' ? '#fff0c8' : '#fffbe8');
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* Rim light (II.8): satu sumber cahaya dominan per frame — neon terdekat
+   waktu malam, jendela waktu siang; senja memilih yang lebih kuat. Sengaja
+   SATU: dua sumber berarti dua sisi terang dan sprite 10 px lebar berhenti
+   terbaca sebagai badan bertepi. Dipakai drawPerson buat mewarnai 1 px tepi
+   di sisi yang menghadap cahaya. Dihitung sekali per frame (memo `now`). */
+let cahayaKini = null, cahayaFrame = -1;
+function sumberCahaya() {
+  if (cahayaFrame === now) return cahayaKini;
+  cahayaFrame = now;
+  if (ringanAktif()) return (cahayaKini = null);
+  const A = ambien();
+  const neon = A.lampu * MOD.lampu;
+  const siang = Math.min(1, A.sinarA * 7) * Math.min(1, A.luar);
+  if (neon < 0.2 && siang < 0.25) return (cahayaKini = null);
+  cahayaKini = neon >= siang
+    ? { jenis: 'neon', kuat: Math.min(1, neon), warna: '#ffcf8a' }
+    : { jenis: 'jendela', x: 215, y: FLOOR_TOP, kuat: siang, warna: A.sinar };
+  return cahayaKini;
+}
+// arah (-1 kiri / +1 kanan / 0 tidak ada) & kekuatan rim buat pegawai a
+function rimPegawai(a) {
+  const c = sumberCahaya();
+  if (!c) return null;
+  let sx, kuat = c.kuat;
+  if (c.jenis === 'neon') {
+    let dekat = 0;
+    for (let i = 1; i < NEON_X.length; i++) if (Math.abs(NEON_X[i] - a.x) < Math.abs(NEON_X[dekat] - a.x)) dekat = i;
+    sx = NEON_X[dekat];
+    kuat *= kedipNeon(dekat) * Math.max(0, 1 - Math.abs(sx - a.x) / 170);
+  } else {
+    sx = c.x;
+    kuat *= Math.max(0, 1 - Math.hypot(sx - a.x, c.y - a.y) / 300);
+  }
+  if (kuat < 0.08 || Math.abs(sx - a.x) < 6) return null;   // tepat di bawah lampu: tidak ada sisi
+  return { arah: sx < a.x ? -1 : 1, kuat, warna: c.warna };
 }
 
 /* ---------------------------------------------------------------- partikel */
@@ -2646,8 +2920,12 @@ const parts = [];
    lain (ping merah untuk UPS, talk kuning untuk tawa, ink pucat untuk bantalan
    yang kering). Menimpanya di sini sekali jauh lebih murah daripada menambah
    satu jenis partikel tiap kali warnanya beda. */
+// Mode ringan: jatah partikel separuh. Yang tertua digusur, bukan yang baru
+// ditolak — pemanggil boleh memegang partikel yang dikembalikan (p.dasar dsb.).
+const PARTIKEL_MAKS_RINGAN = 120;
 function spawn(kind, x, y, warna) {
   const rnd = (n) => (Math.random() - 0.5) * n;
+  if (parts.length >= PARTIKEL_MAKS_RINGAN && ringanAktif()) parts.shift();
   const sebelum = parts.length;
   switch (kind) {
     case 'ink':   parts.push({ x, y, vx: rnd(70), vy: -14 - Math.random() * 26, g: 150, life: 0.5, c: '#c93030', s: 1 }); break;
@@ -2793,7 +3071,8 @@ function slotBebas(id, diri) {
   const maks = daftar ? daftar.length : (s.slots || (id === 'rapat' ? KURSI_TOTAL : 12));
   const dipakai = new Set();
   for (const other of penghuni()) {
-    if (other !== diri && other.station === id) dipakai.add(other.slotIdx);
+    // yang mengantre (antre) berdiri di lajur, bukan di slot — jangan dihitung
+    if (other !== diri && other.station === id && !other.antre) dipakai.add(other.slotIdx);
   }
   for (let k = 0; k < maks; k++) {
     if (dipakai.has(k)) continue;
@@ -2828,7 +3107,7 @@ const jedaKongsi = () => (typeof window !== 'undefined' && window.KONGSI_UJI_MS)
 const sesiNyata = (a) => agents.get(a.id) === a;     // bukan standby, bukan peserta
 // menganggur di meja kerjanya: bukan sedang kerja, bukan sedang jadi pemeran event
 const kongsiDiam = (a) => a.station === 'think' && !a.path.length && a.state !== 'work'
-  && !a.eventKerja && !a.butuh && sesiNyata(a);
+  && !a.eventKerja && !a.butuh && !a.antre && sesiNyata(a);
 function rekanSeproyek(diri, harusDiam) {
   if (!diri.project) return null;
   let rekan = null;
@@ -2843,7 +3122,7 @@ function slotKongsi(diri) {
   const rekan = sesiNyata(diri) ? rekanSeproyek(diri, false) : null;
   if (!rekan) return slotBebas('think', diri);
   const dipakai = new Set();
-  for (const o of penghuni()) if (o !== diri && o.station === 'think') dipakai.add(o.slotIdx);
+  for (const o of penghuni()) if (o !== diri && o.station === 'think' && !o.antre) dipakai.add(o.slotIdx);
   const xr = MEJA_KERJA_X[rekan.slotIdx];
   let k = -1, jarak = Infinity;
   MEJA_KERJA_X.forEach((x, i) => {
@@ -2903,6 +3182,16 @@ class Agent {
     this.kongsiCek = 0;      // now-timestamp: kapan berikutnya melirik rekan seproyek (0 = belum dijadwalkan)
     this.tolehSampai = 0;    // now-timestamp: sedang menoleh ke rekan seproyek sampai lewat ini
     this.tolehRekan = null;  // rekan yang sedang ditoleh
+    this.stamina = 1;        // 0..1, lihat STAMINA_*; reset per sesi karena satu Agent = satu sesi
+    this.antre = 0;          // 0 = punya slot; n = urutan ke-n di antrean stasiun penuh (tickAntre)
+    this.antreUrut = 0;      // nomor giliran global (antreSeq) — yang kecil maju duluan
+    this.tibaSampai = 0;     // now-timestamp: jeda antisipasi setibanya, pose kerja tampak sesudahnya
+    this.dudukSejak = 0;     // now-timestamp mulai duduk di kursi rapat (turunDuduk); 0 = tidak duduk
+    this.bangunSejak = 0;    // now-timestamp mulai berdiri dari kursi rapat
+    this.pulang = '';        // ritual pulang: '' | 'salam' | 'salam-diam' | 'absen' | 'absen-diam' | 'pintu'
+    this.pulangBatas = 0;    // now-timestamp jatah ritual habis (PULANG_BATAS_MS)
+    this.pulangTahap = 0;    // now-timestamp berhenti (salaman / tempel jari) selesai
+    this.pulangRekan = null; // rekan seproyek yang disinggahi
 
     this.el = document.createElement('div');
     this.el.className = 'bubble';
@@ -2933,12 +3222,20 @@ class Agent {
     this.goTo(stasiunPulang(this));
   }
 
-  // Stasiun penuh: slotIdx balik ke 0 dan dia berdiri menumpuk. Itu pilihan
-  // sadar — lebih baik dua orang berimpit daripada satu orang keluar kanvas.
+  // Stasiun penuh: dulu slotIdx balik ke 0 dan dia berdiri menumpuk; sekarang
+  // dia MENGANTRE di lajur di belakang stasiun (antre = urutan, lihat
+  // tickAntre). Yang datang belakangan tidak menyalip antrean yang sudah ada.
   slotOffset(id) {
     const s = STATIONS[id];
     // meja kerja: rekan seproyek jadi tetangga (slotKongsi), selebihnya urut prioritas
-    const k = id === 'think' ? slotKongsi(this) : slotBebas(id, this);
+    let k = id === 'think' ? slotKongsi(this) : slotBebas(id, this);
+    let depan = 0;
+    for (const o of penghuni()) {
+      if (o !== this && o.station === id && o.antre && (!this.antre || o.antreUrut < this.antreUrut)) depan++;
+    }
+    if (depan) k = -1;
+    if (k < 0) { if (!this.antre) this.antreUrut = ++antreSeq; this.antre = depan + 1; }
+    else this.antre = 0;
     this.slotIdx = k < 0 ? 0 : k;
     return s.slotsX ? s.slotsX[this.slotIdx] - s.x : slotKe(this.slotIdx, s.step);
   }
@@ -2946,9 +3243,18 @@ class Agent {
   goTo(id) {
     const s = STATIONS[id];
     if (!s) return;
+    if (id !== this.station) this.antre = 0;   // antrean lama tidak dibawa ke stasiun lain
+    this.bangkit();
     const off = this.slotOffset(id);
     const fromLane = this.y < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
     this.station = id;
+    if (this.antre) {
+      // penuh: berdiri di lajur menghadap stasiun, pose berdiri biasa
+      this.hadap = s.y > s.lane ? 'down' : 'up';
+      this.path = route(this.x, this.y, fromLane, titikAntre(s, this.antre), s.lane, s.lane);
+      this.state = 'walk';
+      return;
+    }
     const dekat = id === 'rapat' ? KURSI_DEKAT[this.slotIdx - KURSI_N] : null;
     const tx = dekat ? dekat.x : Math.max(14, Math.min(W - 12, s.x + off));
     const ty = dekat ? dekat.y : s.y;
@@ -2963,8 +3269,10 @@ class Agent {
   goToXY(tx, ty, hadap) {
     const fromLane = this.y < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
     const bLane = ty < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
+    this.bangkit();
     this.station = 'acara';
     this.slotIdx = 0;
+    this.antre = 0;
     this.hadap = hadap || null;
     this.path = route(this.x, this.y, fromLane, Math.max(10, Math.min(W - 10, tx)), ty, bLane);
     this.state = 'walk';
@@ -3031,6 +3339,11 @@ class Agent {
     this.phase += dt;
     // barang bawaan berumur: gelas kopi hilang sendiri, tidak menempel selamanya
     if (this.bawaSampai && now > this.bawaSampai) { this.bawa = null; this.bawaSampai = 0; }
+    this.tickStamina(dt);
+    if (this.pulang && this.tickPulang()) return;   // true = sudah dihapus, jangan sentuh DOM-nya
+    // berdiri dari kursi rapat lewat jalur apa pun (event yang menulis path sendiri)
+    if (this.dudukSejak && this.path.length) this.bangkit();
+    if (this.bangunSejak && now - this.bangunSejak > DUDUK_MS) this.bangunSejak = 0;
     this.tickKongsi();
 
     if (this.path.length && now >= this.bekuSampai) {
@@ -3042,7 +3355,9 @@ class Agent {
         this.path.shift();
         if (!this.path.length) this.arrive();
       } else {
-        const step = Math.min(dist, SPEED * this.laju * (MOD.lajuGlobal || 1) * dt);
+        // lelah: 0,85× saja — tidak lebih lambat, kedatangan ke stasiun tetap cepat
+        const lelah = this.stamina < STAMINA_LELAH ? LAJU_LELAH : 1;
+        const step = Math.min(dist, SPEED * this.laju * lelah * (MOD.lajuGlobal || 1) * dt);
         this.x += (dx / dist) * step;
         this.y += (dy / dist) * step;
         this.face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
@@ -3053,6 +3368,7 @@ class Agent {
         if (this.stepT > 0.26) { this.stepT = 0; if (!senyap) spawn('step', this.x, this.y); }
       }
     } else {
+      if (this.antre) this.tickAntre();          // stasiun penuh: maju begitu ada slot
       if (this.state === 'work' && now > this.busyUntil) {
         this.state = 'idle';
       }
@@ -3074,8 +3390,9 @@ class Agent {
       }
     }
 
-    // efek kerja per stasiun — beku (kucing di keyboard, dsb) mematikannya juga
-    if (this.state === 'work' && now >= this.bekuSampai) {
+    // efek kerja per stasiun — beku (kucing di keyboard, dsb) mematikannya juga;
+    // poseKerja: belum selama jeda tiba 150 ms, dan tidak selagi mengantre
+    if (poseKerja(this) && now >= this.bekuSampai) {
       if (this.station === 'edit') {
         const up = Math.sin(this.phase * 7) > 0;
         if (this.stampUp && !up) hentakkanStempel(this);    // stempel MENGHANTAM meja
@@ -3176,6 +3493,7 @@ class Agent {
   }
 
   arrive() {
+    if (this.pulang) { this.tibaPulang(); return; }
     this.arrivedAt = now;
     this.face = this.butuh
       ? 'down'
@@ -3185,6 +3503,134 @@ class Agent {
     // pegawai sampai di meja lalu langsung balik kanan tanpa sempat bekerja.
     if (this.adaTugas) this.busyUntil = Math.max(this.busyUntil, now + 1800);
     this.state = now < this.busyUntil ? 'work' : 'idle';
+    // jeda antisipasi: pose kerjanya baru TAMPAK 150 ms lagi (poseKerja);
+    // state-nya sudah 'work' sekarang supaya kartu/statistik tidak bergeser
+    this.tibaSampai = now + TIBA_JEDA_MS;
+    // duduk ke kursi rapat: 3 frame turun (turunDuduk); yang mengantre berdiri
+    if (this.station === 'rapat' && !this.antre) { this.dudukSejak = now; this.bangunSejak = 0; }
+  }
+
+  // Meninggalkan kursi rapat: berdiri 3 frame (turunDuduk), dipanggil dari
+  // tiap jalur yang memasang path baru. Tanpa efek kalau tidak sedang duduk.
+  bangkit() {
+    if (this.dudukSejak) { this.bangunSejak = now; this.dudukSejak = 0; }
+  }
+
+  /* Antrean stasiun (I.8). Stasiunnya penuh waktu goTo(): dia berdiri di lajur
+     di belakang stasiun (antre = urutan 1..n), pose berdiri biasa menghadap
+     stasiun — bukan pose butuh manusia. `state` tetap 'work' secara logika:
+     tool call-nya memang sedang jalan, kartu & statistik tidak berubah; cuma
+     posisinya yang antre. Yang paling depan mengecek slot kosong tiap frame
+     lalu maju lewat goTo(); yang di belakangnya merapat mengisi celah. */
+  tickAntre() {
+    const id = this.station, s = STATIONS[id];
+    if (!s) { this.antre = 0; return; }
+    let depan = 0;
+    for (const o of penghuni()) if (o !== this && o.station === id && o.antre && o.antreUrut < this.antreUrut) depan++;
+    if (!depan && (id === 'think' ? slotKongsi(this) : slotBebas(id, this)) >= 0) { this.goTo(id); return; }
+    if (depan + 1 !== this.antre) {
+      this.antre = depan + 1;
+      this.path = [{ x: titikAntre(s, this.antre), y: s.lane }];
+      this.state = 'walk';
+    }
+  }
+
+  /* Stamina (I.2): waktu di kantor dan menunggu kamu menguras, menganggur dan
+     pantry memulihkan; call & kegagalan dipotong di handle() lewat lelahkan().
+     Semuanya kosmetik — tidak ada yang membacanya selain gambar dan kartu. */
+  tickStamina(dt) {
+    let d = -STAMINA_JAM * dt / 3600;
+    if (this.butuh) d -= STAMINA_TUNGGU * dt / 60;
+    else if (this.eventKerja && /pantry/.test(this.eventKerja.id || '')) d += STAMINA_PANTRY * dt / 60;
+    else if (this.state !== 'work' && !this.adaTugas) d += STAMINA_PULIH * dt / 60;
+    this.stamina = Math.max(0, Math.min(1, this.stamina + d));
+  }
+  lelahkan(n) { this.stamina = Math.max(0, this.stamina - n); }
+  // suasana hati = turunan sederhana stamina, cuma buat baris "kondisi" di kartu
+  get suasana() {
+    return this.stamina < STAMINA_LELAH ? 'lelah' : this.stamina > STAMINA_SEGAR ? 'segar' : 'biasa';
+  }
+
+  /* Ritual pulang (I.6) — dipanggil session-end untuk sesi yang tuntas (sudah
+     `stop`). Slot mejanya dilepas SEKARANG: station 'keluar' tidak dihitung
+     slotBebas, dan laptopnya padam sendiri karena drawMejaKerja cuma menyalakan
+     meja yang ditempati. Urutan: singgah salaman ke rekan seproyek yang
+     menganggur (1 s, saling hadap) kalau ada → mesin absen (0,6 s tempel jari)
+     → pintu → hilang. Jatah total PULANG_BATAS_MS, dan ritualnya DIUKUR dulu:
+     yang tidak muat dibuang dari belakang — salaman dulu, lalu absennya; kalau
+     absen pun tidak terkejar (meja kiri jauh: ±10 s ke mesin absen), dia
+     langsung keluar lewat tepi terdekat. Lewat jatah, memudar di tempat. */
+  pulangKantor() {
+    if (this.pulang) return;
+    lepasDariEvent(this);
+    this.setButuh(null); this.setMacet(null);
+    this.betah = false; this.adaTugas = false; this.busyUntil = 0;
+    this.fx = null; this.doing = 'pulang'; this.antre = 0;
+    this.pulangBatas = now + PULANG_BATAS_MS;
+    this.station = 'keluar'; this.slotIdx = 0;
+    const laju = SPEED * (this.stamina < STAMINA_LELAH ? LAJU_LELAH : 1);
+    const lane = (y) => (y < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN);
+    const jarak = (x, y, tx, ty) => {
+      let d = 0;
+      for (const p of route(x, y, lane(y), tx, ty, lane(ty))) { d += Math.hypot(p.x - x, p.y - y); x = p.x; y = p.y; }
+      return d;
+    };
+    const jatah = PULANG_BATAS_MS / 1000;
+    const keAbsenLaluPintu = (x, y) => (jarak(x, y, ABSEN_X, ABSEN_Y) + jarak(ABSEN_X, ABSEN_Y, PINTU_X, LANE_UP)) / laju
+      + PULANG_ABSEN_MS / 1000;
+    const r = rekanSeproyek(this, true);
+    if (r) {
+      const dariKiri = this.x <= r.x;         // singgah di sisi yang dia datangi
+      const sx = r.x + (dariKiri ? -14 : 14);
+      if (jarak(this.x, this.y, sx, r.y) / laju + PULANG_SALAM_MS / 1000 + keAbsenLaluPintu(sx, r.y) <= jatah) {
+        this.pulangRekan = r;
+        this.pulangKe(sx, r.y, dariKiri ? 'right' : 'left', 'salam');
+        return;
+      }
+    }
+    if (keAbsenLaluPintu(this.x, this.y) <= jatah) this.pulangKe(ABSEN_X, ABSEN_Y, 'up', 'absen');
+    else if (this.x < W / 2) this.pulangKe(-20, LANE_DOWN, 'left', 'pintu');   // tepi kiri, seperti peserta rapat
+    else this.pulangKe(PINTU_X, LANE_UP, 'right', 'pintu');
+  }
+  pulangKe(tx, ty, hadap, tahap) {
+    const fromLane = this.y < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
+    const bLane = ty < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
+    this.bangkit();
+    this.pulang = tahap;
+    this.hadap = hadap;
+    this.path = route(this.x, this.y, fromLane, tx, ty, bLane);
+    this.state = 'walk';
+  }
+  tibaPulang() {
+    this.face = this.hadap || this.face;
+    this.state = 'idle';
+    if (this.pulang === 'salam') {
+      const r = this.pulangRekan;
+      if (r && !r.path.length && !r.butuh) r.face = r.x > this.x ? 'left' : 'right';   // salaman: saling hadap
+      this.pose = 'salam';
+      this.pulangTahap = now + PULANG_SALAM_MS;
+      this.pulang = 'salam-diam';
+    } else if (this.pulang === 'absen') {
+      this.pose = 'angkat';                    // tempel jari ke mesin absen
+      this.pulangTahap = now + PULANG_ABSEN_MS;
+      this.pulang = 'absen-diam';
+    } else hapusPegawai(this);                 // sampai pintu: hilang
+  }
+  // true = dihapus di sini (jatah habis); pemanggil harus berhenti menyentuhnya
+  tickPulang() {
+    if (now > this.pulangBatas) { hapusPegawai(this); return true; }
+    this.alpha = Math.min(1, (this.pulangBatas - now) / 300);   // jatah hampir habis: memudar, bukan lenyap mendadak
+    if (this.path.length) return false;
+    if (this.pulang === 'salam-diam' && now > this.pulangTahap) {
+      const r = this.pulangRekan; this.pulangRekan = null;
+      if (r && !r.path.length && !r.butuh && !r.tolehSampai) r.face = r.hadap || STATIONS.think.face;
+      this.pose = null;
+      this.pulangKe(ABSEN_X, ABSEN_Y, 'up', 'absen');
+    } else if (this.pulang === 'absen-diam' && now > this.pulangTahap) {
+      this.pose = null;
+      this.pulangKe(PINTU_X, LANE_UP, 'left', 'pintu');
+    }
+    return false;
   }
 
   destroy() {
@@ -3212,6 +3658,9 @@ const antrianLaporDiri = [];
 
 function agentFor(id) {
   let a = agents.get(id);
+  // Yang sedang ritual pulang tidak bisa disuruh balik: sesinya sudah bilang
+  // habis. Dia dihapus langsung, dan event ini melahirkan pegawai baru.
+  if (a && a.pulang) { hapusPegawai(a); a = null; }
   if (!a) {
     a = new Agent(id);
     a.setPeran(peranAwal.get(id) || peranBawaan(agenSeq++));
@@ -3315,7 +3764,9 @@ class Peserta extends Agent {
     this.keluar = true;
     this.betah = false;
     this.busyUntil = 0;
+    this.bangkit();            // berdiri dari kursi (3 frame) sambil melangkah
     this.station = 'keluar';   // kursinya dilepas sekarang, bukan setelah sampai pintu
+    this.antre = 0;
     this.hadap = null;
     const lane = this.y < (LANE_UP + LANE_DOWN) / 2 ? LANE_UP : LANE_DOWN;
     this.path = route(this.x, this.y, lane, -20, LANE_DOWN, LANE_DOWN);
@@ -3471,7 +3922,7 @@ function hapusPegawai(a) {
 
 function kursiKosong() {
   let dipakai = 0;
-  for (const o of penghuni()) if (o.station === 'rapat') dipakai++;
+  for (const o of penghuni()) if (o.station === 'rapat' && !o.antre) dipakai++;
   return Math.max(0, KURSI_TOTAL - dipakai);
 }
 
@@ -4426,9 +4877,75 @@ function barisKru(a, kelas, who, what) {
   return row;
 }
 
+/* Kelompok per proyek & pin di daftar pegawai. Sesi nyata dikelompokkan per
+   `a.project` dengan kepala seksi yang bisa dilipat (diingat peramban) —
+   cuma kalau memang ada ≥2 proyek berbeda; satu proyek tidak butuh kepala.
+   📌 menaikkan sesi ke atas daftar, di luar seksi mana pun; pinnya sengaja
+   TIDAK diingat: dia hilang begitu pegawainya pulang (id sesi tidak pernah
+   kembali). Peserta rapat tetap menumpang di bawah pemanggilnya, standby
+   tetap paling bawah. statAgents tidak disentuh: angka besar tetap agents.size. */
+const kruPin = new Set();
+// dibaca malas: `ingatan` baru didefinisikan lebih bawah, dan renderCrew()
+// pertama toh baru jalan sesudah seluruh skrip dimuat
+let kruLipat = null;
+function kruLipatSet() {
+  if (!kruLipat) {
+    let v = [];
+    try { v = JSON.parse(ingatan.baca('kruLipat', '[]')); } catch { /* rusak: anggap kosong */ }
+    kruLipat = new Set(Array.isArray(v) ? v : []);
+  }
+  return kruLipat;
+}
+function kruSusun() {
+  for (const id of kruPin) if (!agents.has(id)) kruPin.delete(id);   // pulang = pin hilang
+  const semua = [...agents.values()];
+  const kelompok = new Set(semua.map((a) => a.project || '')).size >= 2;
+  const disemat = semua.filter((a) => kruPin.has(a.id));
+  const sisa = semua.filter((a) => !kruPin.has(a.id));
+  const seksi = new Map();
+  if (kelompok) {
+    // sort stabil: urutan kedatangan dipertahankan di dalam seksi; tanpa proyek paling bawah
+    const kunci = (a) => (a.project ? '0' + a.project : '1');
+    sisa.sort((x, y) => (kunci(x) < kunci(y) ? -1 : kunci(x) > kunci(y) ? 1 : 0));
+    for (const a of sisa) {
+      const p = a.project || '';
+      if (!seksi.has(p)) seksi.set(p, { proyek: p, judul: p || 'tanpa proyek', jumlah: 0 });
+      seksi.get(p).jumlah++;
+    }
+  }
+  return {
+    urut: [...disemat, ...sisa],
+    seksiDari: (a) => (kelompok && !kruPin.has(a.id) ? seksi.get(a.project || '') : null),
+  };
+}
+function kruKepalaSeksi(s) {
+  const el = document.createElement('div');
+  const lipat = kruLipatSet().has(s.proyek);
+  el.className = 'crew-seksi' + (lipat ? ' lipat' : '');
+  el.title = (lipat ? 'buka' : 'lipat') + ' seksi ' + s.judul;
+  el.innerHTML = '<span class="panah">' + (lipat ? '▸' : '▾') + '</span>'
+    + '<span class="nama">' + esc(s.judul) + '</span><span class="jumlah">' + s.jumlah + '</span>';
+  el.onclick = () => {
+    const lp = kruLipatSet();
+    if (lp.has(s.proyek)) lp.delete(s.proyek); else lp.add(s.proyek);
+    ingatan.tulis('kruLipat', JSON.stringify([...lp]));
+    renderCrew();
+  };
+  return el;
+}
+function kruPinToggle(id) {
+  if (kruPin.has(id)) kruPin.delete(id); else kruPin.add(id);
+  renderCrew();
+}
+
 function renderCrew() {
   crewEl.innerHTML = '';
-  for (const a of agents.values()) {
+  const susunan = kruSusun();
+  let seksiKini = null;
+  for (const a of susunan.urut) {
+    const seksi = susunan.seksiDari(a);
+    if (seksi !== seksiKini) { seksiKini = seksi; if (seksi) crewEl.appendChild(kruKepalaSeksi(seksi)); }
+    if (seksi && kruLipatSet().has(seksi.proyek)) continue;   // seksi terlipat: baris & pesertanya disembunyikan
     const panggilan = namaPanggilan.get(a.id);
     const who = namaKru(a);
     // Yang menunggu keputusan kamu tidak boleh terbaca sedang bekerja — kegiatan
@@ -4442,6 +4959,12 @@ function renderCrew() {
     bNama.className = 'aksi'; bNama.textContent = 'nama'; bNama.title = 'beri nama pegawai ini';
     bNama.onclick = () => beriNama(a.id);
     row.appendChild(bNama);
+    const bPin = document.createElement('button');
+    bPin.className = 'aksi pin' + (kruPin.has(a.id) ? ' aktif' : '');
+    bPin.textContent = '📌';
+    bPin.title = kruPin.has(a.id) ? 'lepas dari atas daftar' : 'sematkan ke atas daftar (hilang saat pegawainya pulang)';
+    bPin.onclick = () => kruPinToggle(a.id);
+    row.appendChild(bPin);
     if (kendali.izin) {
       const bStop = document.createElement('button');
       bStop.className = 'aksi'; bStop.textContent = 'stop'; bStop.title = 'hentikan tugasnya';
@@ -4462,9 +4985,13 @@ function renderCrew() {
       row.appendChild(bHapus);
     }
     crewEl.appendChild(row);
+    // peserta rapatnya menumpang persis di bawah pemanggilnya
+    for (const p of peserta) {
+      if (!p.keluar && p.pemilik === a.id) crewEl.appendChild(barisKru(p, 'crew-row sub', 'peserta', p.nama));
+    }
   }
   for (const p of peserta) {
-    if (p.keluar) continue;
+    if (p.keluar || agents.has(p.pemilik)) continue;   // yang punya pemanggil sudah ikut di atas
     crewEl.appendChild(barisKru(p, 'crew-row sub', 'peserta', p.nama));
   }
   for (const b of standby) {
@@ -4482,6 +5009,7 @@ function renderCrew() {
   statAgents.textContent = agents.size;
   const ket = document.getElementById('statAgentsKet');
   if (ket) ket.textContent = standby.length ? 'sesi +' + standby.length + ' standby' : 'sesi';
+  if (MODE_KADIS) kadisGambar();   // ringkasan HP kepala dinas ikut tiap daftar digambar ulang
 }
 
 setInterval(() => {
@@ -4692,6 +5220,7 @@ function perbaruiKartu() {
     || (a.path.length ? 'dalam perjalanan' : 'menunggu arahan')]);
   if (jenis === 'sesi') {
     baris.push(['di kantor', durasiSingkat(Date.now() - a.sejak) + ' (sejak ' + jam(a.sejak) + ')']);
+    baris.push(['kondisi', a.suasana]);      // suasana hati dari stamina — kosmetik, bukan statistik
     if (a.model) baris.push(['model', namaModel(a.model)]);
     baris.push(['tool call', a.calls + (a.gagal ? ' · ' + a.gagal + ' gagal' : '')]);
     const sering = Object.entries(a.perStasiun)
@@ -4841,7 +5370,12 @@ function handle(ev) {
   if (ev.kind === 'session-end') {
     const a = agents.get(ev.session);
     tutupSemuaRapat(ev.session, true);   // sesinya habis: rapat latar pun bubar
-    if (a) { a.destroy(); agents.delete(ev.session); jagaPopulasi(); renderCrew(); }
+    // Sesi yang tuntas (sudah `stop`, tidak menunggu siapa pun) pulang lewat
+    // ritual: absen, pintu, hilang. Yang mati mendadak di tengah tugas —
+    // session-end tanpa stop, atau masih menunggu kamu — dihapus langsung.
+    const tuntas = a && !a.adaTugas && a.state !== 'work' && !a.butuh && !a.macet;
+    if (tuntas) { a.pulangKantor(); renderCrew(); }
+    else if (a) { a.destroy(); agents.delete(ev.session); jagaPopulasi(); renderCrew(); }
     pushLog(ev, 'mark', ['pulang', ev.cwd || '']);
     return;
   }
@@ -4909,6 +5443,7 @@ function handle(ev) {
       a.adaTugas = true;
       a.doing = v + (o ? ' ' + o : '');
       a.calls++;
+      a.lelahkan(STAMINA_CALL);            // tiap call menguras sedikit (kosmetik)
       a.perStasiun[st] = (a.perStasiun[st] || 0) + 1;
       a.riwayat.push({ ts: ev.ts, v, o, ok: true });
       if (a.riwayat.length > 30) a.riwayat.shift();
@@ -4934,6 +5469,7 @@ function handle(ev) {
       if (ev.ok !== false) a.gagalBerturut = 0;
       if (ev.ok === false) {
         a.gagal++;
+        a.lelahkan(STAMINA_GAGAL);         // kegagalan lebih menguras daripada call biasa
         a.gagalBerturut = (a.gagalBerturut || 0) + 1;
         // dipakai inspektorat-mendadak: pemicunya data nyata, bukan dadu.
         // Disimpan sebagai timestamp Date.now(), BUKAN `now` (performance.now()) —
@@ -5718,7 +6254,14 @@ function kabarMasuk(ev, a, jenis) {
     tanya: ev.tanya || null,
     tool: ev.tool || '',
   });
-  while (kabar.length > KABAR_MAX) { kabar.shift(); if (kabarIdx > 0) kabarIdx--; }
+  while (kabar.length > KABAR_MAX) {
+    // yang disematkan di meja disposisi (📌, lihat kabarTersemat) tidak ikut
+    // dipangkas: yang dibuang kabar tak tersemat paling tua
+    const i = kabar.findIndex((k) => !kabarTersemat(k));
+    if (i < 0) break;
+    kabar.splice(i, 1);
+    if (kabarIdx > i) kabarIdx--;
+  }
   kabarBaru++;
   kabarLencana();
   /* Yang boleh menyela cuma kabar yang BARU. Waktu halaman dibuka ulang, server
@@ -6030,6 +6573,333 @@ statsBtn.onclick = () => {
 document.getElementById('statsTutup').onclick = statsTutupDialog;
 dlgStats.onclick = (e) => { if (e.target === dlgStats) statsTutupDialog(); };
 
+/* ------------------------------------------------------------ papan SKP ---
+   Tab kedua di modal 📊: kinerja per PROYEK dan per SESI dalam rentang
+   7/14/30 hari, dari GET /skp — server yang menjumlahkan buku agenda, riwayat
+   token, dan buku induk (lihat skpHitung() di server.mjs), halaman cuma
+   menggambar. Angkanya "sejak dipantau" dan labelnya wajib tampil; token
+   berhenti di token, tidak ke dolar. Tab Token di atas tidak disentuh:
+   statsGambar() tetap menulis ke statsBadan-nya sendiri, tab ini ke
+   skpBadan. Modalnya dilebarkan hanya saat tab ini aktif (.skp-lebar). */
+const skpBadan = document.getElementById('skpBadan');
+const statsTab = document.getElementById('statsTab');
+const SKP_HARI = [7, 14, 30];
+let skpData = null;
+let skpHari = 7;
+let skpMemuat = false;
+let skpUrut = 0;
+let statsTabAktif = 'token';
+
+function skpRentang(hari) {
+  const sampai = new Date();
+  const dari = new Date(sampai);
+  dari.setDate(dari.getDate() - (hari - 1));
+  return { dari: tanggalLokal(dari), sampai: tanggalLokal(sampai) };
+}
+
+async function muatSkp(hari) {
+  if (SKP_HARI.includes(hari)) skpHari = hari;
+  const r = skpRentang(skpHari);
+  const urut = ++skpUrut;                  // jawaban rentang lama yang telat datang tidak boleh menimpa
+  skpMemuat = true;
+  if (statsTabAktif === 'skp') skpGambar();
+  try {
+    const res = await fetch('/skp?dari=' + r.dari + '&sampai=' + r.sampai);
+    const d = await res.json();
+    if (urut !== skpUrut) return skpData;
+    if (d && !d.galat) skpData = d;
+  } catch { /* server lokal lagi restart — coba lagi waktu tab dibuka */ }
+  if (urut !== skpUrut) return skpData;
+  skpMemuat = false;
+  if (statsTabAktif === 'skp') skpGambar();
+  return skpData;
+}
+
+const skpDurasi = (ms) => ms == null ? '–'
+  : ms < 1000 ? Math.round(ms) + ' ms'
+  : ms < 60000 ? (Math.round(ms / 100) / 10).toLocaleString('id-ID') + ' dtk'
+  : durasiSingkat(ms);
+const skpTanggal = (tgl) => tanggalID(new Date(tgl + 'T00:00:00').getTime());
+const skpJamTgl = (ts) => new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ' ' + jam(ts).slice(0, 5);
+
+/* Ringkasan yang dipakai tab DAN nota: satu hitungan, dua tampilan. */
+function skpRingkas(d) {
+  const r = { sesi: d.sesi.length, toolCall: 0, gagal: 0, tertahan: 0,
+              token: { input: 0, output: 0, cacheBaca: 0, cacheTulis: 0 },
+              proyekTeratas: d.proyek[0] ? d.proyek[0].nama : '', toolTeratas: null };
+  const tool = {};
+  for (const p of d.proyek) {
+    r.toolCall += p.toolCall; r.gagal += p.gagal;
+    for (const k of ['input', 'output', 'cacheBaca', 'cacheTulis']) r.token[k] += p.token[k] || 0;
+    for (const [nama, n] of Object.entries(p.campuranTool || {})) tool[nama] = (tool[nama] || 0) + n;
+  }
+  for (const s of d.sesi) r.tertahan += s.tertahan || 0;
+  const t = Object.entries(tool).sort((a, b) => b[1] - a[1])[0];
+  if (t) r.toolTeratas = { nama: t[0], jumlah: t[1] };
+  return r;
+}
+
+function skpBarisProyek(p, i) {
+  const gagalKelas = p.rasioGagal >= 20 ? ' gagal-tinggi' : '';
+  return '<tr>' + (i != null ? '<td class="angka">' + (i + 1) + '</td>' : '')
+    + '<td class="nama" title="' + esc(p.nama) + '">' + esc(p.nama) + '</td>'
+    + '<td class="angka">' + p.sesi + '</td>'
+    + '<td class="angka">' + angkaID(p.toolCall) + '</td>'
+    + '<td class="angka' + gagalKelas + '">' + p.gagal + (p.toolCall ? ' (' + p.rasioGagal.toLocaleString('id-ID') + '%)' : '') + '</td>'
+    + '<td class="angka">' + skpDurasi(p.durasiRata) + '</td>'
+    + '<td class="angka">' + angkaID(p.token.input) + ' / ' + angkaID(p.token.output) + '</td>'
+    + '<td class="angka">' + jamDinasTeks(p.jamDinasRentang || 0) + '</td>'
+    + '<td class="angka">' + jamDinasTeks(p.jamDinas || 0) + '</td>'
+    + '<td>' + esc(p.golongan || '') + '</td></tr>';
+}
+const SKP_KEPALA_PROYEK = '<th>proyek</th><th class="angka">sesi</th><th class="angka">tool call</th>'
+  + '<th class="angka">gagal</th><th class="angka">durasi rata</th><th class="angka">token masuk / keluar</th>'
+  + '<th class="angka">jam dinas (rentang)</th><th class="angka">jam dinas (karier)</th><th>golongan</th>';
+
+function skpBarisSesi(s, i) {
+  return '<tr>' + (i != null ? '<td class="angka">' + (i + 1) + '</td>' : '')
+    + '<td class="nama">' + esc(s.sesi) + '</td>'
+    + '<td>' + esc(s.proyek) + (s.cabang ? '@' + esc(s.cabang) : '') + '</td>'
+    + '<td>' + esc(skpJamTgl(s.mulai)) + ' – ' + esc(skpJamTgl(s.selesai)) + '</td>'
+    + '<td class="angka">' + angkaID(s.toolCall) + '</td>'
+    + '<td class="angka' + (s.gagal ? ' gagal-tinggi' : '') + '">' + s.gagal + '</td>'
+    + '<td class="angka">' + s.tertahan + '</td>'
+    + '<td>' + (s.toolTeratas ? esc(s.toolTeratas.nama) + ' ×' + s.toolTeratas.jumlah : '–') + '</td></tr>';
+}
+const SKP_KEPALA_SESI = '<th>sesi</th><th>proyek@cabang</th><th>mulai – selesai</th><th class="angka">tool call</th>'
+  + '<th class="angka">gagal</th><th class="angka">tertahan</th><th>tool teratas</th>';
+
+function skpGambar() {
+  const d = skpData;
+  const r = skpRentang(skpHari);
+  const blok = ['<div class="skp-kepala"><span class="skp-rentang">'
+    + SKP_HARI.map((h) => '<button type="button" data-hari="' + h + '"'
+        + (h === skpHari ? ' class="aktif"' : '') + '>' + h + ' hari</button>').join('')
+    + '</span><span class="isi">' + esc(labelTanggal(r.dari)) + ' – ' + esc(labelTanggal(r.sampai))
+    + ' · <b>angka sejak dipantau</b>' + (skpMemuat ? ' · memuat…' : '') + '</span>'
+    + '<button type="button" class="skp-cetak" id="skpCetak" title="buka nota dinas laporan mingguan di tab baru, lalu Ctrl+P">'
+    + '🖨️ Cetak nota mingguan</button></div>'];
+  if (!d) {
+    blok.push('<p class="stat-ket">' + (skpMemuat ? 'memuat papan SKP…' : 'papan SKP belum bisa dimuat — server lokal mungkin sedang restart.') + '</p>');
+    skpBadan.innerHTML = blok.join('');
+    return;
+  }
+  const g = skpRingkas(d);
+  blok.push('<div class="stat-ringkas">'
+    + '<div><b>' + g.sesi + '</b><span>sesi</span></div>'
+    + '<div><b>' + angkaID(g.toolCall) + '</b><span>tool call</span></div>'
+    + '<div><b>' + angkaID(g.token.input + g.token.output) + '</b><span>token masuk+keluar</span></div>'
+    + '<div><b>' + g.tertahan + '</b><span>kali tertahan</span></div>'
+    + '</div>');
+  blok.push('<div class="stat-blok"><h3>per proyek (' + d.proyek.length + ')</h3><div class="skp-gulir">'
+    + '<table class="skp-tabel"><thead><tr>' + SKP_KEPALA_PROYEK + '</tr></thead><tbody>'
+    + (d.proyek.length ? d.proyek.map((p) => skpBarisProyek(p)).join('')
+      : '<tr class="kosong"><td colspan="9">belum ada yang tercatat di rentang ini</td></tr>')
+    + '</tbody></table></div></div>');
+  blok.push('<div class="stat-blok"><h3>per sesi (' + d.sesi.length + ')</h3><div class="skp-gulir">'
+    + '<table class="skp-tabel"><thead><tr>' + SKP_KEPALA_SESI + '</tr></thead><tbody>'
+    + (d.sesi.length ? d.sesi.slice(0, 60).map((s) => skpBarisSesi(s)).join('')
+      : '<tr class="kosong"><td colspan="7">belum ada sesi di rentang ini</td></tr>')
+    + '</tbody></table></div>'
+    + (d.sesi.length > 60 ? '<p class="stat-ket">' + (d.sesi.length - 60) + ' sesi lain tidak ditampilkan — ada di nota cetak (maks 30) dan /skp.</p>' : '')
+    + '</div>');
+  blok.push('<p class="stat-ket">angka <b>sejak dipantau</b> — dijumlah dari buku agenda (tool call, gagal, durasi, tertahan),'
+    + ' riwayat token, dan buku induk. Jam dinas (karier) dan golongan milik seluruh karier proyek, bukan cuma rentang ini.'
+    + ' Token bukan biaya: tidak ada tabel harga di sini.'
+    + (d.cache ? ' Dihitung ' + jam(d.dihitung).slice(0, 5) + ', cache 30 detik.' : '') + '</p>');
+  skpBadan.innerHTML = blok.join('');
+}
+
+function statsTabPilih(nama) {
+  statsTabAktif = nama === 'skp' ? 'skp' : 'token';
+  for (const b of statsTab.querySelectorAll('button[data-tab]')) b.classList.toggle('aktif', b.dataset.tab === statsTabAktif);
+  statsBadan.hidden = statsTabAktif !== 'token';
+  skpBadan.hidden = statsTabAktif !== 'skp';
+  dlgStats.querySelector('.dlg').classList.toggle('skp-lebar', statsTabAktif === 'skp');
+  if (statsTabAktif === 'skp') { skpGambar(); muatSkp(); }
+}
+statsTab.onclick = (e) => {
+  const b = e.target && e.target.closest ? e.target.closest('button[data-tab]') : null;
+  if (b) statsTabPilih(b.dataset.tab);
+};
+skpBadan.onclick = (e) => {
+  const b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (!b) return;
+  if (b.dataset.hari) muatSkp(Number(b.dataset.hari));
+  else if (b.id === 'skpCetak') bukaNotaMingguan();
+};
+// Modal dibuka lagi saat tab SKP yang terakhir aktif: segarkan datanya juga,
+// seperti muatRiwayatToken() untuk tab Token. Pembuka aslinya tidak diubah.
+const statsBukaAsli = statsBtn.onclick;
+statsBtn.onclick = () => {
+  statsBukaAsli();
+  if (!dlgStats.hidden && statsTabAktif === 'skp') muatSkp();
+};
+
+/* --------------------------------------------- nota dinas laporan mingguan ---
+   Satu halaman HTML mandiri (inline CSS, @media print, tanpa pustaka) yang
+   dibuka di tab baru dari tombol 🖨️ — PDF-nya lewat Ctrl+P / "Simpan sebagai
+   PDF" bawaan browser, bukan pustaka PDF. Datanya /skp yang sama dengan tab.
+   `?cetak=mingguan` di URL halaman utama membuka lembar yang sama sebagai
+   lapisan iframe di atas ruangan dan memanggil print() begitu datanya ada —
+   supaya bisa dijadwalkan (mis. chrome --kiosk-printing). */
+const BULAN_ROMAWI = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+/* Nomor ala tata naskah dinas: kode/urut/unit/bulan romawi/tahun. Urutnya
+   penghitung per browser (localStorage): nomor terbit saat nota dicetak,
+   bukan saat tabelnya dilihat — dua kali cetak, dua nomor. */
+function nomorNota(kode = 'ND') {
+  const d = new Date();
+  let urut = 1;
+  try {
+    urut = (Number(localStorage.getItem('agentRoomNotaUrut')) || 0) + 1;
+    localStorage.setItem('agentRoomNotaUrut', String(urut));
+  } catch { urut = d.getDate() * 100 + d.getHours(); }
+  return kode + '/' + String(urut).padStart(3, '0') + '/AR/' + BULAN_ROMAWI[d.getMonth()] + '/' + d.getFullYear();
+}
+
+const NOTA_SESI_MAX = 30;
+function notaMingguanHTML(d, nomor) {
+  const g = skpRingkas(d);
+  const rt = d.rentang;
+  const kosong = !d.proyek.length && !d.sesi.length;
+  const tok = (t) => angkaID(t.input) + ' masuk / ' + angkaID(t.output) + ' keluar'
+    + (t.cacheBaca || t.cacheTulis ? ' (cache ' + angkaID(t.cacheBaca) + ' baca / ' + angkaID(t.cacheTulis) + ' tulis)' : '');
+  const meta = [
+    ['Nomor', nomor], ['Sifat', 'BIASA'], ['Lampiran', '–'], ['Perihal', 'Laporan kinerja mingguan'],
+  ].map(([k, v]) => '<tr><td>' + k + '</td><td>:</td><td>' + esc(v) + '</td></tr>').join('');
+  const ringkas = [
+    ['Sesi aktif', String(g.sesi)],
+    ['Tool call', angkaID(g.toolCall) + (g.gagal ? ' (' + g.gagal + ' gagal)' : '')],
+    ['Token', tok(g.token)],
+    ['Proyek teratas', g.proyekTeratas || '–'],
+    ['Tool teratas', g.toolTeratas ? g.toolTeratas.nama + ' ×' + g.toolTeratas.jumlah : '–'],
+    ['Sesi tertahan', g.tertahan + ' kali (minta izin / berhenti karena galat)'],
+  ].map(([k, v]) => '<tr><td>' + k + '</td><td>:</td><td>' + esc(v) + '</td></tr>').join('');
+  const sesiCetak = d.sesi.slice(0, NOTA_SESI_MAX);
+  return '<!doctype html><html lang="id"><head><meta charset="utf-8">'
+    + '<title>Nota Dinas ' + esc(nomor) + ' — Laporan kinerja mingguan</title>'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<style>'
+    + 'body{margin:0;background:#6f6a60;color:#111;font:12px/1.45 "Times New Roman",Georgia,"Iowan Old Style",serif}'
+    + '.bilah{position:sticky;top:0;z-index:2;background:#2b2416;color:#f3edda;padding:6px 12px;font:12px system-ui,sans-serif;display:flex;gap:8px;align-items:center}'
+    + '.bilah span{flex:1}.bilah button{font:inherit;padding:3px 10px;cursor:pointer;background:#f3edda;color:#2b2416;border:1px solid #a89a70;border-radius:3px}'
+    + '.kertas{background:#fff;max-width:210mm;box-sizing:border-box;margin:16px auto;padding:18mm 20mm;box-shadow:0 2px 14px rgba(0,0,0,.45)}'
+    + '.kop{text-align:center;border-bottom:3px double #111;padding-bottom:6px;margin-bottom:14px}'
+    + '.kop small{display:block;font-size:11px;letter-spacing:.1em}.kop b{display:block;font-size:18px;letter-spacing:.12em}'
+    + '.kop i{display:block;font-size:10px;color:#444;font-style:normal}'
+    + 'h1{text-align:center;font-size:15px;letter-spacing:.16em;margin:0 0 10px;text-decoration:underline}'
+    + 'table.meta{border-collapse:collapse;margin-bottom:10px}table.meta td{padding:1px 6px 1px 0;vertical-align:top}'
+    + 'table.meta td:first-child{width:92px}'
+    + 'h2{font-size:12px;margin:14px 0 4px;letter-spacing:.06em;text-transform:uppercase}'
+    + 'p{margin:6px 0;text-align:justify}'
+    + 'table.data{border-collapse:collapse;width:100%;margin:4px 0 8px;font-size:10.5px}'
+    + 'table.data th,table.data td{border:1px solid #333;padding:3px 5px;vertical-align:top}'
+    + 'table.data th{background:#eee;font-weight:700;text-align:left}'
+    + 'table.data td.angka,table.data th.angka{text-align:right;font-variant-numeric:tabular-nums}'
+    + 'table.data td.nama{word-break:break-all}table.data tr.kosong td{text-align:center;font-style:italic;color:#555}'
+    + '.catatan{font-size:10.5px;color:#333;border-top:1px solid #999;padding-top:6px;margin-top:10px}'
+    + '.ttd{margin-top:26px;display:flex;justify-content:flex-end;page-break-inside:avoid}'
+    + '.ttd div{text-align:center;min-width:210px}.ttd .ruang{height:52px}.ttd b{display:block;text-decoration:underline}'
+    + '@media print{body{background:#fff}.bilah{display:none}.kertas{box-shadow:none;margin:0;padding:0;max-width:none}'
+    + '@page{size:A4;margin:18mm 20mm}table.data{page-break-inside:auto}tr{page-break-inside:avoid}}'
+    + '</style></head><body>'
+    + '<div class="bilah"><span>Nota dinas ' + esc(nomor) + ' — Ctrl+P atau tombol di kanan untuk mencetak / menyimpan PDF</span>'
+    + '<button type="button" onclick="window.print()">🖨️ Cetak</button></div>'
+    + '<div class="kertas">'
+    + '<div class="kop"><small>PEMERINTAH KANTOR DINAS</small><b>AGENT ROOM</b>'
+    + '<i>Sekretariat Notulis · ' + esc(location.host || 'localhost') + '</i></div>'
+    + '<h1>NOTA DINAS</h1>'
+    + '<table class="meta">' + meta + '</table>'
+    + '<table class="meta"><tr><td>Yth.</td><td>:</td><td>Kepala Dinas</td></tr>'
+    + '<tr><td>Dari</td><td>:</td><td>Notulis Agent Room</td></tr>'
+    + '<tr><td>Tanggal</td><td>:</td><td>' + esc(tanggalID(Date.now())) + '</td></tr>'
+    + '<tr><td>Rentang</td><td>:</td><td>' + esc(skpTanggal(rt.dari)) + ' s.d. ' + esc(skpTanggal(rt.sampai))
+    + ' (' + rt.hari + ' hari)</td></tr></table>'
+    + '<p>Dengan hormat, bersama ini disampaikan laporan kinerja pegawai (sesi Claude Code) yang tercatat di ruangan'
+    + ' selama rentang tersebut, dihimpun dari buku agenda, riwayat token, dan buku induk pegawai.'
+    + (kosong ? ' <b>Selama rentang ini tidak ada sesi maupun tool call yang tercatat</b> — laporan nihil, disampaikan apa adanya.' : '')
+    + '</p>'
+    + '<h2>I. Ringkasan</h2><table class="meta">' + ringkas + '</table>'
+    + '<h2>II. Kinerja per proyek</h2>'
+    + '<table class="data"><thead><tr><th class="angka">No</th>' + SKP_KEPALA_PROYEK + '</tr></thead><tbody>'
+    + (d.proyek.length ? d.proyek.map((p, i) => skpBarisProyek(p, i)).join('')
+      : '<tr class="kosong"><td colspan="10">nihil</td></tr>')
+    + '</tbody></table>'
+    + '<h2>III. Kinerja per sesi' + (d.sesi.length > NOTA_SESI_MAX ? ' (' + NOTA_SESI_MAX + ' dari ' + d.sesi.length + ')' : '') + '</h2>'
+    + '<table class="data"><thead><tr><th class="angka">No</th>' + SKP_KEPALA_SESI + '</tr></thead><tbody>'
+    + (sesiCetak.length ? sesiCetak.map((s, i) => skpBarisSesi(s, i)).join('')
+      : '<tr class="kosong"><td colspan="8">nihil</td></tr>')
+    + '</tbody></table>'
+    + (d.sesi.length > NOTA_SESI_MAX ? '<p><i>' + (d.sesi.length - NOTA_SESI_MAX) + ' sesi lainnya tidak dicetak; lengkapnya di /skp.</i></p>' : '')
+    + '<h2>IV. Catatan</h2>'
+    + '<p class="catatan">Seluruh angka dihitung <b>sejak dipantau</b> — sesi yang berjalan sebelum ruangan dibuka tidak punya'
+    + ' catatan dari jam itu. Token adalah jumlah token resmi dari respons API, <b>bukan biaya</b>: tidak ada tabel harga di'
+    + ' laporan ini. Jam dinas (karier) dan golongan milik seluruh karier proyek di buku induk, bukan cuma rentang laporan.'
+    + ' Demikian disampaikan, atas perhatiannya diucapkan terima kasih.</p>'
+    + '<div class="ttd"><div>' + esc(tanggalID(Date.now())) + '<br>Notulis,<div class="ruang"></div><b>Agent Room</b>'
+    + '<span>Sekretariat Notulis</span></div></div>'
+    + '</div></body></html>';
+}
+
+/* Tab baru dibuka DULU (masih di dalam klik, supaya tidak diblokir), datanya
+   menyusul: kalau /skp belum ada di memori, ditunggu, baru notanya ditulis. */
+async function bukaNotaMingguan() {
+  let w = null;
+  try { w = window.open('', '_blank'); } catch { w = null; }
+  if (!w) {
+    // pop-up diblokir: notanya tetap bisa dibaca & dicetak lewat lapisan iframe
+    // di atas ruangan (tanpa print() otomatis — yang minta cetak tetap orangnya)
+    const d = skpData || await muatSkp();
+    if (d) notaCetakLapis(notaMingguanHTML(d, nomorNota()), false);
+    else console.warn('[nota] /skp belum bisa dimuat — server lokal mungkin sedang restart.');
+    return null;
+  }
+  try {
+    w.document.write('<!doctype html><title>Nota dinas mingguan</title>'
+      + '<p style="font:14px Georgia,serif;padding:24px">menyusun nota dinas…</p>');
+  } catch { /* dokumen sementara gagal — nota tetap ditulis di bawah */ }
+  const d = skpData || await muatSkp();
+  if (!d) {
+    try { w.document.body.innerHTML = '<p style="font:14px Georgia,serif;padding:24px">/skp belum bisa dimuat — server lokal mungkin sedang restart.</p>'; } catch {}
+    return w;
+  }
+  const html = notaMingguanHTML(d, nomorNota());
+  w.document.open(); w.document.write(html); w.document.close();
+  return w;
+}
+
+let notaCetakJumlah = 0;                 // berapa kali print() dipanggil dari ?cetak=mingguan (dibaca uji)
+function notaCetakPanggil(win) {
+  notaCetakJumlah++;
+  try { win.focus(); win.print(); } catch (err) { console.warn('[nota] print() gagal: ' + err.message); }
+}
+function notaCetakLapis(html, cetakOtomatis = true) {
+  const lapis = document.createElement('div');
+  lapis.className = 'nota-cetak-lapis';
+  lapis.innerHTML = '<div class="bilah"><b>Nota dinas laporan mingguan</b><span style="flex:1">'
+    + (cetakOtomatis ? 'dibuka lewat ?cetak=mingguan — dialog cetak dipanggil otomatis'
+      : 'tab baru diblokir browser, notanya dibuka di sini — cetak lewat tombol di kanan')
+    + '</span><button type="button" id="notaCetakUlang">🖨️ Cetak</button>'
+    + '<button type="button" id="notaCetakTutup">✕ tutup</button></div><iframe title="nota dinas laporan mingguan"></iframe>';
+  const frame = lapis.querySelector('iframe');
+  document.body.appendChild(lapis);
+  if (cetakOtomatis) frame.onload = () => notaCetakPanggil(frame.contentWindow);
+  frame.srcdoc = html;
+  lapis.querySelector('#notaCetakUlang').onclick = () => notaCetakPanggil(frame.contentWindow);
+  lapis.querySelector('#notaCetakTutup').onclick = () => lapis.remove();
+  return lapis;
+}
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('cetak') === 'mingguan') {
+    muatSkp(Number(q.get('hari'))).then((d) => {
+      if (!d) { console.warn('[nota] ?cetak=mingguan: /skp tidak terjangkau, nota tidak dibuka'); return; }
+      document.title = 'Nota dinas mingguan — Kantor Agent';
+      notaCetakLapis(notaMingguanHTML(d, nomorNota()));
+    });
+  }
+}
+
 /* ------------------------------------------------------------------ kamera */
 /* Kamera hidup, sengaja dipisah dari fit(). fit() cuma mengurus skala integer
    kanvas→CSS (itu urusan piksel layar); kamera bekerja di koordinat dunia
@@ -6162,6 +7032,47 @@ function kameraSet(mode) {
   kameraSet(dariUrl || ingatan.baca('kamera', 'mati'));
 }
 
+/* ------------------------------------------------------------ mode ringan ---
+   Halaman ini biasanya dibiarkan hidup berjam-jam di layar kedua atau laptop;
+   60 fps dengan tujuh gradasi radial per frame itu boros buat ruangan yang
+   isinya cuma berubah pelan. Mode ringan (setelan ⚙️, diingat) mengunci
+   30 fps, 15 fps saat tab tersembunyi, mengambil pendar neon & vignette dari
+   cache, memangkas jatah partikel separuh, dan mematikan debu. Menyala
+   sendiri kalau baterai <30 % tanpa dicas (Battery API — opsional, aman
+   kalau tidak ada), ?ringan=1 di URL, atau prefers-reduced-motion. Kedip neon
+   TIDAK dimatikan: itu identitas ruangan, bukan hiasan. */
+const RINGAN = {
+  pilih: ingatan.baca('ringan', '0') === '1',                          // centang ⚙️
+  url: new URLSearchParams(location.search).get('ringan') === '1',    // sesi ini saja
+  baterai: false,                                                     // tidak dicas & <30 %
+};
+const ringanAktif = () => RINGAN.pilih || RINGAN.url || RINGAN.baterai || geraKurang.matches;
+const ringanSebab = () => RINGAN.pilih ? 'setelan' : RINGAN.url ? '?ringan=1'
+  : RINGAN.baterai ? 'baterai lemah' : geraKurang.matches ? 'gerak dikurangi' : '';
+// Battery API opsional; di peramban tanpa itu (dan di VM uji-event.mjs yang
+// navigator-nya stub) harus lewat tanpa suara
+try {
+  const janji = typeof navigator.getBattery === 'function' ? navigator.getBattery() : null;
+  if (janji && typeof janji.then === 'function') {
+    janji.then((b) => {
+      const cek = () => { RINGAN.baterai = !b.charging && b.level < 0.3; };
+      cek();
+      b.addEventListener('chargingchange', cek);
+      b.addEventListener('levelchange', cek);
+    }).catch(() => {});
+  }
+} catch { /* tidak ada baterai untuk dipantau */ }
+// fps sebenarnya (frame yang benar-benar digambar), cuma dihitung; ditulis
+// ke panel ⚙️ hanya waktu panelnya terbuka
+let fpsHitung = 0, fpsSejak = performance.now(), fpsNilai = 0;
+function catatFps(ts) {
+  fpsHitung++;
+  if (ts - fpsSejak < 1000) return;
+  fpsNilai = Math.round(fpsHitung * 1000 / (ts - fpsSejak));
+  fpsHitung = 0; fpsSejak = ts;
+  if (typeof tulisFps === 'function') tulisFps();
+}
+
 /* ------------------------------------------------------------- pengaturan ---
    Satu tombol ⚙️ menggantikan tombol-tombol toggle yang dulu berjejer di
    bilah panggung (💭🔊🔔🎧) plus centang "buka sendiri" yang tadinya cuma
@@ -6208,6 +7119,18 @@ if (!kameraSinematikBoleh()) {
   if (o) { o.disabled = true; o.textContent += ' (gerak dikurangi)'; }
 }
 setKamera.onchange = () => { kameraSet(setKamera.value); ingatan.tulis('kamera', KAMERA.mode); };
+
+// Mode ringan: centangnya = pilihan manual; sebab otomatis (baterai/URL/
+// gerak dikurangi) cuma ditulis di keterangan, tidak memaksa centangnya.
+const setRingan = document.getElementById('setRingan');
+const setFps = document.getElementById('setFps');
+setRingan.checked = RINGAN.pilih;
+setRingan.onchange = () => { RINGAN.pilih = setRingan.checked; ingatan.tulis('ringan', RINGAN.pilih ? '1' : '0'); tulisFps(); };
+function tulisFps() {
+  if (dlgSetting.hidden) return;
+  const sebab = ringanSebab();
+  setFps.textContent = fpsNilai + ' fps' + (sebab && sebab !== 'setelan' ? ' · ringan otomatis: ' + sebab : '');
+}
 
 // Tiga di bawah sengaja TIDAK diinisialisasi dari ingatan (localStorage) —
 // AudioContext baru boleh jalan sesudah klik pengguna, jadi menyalakan
@@ -6323,6 +7246,316 @@ settingBtn.onclick = () => {
 };
 document.getElementById('settingTutup').onclick = settingTutupDialog;
 dlgSetting.onclick = (e) => { if (e.target === dlgSetting) settingTutupDialog(); };
+
+/* ------------------------------------------------- meja disposisi ---------
+   Kotak kabar (💬) itu utas grup: dibaca berurutan. Meja disposisi (📚) itu
+   tumpukan berkas di meja kadis: dicari, disaring per jenis & pegawai,
+   disematkan, disalin. Cuma MEMBACA larik `kabar` — modal kabar dan
+   kabarUtas() tidak disentuh; klik satu kartu memanggil kabarBuka(idx) yang
+   sudah ada. Yang disematkan disalin utuh ke ingatan peramban (bukan cuma
+   id-nya: `no` hidup sebatas sesi halaman, dan server cuma memutar ulang
+   ring 60 event), jadi tetap ada sesudah muat ulang dan tidak ikut dipangkas
+   KABAR_MAX (lihat pengecualian di kabarMasuk). Kuncinya sesi|ts|jenis —
+   ts datang dari server, jadi kabar yang sama sesudah muat ulang dikenali
+   sebagai berkas yang sama, bukan duplikat. */
+const MEJA_SEMAT_MAX = 40;
+const mejaKunci = (k) => (k.sesi || '') + '|' + k.ts + '|' + k.jenis;
+const kabarSemat = new Map((() => {
+  try {
+    const v = JSON.parse(ingatan.baca('mejaSemat', '[]'));
+    return (Array.isArray(v) ? v : []).filter((k) => k && k.ts && k.jenis).map((k) => [mejaKunci(k), k]);
+  } catch { return []; }
+})());
+function kabarTersemat(k) { return kabarSemat.has(mejaKunci(k)); }
+function mejaSimpanSemat() {
+  ingatan.tulis('mejaSemat', JSON.stringify([...kabarSemat.values()].slice(-MEJA_SEMAT_MAX)));
+}
+function mejaSematToggle(k) {
+  const kunci = mejaKunci(k);
+  if (kabarSemat.has(kunci)) kabarSemat.delete(kunci);
+  else {
+    const salinan = { ...k };
+    delete salinan.no;                 // nomor urut milik sesi halaman ini, bukan berkasnya
+    kabarSemat.set(kunci, salinan);
+    while (kabarSemat.size > MEJA_SEMAT_MAX) kabarSemat.delete(kabarSemat.keys().next().value);
+  }
+  mejaSimpanSemat();
+  mejaGambar();
+}
+
+const mj = {
+  latar: document.getElementById('dlgMeja'),
+  badan: document.getElementById('mejaBadan'),
+  cari: document.getElementById('mejaCari'),
+  sesi: document.getElementById('mejaSesi'),
+  tab: document.getElementById('mejaTab'),
+  agenda: document.getElementById('mejaAgenda'),
+  ket: document.getElementById('mejaKet'),
+  tutup: document.getElementById('mejaTutup'),
+  tombol: document.getElementById('mejaBtn'),
+};
+const MEJA_TAB = [
+  ['semua', 'semua', () => true],
+  ['hasil', 'hasil', (k) => k.jenis === 'hasil' || k.jenis === 'sk'],
+  ['tanya-izin', 'tanya · izin', (k) => k.cls === 'tunggu'],
+  ['galat', 'galat', (k) => k.cls === 'galat'],
+  ['lainnya', 'lainnya', (k) => k.cls !== 'tunggu' && k.cls !== 'galat' && k.jenis !== 'hasil' && k.jenis !== 'sk'],
+];
+let mejaTabKini = 'semua';
+let mejaAgendaHasil = null;      // null = belum dicari; { q, baris, jumlah } | { q, galat }
+let mejaTimer = 0;               // selama terbuka: kabar baru masuk lewat kabarMasuk() yang tidak tahu modal ini
+let mejaJumlahLalu = -1;
+let mejaKetTimer = 0;
+// AGENT_ROOM_ISI=off di server: kabar datang tanpa kalimat agen, agenda tanpa
+// label — mencari isi cuma menghasilkan kosong yang membingungkan
+const mejaIsiMati = () => !!kendali && kendali.isiAktif === false;
+
+// Teks yang dicari & disalin dihitung di satu tempat, supaya yang ketemu
+// lewat kotak cari itu juga yang keluar dari tombol salin.
+function mejaTeksTanya(k) {
+  if (!k.tanya) return '';
+  if (k.tanya.jenis === 'rencana') return k.tanya.teks || '';
+  return (k.tanya.daftar || [])
+    .map((q) => (q.tanya || '') + (q.opsi && q.opsi.length ? ' [' + q.opsi.join(' / ') + ']' : ''))
+    .join('\n');
+}
+function mejaTeksPolos(k) {
+  const baris = ['[' + tanggalID(k.ts) + ' ' + jam(k.ts).slice(0, 5) + '] ' + k.nama + ' (' + k.jab + ') — ' + k.emoji + ' ' + k.perihal];
+  const tanya = mejaTeksTanya(k);
+  if (tanya) baris.push(tanya);
+  if (k.teks && !(k.tanya && k.tanya.teks === k.teks)) baris.push(k.teks);
+  const meta = [];
+  if (k.tool) meta.push('via ' + k.tool);
+  if (k.sesi) meta.push('sesi ' + k.sesi);
+  if (meta.length) baris.push(meta.join(' · '));
+  return baris.join('\n');
+}
+async function mejaSalin(k) {
+  const teks = mejaTeksPolos(k);
+  let ok = false;
+  try { await navigator.clipboard.writeText(teks); ok = true; } catch { /* butuh konteks aman/izin; jatuh ke textarea */ }
+  if (!ok) {
+    const ta = document.createElement('textarea');
+    ta.value = teks; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+  }
+  mejaKet(ok ? 'disalin sebagai teks polos' : 'gagal menyalin — peramban menolak akses papan klip', !ok);
+}
+function mejaKet(teks, galat) {
+  mj.ket.textContent = teks;
+  mj.ket.classList.toggle('galat', !!galat);
+  clearTimeout(mejaKetTimer);
+  mejaKetTimer = setTimeout(() => { mj.ket.textContent = ''; }, 3000);
+}
+
+// Tumpukan = kabar hidup + sematan yang sudah tidak ada di larik (terpangkas,
+// atau dari sesi halaman sebelumnya). `idx` cuma ada untuk yang hidup: itu
+// yang bisa dibuka di modal kabar; sematan lama dibaca di tempat.
+function mejaDaftar() {
+  const hidup = new Set();
+  const semua = kabar.map((k, idx) => { const kunci = mejaKunci(k); hidup.add(kunci); return { k, idx, kunci }; });
+  for (const [kunci, k] of kabarSemat) if (!hidup.has(kunci)) semua.push({ k, idx: -1, kunci });
+  semua.sort((a, b) => b.k.ts - a.k.ts);        // terbaru di atas, seperti tumpukan berkas
+  return semua;
+}
+function mejaCocok(k, q) {
+  if (!q) return true;
+  return [k.perihal, k.tajuk, k.teks, k.nama, k.jab, k.tool, k.sesi, mejaTeksTanya(k)]
+    .some((v) => v && String(v).toLowerCase().includes(q));
+}
+
+function mejaGambar() {
+  const semua = mejaDaftar();
+  const isiMati = mejaIsiMati();
+  const q = isiMati ? '' : mj.cari.value.trim().toLowerCase();
+  // pilihan pegawai dari sesi yang memang ada di tumpukan; pilihan yang sedang
+  // dipakai dipertahankan selama sesinya masih ada
+  const sesiLama = mj.sesi.value;
+  const perSesi = new Map();
+  for (const { k } of semua) if (k.sesi && !perSesi.has(k.sesi)) perSesi.set(k.sesi, k.nama);
+  mj.sesi.innerHTML = '<option value="">semua pegawai</option>'
+    + [...perSesi].map(([s, n]) => '<option value="' + esc(s) + '">' + esc(n) + ' · ' + esc(s) + '</option>').join('');
+  mj.sesi.value = perSesi.has(sesiLama) ? sesiLama : '';
+  const dasar = semua.filter(({ k }) => (!mj.sesi.value || k.sesi === mj.sesi.value) && mejaCocok(k, q));
+  mj.tab.innerHTML = MEJA_TAB.map(([id, label, uji]) =>
+    '<button type="button" data-tab="' + id + '" class="' + (id === mejaTabKini ? 'aktif' : '') + '">'
+    + esc(label) + '<i>' + dasar.filter(({ k }) => uji(k)).length + '</i></button>').join('');
+  const uji = (MEJA_TAB.find(([id]) => id === mejaTabKini) || MEJA_TAB[0])[2];
+  const tampil = dasar.filter(({ k }) => uji(k));
+
+  const out = [];
+  if (isiMati) {
+    out.push('<p class="meja-nota">Isi transkrip dimatikan di server (<code>AGENT_ROOM_ISI=off</code>): '
+      + 'kabar tidak membawa kalimat agen, jadi pencarian isi dan pencarian agenda dimatikan. '
+      + 'Saringan jenis dan pegawai tetap jalan.</p>');
+  }
+  if (!tampil.length) {
+    out.push('<p class="meja-kosong">' + (semua.length ? 'tidak ada berkas yang cocok'
+      : 'meja masih kosong — kabar dari pegawai menumpuk di sini') + '</p>');
+  }
+  for (const { k, idx, kunci } of tampil) {
+    const semat = kabarSemat.has(kunci);
+    const cuplik = satuBaris(k.teks || mejaTeksTanya(k), 110);
+    out.push('<div class="meja-kartu ' + k.cls + (semat ? ' semat' : '') + (idx < 0 ? ' arsip' : '')
+      + '" data-kunci="' + esc(kunci) + '" data-idx="' + idx + '" title="'
+      + (idx < 0 ? 'sematan lama, sudah tidak ada di kotak kabar: klik untuk membaca di sini' : 'buka di kotak kabar') + '">'
+      + '<span class="meja-stempel">' + k.emoji + ' ' + esc(k.tajuk) + '</span>'
+      + '<b class="meja-perihal">' + esc(k.perihal) + '</b>'
+      + '<span class="meja-jam">' + esc(labelHari(k.ts).toLowerCase()) + ' ' + jamWA(k.ts) + '</span>'
+      + '<span class="meja-nama" style="border-color:' + esc(k.warna) + '">' + esc(k.nama)
+        + (k.tool ? ' <i>· ' + esc(k.tool) + '</i>' : '') + '</span>'
+      + (cuplik ? '<span class="meja-cuplik">' + esc(cuplik) + '</span>' : '')
+      + '<pre class="meja-penuh">' + esc(mejaTeksPolos(k)) + '</pre>'
+      + '<span class="meja-aksi">'
+        + '<button type="button" data-aksi="semat" class="' + (semat ? 'aktif' : '') + '" title="'
+          + (semat ? 'lepas sematan' : 'sematkan: tidak dipangkas, tetap ada sesudah muat ulang') + '">📌</button>'
+        + '<button type="button" data-aksi="salin" title="salin sebagai teks polos">⎘</button>'
+      + '</span></div>');
+  }
+  if (mejaAgendaHasil) out.push(mejaAgendaHtml());
+  const posisi = mj.badan.scrollTop;
+  mj.badan.innerHTML = out.join('');
+  mj.badan.scrollTop = posisi;
+  mejaJumlahLalu = kabar.length;
+  mj.agenda.disabled = isiMati;
+  mj.cari.disabled = isiMati;
+  mj.cari.placeholder = isiMati ? 'pencarian isi mati (AGENT_ROOM_ISI=off)' : 'cari perihal, isi, nama, tool…';
+}
+
+const tanggalPendek = (ts) => new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+function mejaAgendaHtml() {
+  const h = mejaAgendaHasil;
+  const kepala = '<h3 class="meja-seksi">buku agenda, 7 hari terakhir' + (h.q ? ' · “' + esc(h.q) + '”' : '') + '</h3>';
+  if (h.galat) return kepala + '<p class="meja-kosong">agenda tidak bisa dibaca: ' + esc(h.galat) + '</p>';
+  if (!h.baris.length) return kepala + '<p class="meja-kosong">tidak ada catatan yang cocok</p>';
+  return kepala + '<ul class="meja-agenda">' + h.baris.map((b) =>
+    '<li><span class="t">' + esc(tanggalPendek(b.ts)) + ' ' + esc(jam(b.ts).slice(0, 5)) + '</span>'
+    + '<span class="s" title="sesi ' + esc(b.session || '') + '">' + esc((b.nama || b.session || '').slice(0, 14)) + '</span>'
+    + '<span class="k">' + esc(b.tool || b.kind || '') + '</span>'
+    + '<span class="l">' + esc(b.label || b.alasan || b.galat || '') + '</span></li>').join('')
+    + '</ul>' + (h.jumlah >= 100 ? '<p class="meja-nota">100 teratas saja — persempit kata kuncinya</p>' : '');
+}
+
+// Kata kunci yang sama ke buku agenda server: hari ini + 6 hari sebelumnya.
+async function mejaCariAgenda() {
+  if (mejaIsiMati()) return;
+  const q = mj.cari.value.trim();
+  const sampai = new Date();
+  const dari = new Date(sampai);
+  dari.setDate(dari.getDate() - 6);
+  const u = '/agenda?q=' + encodeURIComponent(q) + '&dari=' + tanggalLokal(dari) + '&sampai=' + tanggalLokal(sampai)
+    + '&limit=100' + (mj.sesi.value ? '&sesi=' + encodeURIComponent(mj.sesi.value) : '');
+  mj.agenda.disabled = true;
+  try {
+    const r = await fetch(u);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    mejaAgendaHasil = { q, baris: Array.isArray(d.baris) ? d.baris : [], jumlah: d.jumlah || 0 };
+  } catch (err) {
+    mejaAgendaHasil = { q, galat: err.message || 'gagal' };
+  }
+  mj.agenda.disabled = false;
+  mejaGambar();
+  const el = mj.badan.querySelector('.meja-seksi');
+  if (el) el.scrollIntoView({ block: 'start' });
+}
+
+function mejaBuka() {
+  mejaAgendaHasil = null;
+  mejaGambar();
+  mj.latar.hidden = false;
+  document.addEventListener('keydown', mejaTombol);
+  mejaTimer = setInterval(() => { if (kabar.length !== mejaJumlahLalu) mejaGambar(); }, 2000);
+  if (!mejaIsiMati()) mj.cari.focus();
+}
+function mejaTutupDialog() {
+  mj.latar.hidden = true;
+  document.removeEventListener('keydown', mejaTombol);
+  clearInterval(mejaTimer);
+}
+function mejaTombol(e) { if (e.key === 'Escape') { e.preventDefault(); mejaTutupDialog(); } }
+
+mj.tombol.onclick = () => { if (mj.latar.hidden) mejaBuka(); else mejaTutupDialog(); };
+mj.tutup.onclick = mejaTutupDialog;
+mj.latar.onclick = (e) => { if (e.target === mj.latar) mejaTutupDialog(); };
+mj.cari.oninput = mejaGambar;
+mj.cari.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); mejaCariAgenda(); } };
+mj.sesi.onchange = mejaGambar;
+mj.agenda.onclick = mejaCariAgenda;
+mj.tab.onclick = (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (!b) return;
+  mejaTabKini = b.dataset.tab;
+  mejaGambar();
+};
+mj.badan.onclick = (e) => {
+  const kartu = e.target.closest('.meja-kartu');
+  if (!kartu) return;
+  const kunci = kartu.dataset.kunci;
+  const idx = Number(kartu.dataset.idx);
+  const hidup = idx >= 0 && kabar[idx] && mejaKunci(kabar[idx]) === kunci ? kabar[idx] : null;
+  const k = hidup || kabarSemat.get(kunci);
+  if (!k) return;
+  const aksi = e.target.closest('button[data-aksi]');
+  if (aksi) {
+    if (aksi.dataset.aksi === 'semat') mejaSematToggle(k);
+    else mejaSalin(k);
+    return;
+  }
+  if (hidup) { mejaTutupDialog(); kabarBuka(idx); }   // pembuka yang sudah ada
+  else kartu.classList.toggle('buka');                // sematan lama: dibaca di tempat
+};
+
+/* --------------------------------------------------- mode kadis (HP) -----
+   ?kadis=1: yang dilihat kepala dinas dari HP bukan diorama, tapi daftar —
+   siapa menunggu parafnya, siapa berhenti, siapa sedang apa, berapa yang
+   antre, token hari ini. Kanvas & bilah panggung disembunyikan CSS
+   (body.mode-kadis); simulasinya tetap jalan supaya keadaan pegawainya
+   benar. Server tetap bind 127.0.0.1: mode ini cuma berguna lewat tunnel
+   (lihat DESIGN.md, "Rupa halaman"). */
+const kadisEl = document.getElementById('kadisRingkas');
+function kadisGambar() {
+  if (!MODE_KADIS || !kadisEl) return;
+  const sesi = [...agents.values()];
+  const tunggu = sesi.filter((a) => a.butuh);
+  const macet = sesi.filter((a) => !a.butuh && a.macet);
+  const kerja = sesi.filter((a) => !a.butuh && !a.macet && a.state === 'work');
+  const santai = sesi.filter((a) => !a.butuh && !a.macet && a.state !== 'work');
+  const baris = (a, apa) => '<li><b>' + esc(namaKru(a)) + '</b><span>' + esc(apa) + '</span></li>';
+  const blok = (judul, kelas, isi, kosong) => '<section class="kadis-blok ' + kelas + '"><h3>' + judul
+    + ' <i>' + isi.length + '</i></h3>' + (isi.length ? '<ul>' + isi.join('') + '</ul>'
+    : '<p class="kadis-kosong">' + kosong + '</p>') + '</section>';
+  const out = [
+    blok('menunggu paraf / izin', 'tunggu', tunggu.map((a) => baris(a,
+      (TUNGGU_TEKS[a.butuh.sebab] || TUNGGU_TEKS.izin) + (a.butuh.label ? ' — ' + a.butuh.label : ''))), 'tidak ada yang menunggu kamu'),
+    blok('berhenti karena galat', 'galat', macet.map((a) => baris(a, a.macet.label || a.macet.jenis || 'galat')), 'tidak ada yang berhenti'),
+    blok('sedang bekerja', 'kerja', kerja.map((a) => baris(a, a.doing || (STATIONS[a.station] || {}).name || '')), 'kantor sepi'),
+  ];
+  if (santai.length) out.push(blok('di meja, tidak sedang tool call', 'santai', santai.map((a) => baris(a, a.doing || 'menunggu giliran')), ''));
+  out.push(blok('antrean disposisi', 'antre', antrean.map((t) => '<li><b>' + esc(t.nama || 'tugas') + '</b><span>#'
+    + Number(t.posisi || 0) + ' · ' + esc(t.cwd || '') + (t.sifat === 'SEGERA' ? ' · SEGERA' : '') + '</span></li>'), 'loket kosong'));
+  // token hari ini dari /token-riwayat (ditulis server, lintas sesi) — angka
+  // token saja, tanpa dolar: biaya di halaman ini toh "data sementara"
+  let tokenHariIni = 'belum termuat';
+  if (riwayatToken && Array.isArray(riwayatToken.harian)) {
+    const h = riwayatToken.harian.find((x) => x.tanggal === tanggalLokal(new Date()));
+    tokenHariIni = angkaID(h ? (h.input || 0) + (h.output || 0) : 0) + ' token';
+  }
+  out.push('<section class="kadis-blok token"><h3>token hari ini</h3><p class="kadis-token">' + esc(tokenHariIni) + '</p></section>');
+  out.push('<button type="button" class="kadis-muat">⟳ muat ulang</button>');
+  kadisEl.innerHTML = out.join('');
+  kadisEl.querySelector('.kadis-muat').onclick = () => location.reload();
+}
+if (MODE_KADIS) {
+  kadisEl.hidden = false;
+  kadisGambar();
+  // kegiatan berganti tanpa renderCrew() (tool call biasa cuma menyentuh
+  // baris orangnya), dan token hari ini datang dari server: segarkan sendiri
+  setInterval(kadisGambar, 4000);
+  setInterval(() => muatRiwayatToken().then(kadisGambar), 60000);
+}
 
 /* ------------------------------------------------------------------ stream */
 const params = new URLSearchParams(location.search);
@@ -6760,6 +7993,7 @@ function nyalakanEvent(def) {
     def.mulai && def.mulai(E, S);
   } catch (e) {
     console.warn('[event]', def.id, e);
+    laporGalatEvent(def.id, e);
     matikanEvent(E, true);
     return false;
   }
@@ -6769,10 +8003,61 @@ function nyalakanEvent(def) {
   return true;
 }
 
+/* ------------------------------------------------------ telemetri galat ---
+   Galat halaman dikirim ke POST /galat supaya terbaca dari konsol server dan
+   GET /galat tanpa membuka devtools — halaman ini sering hidup di layar
+   kedua yang tidak ada yang memelototi. Yang dikirim: pesan (200 huruf),
+   nama berkas:baris (basename saja, tanpa path penuh), id event acak yang
+   sedang jalan (tersangka pertama), nama peramban pendek. Tidak pernah
+   stack, tidak pernah isi apa pun. Batas 5 per menit dan pesan yang sama
+   tidak dikirim dua kali: event yang tick()-nya meledak dilaporkan sekali,
+   bukan 60 kali sedetik. Pelapornya sendiri tidak boleh melempar. */
+const GALAT_BATAS_MENIT = 5;
+const galatKirim = [];              // ts kiriman 60 detik terakhir
+const galatSudah = new Set();       // pesan yang sudah pernah dilaporkan
+const namaPeramban = () => {
+  const m = (navigator.userAgent || '').match(/(Edg|OPR|Firefox|Chrome|Safari)\/(\d+)/);
+  if (!m) return 'lain';
+  return (m[1] === 'Edg' ? 'Edge' : m[1] === 'OPR' ? 'Opera' : m[1]) + ' ' + m[2];
+};
+const sumberSingkat = (berkas, baris) => {
+  const b = String(berkas || '').split(/[?#]/)[0].split(/[\\/]/).pop() || '';
+  return b ? (baris ? b + ':' + baris : b) : '';
+};
+const galatPesan = (e) => (e && e.message ? String(e.message) : String(e == null ? 'galat tanpa pesan' : e));
+function laporGalat(pesan, sumber, eventId) {
+  try {
+    const teks = String(pesan || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (!teks || galatSudah.has(teks)) return;
+    const t = Date.now();
+    while (galatKirim.length && t - galatKirim[0] > 60000) galatKirim.shift();
+    if (galatKirim.length >= GALAT_BATAS_MENIT) return;
+    galatKirim.push(t);
+    if (galatSudah.size > 200) galatSudah.clear();
+    galatSudah.add(teks);
+    let ev = eventId || '';
+    if (!ev) { try { ev = eventHidup.length ? eventHidup[eventHidup.length - 1].id : ''; } catch { ev = ''; } }
+    fetch('/galat', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ ts: t, pesan: teks, sumber: sumber || '', event: ev, ua: namaPeramban() }),
+    }).catch(() => {});
+  } catch { /* pelapor tidak boleh ikut melempar */ }
+}
+// jalur event acak: tetap console.warn di pemanggilnya, ditambah laporan
+// berisi id event + pesan saja (stack-nya memuat path, tidak dikirim)
+const laporGalatEvent = (id, e) => laporGalat('event ' + id + ': ' + galatPesan(e), 'event-acak.js', id);
+window.addEventListener('error', (ev) => {
+  laporGalat(ev.message || galatPesan(ev.error), sumberSingkat(ev.filename, ev.lineno));
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  const s = ev.reason && ev.reason.stack ? String(ev.reason.stack).match(/([^\/\\\s():]+\.m?js):(\d+)/) : null;
+  laporGalat('janji ditolak: ' + galatPesan(ev.reason), s ? s[1] + ':' + s[2] : '');
+});
+
 function matikanEvent(E, batal) {
   const i = eventHidup.indexOf(E);
   if (i >= 0) eventHidup.splice(i, 1);
-  if (!batal) { try { E.def.selesai && E.def.selesai(E, S); } catch (e) { console.warn('[event]', E.id, e); } }
+  if (!batal) { try { E.def.selesai && E.def.selesai(E, S); } catch (e) { console.warn('[event]', E.id, e); laporGalatEvent(E.id, e); } }
   for (const a of [...E.aktor]) lepaskanAktor(a);
   if (batal) cooldownSampai.set(E.id, now + 20000);
   else if (E.def.lanjutan) {
@@ -6873,7 +8158,7 @@ function tickEvent(dt) {
     const E = eventHidup[i];
     E.umur += dt;
     E.sisa -= dt;
-    try { E.def.tick && E.def.tick(E, dt, S); } catch (e) { console.warn('[event]', E.id, e); }
+    try { E.def.tick && E.def.tick(E, dt, S); } catch (e) { console.warn('[event]', E.id, e); laporGalatEvent(E.id, e); }
     if (E.sisa <= 0 || E.selesaiCepat) matikanEvent(E);
   }
 
@@ -6919,7 +8204,7 @@ function pada(E, detik, fn) {
 function gambarLapis(nama) {
   for (const E of eventHidup) {
     const fn = E.def[nama];
-    if (fn) { try { fn(E, S); } catch (e) { console.warn('[event]', E.id, e); } }
+    if (fn) { try { fn(E, S); } catch (e) { console.warn('[event]', E.id, e); laporGalatEvent(E.id, e); } }
   }
 }
 
@@ -7196,8 +8481,49 @@ function gambarTemaMeja(x, y) {
 /* -------------------------------------------------------------------- loop */
 let last = performance.now();
 let dripT = 0;
+let frameGambarTs = -1e9;   // ts frame terakhir yang benar-benar digambar (jatah 30 fps)
+
+/* Penjadwal frame. rAF dijeda peramban saat tab tersembunyi; di mode ringan
+   simulasinya tetap dijalankan 15 fps lewat setTimeout supaya pegawai tidak
+   melompat waktu tab dibuka lagi — dan jam ruangan tetap terasa jalan. Di mode
+   biasa tetap rAF murni (dijeda saat tersembunyi), persis seperti dulu. */
+function jadwalFrame() {
+  if (ringanAktif() && document.hidden) {
+    // Timer halaman di tab tersembunyi di-throttle Chrome ke ~1 Hz; timer di
+    // Worker tidak (diukur: 30 ketukan/2 s vs 3). Worker-nya dibuat saat
+    // dibutuhkan dan dimatikan sendiri begitu ketukannya tidak ditunggu lagi
+    // (tab tampak → rantai kembali ke rAF). Gagal bikin Worker → setTimeout.
+    if (!tickerSembunyi) tickerSembunyi = buatTickerSembunyi();
+    if (tickerSembunyi) { tickerSembunyi.tunggu = true; return; }
+    setTimeout(() => frame(performance.now()), 1000 / 15);
+    return;
+  }
+  requestAnimationFrame(frame);
+}
+let tickerSembunyi = null;
+function buatTickerSembunyi() {
+  try {
+    const src = 'setInterval(function(){postMessage(0)},' + Math.round(1000 / 15) + ')';
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.tunggu = false;
+    w.onmessage = () => {
+      if (!w.tunggu) { w.terminate(); if (tickerSembunyi === w) tickerSembunyi = null; return; }
+      w.tunggu = false;
+      frame(performance.now());
+    };
+    return w;
+  } catch { return null; }
+}
 
 function frame(ts) {
+  const ringan = ringanAktif();
+  // Mode ringan: 30 fps. Frame yang terlalu cepat dilewati TANPA menyentuh
+  // `last`, jadi dt frame berikutnya menampung dua interval — simulasinya
+  // tetap tepat waktu, cuma digambar separuh sesering. Toleransi 1,5 ms
+  // supaya 60 Hz tepat terbagi dua (16,7 → skip, 33,3 → gambar).
+  if (ringan && !document.hidden && ts - frameGambarTs < 1000 / 30 - 1.5) { requestAnimationFrame(frame); return; }
+  frameGambarTs = ts;
+  catatFps(ts);
   const dt = Math.min(0.05, (ts - last) / 1000);
   last = ts;
   now = ts;
@@ -7205,13 +8531,16 @@ function frame(ts) {
 
   tickEvent(dt);        // sebelum update: MOD dipasang di sini, dibaca di bawah
   tickKamera(dt);       // sebelum update pegawai: balon DOM-nya dihitung lewat keLayar()
-  putarKipas += dt * 11 * MOD.kipas;
+  // prefers-reduced-motion: kipas plafon dibekukan (animasi non-esensial);
+  // kedip neon & langkah pegawai tetap — itu isi ruangannya, bukan hiasan
+  if (!geraKurang.matches) putarKipas += dt * 11 * MOD.kipas;
 
   // disalin dulu: peserta yang sampai di pintu menghapus dirinya saat update
   for (const a of [...agents.values(), ...peserta, ...standby]) a.update(dt);
   dripT += dt;
   if (dripT > MOD.drip) { dripT = 0; spawn('drip', 347, 30); }  // AC-nya memang bocor
   updateParts(dt);
+  updateDebu(dt);
 
   const busy = [...agents.values(), ...peserta, ...standby].filter((a) => a.state === 'work');
   const activeStations = new Set(busy.map((a) => a.station));
@@ -7261,20 +8590,44 @@ function frame(ts) {
 
   drawParts();
   drawAmbien();
+  drawDebu();           // sesudah selubung suasana: debu harus ditembus cahaya, bukan ikut digelapkan
   gambarLapis('gambarAtas');
 
   // vignette milik layar, bukan ruangan: waktu kamera membidik pojok, yang
   // gelap tetap tepi bidikan — bukan pojok ruangan yang sedang dilihat
   if (KAMERA.zoom !== 1) ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const g = ctx.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(30,40,30,' + MOD.vignette.toFixed(3) + ')');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  if (ringan) ctx.drawImage(vignetteLapis(MOD.vignette), 0, 0);   // dari cache; digambar ulang cuma saat alphanya berubah
+  else {
+    const g = ctx.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(30,40,30,' + MOD.vignette.toFixed(3) + ')');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
   ctx.restore();
 
   taruhKartu();
-  requestAnimationFrame(frame);
+  jadwalFrame();
+}
+
+// Vignette mode ringan: milik layar (bukan ruangan), jadi kameranya tidak
+// pernah mengubahnya — kuncinya cuma alpha MOD.vignette. Event yang
+// meng-lerp alphanya tiap frame membuatnya digambar ulang tiap frame juga,
+// sama dengan sebelumnya; tidak pernah lebih buruk.
+let vignetteCache = null, vignetteKunci = '';
+function vignetteLapis(alpha) {
+  const kunci = alpha.toFixed(3);
+  if (vignetteCache && vignetteKunci === kunci) return vignetteCache;
+  if (!vignetteCache) { vignetteCache = document.createElement('canvas'); vignetteCache.width = W; vignetteCache.height = H; }
+  const k = vignetteCache.getContext('2d');
+  k.clearRect(0, 0, W, H);
+  const g = k.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(30,40,30,' + kunci + ')');
+  k.fillStyle = g;
+  k.fillRect(0, 0, W, H);
+  vignetteKunci = kunci;
+  return vignetteCache;
 }
 
 jagaPopulasi();      // ruangan sudah berisi sejak halaman dibuka

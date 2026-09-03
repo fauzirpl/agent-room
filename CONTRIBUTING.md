@@ -18,18 +18,44 @@ menyebutnya.
 ## Cara uji
 
 ```bash
-npm test                        # = node uji-event.mjs --semua
-node uji-event.mjs <id>         # satu event, detail lengkap
+npm test                        # = uji-event --semua && uji-zorder && uji-katalog
+node uji-event.mjs <id>         # satu event, detail lengkap (termasuk hook gambar & rantai lanjutan)
 node uji-event.mjs --daftar     # semua id yang valid
+node uji-event.mjs --penjadwal  # cuma aturan bentrok / kelas panggung / pinjam aktor
+node uji-zorder.mjs             # z-order frame() vs golden; --tampil untuk melihat urutannya
+node uji-katalog.mjs            # papan skor katalog (event-acak.json vs kode); --gerbang untuk menggagalkan
 node --check server.mjs && node --check dinas.mjs
 ```
 
 Harness `uji-event.mjs` memuat `public/room.js` + `public/event-acak.js` apa
 adanya ke sandbox `node:vm` dan memanggil `syarat()/mulai()/tick()/selesai()`
-tiap event langsung, tanpa peramban. `Date` di sandbox dikunci ke Rabu
-15 April 2026 supaya hasilnya tidak berubah mengikuti kalender. CI
-(`.github/workflows/uji.yml`) menjalankan hal yang sama plus smoke test
-`/health` di tiap push.
+tiap event langsung, tanpa peramban. Hook `gambar*` ikut dipanggil terhadap
+canvas 2D palsu yang **melempar** kalau ada argumen angka `NaN`/`undefined`
+(di peramban kesalahan itu diam — gambarnya cuma tidak muncul); rantai
+`lanjutan` diikuti sampai kedalaman 3; aturan `bentrok`/`kelas panggung`/
+`perluAktor` diuji lewat fungsi asli `room.js`. `Date` di sandbox dikunci ke
+Rabu 15 April 2026 supaya hasilnya tidak berubah mengikuti kalender. Hook
+gambar yang memang melempar karena bug yang belum sempat diperbaiki dicatat
+di `DIKETAHUI` (uji-event.mjs) supaya CI tetap hijau tanpa bug-nya hilang dari
+laporan — hapus entrinya begitu diperbaiki.
+
+`uji-zorder.mjs` memanggil `frame()` asli dengan pegawai fixture di posisi
+tetap (pita lajur bawah, duduk di kursi rapat, di depan/belakang meja kerja,
+prop event ber-`sortY`, dst.) dan merekam **urutan** gambar prop/pegawai —
+disimpan sebagai daftar id di `uji-zorder.golden.json`, bukan angka y. Kalau
+kamu sengaja mengubah aturan depth sort (`PROPS[].sortY`, pita 230–265,
+`SORT_KURSI_DEKAT`) dan uji ini merah dengan diff yang memang kamu maksud,
+perbarui golden-nya dan commit bersama perubahan kodenya:
+
+```bash
+node uji-zorder.mjs --perbarui
+```
+
+`uji-katalog.mjs` cuma papan skor: mencetak berapa id `event-acak.json` yang
+sudah terdaftar di `event-acak.js`, yang belum (per kategori), dan id yang
+terdaftar tapi tidak ada di katalog. Angka "berapa event sudah jadi kode" di
+README/DESIGN diambil dari sini. CI (`.github/workflows/uji.yml`) menjalankan
+ketiganya plus smoke test `/health` di tiap push.
 
 ## Gaya commit
 

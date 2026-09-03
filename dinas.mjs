@@ -206,6 +206,12 @@ function cekToken() {
   try { return fs.statSync(berkas).size > 0 ? berkas : null; } catch { return null; }
 }
 
+const tundaDir = () => process.env.AGENT_ROOM_TUNDA_DIR || path.join(os.homedir(), '.agent-room', 'tunda');
+function hitungTunda() {
+  try { return fs.readdirSync(tundaDir()).filter((n) => /^\d{13}-[a-z0-9]{1,12}\.json$/.test(n)).length; }
+  catch { return 0; }
+}
+
 /* ————— laporan sebelum kantor dibuka ————— */
 function laporan(bin, hook, token) {
   const baris = (k, v) => console.log('  ' + abu(k.padEnd(13)) + v);
@@ -241,6 +247,13 @@ function laporan(bin, hook, token) {
     : abu('mati') + abu('  (nyalakan: dinas --kendali)'));
 
   baris('alamat', putih('http://127.0.0.1:' + PORT));
+
+  // kotak surat hook offline: berkas yang ditulis hook selagi kantor tutup,
+  // dipungut server begitu nyala — angkanya saja, isinya tidak dibaca
+  const tunda = hitungTunda();
+  baris('surat tunda', tunda
+    ? kuning(tunda + ' berkas') + abu('  (' + tundaDir() + '; diserap begitu kantor buka)')
+    : abu('tidak ada') + abu('  — hook tidak pernah menulis selagi kantor tutup'));
 
   // gerbang: kunci event & kantor pusat (multi-mesin) — dibaca dari env yang
   // sama yang dipakai server dan installer, supaya laporannya tidak bohong

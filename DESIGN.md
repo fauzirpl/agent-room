@@ -118,6 +118,47 @@ kunci, dan alamat kantor pusat kalau env-nya ada) tanpa menyentuh berkas apa pun
 
 **Restart sesi Claude Code setelah install** — hook dibaca waktu sesi mulai.
 
+### Kotak surat hook offline
+
+Dulu perintah hook diakhiri `|| exit 0`: server ruangan mati, event-nya
+hilang, sesi jalan terus. Sekarang cabang `||`-nya menulis surat:
+
+```
+curl -s -m 2 --connect-timeout 1 -X POST -H "content-type: application/json" \
+  -H "x-agent-room: 1" -H "Expect:" -H "x-agent-room-mesin: <host>" \
+  -T - http://127.0.0.1:4517/event || node "<agent-room>/hook.mjs" --tunda
+```
+
+Kuncinya di `-T -`, bukan `--data-binary @-`. Keduanya mengirim stdin sebagai
+body, tapi `--data-binary` **menghabiskan stdin sebelum tersambung** — kalau
+koneksinya ditolak, cabang `||` menerima stdin kosong dan tidak ada yang bisa
+disimpan. `-T -` baru membaca stdin sesudah koneksi berdiri (dikirim
+`Transfer-Encoding: chunked`, `Expect:` dikosongkan supaya curl tidak menunggu
+100-continue), jadi saat server mati payload masih utuh untuk `hook.mjs
+--tunda`, yang menaruhnya di `~/.agent-room/tunda/<ts>-<acak>.json`
+(`AGENT_ROOM_TUNDA_DIR` memindahkannya). Server memungut folder itu saat start
+dan tiap 60 detik: diurutkan menurut `ts` di nama berkas, diserap lewat jalur
+yang **sama persis** dengan `POST /event` (normalize, ring/SSE, agenda, buku
+induk) dengan `tunda: true` dan **ts asli** — agenda mencatat kapan
+kejadiannya, bukan kapan kantornya buka lagi — lalu berkasnya dihapus. Yang
+tidak ikut untuk event tunda: nota dinas keluar (keadaan tertahan berjam-jam
+lalu bukan bahan lapor) dan pemantau transkrip (sesinya sudah lewat).
+
+Batasnya dijaga di sisi penulis: berkas lebih tua dari 24 jam dibuang, dan
+kalau sudah 500 berkas / 20 MB yang paling tua disingkirkan dulu. Folder
+0700, berkas 0600, ditulis `.tmp` lalu rename supaya pemungut tidak pernah
+membaca berkas setengah jadi. `hook.mjs` sebagai transport utama
+(`install.mjs --node`) juga menulis surat kalau kirimnya gagal.
+`dinas --periksa` menampilkan jumlah surat yang belum dipungut. Cabang `||`
+sendiri berlaku di ketiga shell yang mungkin menjalankan hook di Windows
+(cmd.exe, Git Bash) maupun sh di Linux/macOS — diuji ketiganya — dan
+`hook.mjs` tetap keluar 0 tanpa menulis stdout, jadi sesi tidak pernah kena
+warning. Ongkos di jalur normal nol: node hanya dipanggil saat curl gagal.
+
+Satu batas yang harus jujur: kotak surat ini **lokal**. Hook di kantor cabang
+(`AGENT_ROOM_URL` menunjuk mesin lain) menulis suratnya di mesin cabang, dan
+hanya server yang berjalan di mesin itu yang memungutnya.
+
 ### Event yang dipasang
 
 Dokumentasi hook Claude Code mencantumkan 33 event. Yang dipasang 16 — yang
@@ -171,6 +212,19 @@ yang orangnya antre. Ruang tunggu tinggal jadi limpahan: dipakai hanya kalau
 empat meja sudah terisi semua, dan begitu ada meja yang kosong, yang menunggu
 langsung dipanggil balik.
 
+**Menyadap MCP sampai nama servernya.** Tool MCP bernama
+`mcp__<server>__<tool>`, dan sebelumnya server cuma tahu "ini MCP". Sekarang
+`normalize()` memecahnya sekali: `ev.mcpServer`, `ev.mcpTool` (pola tidak
+cocok → dua field itu tidak ada, bukan tebakan), dan label bawaannya
+`<server> · <tool>` — `Claude_Browser · navigate`, bukan string pertama dari
+input-nya. Halaman menyusun kegiatannya dari nama tool yang sama:
+"berkoordinasi dengan Claude Browser · navigate". `PostToolUse` MCP yang
+`duration_ms`-nya lewat 8 detik ditandai `lambat: true` (ikut ke agenda) —
+tool luar yang lelet itu informasi, bukan kesalahan pegawainya. Buku induk
+menambah tabel `mcp: { <server>: jumlah }` per proyek, dibatasi 20 kunci,
+sisanya `(lain)`. Loket per server di kanvas sengaja belum: semua MCP masih
+menghadap kepala dinas.
+
 **Kongsi seproyek.** Dua sesi nyata yang `cwd`-nya sama (cabang git boleh
 beda) duduk bersebelahan: waktu salah satunya kebagian meja kerja, yang dipilih
 bukan urutan prioritas `MEJA_KERJA_X`, melainkan meja kosong yang paling dekat
@@ -182,6 +236,29 @@ meja tanpa sebab. Sesekali (±20–40 detik) dua rekan yang sama-sama menganggur
 saling menoleh sebentar, satu dari lima kali sambil bertanya pendek soal
 branch. Itu bukan event acak: tidak masuk log, tidak menaikkan statistik, dan
 batal seketika begitu tool call datang. Beda proyek tetap asing.
+
+**Antrean stasiun.** Stasiun punya kapasitas (PC server 4 slot, meja rapat 9
+kursi, meja kerja 6). Dulu yang kelima berdiri berimpit di slot pertama;
+sekarang dia **mengantre** di lajur di belakang stasiun — berjarak 10 px,
+paling banyak tiga yang kelihatan — dengan pose berdiri biasa menghadap
+stasiunnya, bukan pose butuh manusia. Begitu ada slot kosong, yang paling
+depan maju sendiri dan yang di belakangnya merapat. Secara logika dia tetap
+`work` (tool call-nya memang sedang jalan), jadi kartu dan statistik tidak
+berubah; yang antre cuma posisinya (`antre`, `tickAntre`). Yang datang
+belakangan tidak pernah menyalip antrean yang sudah ada.
+
+**Ritual pulang.** `SessionEnd` tidak lagi menghapus pegawainya di tempat.
+Sesi yang tuntas (sudah `Stop`, tidak sedang menunggu siapa pun) berjalan ke
+mesin absen, berhenti 0,6 detik menempel jari, lalu keluar lewat tepi kanan
+lajur atas dan hilang; kalau ada rekan seproyek yang menganggur, dia singgah
+sedetik untuk salaman (saling hadap) dulu. Slot mejanya dilepas **begitu
+berangkat**, bukan setelah hilang — laptopnya padam saat itu juga, dan orang
+lain boleh langsung menempati. Jatah seluruh ritual 6 detik dan diukur di
+muka: yang tidak muat dibuang dari belakang (salaman dulu, lalu absennya —
+dari meja paling kiri mesin absen ±10 detik jauhnya, jadi dia langsung keluar
+lewat tepi terdekat). Sesi yang mati mendadak — `SessionEnd` tanpa `Stop`,
+masih memegang tugas, atau dihapus dari panel — tidak berritual: hilang
+langsung seperti dulu.
 
 ### Butuh manusia
 
@@ -298,6 +375,15 @@ berpikir berikutnya kembali ke meja kerja sendiri.
 
 Yang dialihkan hanya empat tool di atas. Perintah shell non-git juga jatuh ke
 meja kerja, tapi **tidak** ikut pindah: menjalankan perintah bukan berpikir.
+
+**Transisi duduk & jeda tiba.** Tiba di stasiun tidak langsung berpose kerja:
+ada jeda antisipasi 150 ms — `state`-nya sudah `work` (kartu dan statistik
+tidak bergeser), cuma gambarnya yang menunggu (`poseKerja`). Di kursi rapat,
+duduk dan berdiri bukan teleport: badannya turun 2 px per frame, tiga frame,
+±150 ms (`turunDuduk`), dan bangkitnya kebalikannya sambil melangkah pergi.
+Dua-duanya dilewati kalau pegawainya sedang beku atau event acak sedang
+mengatur posenya, dan tidak menggeser jam event apa pun — `pada(E, t, …)`
+tetap dibaca dari umur event, bukan dari pose.
 
 ### Kenapa perintah shell dipecah dua
 
@@ -433,12 +519,53 @@ terpisah dari isi pesan yang diformat.
 Kotak kabar menyimpan 60 kabar terakhir, bisa dibolak-balik dengan `←` `→`,
 ditutup dengan `Esc`.
 
+### Meja disposisi & pencarian
+
+Utas grup enak dibaca berurutan, tapi payah buat *mencari*: "izin yang tadi
+pagi soal `rm -rf` itu kabar yang mana?" Untuk itu ada tombol 📚 **meja
+disposisi** — tumpukan berkas di meja kadis, bukan grup chat kedua. Dialognya
+berdiri sendiri (`mejaGambar()` dkk. di room.js) dan cuma **membaca** larik
+`kabar`; modal kabar dan `kabarUtas()` tidak disentuh, klik satu kartu memanggil
+`kabarBuka(idx)` yang sudah ada dan menutup mejanya. Isinya:
+
+- **kotak cari** — substring tanpa peduli huruf besar-kecil, mencari di
+  perihal, isi, pertanyaan + pilihan `AskUserQuestion`, nama pegawai, jabatan,
+  tool, dan id sesi;
+- **tab jenis** (semua / hasil / tanya · izin / galat / lainnya) dan **pilihan
+  pegawai** dari sesi yang memang ada di tumpukan — hitungannya ikut kata kunci
+  yang sedang diketik;
+- **kartu kecil** per kabar: stempel jenis, perihal, jam, nama pengirim
+  (garis tepi warna seragamnya), cuplikan satu baris. Terbaru di atas, seperti
+  tumpukan berkas;
+- 📌 **sematkan**: kabar tersemat disalin utuh ke `localStorage` (`mejaSemat`,
+  paling banyak 40), bukan cuma id-nya — nomor urut kabar cuma hidup sebatas
+  sesi halaman, dan server cuma memutar ulang 60 event terakhir. Kuncinya
+  `sesi|ts|jenis`; `ts` datang dari server, jadi kabar yang sama sesudah muat
+  ulang dikenali sebagai berkas yang sama. Yang tersemat **tidak ikut
+  dipangkas** `KABAR_MAX` (`kabarMasuk()` membuang kabar tak tersemat paling
+  tua), dan yang sudah tidak ada lagi di larik tampil bergaris putus — dibaca
+  di tempat, karena tidak ada lagi balonnya di utas;
+- ⎘ **salin** sebagai teks polos (`navigator.clipboard`, jatuh ke textarea +
+  `execCommand` kalau perambannya menolak): stempel waktu, nama, perihal, isi,
+  tool, sesi;
+- **cari di agenda** (atau Enter di kotak cari): kata kunci yang sama ke
+  `GET /agenda?q=…&dari=…&sampai=…&limit=100`, hari ini plus enam hari
+  sebelumnya, hasilnya daftar sederhana jam · sesi · tool · label di bawah
+  tumpukan. Kotak kabar cuma ingatan halaman; buku agenda ingatan server.
+
+Kalau server jalan dengan `AGENT_ROOM_ISI=off` (`kendali.isiAktif === false`),
+kotak cari dan tombol agenda **dimatikan dengan keterangan**, bukan dibiarkan
+menghasilkan kosong yang membingungkan — kabar tidak membawa kalimat agen dan
+agenda tidak membawa label, jadi memang tidak ada isi yang bisa dicari.
+Saringan jenis dan pegawai tetap jalan.
+
 ### Tombol di bilah bawah
 
 | Tombol | Guna |
 |---|---|
 | ⚙️ | buka panel **Pengaturan** — lihat di bawah |
 | 💬 | buka kotak kabar; lencananya jumlah kabar yang belum dibaca |
+| 📚 | buka **meja disposisi**: cari, saring, sematkan, salin kabar; cari di buku agenda |
 
 Lima setelan yang dulu masing-masing punya tombol sendiri di bilah ini sekarang
 digabung ke satu panel **Pengaturan** (⚙️), supaya tidak perlu menghafal lima
@@ -564,6 +691,64 @@ Baris yang rusak tidak lagi dibuang diam-diam: dihitung dan dilaporkan satu
 baris di konsol. Keduanya tidak di-commit ke git (lihat `.gitignore`), sama
 seperti `.agent-room-token`.
 
+**Versi skema.** Tiga berkas di disk hidup lebih lama dari kode yang
+menulisnya — riwayat token, `agenda/*.jsonl`, `buku-induk.json` — dan
+sebelum ini bentuknya cuma disepakati diam-diam. Sekarang tiap baris/berkas
+baru membawa `v` dari satu tabel `SKEMA` di `server.mjs` (token 1, agenda 1,
+buku induk 1). Saat muat, baris **tanpa** `v` dianggap v0 dan dimigrasi di
+memori lewat `migrasiToken()/migrasiAgenda()/migrasiBukuInduk()` (hari ini
+identitas: cuma menambal `v`); baris yang gagal parse **atau** `v`-nya lebih
+besar dari yang dikenal proses ini (ditulis server yang lebih baru) ditolak,
+dihitung, dan dilaporkan satu baris di konsol — `token-riwayat: N baris
+ditolak (skema v1; a bukan JSON / tanpa ts, b ber-v lebih baru)` — menyatu
+dengan hitungan baris rusak dari pemadatan di atas. Berkas lama tidak pernah
+ditulis ulang demi versi; baris v0 baru ikut ber-`v` kalau kebetulan dilebur
+pemadatan. Menaikkan versi: naikkan angkanya di `SKEMA`, tambah cabang
+`if (v < N)` di fungsi migrasinya (berurutan, supaya v0 pun melewati semua
+tahap); penulisnya otomatis memakai angka baru.
+
+### Papan SKP & nota mingguan
+
+Riwayat token menjawab "habis berapa", buku induk menjawab "sudah berapa lama",
+tapi tidak ada yang menjawab pertanyaan rapat Senin pagi: **minggu ini siapa
+mengerjakan apa, seberapa sering gagal, berapa kali tertahan**. Papan SKP
+(tab kedua di modal 📊, `GET /skp?dari=&sampai=`) menjawab itu per proyek dan
+per sesi untuk rentang 7/14/30 hari, dan tombol 🖨️ di tab yang sama
+menjilidnya jadi **nota dinas laporan mingguan**.
+
+Angkanya **dihitung saat diminta** dari tiga catatan yang sudah ada di disk —
+bukan tabel baru yang harus dipelihara: buku agenda (tool call dari `pre`,
+gagal dari `post` yang `ok:false`, durasi dari `durasi`, tertahan dari
+`izin-minta`/`stop-gagal`, campuran tool, jam dinas *dalam rentang* dengan
+aturan celah ≤ 5 menit yang sama seperti buku induk), rincian harian riwayat
+token (masuk/keluar/cache per proyek per hari, jadi rentangnya bisa dipotong
+persis per tanggal), dan buku induk (jam dinas karier + golongan). Sengaja
+**bukan** dari arsip kliping mingguan: kliping dijilid per Senin dan cuma
+menyimpan angka teratas, sedangkan laporan butuh rentang bebas dan angka per
+sesi — dan agenda toh sudah menyimpan setiap event yang dibutuhkan. Tiga
+sumber, satu kalkulasi di server (`skpHitung()`), di-cache 30 detik per
+rentang supaya modal yang dibuka-tutup tidak membaca ulang tiga puluh berkas
+agenda. Endpointnya tanpa token, sekelas `/token-riwayat`: yang keluar cuma
+angka, nama folder, cabang, dan nama tool; label tidak pernah ikut, jadi
+`AGENT_ROOM_ISI=off` tidak punya apa-apa untuk disembunyikan di sini.
+
+Nota dinasnya satu halaman HTML mandiri — inline CSS, `@media print`,
+`@page` A4 — dibuka di tab baru dan **dicetak lewat Ctrl+P**, "Simpan sebagai
+PDF" bawaan browser. Bukan pustaka PDF: proyek ini nol dependency, dan mesin
+cetak browser sudah cukup rapi untuk kop, tabel berbingkai, dan blok tanda
+tangan; yang perlu ditulis tangan cuma gaya kertasnya. Nomornya
+`ND/urut/AR/bulan romawi/tahun` (`nomorNota()`), urutannya penghitung per
+browser yang naik tiap nota diterbitkan — bukan tiap tabel dilihat. Halaman
+utama dengan `?cetak=mingguan` (opsional `&hari=14`) membuka lembar yang sama
+sebagai lapisan di atas ruangan dan memanggil `print()` begitu datanya ada,
+supaya bisa dijadwalkan (`chrome --kiosk-printing "http://127.0.0.1:4517/?cetak=mingguan"`).
+Minggu yang kosong ditulis apa adanya sebagai laporan nihil.
+
+Batasnya sama dengan yang lain dan tertulis di tabel maupun di catatan kaki
+nota: **sejak dipantau** — sesi yang berjalan sebelum ruangan dibuka tidak
+punya baris agenda dari jam itu; jam dinas karier dan golongan milik seluruh
+karier proyek, bukan cuma minggu laporan; dan token tetap token, bukan biaya.
+
 ### Yang berubah soal privasi
 
 Sebelum ini server cuma menyiarkan **metadata**. Sekarang isi percakapan ikut
@@ -608,6 +793,35 @@ event sekarang bisa membawa `mesin`, nama host mesin pengirim, yang ikut ke
 jaringan adalah keputusan sadar yang menuntut `AGENT_ROOM_KUNCI`, dan tanpa
 tunnel/TLS seluruh isi di atas — `pikir`, `ucap`, prompt — ikut lewat
 jaringan apa adanya.
+
+Satu lagi, **telemetri galat halaman**: `window.onerror`/`unhandledrejection`
+dan galat di jalur event acak dikirim ke `POST /galat` (paling banyak 5 per
+menit, pesan yang sama sekali saja), dan yang dikirim hanya pesan galat,
+nama berkas beserta barisnya, id event yang sedang jalan, serta nama
+peramban — tidak pernah stack berisi path, apalagi isi apa pun. Server
+menulis satu baris `[agent-room] galat halaman: …` ke konsol dan menyimpan
+50 terakhir **di memori saja** (terbaca di `GET /galat`), tidak pernah ke
+disk; masih hanya-localhost lewat penjaga Host dan cek Origin yang sama
+dengan `/ambien`. Gunanya buat pemecahan masalah: halaman ini sering hidup di
+layar kedua yang tidak ada yang memelototi, dan "event X meledak di
+`tick()`" lebih enak terbaca dari terminal server daripada dari devtools
+yang harus dibuka dulu.
+
+Sejak ada **kotak surat hook offline** (lihat **Pasang hook**), ada satu
+tempat lagi di disk yang menyimpan **payload hook mentah** — termasuk
+`tool_input` dan `tool_response`, jadi isi berkas yang dibaca agen dan
+keluaran perintahnya — yaitu `~/.agent-room/tunda/`. Ini satu-satunya berkas
+milik agent-room selain transkrip Claude Code sendiri yang memuat isi kerja,
+dan bedanya nyata dari agenda yang cuma metadata. Pembatasnya: berkas hanya
+lahir saat server mati, folder 0700 / berkas 0600 di home pengguna, dihapus
+begitu dipungut, dan yang lebih tua dari 24 jam dibuang tanpa dibaca —
+sehingga umurnya paling lama sehari. `AGENT_ROOM_ISI=off` tidak
+mempengaruhinya (isinya payload hook, bukan transkrip); yang tidak mau ada
+jejak sama sekali selagi server mati cukup memasang ulang hook dengan
+`|| exit 0` seperti dulu.
+
+`GET /metrics` (lihat **Pemantauan**) tanpa token, dan yang keluar cuma angka:
+tidak ada nama proyek kecuali `AGENT_ROOM_METRICS_PROYEK=1` dipasang sadar.
 
 ## Buku agenda
 
@@ -785,6 +999,18 @@ daripada kepala dinas yang menganggur.
 Pegawai standby dan peserta rapat ikut berjabatan, tapi jabatannya cuma berlaku
 selama halaman terbuka — mereka tidak punya sesi di server untuk dititipi.
 
+**Stamina & suasana hati.** Tiap pegawai punya `stamina` 0..1 yang mulai
+penuh saat sesinya lahir dan turun pelan dari jumlah tool call, kegagalan
+(lebih berat), lama di kantor, dan waktu menunggu kamu; naik lagi saat
+menganggur dan selagi dipinjam event pantry. Efeknya **kosmetik saja**: di
+bawah 0,3 langkahnya 0,85× (tidak lebih lambat — kedatangan ke stasiun tetap
+cepat, Aturan 1 event acak), bahu dan kepalanya turun sepiksel, dan wajahnya
+'lelah' (kelopak turun) sebagai ekspresi prioritas paling rendah — yang
+sedang bekerja tetap terlihat fokus. Turunannya, `suasana` ('segar' /
+'biasa' / 'lelah'), cuma muncul sebagai satu baris *kondisi* di kartu
+pegawai; tidak masuk log, tidak masuk statistik. Konstantanya `STAMINA_*` di
+[public/room.js](public/room.js).
+
 ## Kartu pegawai
 
 Klik pegawainya — di ruangan atau di barisnya pada panel — untuk membuka kartu
@@ -810,6 +1036,26 @@ cuma keterangan mereka ini apa.
 
 Menutupnya: klik lantai kosong, tombol ✕, atau baris yang sama sekali lagi.
 Pegawai yang pulang di tengah jalan menutup kartunya sendiri.
+
+### Daftar kru: seksi per proyek & pin
+
+Begitu dua-tiga repo dipantau sekaligus, daftar kru di panel jadi campur aduk.
+`renderCrew()` sekarang menyusun baris lewat `kruSusun()`: sesi nyata
+dikelompokkan per `a.project` di bawah **kepala seksi** kecil (nama proyek +
+jumlah, seperti map gantung di lemari arsip) yang bisa **dilipat** dengan
+sekali klik — daftar proyek yang dilipat diingat peramban (`kruLipat`).
+Kepala seksi cuma muncul kalau memang ada **≥2 proyek berbeda**; satu proyek
+tidak butuh judul. Yang tanpa proyek jatuh ke seksi "tanpa proyek" paling
+bawah.
+
+📌 di tiap baris **menyematkan** sesi ke puncak daftar, di luar seksi mana pun
+— buat sesi yang sedang kamu tunggu. Pinnya sengaja tidak diingat: id sesi
+tidak pernah kembali, jadi pin hilang begitu pegawainya pulang
+(`kruSusun()` membersihkannya tiap gambar ulang). Peserta rapat tetap
+menumpang persis di bawah pemanggilnya (`p.pemilik`), termasuk ikut
+tersembunyi kalau seksinya dilipat; standby tetap paling bawah. Angka besar
+"sesi" di atas panel tidak berubah — tetap `agents.size`, bukan jumlah yang
+sedang kelihatan.
 
 ### Cabang git sebagai konteks sesi
 
@@ -933,6 +1179,98 @@ selama 4 detik, tapi mundur ke tampak penuh begitu dua orang sama-sama
 aktif (jangan bolak-balik). *Sinematik* berkeliling stasiun sesudah 60 detik
 sepi, dan dimatikan kalau `prefers-reduced-motion` menyala.
 
+### Debu di berkas cahaya & rim light
+
+Dua sentuhan kecil yang membuat cahayanya terasa *mengisi* ruangan, bukan
+sekadar ditempel di atasnya. **Debu** (`debu[]`, `updateDebu`/`drawDebu`):
+paling banyak 40 butir 1 px, alpha rendah, melayang pelan sekali — dan hanya
+lahir *di dalam* berkas: kerucut neon waktu malam, berkas jendela di lantai
+waktu siang. Yang hanyut keluar dari berkasnya dibunuh, bukan dibiarkan
+melayang di gelap; debu memang ada di mana-mana, tapi cuma kelihatan waktu
+ditembus cahaya. Digambar sesudah selubung suasana supaya tidak ikut
+digelapkan.
+
+**Rim light** (`sumberCahaya`/`rimPegawai`, dipakai `drawPerson`): satu piksel
+tepi badan di sisi yang menghadap cahaya, diwarnai lewat jalur tepi sprite
+yang sudah ada (`lerpHex` dari warna baju ke warna cahaya), bukan lapisan alpha
+di atasnya — jadi tetap satu piksel tegas seperti tepi lainnya. Sumbernya
+sengaja **satu** yang dominan per frame: neon terdekat waktu malam, jendela
+waktu siang, senja memilih yang lebih kuat. Dua sumber berarti dua sisi
+terang, dan sprite selebar 10 px berhenti terbaca sebagai badan bertepi.
+Yang tepat di bawah lampu tidak dapat rim (tidak ada "sisi"), yang memegang
+map disposisi dilewati karena mapnya menutupi separuh badan. Depth-sort tidak
+disentuh sama sekali. Keduanya mati di mode ringan.
+
+### Mode ringan
+
+Halaman ini biasanya dibiarkan hidup berjam-jam di layar kedua atau laptop,
+dan 60 fps dengan tujuh gradasi radial per frame itu boros buat ruangan yang
+isinya berubah pelan. Mode ringan (centang di ⚙️, diingat browser) menyala
+sendiri kalau `?ringan=1` di URL, `prefers-reduced-motion` aktif, atau
+Battery API melaporkan baterai <30 % tanpa dicas (opsional — kalau API-nya
+tidak ada, ya tidak ada). Yang berubah:
+
+- **30 fps**: `frame()` melewati frame yang datang terlalu cepat *tanpa*
+  menyentuh `last`, jadi `dt` frame berikutnya menampung dua interval —
+  simulasinya tetap tepat waktu, cuma digambar separuh sesering. Saat tab
+  tersembunyi rAF dijeda peramban; mode ringan menjalankan simulasinya 15 fps
+  lewat `setTimeout` supaya pegawai tidak melompat waktu tab dibuka lagi.
+- **pendar neon dari cache** (`neonLapis`): geometrinya tetap dan semua
+  alphanya linear terhadap intensitas, jadi tiap neon cukup digambar sekali ke
+  kanvas offscreen pada intensitas 1, lalu tiap frame cuma `drawImage` dengan
+  `globalAlpha` = intensitas saat itu. Kedipnya tetap hidup — yang berkedip
+  alphanya — tapi `createRadialGradient` per frame turun dari 8 ke 0.
+  Vignette (`vignetteLapis`) sama, dikunci pada alpha `MOD.vignette`.
+- jatah partikel separuh (120; yang tertua digusur, bukan yang baru ditolak,
+  karena pemanggil boleh memegang partikel yang dikembalikan `spawn`), debu
+  mati, rim light mati. Kedip neon **tidak** dimatikan: itu identitas
+  ruangan, bukan hiasan. `prefers-reduced-motion` juga membekukan kipas
+  plafon.
+
+Fps sebenarnya (frame yang benar-benar digambar) tampil kecil di panel ⚙️
+selagi panelnya terbuka, berikut sebab otomatisnya kalau ada.
+
+### Mode kadis: `?kadis=1`
+
+Kepala dinas yang melirik dari HP tidak butuh diorama; dia butuh daftar. Dengan
+`?kadis=1` kanvas dan bilah panggung disembunyikan (`body.mode-kadis` di
+style.css), panel jadi **satu kolom penuh layar** berhuruf lebih besar dengan
+tombol setinggi jempol, dan di atas daftar kru ada ringkasan
+(`kadisGambar()` di room.js) yang menjawab pertanyaan kadis berurutan: siapa
+**menunggu paraf/izin**, siapa **berhenti karena galat**, siapa **sedang
+bekerja**, siapa di meja tanpa tool call, berapa yang **antre** di loket
+disposisi, dan **token hari ini** dari `/token-riwayat` (angka token saja,
+tanpa dolar — biaya di halaman ini toh "data sementara"). Tombol merah
+**muat ulang** di bawahnya, karena di HP tidak ada F5. Ringkasan digambar
+ulang tiap `renderCrew()` dan tiap 4 detik (kegiatan berganti tanpa
+`renderCrew()`), token disegarkan tiap menit. Simulasinya tetap jalan di
+balik layar supaya keadaan pegawai benar; yang tidak digambar cuma kanvasnya.
+
+Satu hal yang tidak boleh disalahpahami: server **tetap bind `127.0.0.1`**.
+Mode ini hanya berguna lewat tunnel (ssh `-L`, Tailscale, atau sejenisnya)
+dari HP ke mesin yang menjalankan server — dan itu memang jalannya. Jangan
+pernah melonggarkan bind ke `0.0.0.0` demi mode ini: yang lewat `/stream`
+adalah isi kerja agen, dan halaman tanpa autentikasi di jaringan Wi-Fi kantor
+bukan "tampilan HP", tapi kebocoran.
+
+### Overlay layar kedua / OBS: `?overlay=1`
+
+Buat ditumpuk di atas siaran atau layar kedua: `?overlay=1` menyembunyikan
+panel kanan, bilah panggung, pita merah-putih, dan semua dialog (kabar yang
+menyela di atas siaran bukan fitur), lalu membuat latar `<html>` dan `<body>`
+**tembus** (`background: transparent`) — OBS browser source menampilkan apa
+yang ada di bawahnya. `?overlay=chroma` memakai hijau `#00ff00` sebagai gantinya
+buat chroma key di perangkat yang tidak mendukung alpha. Kelasnya
+(`mode-overlay` + `mode-tembus`/`mode-chroma`) dipasang di awal room.js,
+sebelum `fit()` pertama.
+
+Di mode ini `fit()` berubah dua hal: tepi 36 px yang biasa disisakan buat
+bayangan kanvas ditiadakan (stageInner-nya full-bleed, padding 0), dan skala
+**dikunci ke bilangan bulat ≥ 1** — OBS menyusun ulang tiap frame, skala pecahan
+bikin garis tepi sprite belang di layar penonton. Balon ucap dan balon pikiran
+tetap tampil (mereka anak stageInner), jadi padukan dengan `?panggung=1` kalau
+siarannya ditonton orang lain: isi balon dan kabar disamarkan, animasinya tetap.
+
 ## Suasana ikut jam
 
 Ruangan mengikuti jam di mesin penontonnya, digeser mulus antar patokan jam —
@@ -1041,8 +1379,9 @@ angka `?hujan=0.5` — boleh digabung `?demo=1&jam=22&hujan=petir`.
 
 ## Event acak
 
-Selain yang dipicu tool call, ruangan punya **102 kejadian yang muncul
-sendiri**: UPS berbunyi, kalender disobek, kabel LAN longgar, gorengan naik ke
+Selain yang dipicu tool call, ruangan punya **272 kejadian yang muncul
+sendiri** (angka dihitung otomatis: `node uji-katalog.mjs`): UPS berbunyi,
+kalender disobek, kabel LAN longgar, gorengan naik ke
 meja rapat, kucing tidur di karpet, tamu salah alamat, sirene lewat di jalan
 depan. Katalog lengkapnya ada di [EVENT-ACAK.md](EVENT-ACAK.md); definisinya di
 [public/event-acak.js](public/event-acak.js), mesinnya di `room.js`.
@@ -1205,8 +1544,87 @@ Dua hal yang bikin ini aman buat sesi kamu:
 
 - Server balas **204 tanpa body**. Stdout hook dibaca Claude Code sebagai
   perintah kontrol, jadi hook ini sengaja tidak menulis apa pun.
-- Perintahnya diakhiri `|| exit 0`. Server ruangan mati? Hook diam-diam
-  no-op, sesi kamu jalan terus tanpa warning.
+- Perintahnya diakhiri `|| node hook.mjs --tunda` (dulu `|| exit 0`). Server
+  ruangan mati? Payload-nya ditaruh di kotak surat `~/.agent-room/tunda`
+  (lihat **Kotak surat hook offline**), sesi kamu jalan terus tanpa warning —
+  `hook.mjs` selalu keluar 0 dan tidak menulis stdout. Node cuma dibayar
+  saat curl gagal.
+
+## Pemantauan
+
+### `/metrics` gaya Prometheus
+
+`GET /metrics` mengeluarkan format exposition (`text/plain; version=0.0.4`),
+tiap metrik dengan `# HELP`/`# TYPE`, tanpa token seperti `/health` — penjaga
+Host di depan tetap berlaku. Isinya angka yang sudah ada di memori server,
+tidak ada hitungan baru:
+
+| Metrik | Jenis | Sumber |
+|---|---|---|
+| `agent_room_events_total` | counter | event yang lewat `publish()` sejak proses hidup |
+| `agent_room_viewers` | gauge | klien `/stream` |
+| `agent_room_sesi_hidup` | gauge | `sesiHidup` (jendela 3 jam) |
+| `agent_room_sesi_tertahan{jenis="butuh"\|"macet"}` | gauge | sesi hidup yang butuh manusia / macet |
+| `agent_room_antrean`, `agent_room_tugas_jalan` | gauge | antrean disposisi, sesi headless berjalan |
+| `agent_room_token_total{jenis=…}` | counter | riwayat lintas sesi sepanjang masa |
+| `agent_room_token_hari_ini{jenis=…}` | gauge | hari kalender lokal server |
+| `agent_room_galat_halaman` | gauge | laporan `POST /galat` yang tersimpan (maks 50) |
+| `agent_room_sse_dibuang_total`, `agent_room_sse_dilebur_total`, `agent_room_sse_diputus_total` | counter | rem SSE (di bawah) |
+| `agent_room_tunda_berkas`, `agent_room_tunda_diserap_total` | gauge/counter | kotak surat hook offline |
+| `agent_room_uptime_seconds` | gauge | `process.uptime()` |
+
+`jenis` token ada empat: `input`, `output`, `cache_tulis`, `cache_baca`. Nama
+proyek **tidak** jadi label secara bawaan — kardinalitas di sisi pengumpul,
+dan nama folder itu metadata yang tidak perlu keluar bersama angka.
+`AGENT_ROOM_METRICS_PROYEK=1` menambahkan deret berlabel `proyek="…"` pada
+kedua metrik token (hari ini hanya `input`/`output`, karena rinciannya
+per-proyek-per-hari memang cuma menyimpan itu). Contoh:
+
+```
+# HELP agent_room_sesi_tertahan Sesi hidup yang tertahan: butuh manusia atau macet karena galat.
+# TYPE agent_room_sesi_tertahan gauge
+agent_room_sesi_tertahan{jenis="butuh"} 1
+agent_room_sesi_tertahan{jenis="macet"} 0
+# HELP agent_room_token_total Token sepanjang masa dari riwayat lintas sesi.
+# TYPE agent_room_token_total counter
+agent_room_token_total{jenis="input"} 30300
+```
+
+### Rem SSE
+
+`publish()` dulu menulis ke semua klien tanpa melihat nilai balik
+`res.write()`. Satu tab yang tertidur — laptop ditutup, tab latar yang
+dibekukan peramban — membuat buffer socket-nya menggelembung tanpa batas di
+memori server, dan `token` yang lahir tiap giliran asisten penyumbang
+terbesarnya. Sekarang tiap klien punya keadaan sendiri, dua lapis:
+
+1. `write()` yang menjawab `false` belum berarti klien lambat — highWaterMark
+   socket cuma 16 KB, dan satu cek transkrip bisa melahirkan ribuan event
+   **sinkron** (`SUSUL_MAX` 4 MB) sebelum siapa pun sempat drain. Jadi selama
+   byte yang masih tertahan di stream (`writableLength`) di bawah 4 MB, event
+   tetap ditulis langsung.
+2. Lewat itu, event masuk **antrean per klien** (maks 200, buang-terlama,
+   dihitung `dibuang`) yang dikuras saat `drain`. Event `token` berurutan
+   untuk sesi yang sama **dilebur** waktu antre — isinya angka kumulatif sesi,
+   jadi yang terbaru sudah memuat semua delta sebelumnya; itu dihitung
+   `dilebur`, bukan `dibuang`, karena tidak ada yang hilang.
+
+Memori per klien dengan begitu terikat: ≤ 4 MB + 200 event. Klien yang
+antreannya penuh lebih dari 30 detik tanpa pernah drain **diputus** — satu
+baris log `klien SSE lambat diputus: antrean penuh N detik tanpa drain, M
+event dibuang` — dan tidak dikirimi `: beat` selagi tersumbat (cuma menambah
+buffer). Halaman `EventSource` menyambung sendiri lewat `retry` dan
+`Last-Event-ID`, jadi yang hilang cuma yang memang sudah dibuang.
+`/stream?tanpa=pikir,token` menyaring `kind` per klien di sisi server — untuk
+penonton yang cuma butuh perbuatan, bukan isi kepala — dan berlaku juga pada
+60 event ring yang dikirim saat sambung. Angkanya ke `/health`
+(`sseDibuang`, `sseDilebur`, `sseDiputus`, `memoriMB`) dan `/metrics`.
+
+Uji yang menetapkan angkanya: satu klien `/stream` yang tidak pernah membaca
+socket-nya, 3.000 event token + 9.000 `ucap` (≈21 MB); buffer kernel
+loopback Windows sendiri menyerap belasan MB sebelum `writableLength` naik,
+klien normal di sebelahnya menerima semuanya, RSS server naik ≈77 MB untuk
+21 MB × 3 klien lalu turun setelah klien lambatnya diputus di detik ke-34.
 
 ## Konfigurasi
 
@@ -1226,6 +1644,8 @@ Dua hal yang bikin ini aman buat sesi kamu:
 | `AGENT_ROOM_KUNCI` | *(kosong)* | kalau diisi, `POST /event` wajib membawa header `x-agent-room-kunci` yang sama; **wajib** begitu bind dibuka ke jaringan (lihat **Kantor pusat & kantor cabang**) |
 | `AGENT_ROOM_URL` | *(kosong)* | dibaca **installer** & `mcp-room.mjs`: alamat kantor pusat yang dituju hook mesin ini, mis. `http://kantor.lan:4517` |
 | `AGENT_ROOM_HOST_IZIN` | *(kosong)* | nama Host tambahan yang diterima penjaga Host, dipisah koma (nama mesin di LAN, nama tunnel) |
+| `AGENT_ROOM_TUNDA_DIR` | `~/.agent-room/tunda` | kotak surat hook offline: dibaca `hook.mjs --tunda` (penulis), server (pemungut), dan `dinas --periksa` (lihat **Kotak surat hook offline**) |
+| `AGENT_ROOM_METRICS_PROYEK` | *(kosong)* | `1` menambahkan label `proyek` pada metrik token di `/metrics` (lihat **Pemantauan**) |
 
 ### Gerbang: penjaga Host & kunci event
 
@@ -1336,6 +1756,33 @@ jaringan (bagian di atas), yang menjaga tetap tunnel/kunci di server, bukan
 MCP-nya; MCP tidak menambah pintu baru karena semua route yang dipakainya
 memang sudah ada dan sudah tanpa token.
 
+### Uji tanpa peramban
+
+Tiga harness Node nol-dependency, semuanya dijalankan `npm test` dan CI:
+
+- **`uji-event.mjs`** memuat `room.js` + `event-acak.js` apa adanya ke sandbox
+  `node:vm` (DOM/`Date`/canvas palsu) dan memanggil `syarat()` di 36 kombinasi
+  jam×hujan×ramai, lalu `mulai()→tick()×N→selesai()` tiap event. Hook
+  `gambar*` (nama kaitnya dibaca dari `room.js`, bukan dihafal) dipanggil di
+  sela tick terhadap **canvas 2D palsu yang melempar** kalau ada argumen angka
+  `NaN`/`undefined`/`Infinity` — di peramban kesalahan itu diam, gambarnya cuma
+  tidak muncul. Rantai `lanjutan` diikuti sampai kedalaman 3 di ruangan yang
+  sama, seperti `matikanEvent()` sungguhan. Aturan `bentrok()`/`kelas
+  panggung`/`perluAktor`/`pinjamAktor` diuji lewat fungsi asli `room.js`
+  terhadap definisi sintetis — bukan salinan aturannya. Bug gambar yang
+  diketahui tapi belum diperbaiki dicatat di `DIKETAHUI` supaya CI hijau tanpa
+  bug-nya hilang dari laporan.
+- **`uji-zorder.mjs`** memanggil `frame()` asli dengan pegawai fixture di
+  posisi yang pernah bikin bug (pita lajur bawah 230–265, duduk di kursi rapat
+  sisi dekat, di depan/belakang meja kerja, prop event ber-`sortY`) dan
+  membandingkan **urutan** gambar prop/pegawai dengan `uji-zorder.golden.json`.
+  Golden-nya urutan id, bukan angka y: geser `sortY` boleh, asal urutannya
+  memang disengaja (`--perbarui`).
+- **`uji-katalog.mjs`** papan skor `event-acak.json` vs `daftarEvent()`:
+  katalog, terdaftar, terimplementasi, belum (per kategori), dan id di luar
+  katalog. Selalu exit 0 (`--gerbang` untuk menggagalkan). Angka jumlah event
+  di dokumen ini dan README diambil dari sini.
+
 ## Isi
 
 | File | Guna |
@@ -1346,7 +1793,8 @@ memang sudah ada dan sudah tanpa token.
 | `hook.mjs` | forwarder cadangan kalau `curl` tidak ada |
 | `install.mjs` | pasang/lepas hook di `settings.json` |
 | `public/room.js` | mesin render canvas + mesin event acak |
-| `public/event-acak.js` | katalog 102 event acak (dimuat sesudah `room.js`) |
+| `public/event-acak.js` | 272 event acak terpasang (dimuat sesudah `room.js`; angka dari `node uji-katalog.mjs`) |
+| `uji-event.mjs`, `uji-zorder.mjs` + `uji-zorder.golden.json`, `uji-katalog.mjs` | harness uji headless: event (syarat/mulai/tick/selesai/gambar*/lanjutan/penjadwal), z-order `frame()` vs golden, papan skor katalog |
 | `public/index.html`, `public/style.css` | rangka halaman + panel |
 | `EVENT-ACAK.md`, `event-acak.json` | katalog rancangan 373 event, hasil rapat desain |
 

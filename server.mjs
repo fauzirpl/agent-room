@@ -489,8 +489,21 @@ function ringkasTanya(tool, input) {
 }
 
 /** Human-readable one-liner for what the agent is doing. */
+/* Tool MCP bernama `mcp__<server>__<tool>`. Dipecah sekali di sini, dipakai
+   normalize() (ev.mcpServer/ev.mcpTool), describe() (label), dan buku induk
+   (agregat per server). Pola tidak cocok -> null, bukan tebakan. */
+const MCP_RX = /^mcp__([^_](?:.*?[^_])?)__(.+)$/;
+const MCP_LAMBAT_MS = 8000;                 // tool MCP lebih lama dari ini ditandai `lambat`
+function pecahMcp(tool) {
+  const m = typeof tool === 'string' ? MCP_RX.exec(tool) : null;
+  return m ? { server: clip(m[1], 64), tool: clip(m[2], 64) } : null;
+}
+
 function describe(tool, input) {
   const i = input && typeof input === 'object' ? input : {};
+  // label MCP: nama servernya ikut, bukan cuma string pertama dari input-nya
+  const mcp = pecahMcp(tool);
+  if (mcp) return mcp.server + ' · ' + mcp.tool;
   switch (tool) {
     case 'Bash':
     case 'PowerShell':
@@ -611,6 +624,13 @@ function normalize(raw) {
   // pasangan pre→post bisa dicocokkan persis, bukan ditebak lewat (sesi, tool).
   if (raw.tool_use_id) ev.panggilan = clip(raw.tool_use_id, 64);
   if (Number.isFinite(raw.duration_ms)) ev.durasi = Math.round(raw.duration_ms);
+  const mcp = pecahMcp(tool);
+  if (mcp) {
+    ev.mcpServer = mcp.server;
+    ev.mcpTool = mcp.tool;
+    // hanya di giliran penutup: durasi baru ada di PostToolUse(Failure)
+    if (kind === 'post' && ev.durasi > MCP_LAMBAT_MS) ev.lambat = true;
+  }
   const panggilan = namaSesi.get(ev.session);
   if (panggilan) ev.nama = panggilan;
   const peran = peranSesi.get(ev.session);
@@ -752,13 +772,104 @@ function tandaiHidup(sesi) {
   }
 }
 
+/* ————— rem SSE (backpressure) —————
+   Dulu publish() menulis ke semua klien tanpa melihat nilai balik res.write():
+   satu tab yang tertidur (laptop ditutup, tab di latar yang dibekukan peramban)
+   membuat buffer socket-nya menggelembung tanpa batas di memori server, dan
+   event `token` yang lahir tiap giliran asisten adalah penyumbang terbesar.
+   Sekarang tiap klien punya keadaan sendiri. write() yang menjawab false
+   belum berarti klien lambat — highWaterMark socket cuma 16 KB, dan satu
+   cek transkrip bisa melahirkan ribuan event SINKRON (SUSUL_MAX 4 MB)
+   sebelum siapa pun sempat drain. Jadi ada dua lapis: selama byte yang
+   masih tertahan di stream (writableLength) di bawah SSE_BUFFER_MAKS, event
+   tetap ditulis langsung; lewat itu masuk antrean (maks SSE_ANTRE_MAKS,
+   buang-terlama, dihitung `dibuang`) yang dikuras saat 'drain'. Event
+   `token` berurutan untuk sesi yang sama dilebur waktu antre — isinya angka
+   KUMULATIF sesi, jadi yang terbaru sudah memuat semua delta sebelumnya
+   (dihitung `dilebur`, bukan `dibuang`). Memori per klien dengan begitu
+   terikat: ≤ SSE_BUFFER_MAKS + 200 event. Klien yang antreannya penuh lebih
+   dari SSE_MACET_MS tanpa pernah drain diputus, satu baris log.
+   `?tanpa=pikir,token` di /stream menyaring kind per klien di sini juga. */
+const SSE_BUFFER_MAKS = 4 * 1024 * 1024;    // = SUSUL_MAX: satu burst transkrip masih muat tanpa antre
+const SSE_ANTRE_MAKS = 200;
+const SSE_MACET_MS = 30 * 1000;
+const sseKeadaan = new Map();               // res -> { antre: [], dibuang, tersumbat, tersumbatSejak, tanpa:Set|null }
+let sseDibuangTotal = 0;                    // sepanjang proses; ke /metrics & /health
+let sseDileburTotal = 0;                    // event token yang digantikan yang lebih baru di antrean
+let sseDiputus = 0;                         // klien lambat yang diputus paksa
+let metrikEventTotal = 0;                   // event yang lewat publish() sejak proses hidup
+
+const sseFrame = (ev) => `id: ${ev.id}\ndata: ${JSON.stringify(ev)}\n\n`;
+
+function sseDaftar(res, tanpa) {
+  clients.add(res);
+  const k = { antre: [], dibuang: 0, tersumbat: false, tersumbatSejak: 0, tanpa: tanpa && tanpa.size ? tanpa : null };
+  sseKeadaan.set(res, k);
+  res.on('drain', () => sseKuras(res));
+  return k;
+}
+function sseLepas(res) {
+  clients.delete(res);
+  sseKeadaan.delete(res);
+}
+function sseTulis(res, k, frame) {
+  let ok = false;
+  try { ok = res.write(frame); } catch { sseLepas(res); return false; }
+  if (!ok) { k.tersumbat = true; if (!k.tersumbatSejak) k.tersumbatSejak = Date.now(); }
+  return true;
+}
+// masih boleh ditulis langsung? antrean harus kosong dulu supaya urutan terjaga
+const sseLonggar = (res, k) => k.antre.length === 0 && (!k.tersumbat || res.writableLength < SSE_BUFFER_MAKS);
+function sseKuras(res) {
+  const k = sseKeadaan.get(res);
+  if (!k) return;
+  k.tersumbat = false; k.tersumbatSejak = 0;
+  while (k.antre.length && (!k.tersumbat || res.writableLength < SSE_BUFFER_MAKS)) {
+    if (!sseTulis(res, k, sseFrame(k.antre.shift()))) return;
+  }
+}
+function sseAntre(res, k, ev) {
+  // token kumulatif per sesi: yang lama di antrean sudah usang, ganti saja
+  if (ev.kind === 'token') {
+    const i = k.antre.findIndex((e) => e.kind === 'token' && e.session === ev.session);
+    if (i >= 0) { k.antre[i] = ev; sseDileburTotal++; return; }
+  }
+  k.antre.push(ev);
+  if (k.antre.length > SSE_ANTRE_MAKS) { k.antre.shift(); k.dibuang++; sseDibuangTotal++; }
+  // penuh dan tidak pernah drain lebih dari SSE_MACET_MS: putus, jangan tunggu
+  if (k.antre.length >= SSE_ANTRE_MAKS && k.tersumbatSejak && Date.now() - k.tersumbatSejak > SSE_MACET_MS) {
+    ssePutus(res, k);
+  }
+}
+function ssePutus(res, k) {
+  sseDiputus++;
+  console.warn('[agent-room] klien SSE lambat diputus: antrean penuh ' + Math.round((Date.now() - k.tersumbatSejak) / 1000)
+    + ' detik tanpa drain, ' + k.dibuang + ' event dibuang');
+  sseLepas(res);
+  try { res.destroy(); } catch {}
+}
+/* Dipanggil dari detak 20 detik tiap klien: klien yang macet tidak dikirimi
+   `: beat` (cuma menambah buffer), tapi diperiksa apakah sudah layak diputus. */
+function sseDetak(res) {
+  const k = sseKeadaan.get(res);
+  if (!k) return;
+  if (!k.tersumbat) { try { res.write(': beat\n\n'); } catch {} return; }
+  if (k.antre.length >= SSE_ANTRE_MAKS && Date.now() - k.tersumbatSejak > SSE_MACET_MS) ssePutus(res, k);
+}
+
 function publish(ev) {
   ring.push(ev);
   if (ring.length > RING_SIZE) ring.shift();
+  metrikEventTotal++;
   agendaCatat(ev);                          // buku agenda: metadata saja, lihat agendaBaris()
-  const frame = `id: ${ev.id}\ndata: ${JSON.stringify(ev)}\n\n`;
+  let frame = null;                         // dibentuk sekali, hanya kalau ada yang menerimanya langsung
   for (const res of clients) {
-    try { res.write(frame); } catch { clients.delete(res); }
+    const k = sseKeadaan.get(res);
+    if (!k) { sseLepas(res); continue; }
+    if (k.tanpa && k.tanpa.has(ev.kind)) continue;
+    if (!sseLonggar(res, k)) { sseAntre(res, k, ev); continue; }
+    if (!frame) frame = sseFrame(ev);
+    sseTulis(res, k, frame);
   }
 }
 
@@ -844,6 +955,28 @@ const tokenSesi = new Map();                // sesi 12-char -> { input, output, 
    ke disk (satu baris JSON per giliran asisten), jadi bisa dipantau lintas
    sesi dan lintas restart. Sengaja DELTA, bukan kumulatif, supaya bisa
    dijumlah ulang per hari/per proyek kapan saja tanpa menyimpan turunannya. */
+/* ------------------------------------------------- versi skema berkas ----
+   Tiga berkas di disk hidup lebih lama dari kode yang menulisnya: riwayat
+   token, buku agenda, buku induk. Tiap baris/berkas baru membawa `v`, angka
+   skema dari tabel ini; baris TANPA `v` adalah v0 (ditulis sebelum ada
+   tabel ini) dan dimigrasi di memori lewat migrasi<Nama>() — hari ini
+   identitas, cuma menambal `v`. Baris yang gagal parse, atau `v`-nya LEBIH
+   BESAR dari yang dikenal proses ini (ditulis server yang lebih baru),
+   ditolak: dihitung dan dilaporkan satu baris di konsol, tidak ditebak.
+
+   Cara menaikkan versi, mis. token 1 -> 2:
+     1. naikkan SKEMA.token,
+     2. di migrasiToken() tambah cabang `if (v < 2) { ...ubah bentuk lama... }`
+        — berurutan, supaya v0 pun melewati semua tahap,
+     3. penulisnya (riwayatCatat/riwayatLebur) otomatis memakai angka baru.
+   Berkas lama tidak pernah ditulis ulang hanya demi versi; migrasi hidup
+   di memori sampai barisnya kebetulan ditulis ulang (pemadatan).           */
+const SKEMA = { token: 1, agenda: 1, bukuInduk: 1 };
+const versiSkema = (o) => (Number.isFinite(Number(o.v)) ? Number(o.v) : 0);
+function migrasiToken(o) { o.v = SKEMA.token; return o; }
+function migrasiAgenda(o) { o.v = SKEMA.agenda; return o; }
+function migrasiBukuInduk(o) { o.v = SKEMA.bukuInduk; return o; }
+
 const BERKAS_RIWAYAT_TOKEN = process.env.AGENT_ROOM_TOKEN_LOG
   || path.join(__dirname, 'token-riwayat.jsonl');
 const riwayatHarian = new Map();   // 'YYYY-MM-DD' (waktu lokal server) -> { input, output, cacheTulis, cacheBaca }
@@ -871,8 +1004,9 @@ function riwayatTambah(ts, proyek, d) {
   // rincian per proyek di dalam hari yang sama — dipakai /ruangan & MCP
   // ("token hari ini per proyek"), bukan cuma total sepanjang masa per proyek
   const hp = h.proyek || (h.proyek = {});
-  const hq = hp[nama] || (hp[nama] = { input: 0, output: 0 });
+  const hq = hp[nama] || (hp[nama] = { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 });
   hq.input += d.input; hq.output += d.output;
+  hq.cacheTulis += d.cacheTulis; hq.cacheBaca += d.cacheBaca;   // dipakai /skp (token per proyek dalam rentang)
   const p = riwayatProyek.get(nama) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0, terakhir: 0 };
   p.input += d.input; p.output += d.output; p.cacheTulis += d.cacheTulis; p.cacheBaca += d.cacheBaca;
   p.terakhir = Math.max(p.terakhir, ts);
@@ -887,7 +1021,7 @@ function riwayatTambah(ts, proyek, d) {
 function riwayatCatat(ts, proyek, model, d) {
   if (!d.input && !d.output && !d.cacheTulis && !d.cacheBaca) return;
   riwayatTambah(ts, proyek, d);
-  const baris = JSON.stringify({ ts, proyek, model: model || undefined, ...d });
+  const baris = JSON.stringify({ v: SKEMA.token, ts, proyek, model: model || undefined, ...d });
   fs.appendFile(BERKAS_RIWAYAT_TOKEN, baris + '\n', (err) => {
     if (err) console.warn('[agent-room] gagal menulis riwayat token: ' + err.message);
   });
@@ -928,7 +1062,7 @@ function riwayatLebur(baris, batas, kunciWaktu) {
   const arsip = [];
   for (const grup of kelompok.values()) {
     if (grup.length === 1 && grup[0].o.padat) { sisa.push(grup[0]); continue; }
-    const o = { ts: kunciWaktu(grup[0].o.ts), proyek: grup[0].o.proyek || '',
+    const o = { v: SKEMA.token, ts: kunciWaktu(grup[0].o.ts), proyek: grup[0].o.proyek || '',
                 input: 0, output: 0, cacheTulis: 0, cacheBaca: 0, n: 0, padat: true };
     for (const b of grup) {
       o.input += b.o.input; o.output += b.o.output;
@@ -948,20 +1082,28 @@ function riwayatMuat() {
   catch { return; }                 // belum ada berkasnya: wajar, riwayat baru mulai
   const baris = [];
   const rusak = [];                 // ikut ke arsip kalau berkas utama ditulis ulang
+  let asing = 0;                    // skema lebih baru dari yang dikenal proses ini
   for (const t of teks.split('\n')) {
     if (!t.trim()) continue;
     let o = null;
     try { o = JSON.parse(t); } catch {}
     if (!o || !Number.isFinite(o.ts)) { rusak.push(t); continue; }
+    if (versiSkema(o) > SKEMA.token) { rusak.push(t); asing++; continue; }
+    // v0 (tanpa `v`) dimigrasi di memori; teksnya ikut diperbarui supaya
+    // pemadatan yang kebetulan menulis ulang berkas menghasilkan baris ber-`v`
+    const lama = versiSkema(o) < SKEMA.token;
+    if (lama) migrasiToken(o);
     o.input = Number(o.input) || 0; o.output = Number(o.output) || 0;
     o.cacheTulis = Number(o.cacheTulis) || 0; o.cacheBaca = Number(o.cacheBaca) || 0;
     riwayatTambah(o.ts, o.proyek || '', o);
-    baris.push({ o, teks: t });
+    baris.push({ o, teks: lama ? JSON.stringify(o) : t });
   }
   if (baris.length) console.log('[agent-room] riwayat token dimuat: ' + baris.length + ' baris dari ' + BERKAS_RIWAYAT_TOKEN);
   // Dulu baris rusak dibuang diam-diam; sekarang dihitung supaya berkas yang
   // terpotong (mis. mati listrik di tengah append) ketahuan, bukan hilang senyap.
-  if (rusak.length) console.warn('[agent-room] token-riwayat: ' + rusak.length + ' baris ditolak (bukan JSON / tanpa ts)');
+  // Satu baris untuk keduanya: yang rusak dan yang skemanya di luar jangkauan.
+  if (rusak.length) console.warn('[agent-room] token-riwayat: ' + rusak.length + ' baris ditolak (skema v' + SKEMA.token
+    + '; ' + (rusak.length - asing) + ' bukan JSON / tanpa ts' + (asing ? ', ' + asing + ' ber-v lebih baru' : '') + ')');
 
   const kini = Date.now();
   let { sisa, arsip } = riwayatLebur(baris, kini - PADAT_HARI, awalHariLokal);
@@ -1021,7 +1163,7 @@ const agendaBerkas = (tanggal) => path.join(AGENDA_DIR, tanggal + '.jsonl');
    event tidak otomatis bocor ke disk. */
 function agendaBaris(ev) {
   if (!ev || AGENDA_KIND_TOLAK.has(ev.kind)) return null;
-  const b = { id: ev.id, ts: ev.ts, kind: ev.kind, session: ev.session };
+  const b = { v: SKEMA.agenda, id: ev.id, ts: ev.ts, kind: ev.kind, session: ev.session };
   if (ev.cwd) b.cwd = ev.cwd;
   if (ev.cabang) b.cabang = ev.cabang;
   if (ev.tool) b.tool = ev.tool;
@@ -1031,6 +1173,8 @@ function agendaBaris(ev) {
   if (ev.interupsi) b.interupsi = true;
   if (ev.alasan) b.alasan = clip(ev.alasan, AGENDA_LABEL_MAX);
   if (Number.isFinite(ev.durasi)) b.durasi = ev.durasi;
+  if (ev.lambat) b.lambat = true;                         // tool MCP > 8 detik
+  if (ev.tunda) b.tunda = true;                           // diserap dari kotak surat hook offline
   if (ev.model) b.model = ev.model;
   if (ev.nama) b.nama = ev.nama;
   if (ev.peran) b.peran = ev.peran;
@@ -1070,19 +1214,20 @@ function agendaCatat(ev) {
 
 /* Baris satu hari, kronologis naik. Berkas tidak ada → []. Baris rusak
    (append terpotong) dilewati, tidak menggagalkan seluruh hari. */
-function agendaBacaHari(tanggal) {
+function agendaBacaHari(tanggal, tolak) {
   let teks = '';
   try { teks = fs.readFileSync(agendaBerkas(tanggal), 'utf8'); } catch { return []; }
   const keluar = [];
   for (const t of teks.split('\n')) {
     if (!t.trim()) continue;
-    try {
-      const o = JSON.parse(t);
-      if (o && Number.isFinite(o.ts) && o.kind && !AGENDA_KIND_TOLAK.has(o.kind)) {
-        if (ISI_MATI) { delete o.label; if (o.butuh) delete o.butuh.label; if (o.macet) delete o.macet.label; }
-        keluar.push(o);
-      }
-    } catch { /* baris terpotong */ }
+    let o = null;
+    try { o = JSON.parse(t); } catch { /* baris terpotong */ }
+    if (!o || !Number.isFinite(o.ts) || !o.kind) { if (tolak) tolak.rusak++; continue; }
+    if (versiSkema(o) > SKEMA.agenda) { if (tolak) tolak.asing++; continue; }
+    if (versiSkema(o) < SKEMA.agenda) migrasiAgenda(o);
+    if (AGENDA_KIND_TOLAK.has(o.kind)) continue;
+    if (ISI_MATI) { delete o.label; if (o.butuh) delete o.butuh.label; if (o.macet) delete o.macet.label; }
+    keluar.push(o);
   }
   return keluar;
 }
@@ -1103,10 +1248,15 @@ function agendaMuat() {
   // ring diisi ulang dari hari ini supaya halaman yang dibuka SESUDAH restart
   // tetap melihat ruangan hari ini, dan seq lanjut dari id terbesar supaya
   // Last-Event-ID milik halaman yang sudah terbuka tidak bertabrakan.
-  const hariIni = agendaBacaHari(tanggalLokal(Date.now())).slice(-RING_SIZE);
+  const tolak = { rusak: 0, asing: 0 };
+  const hariIni = agendaBacaHari(tanggalLokal(Date.now()), tolak).slice(-RING_SIZE);
   for (const o of hariIni) {
     ring.push(o);
     if (Number.isFinite(o.id) && o.id > seq) seq = o.id;
+  }
+  if (tolak.rusak || tolak.asing) {
+    console.warn('[agent-room] buku agenda: ' + (tolak.rusak + tolak.asing) + ' baris ditolak (skema v' + SKEMA.agenda
+      + '; ' + tolak.rusak + ' rusak' + (tolak.asing ? ', ' + tolak.asing + ' ber-v lebih baru' : '') + ')');
   }
   if (hariIni.length || dibuang) {
     console.log('[agent-room] buku agenda: ' + hariIni.length + ' event hari ini dimuat ke ring'
@@ -1197,24 +1347,25 @@ function golonganDari(p) {
 }
 const golonganUrut = (nama) => GOLONGAN.findIndex((g) => g.nama === nama);
 
-const bukuInduk = { v: 1, proyek: {} };
+const BUKU_INDUK_MCP_MAX = 20;              // server MCP per proyek, sisanya dilebur ke '(lain)'
+const bukuInduk = { v: SKEMA.bukuInduk, proyek: {} };
 const bukuIndukSesi = new Map();            // proyek -> Set sesi 12-char yang sudah dihitung di proses ini
 let bukuIndukTimer = null;
 let bukuIndukKotor = false;
 
 const bukuIndukKosong = () => ({
   sesi: 0, toolCall: 0, gagal: 0, jamDinas: 0, fanOut: 0,
-  pertama: 0, terakhir: 0, cabang: {}, tool: {}, golongan: GOLONGAN[0].nama,
+  pertama: 0, terakhir: 0, cabang: {}, tool: {}, mcp: {}, golongan: GOLONGAN[0].nama,
 });
 
 /* Tabel tool dibatasi 40 kunci: proyek yang memakai puluhan tool MCP tidak
    boleh menggemukkan berkas. Yang tersingkir dilebur ke '(lain)', jadi total
    hitungannya tetap sama dengan toolCall. */
-function bukuIndukPangkasTool(tool) {
+function bukuIndukPangkasTool(tool, maks = BUKU_INDUK_TOOL_MAX) {
   const kunci = Object.keys(tool).filter((k) => k !== '(lain)');
-  if (kunci.length <= BUKU_INDUK_TOOL_MAX) return;
+  if (kunci.length <= maks) return;
   kunci.sort((a, b) => tool[b] - tool[a]);
-  for (const k of kunci.slice(BUKU_INDUK_TOOL_MAX)) {
+  for (const k of kunci.slice(maks)) {
     tool['(lain)'] = (tool['(lain)'] || 0) + tool[k];
     delete tool[k];
   }
@@ -1243,6 +1394,11 @@ function bukuIndukCatat(ev) {
     p.tool[ev.tool] = (p.tool[ev.tool] || 0) + 1;
     bukuIndukPangkasTool(p.tool);
     if (BUKU_INDUK_FANOUT.has(ev.tool)) p.fanOut++;
+    // agregat per SERVER MCP (bukan per tool-nya): 20 kunci, sisanya '(lain)'
+    if (ev.mcpServer) {
+      p.mcp[ev.mcpServer] = (p.mcp[ev.mcpServer] || 0) + 1;
+      bukuIndukPangkasTool(p.mcp, BUKU_INDUK_MCP_MAX);
+    }
   }
   if (ev.kind === 'post' && ev.ok === false) p.gagal++;
   if (ev.cabang) p.cabang[ev.cabang] = (p.cabang[ev.cabang] || 0) + 1;
@@ -1293,10 +1449,15 @@ function bukuIndukMuat() {
   let o = null;
   try { o = JSON.parse(fs.readFileSync(BERKAS_BUKU_INDUK, 'utf8')); }
   catch { return; }                 // belum ada: wajar, karier baru mulai
-  if (!o || o.v !== 1 || !o.proyek || typeof o.proyek !== 'object') {
-    console.warn('[agent-room] buku induk diabaikan: bentuk berkas tidak dikenal');
+  if (!o || typeof o !== 'object' || !o.proyek || typeof o.proyek !== 'object') {
+    console.warn('[agent-room] buku induk: 1 berkas ditolak (skema v' + SKEMA.bukuInduk + '; bentuk tidak dikenal)');
     return;
   }
+  if (versiSkema(o) > SKEMA.bukuInduk) {
+    console.warn('[agent-room] buku induk: 1 berkas ditolak (skema v' + SKEMA.bukuInduk + '; berkas ber-v' + versiSkema(o) + ' lebih baru)');
+    return;
+  }
+  if (versiSkema(o) < SKEMA.bukuInduk) migrasiBukuInduk(o);
   let n = 0;
   for (const [nama, r] of Object.entries(o.proyek)) {
     if (!r || typeof r !== 'object' || !nama) continue;
@@ -1304,12 +1465,13 @@ function bukuIndukMuat() {
     for (const k of ['sesi', 'toolCall', 'gagal', 'jamDinas', 'fanOut', 'pertama', 'terakhir']) {
       p[k] = Math.max(0, Number(r[k]) || 0);
     }
-    for (const k of ['cabang', 'tool']) {
+    for (const k of ['cabang', 'tool', 'mcp']) {
       if (r[k] && typeof r[k] === 'object') {
         for (const [nm, v] of Object.entries(r[k])) if (nm && Number(v) > 0) p[k][clip(nm, 64)] = Number(v);
       }
     }
     bukuIndukPangkasTool(p.tool);
+    bukuIndukPangkasTool(p.mcp, BUKU_INDUK_MCP_MAX);
     // golongan tersimpan dipercaya kalau sah; kalau tidak, dihitung ulang tanpa
     // menerbitkan event — berkas lama bukan kenaikan pangkat
     p.golongan = golonganUrut(r.golongan) >= 0 ? r.golongan : golonganDari(p);
@@ -1337,6 +1499,129 @@ function bukuIndukRingkas() {
     proyek: bukuInduk.proyek,
     usulPromosi: usul ? { ...usul, jabatan: 'Kepala Bidang', jabatanId: 'kabid' } : null,
   };
+}
+
+/* ------------------------------------------------------------ papan SKP ---
+   Kinerja per PROYEK dan per SESI dalam satu rentang tanggal, dihitung saat
+   diminta dari tiga sumber yang sudah ada — bukan tabel baru yang harus
+   dipelihara: buku agenda (tool call, gagal, durasi, tertahan, campuran tool),
+   riwayat token (masuk/keluar/cache per proyek per hari), dan buku induk (jam
+   dinas seumur hidup + golongan). Tidak ada label maupun isi yang keluar —
+   agendaBacaHari() sudah menanggalkan label saat ISI_MATI, dan yang dijumlah
+   di sini cuma nama tool, nama folder, cabang, dan angka. Berhenti di token,
+   tidak ke dolar (lihat DESIGN "Token sesi terminal"). Di-cache 30 detik per
+   rentang supaya halaman yang buka-tutup modal tidak membaca ulang 7-30
+   berkas agenda tiap kali. */
+const SKP_CACHE_MS = 30000;
+const SKP_TOOL_MAX = 8;
+const SKP_TERTAHAN = new Set(['izin-minta', 'stop-gagal']);
+const skpCache = new Map();                 // 'dari|sampai' -> { ts, hasil }
+
+const skpHariMundur = (tanggal, n) => {
+  const d = new Date(tanggal + 'T00:00:00');
+  return tanggalLokal(d.getTime() - n * 24 * 3600 * 1000);
+};
+
+function skpHitung(dari, sampai) {
+  const kunci = dari + '|' + sampai;
+  const ada = skpCache.get(kunci);
+  if (ada && Date.now() - ada.ts < SKP_CACHE_MS) return { ...ada.hasil, cache: true };
+
+  const proyek = new Map();                 // nama -> agregat
+  const sesi = new Map();                   // id sesi -> agregat
+  const proyekAmbil = (nama) => {
+    let p = proyek.get(nama);
+    if (!p) proyek.set(nama, p = { nama, sesi: new Set(), toolCall: 0, gagal: 0, durasiJumlah: 0, durasiN: 0,
+                                   tool: {}, jamDinasRentang: 0, terakhir: 0, token: null });
+    return p;
+  };
+  // Rentang dibatasi seumur simpanan agenda; hari tanpa berkas cuma [] murah.
+  // Dikumpulkan dulu lalu dibaca URUT NAIK: aturan celah jam dinas di bawah
+  // butuh event kronologis, dan mundur dari `sampai` akan mematikan celahnya.
+  const tanggal = [];
+  for (let n = 0; n <= AGENDA_HARI + 1; n++) {
+    const tgl = skpHariMundur(sampai, n);
+    if (tgl < dari) break;
+    tanggal.unshift(tgl);
+  }
+  const hari = tanggal.length;
+  for (const tgl of tanggal) {
+    for (const o of agendaBacaHari(tgl)) {
+      if (!o.session) continue;
+      const nama = o.cwd || '(tanpa proyek)';
+      const p = proyekAmbil(nama);
+      p.sesi.add(o.session);
+      let s = sesi.get(o.session);
+      if (!s) sesi.set(o.session, s = { sesi: o.session, proyek: nama, cabang: o.cabang || '', mulai: o.ts, selesai: o.ts,
+                                        toolCall: 0, gagal: 0, tertahan: 0, tool: {}, model: '' });
+      if (o.ts < s.mulai) s.mulai = o.ts;
+      if (o.ts > s.selesai) s.selesai = o.ts;
+      if (o.cabang) s.cabang = o.cabang;
+      if (o.model) s.model = o.model;
+      if (o.kind === 'pre' && o.tool) {
+        p.toolCall++; s.toolCall++;
+        p.tool[o.tool] = (p.tool[o.tool] || 0) + 1;
+        s.tool[o.tool] = (s.tool[o.tool] || 0) + 1;
+      }
+      if (o.kind === 'post') {
+        if (o.ok === false) { p.gagal++; s.gagal++; }
+        if (Number.isFinite(o.durasi)) { p.durasiJumlah += o.durasi; p.durasiN++; }
+      }
+      if (SKP_TERTAHAN.has(o.kind)) s.tertahan++;
+      // jam dinas DALAM rentang: aturan yang sama dengan buku induk (celah ≤5
+      // menit antar event hook), dihitung ulang dari agenda supaya angkanya
+      // memang milik minggu ini, bukan seumur karier
+      if (BUKU_INDUK_KIND.has(o.kind)) {
+        if (p.terakhir && o.ts > p.terakhir && o.ts - p.terakhir <= BUKU_INDUK_JEDA) p.jamDinasRentang += o.ts - p.terakhir;
+        if (o.ts > p.terakhir) p.terakhir = o.ts;
+      }
+    }
+  }
+  // token per proyek dalam rentang, dari rincian harian riwayat token
+  for (const [tgl, h] of riwayatHarian) {
+    if (tgl < dari || tgl > sampai || !h.proyek) continue;
+    for (const [nama, t] of Object.entries(h.proyek)) {
+      const p = proyekAmbil(nama);
+      const k = p.token || (p.token = { input: 0, output: 0, cacheBaca: 0, cacheTulis: 0 });
+      k.input += t.input || 0; k.output += t.output || 0;
+      k.cacheBaca += t.cacheBaca || 0; k.cacheTulis += t.cacheTulis || 0;
+    }
+  }
+  const teratas = (tool) => Object.entries(tool).sort((a, b) => b[1] - a[1]);
+  const daftarProyek = [...proyek.values()].map((p) => {
+    const induk = bukuInduk.proyek[p.nama];
+    return {
+      nama: p.nama,
+      sesi: p.sesi.size,
+      toolCall: p.toolCall,
+      gagal: p.gagal,
+      rasioGagal: p.toolCall ? Math.round((p.gagal / p.toolCall) * 1000) / 10 : 0,
+      durasiRata: p.durasiN ? Math.round(p.durasiJumlah / p.durasiN) : null,
+      campuranTool: Object.fromEntries(teratas(p.tool).slice(0, SKP_TOOL_MAX)),
+      token: p.token || { input: 0, output: 0, cacheBaca: 0, cacheTulis: 0 },
+      jamDinasRentang: p.jamDinasRentang,
+      jamDinas: induk ? induk.jamDinas : 0,          // seumur karier (buku induk), bukan cuma rentang ini
+      golongan: induk ? induk.golongan : GOLONGAN[0].nama,
+      fanOut: induk ? induk.fanOut : 0,
+    };
+  }).sort((a, b) => (b.toolCall - a.toolCall) || ((b.token.input + b.token.output) - (a.token.input + a.token.output)));
+  const daftarSesi = [...sesi.values()].map((s) => {
+    const t = teratas(s.tool)[0];
+    return { sesi: s.sesi, proyek: s.proyek, cabang: s.cabang, model: s.model, mulai: s.mulai, selesai: s.selesai,
+             toolCall: s.toolCall, gagal: s.gagal, tertahan: s.tertahan,
+             toolTeratas: t ? { nama: t[0], jumlah: t[1] } : null };
+  }).sort((a, b) => (b.toolCall - a.toolCall) || (b.selesai - a.selesai));
+  const hasil = {
+    rentang: { dari, sampai, hari },
+    proyek: daftarProyek,
+    sesi: daftarSesi,
+    keterangan: 'sejak dipantau',
+    dihitung: Date.now(),
+  };
+  // satu peta kecil: rentang yang lazim cuma 7/14/30 hari, sisanya kedaluwarsa sendiri
+  for (const [k, v] of skpCache) if (Date.now() - v.ts >= SKP_CACHE_MS) skpCache.delete(k);
+  skpCache.set(kunci, { ts: Date.now(), hasil });
+  return { ...hasil, cache: false };
 }
 
 // Tulis saat keluar: 'exit' cuma boleh sinkron, dan SIGINT/SIGTERM harus
@@ -1652,6 +1937,17 @@ const BATAS_EVENT = 8 * 1024 * 1024;
    lama membuang kelebihan chunk tapi tetap mengembalikan potongannya, jadi
    JSON.parse pasti gagal dengan "Unterminated string in JSON at position ..." —
    pesan yang menyesatkan: yang salah ukurannya, bukan payloadnya. */
+/* Telemetri galat halaman (POST /galat, dibaca GET /galat). Hidup DI MEMORI
+   saja — 50 terakhir, tidak pernah ke disk — karena isinya cuma pesan galat
+   + nama berkas:baris + id event acak yang sedang jalan + nama peramban; itu
+   cukup buat tahu "halaman tersandung di event X" dari konsol server tanpa
+   membuka devtools, dan tidak cukup berharga untuk bertahan setelah server
+   mati. Batas 2 KB: pesan halaman sudah dipotong 200 huruf di sisi klien,
+   jadi yang lebih besar dari itu pasti bukan laporan yang kita minta. */
+const GALAT_SIMPAN = 50;
+const GALAT_MAKS_BYTE = 2 * 1024;
+const galatHalaman = [];
+
 function readBody(req, limit = 1024 * 512) {
   return new Promise((resolve) => {
     let size = 0;
@@ -2115,6 +2411,143 @@ function lahirkanTugas(t) {
   return { ok: true, sesi: sid.slice(0, 12) };
 }
 
+/* Satu jalur untuk payload hook, dari mana pun datangnya: POST /event
+   langsung, atau kotak surat tunda yang dipungut belakangan. `opsi.ts`
+   (tunda) mengembalikan waktu asli event supaya agenda/buku induk mencatat
+   kapan kejadiannya, bukan kapan servernya nyala lagi. */
+function terimaEvent(raw, opsi = {}) {
+  const ev = normalize(raw);
+  if (opsi.mesin) ev.mesin = opsi.mesin;
+  if (opsi.tunda) {
+    ev.tunda = true;
+    if (Number.isFinite(opsi.ts) && opsi.ts > 0) ev.ts = opsi.ts;
+  }
+  tandaiHidup(ev.session);
+  catatSesiHidup(ev);
+  publish(ev);
+  // nota dinas keluar hanya untuk yang baru terjadi: event yang tertunda
+  // berjam-jam bukan bahan lapor "sedang tertahan"
+  if (!opsi.tunda) laporKeluar(ev);          // hanya kalau AGENT_ROOM_LAPOR diisi
+  // Buku induk pegawai: karier per folder proyek, hanya dari hook nyata di sini
+  bukuIndukCatat(ev);
+  /* Jalur transkrip cuma diketahui dari sini. Waktu sesinya habis
+     pemantauannya tidak langsung dicabut: kalimat penutup agen sering baru
+     mendarat di berkas beberapa saat sesudah hook terakhir. Event tunda
+     tidak membuka pemantau: sesinya sudah lewat, isinya sudah basi. */
+  if (ev.kind === 'session-end') setTimeout(() => lepasTranskrip(ev.session), 3000).unref?.();
+  else if (!opsi.tunda) pantauTranskrip(ev.session, jalurTranskrip(raw));
+  return ev;
+}
+
+/* ------------------------------------------- kotak surat hook offline ----
+   Hook curl memakai `-T -` dan cabang `|| node hook.mjs --tunda`: waktu
+   server ini mati, payload mentah ditulis ke ~/.agent-room/tunda/<ts>-<acak>.json
+   (lihat hook.mjs). Di sini dipungut: saat start dan tiap TUNDA_JEDA_MS,
+   diurutkan menurut ts di nama berkas, diserap lewat terimaEvent() yang
+   sama dengan /event (ev.tunda = true, ts asli), lalu berkasnya dihapus.
+   Yang lebih tua dari 24 jam dibuang tanpa dibaca. Isinya payload mentah —
+   termasuk tool_response — jadi ini satu-satunya tempat di luar transkrip
+   Claude Code sendiri yang menyimpan isi kerja di disk; umurnya sehari. */
+const TUNDA_DIR = process.env.AGENT_ROOM_TUNDA_DIR || path.join(os.homedir(), '.agent-room', 'tunda');
+const TUNDA_JEDA_MS = 60 * 1000;
+const TUNDA_UMUR_MS = 24 * 3600 * 1000;
+const TUNDA_MAKS_BERKAS = 500;
+const TUNDA_RX = /^(\d{13})-[a-z0-9]{1,12}\.json$/;
+let tundaTerserap = 0;                      // sepanjang proses; ke /metrics
+
+function tundaHitung() {
+  try { return fs.readdirSync(TUNDA_DIR).filter((n) => TUNDA_RX.test(n)).length; } catch { return 0; }
+}
+
+function tundaSerap() {
+  let nama;
+  try { nama = fs.readdirSync(TUNDA_DIR); } catch { return; }   // folder belum ada: belum pernah offline
+  const kini = Date.now();
+  const berkas = [];
+  let dibuang = 0;
+  for (const n of nama) {
+    const m = TUNDA_RX.exec(n);
+    if (!m) continue;
+    const ts = Number(m[1]);
+    if (kini - ts > TUNDA_UMUR_MS) { try { fs.unlinkSync(path.join(TUNDA_DIR, n)); dibuang++; } catch {} continue; }
+    berkas.push({ ts, jalur: path.join(TUNDA_DIR, n) });
+  }
+  berkas.sort((a, b) => a.ts - b.ts);
+  // lebih dari batas: yang paling tua dibuang, sisanya diserap — batas yang
+  // sama dengan penulisnya, supaya folder yang ditulis versi hook lain pun terjaga
+  while (berkas.length > TUNDA_MAKS_BERKAS) { try { fs.unlinkSync(berkas.shift().jalur); dibuang++; } catch { berkas.shift(); } }
+  let diserap = 0, rusak = 0;
+  for (const b of berkas) {
+    let raw = null;
+    try { raw = JSON.parse(fs.readFileSync(b.jalur, 'utf8')); } catch { rusak++; }
+    if (raw && typeof raw === 'object') {
+      try { terimaEvent(raw, { tunda: true, ts: b.ts }); diserap++; } catch (err) { rusak++; }
+    }
+    try { fs.unlinkSync(b.jalur); } catch {}
+  }
+  tundaTerserap += diserap;
+  if (diserap || rusak || dibuang) {
+    console.log('[agent-room] kotak surat tunda: ' + diserap + ' event diserap'
+      + (rusak ? ', ' + rusak + ' rusak' : '') + (dibuang ? ', ' + dibuang + ' dibuang (lebih tua dari 24 jam / melebihi batas)' : '')
+      + ' (' + TUNDA_DIR + ')');
+  }
+}
+setInterval(tundaSerap, TUNDA_JEDA_MS).unref?.();
+
+/* ------------------------------------------------------- /metrics ------
+   Format exposition Prometheus (text/plain; version=0.0.4). Tanpa token,
+   seperti /health — penjaga Host di depan tetap berlaku. Nama proyek
+   sengaja TIDAK jadi label kecuali AGENT_ROOM_METRICS_PROYEK=1: kardinalitas
+   di sisi pengumpul, dan nama folder itu metadata yang tidak perlu keluar
+   bersama angka. */
+const METRICS_PROYEK = String(process.env.AGENT_ROOM_METRICS_PROYEK || '').trim() === '1';
+const metrikLabel = (v) => String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+function metrikTeks() {
+  const baris = [];
+  const metrik = (nama, tipe, help, nilai) => {
+    baris.push('# HELP ' + nama + ' ' + help, '# TYPE ' + nama + ' ' + tipe);
+    for (const [label, v] of nilai) baris.push(nama + (label ? '{' + label + '}' : '') + ' ' + (Number.isFinite(v) ? v : 0));
+  };
+  const potret = potretRuangan();
+  const butuh = potret.sesi.filter((s) => s.butuh).length;
+  const macet = potret.sesi.filter((s) => s.macet).length;
+  const hariIni = riwayatHarian.get(tanggalLokal(Date.now())) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+  const JENIS = [['input', 'input'], ['output', 'output'], ['cache_tulis', 'cacheTulis'], ['cache_baca', 'cacheBaca']];
+  const token = (sumber, perProyek) => {
+    const keluar = [];
+    for (const [jenis, k] of JENIS) keluar.push(['jenis="' + jenis + '"', sumber[k] || 0]);
+    if (METRICS_PROYEK && perProyek) {
+      for (const [nama, p] of perProyek) {
+        for (const [jenis, k] of JENIS) {
+          if (p[k] === undefined) continue;
+          keluar.push(['jenis="' + jenis + '",proyek="' + metrikLabel(nama) + '"', p[k] || 0]);
+        }
+      }
+    }
+    return keluar;
+  };
+  metrik('agent_room_events_total', 'counter', 'Event yang disiarkan lewat publish() sejak proses hidup.', [['', metrikEventTotal]]);
+  metrik('agent_room_viewers', 'gauge', 'Klien SSE /stream yang sedang tersambung.', [['', clients.size]]);
+  metrik('agent_room_sesi_hidup', 'gauge', 'Sesi Claude Code yang masih mengirim hook (jendela 3 jam).', [['', potret.sesi.length]]);
+  metrik('agent_room_sesi_tertahan', 'gauge', 'Sesi hidup yang tertahan: butuh manusia atau macet karena galat.',
+    [['jenis="butuh"', butuh], ['jenis="macet"', macet]]);
+  metrik('agent_room_antrean', 'gauge', 'Disposisi yang menunggu giliran dijalankan (kendali web).', [['', antrean.length]]);
+  metrik('agent_room_tugas_jalan', 'gauge', 'Sesi headless yang sedang dijalankan dari halaman (kendali web).', [['', jalan.size]]);
+  metrik('agent_room_token_total', 'counter', 'Token sepanjang masa dari riwayat lintas sesi.',
+    token(riwayatTotal, riwayatProyek));
+  metrik('agent_room_token_hari_ini', 'gauge', 'Token hari ini (kalender lokal server) dari riwayat lintas sesi.',
+    token(hariIni, hariIni.proyek ? Object.entries(hariIni.proyek) : null));
+  metrik('agent_room_galat_halaman', 'gauge', 'Laporan galat halaman yang tersimpan di memori (POST /galat, maks ' + GALAT_SIMPAN + ').',
+    [['', galatHalaman.length]]);
+  metrik('agent_room_sse_dibuang_total', 'counter', 'Event yang dibuang dari antrean klien SSE lambat (rem SSE).', [['', sseDibuangTotal]]);
+  metrik('agent_room_sse_dilebur_total', 'counter', 'Event token yang digantikan yang lebih baru selagi antre (bukan kehilangan: angkanya kumulatif).', [['', sseDileburTotal]]);
+  metrik('agent_room_sse_diputus_total', 'counter', 'Klien SSE yang diputus karena macet lebih dari ' + (SSE_MACET_MS / 1000) + ' detik.', [['', sseDiputus]]);
+  metrik('agent_room_tunda_berkas', 'gauge', 'Berkas di kotak surat hook offline yang belum dipungut.', [['', tundaHitung()]]);
+  metrik('agent_room_tunda_diserap_total', 'counter', 'Event dari kotak surat hook offline yang diserap sejak proses hidup.', [['', tundaTerserap]]);
+  metrik('agent_room_uptime_seconds', 'gauge', 'Umur proses server dalam detik.', [['', Math.round(process.uptime())]]);
+  return baris.join('\n') + '\n';
+}
+
 const server = http.createServer(async (req, res) => {
   // Penjaga Host jalan paling depan, untuk SEMUA route — lihat blok gerbang.
   if (!hostSah(req)) {
@@ -2153,20 +2586,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const raw = JSON.parse(body.teks || '{}');
-      const ev = normalize(raw);
-      if (mesin) ev.mesin = mesin;
-      tandaiHidup(ev.session);
-      catatSesiHidup(ev);
-      publish(ev);
-      laporKeluar(ev);          // nota dinas keluar: hanya kalau AGENT_ROOM_LAPOR diisi
-      // Buku induk pegawai: karier per folder proyek, hanya dari hook nyata di sini
-      bukuIndukCatat(ev);
-      /* Jalur transkrip cuma diketahui dari sini. Waktu sesinya habis
-         pemantauannya tidak langsung dicabut: kalimat penutup agen sering baru
-         mendarat di berkas beberapa saat sesudah hook terakhir. */
-      if (ev.kind === 'session-end') setTimeout(() => lepasTranskrip(ev.session), 3000).unref?.();
-      else pantauTranskrip(ev.session, jalurTranskrip(raw));
+      terimaEvent(JSON.parse(body.teks || '{}'), { mesin });
     } catch (err) {
       // payload rusak: jangan pernah bikin agent-nya ikut gagal
       console.warn('[agent-room] payload diabaikan:', err.message);
@@ -2189,12 +2609,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const since = Number(req.headers['last-event-id'] || url.searchParams.get('since') || 0);
-    for (const ev of ring.filter((e) => e.id > since).slice(-60)) {
-      res.write(`id: ${ev.id}\ndata: ${JSON.stringify(ev)}\n\n`);
+    // ?tanpa=pikir,token — kind yang tidak mau diterima klien ini (rem SSE)
+    const tanpa = new Set(String(url.searchParams.get('tanpa') || '').split(',').map((s) => s.trim()).filter(Boolean));
+    for (const ev of ring.filter((e) => e.id > since && !tanpa.has(e.kind)).slice(-60)) {
+      res.write(sseFrame(ev));
     }
-    clients.add(res);
-    const beat = setInterval(() => { try { res.write(': beat\n\n'); } catch {} }, 20000);
-    req.on('close', () => { clearInterval(beat); clients.delete(res); });
+    sseDaftar(res, tanpa);
+    const beat = setInterval(() => sseDetak(res), 20000);
+    req.on('close', () => { clearInterval(beat); sseLepas(res); });
     return;
   }
 
@@ -2361,6 +2783,39 @@ const server = http.createServer(async (req, res) => {
     } catch {
       res.writeHead(400).end();
     }
+    return;
+  }
+
+  /* Telemetri galat halaman — pasangan laporGalat() di room.js. Dijaga
+     asalSah seperti /ambien: hanya halaman dari alamat kantor ini. Yang
+     masuk sudah dipotong lagi di sini (clip), bukan mempercayai klien. */
+  if (url.pathname === '/galat' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = await readBody(req, GALAT_MAKS_BYTE);
+    if (body.terpotong) { res.writeHead(413).end(); return; }
+    let p;
+    try { p = JSON.parse(body.teks || '{}'); } catch { res.writeHead(400).end(); return; }
+    if (!p || typeof p !== 'object') { res.writeHead(400).end(); return; }
+    const g = {
+      ts: Number.isFinite(p.ts) ? p.ts : Date.now(),
+      pesan: clip(p.pesan, 200),
+      sumber: clip(p.sumber, 80),
+      event: clip(p.event, 64),
+      ua: clip(p.ua, 24),
+    };
+    if (!g.pesan) { res.writeHead(400).end(); return; }
+    galatHalaman.push(g);
+    if (galatHalaman.length > GALAT_SIMPAN) galatHalaman.splice(0, galatHalaman.length - GALAT_SIMPAN);
+    console.warn('[agent-room] galat halaman: ' + g.pesan
+      + (g.sumber ? ' @ ' + g.sumber : '')
+      + (g.event ? ' [event ' + g.event + ']' : '')
+      + (g.ua ? ' (' + g.ua + ')' : ''));
+    res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
+    return;
+  }
+  if (url.pathname === '/galat' && req.method === 'GET') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ galat: galatHalaman }));
     return;
   }
 
@@ -2655,6 +3110,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Papan SKP — tanpa token, sekelas /token-riwayat: agregat angka dan nama
+     folder/cabang/tool dari agenda + riwayat token + buku induk (lihat
+     skpHitung()). Bawaan 7 hari terakhir sampai hari ini. */
+  if (url.pathname === '/skp') {
+    const p = url.searchParams;
+    const hariIni = tanggalLokal(Date.now());
+    const sampai = p.get('sampai') || hariIni;
+    const dari = p.get('dari') || skpHariMundur(sampai, 6);
+    if (!AGENDA_TANGGAL_RX.test(dari) || !AGENDA_TANGGAL_RX.test(sampai) || dari > sampai) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ galat: 'dari/sampai harus YYYY-MM-DD dan dari <= sampai' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify(skpHitung(dari, sampai)));
+    return;
+  }
+
   /* Buku agenda — tanpa token, sekelas /token-riwayat: isinya metadata yang
      toh sudah lewat /stream tanpa autentikasi juga. Terbaru dulu. */
   if (url.pathname === '/agenda') {
@@ -2701,9 +3174,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Metrik gaya Prometheus — tanpa token, sekelas /health. */
+  if (url.pathname === '/metrics') {
+    res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8', 'cache-control': 'no-cache' });
+    res.end(metrikTeks());
+    return;
+  }
+
   if (url.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, events: seq, viewers: clients.size, pemutarUlang, port: PORT }));
+    res.end(JSON.stringify({
+      ok: true, events: seq, viewers: clients.size, pemutarUlang, port: PORT,
+      sseDibuang: sseDibuangTotal, sseDilebur: sseDileburTotal, sseDiputus, tunda: tundaHitung(),
+      memoriMB: Math.round(process.memoryUsage().rss / 1048576),
+    }));
     return;
   }
 
@@ -2723,6 +3207,7 @@ if (IZIN) muatKredensial();     // hanya berguna kalau halaman boleh melahirkan 
 server.listen(PORT, HOST, () => {
   console.log(`[agent-room] ruangan siap  ->  http://${HOST}:${PORT}`);
   console.log('[agent-room] menunggu event dari Claude Code hooks...');
+  tundaSerap();                 // surat yang menumpuk selagi kantor tutup, dibaca sekarang
   if (KUNCI) console.log('[agent-room] kunci event AKTIF — POST /event tanpa x-agent-room-kunci ditolak');
   if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !KUNCI) {
     console.warn('[agent-room] PERINGATAN: bind ke ' + HOST + ' tanpa AGENT_ROOM_KUNCI — siapa pun di jaringan'
