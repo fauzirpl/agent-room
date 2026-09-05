@@ -48,9 +48,15 @@ daftarEvent(
     E.data.orang = S.orang.filter((o) => !o.adaTugas);
     for (const o of E.data.orang) {
       o.bekuSampai = now + 8000;
-      hadapkan(o, 300, 16);
       o.pose = 'hormat';
     }
+    /* Arahnya lewat menoleh(), bukan hadapkan(): tidak seorang pun di sini
+       dipinjam sebagai pemeran, jadi hadap yang ditulis hadapkan() tidak
+       punya siapa pun yang membereskannya. 8000 ms = sepanjang pembekuan;
+       tickKongsi() yang mengembalikan arahnya. Yang kebetulan sedang
+       melangkah dilewati menoleh() — dan itu benar: dia membeku di tengah
+       langkah, jadi wajar kalau badannya masih menghadap arah jalannya. */
+    menoleh(E.data.orang, 300, 16, 8000);
   },
   gambarAtas() { ctx.globalAlpha = 0.05; r(0, 0, W, H, '#ffd9a0'); ctx.globalAlpha = 1; },
   selesai(E) { for (const o of E.data.orang) o.pose = null; },

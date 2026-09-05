@@ -282,9 +282,25 @@ daftarEvent(
       if (a) spawn('talk', a.x, a.y - 26);
     }
     pada(E, 1, () => { const a = E.aktor[0]; if (a) a.say('dipanggil rapat, tinggal dulu berkasnya'); });
-    for (const o of S.orang) {
-      if (E.aktor.includes(o) || o.eventKerja) continue;
-      if (jarakKe(o, 246, 200) < 90 && !o.path.length) hadapkan(o, 246, 200);
+    /* Yang berdiri dekat meja rapat sesekali menoleh menonton.
+
+       menoleh(), bukan hadapkan(): mereka bukan pemeran event ini, dan
+       hadapkan() menulis a.hadap yang LENGKET — tidak ada yang membereskannya,
+       jadi arah itu menempel di badan mereka sampai sesinya berakhir.
+
+       Dan TIAP 5 DETIK, bukan tiap frame seperti hadapkan() dulu. menoleh()
+       menaikkan busyUntil (itu yang menahan langkah pulang IDLE_AFTER supaya
+       orangnya tidak ngeloyor di tengah tolehan), jadi memanggilnya tiap frame
+       selama rapat 50 detik akan memaku penonton di tempat selama itu juga —
+       catatan yang sama sudah ditulis di 33-tamu-tenar-dasar.js. Dengan jeda
+       5 detik dan tolehan 2 detik, busyUntil tidak pernah lebih dari 2 detik
+       di depan, dan yang terbaca justru lebih hidup: orang melirik ke rapat,
+       balik ke kerjaannya, melirik lagi. Yang baru datang belakangan pun ikut
+       kebagian — itu yang dulu jadi alasan pemanggilan tiap frame. */
+    if (Math.floor(E.umur / 5) !== E.data.lirik) {
+      E.data.lirik = Math.floor(E.umur / 5);
+      menoleh(S.orang.filter((o) => !E.aktor.includes(o) && jarakKe(o, 246, 200) < 90),
+        246, 200, 2000);
     }
   },
   gambarDinding(E) {

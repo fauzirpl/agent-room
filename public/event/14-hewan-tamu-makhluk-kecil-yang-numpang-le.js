@@ -45,11 +45,7 @@ daftarEvent(
   syarat: (S) => S.malam || !S.kerjaJam,
   mulai(E, S) {
     E.data.maju = 0;
-    for (const o of S.orang) {
-      if (o.path.length || o.eventKerja) continue;
-      hadapkan(o, o.x, o.y - 200);
-      o.busyUntil = Math.max(o.busyUntil, now + 1500);
-    }
+    mendongak(S.orang, 1500);
     const a = S.orang.find((o) => !o.path.length && !o.eventKerja);
     if (a) a.say('itu apa ya');
   },

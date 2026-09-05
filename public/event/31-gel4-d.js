@@ -393,18 +393,43 @@ daftarEvent(
          "salam selesai" di bawah: dia tetap masuk barisan, cuma lebih cepat. */
       const pasanganPergi = d.pasangan != null && !masihMain(E, d.pasangan);
 
-      /* Ekor barisan penerima yang MASIH ikut. Dihitung sekali di sini karena
-         dipakai untuk DUA hal yang harus memakai orang yang sama: syarat boleh
-         tidaknya salaman dimulai, dan pasangan salamannya. */
-      const lawan = yangMasihMain(E, d.baris).pop() || null;
+      /* Slot yang akan ditempati penyalam berikutnya, dan penghuni slot TEPAT
+         SEBELUMNYA — tetangga sebelah kirinya, satu-satunya orang yang berdiri
+         dalam jarak jabat tangan (16 px).
+
+         Sengaja SLOT, bukan `yangMasihMain(E, d.baris).pop()` yang dipakai
+         dulu. Dua-duanya membaca roster yang sama, tapi pop() mundur satu slot
+         tiap kali EKOR barisan direbut tool call, sementara titik tujuan
+         penyalam tetap dihitung dari d.baris.length yang tidak dipangkas —
+         jadi keduanya berpisah 32, 48, 64 px dan seterusnya, dan
+         hadapkan(lawan, ...) memutar tuan rumah menghadap lubang kosong.
+         Membaca slot membuat dua angka itu selalu dari sumber yang sama. */
+      const slot = d.baris.length;
+      const sebelah = d.baris[slot - 1];
+      const lawan = masihMain(E, sebelah) ? sebelah : null;
 
       if (!d.kini && d.antre.length) {
         d.kini = d.antre[0];
         // titik tujuan bergeser mengikuti panjang barisan penerima — inti
         // koreografinya, dan alasan tenggatnya tidak bisa ditulis di muka
-        d.kini.goToXY(188 + d.baris.length * 16, 240, 'left');
+        d.kini.goToXY(188 + slot * 16, 240, 'left');
         d.kiniSejak = E.umur;
         d.salamMulai = null;
+      } else if (d.kini && d.salamMulai == null && d.kini.diam
+                 && !lawan && E.umur - d.kiniSejak > 0.6) {
+        /* Tetangga sebelahnya direbut tool call sebelum dia sampai: tidak ada
+           tangan untuk dijabat di slot itu. Dia tetap masuk barisan, cuma
+           tanpa adegan salamannya — konsisten dengan alasan d.baris tidak
+           dipangkas (lihat di bawah): lubang di barisan memang jujur, orangnya
+           betul-betul pergi. Yang TIDAK boleh terjadi adalah menyalami orang
+           yang berdiri tiga slot jauhnya seolah dia ada di sebelah.
+
+           Slot 1 tidak pernah lewat sini: d.baris[0] itu tuan rumah, dan
+           penjaga di atas sudah membubarkan acara kalau dia yang direbut. */
+        hadapkan(d.kini, d.kini.x + 40, 240);
+        d.baris.push(d.kini);
+        d.antre.shift();
+        d.kini = null;
       } else if (d.kini && d.salamMulai == null && d.kini.diam
                  && lawan && lawan.diam && E.umur - d.kiniSejak > 0.6) {
         /* DUA-DUANYA harus sudah berdiri, bukan cuma penyalamnya. Dulu
@@ -427,12 +452,6 @@ daftarEvent(
            kalau orangnya kebetulan sudah berdiri di titik itu, dan salaman nol
            detik terbaca sebagai kedutan, bukan jabat tangan.
 
-           Pasangannya ekor barisan yang MASIH ikut, bukan d.baris[terakhir]
-           mentah: yang sudah direbut tool call tetap tercatat di d.baris, dan
-           menyalami dia persis kegagalan yang dijanjikan berkas ini untuk
-           dihindari. Terverifikasi: pasangan direbut t=6,83 → satu frame
-           kemudian pose tersisa cuma [penyalam:salam], tanpa lawan.
-
            d.baris SENGAJA tidak ikut dipangkas seperti d.antre. Dia roster
            SLOT, bukan sekadar daftar orang: titik berdiri penyalam ke-n itu
            188 + d.baris.length*16, jadi memangkas orang yang direbut di
@@ -441,12 +460,27 @@ daftarEvent(
            dipangkas → berikutnya disuruh ke 188+2*16 = 220 = tempat p2).
            Lubang di barisan justru jujur: orangnya memang pergi.
 
-           `lawan` tidak pernah bisa null di sini — d.tuan === d.baris[0] dan
-           penjaga di atas sudah membubarkan acara kalau tuan rumahnya direbut
-           — tapi syaratnya tetap ditulis supaya cabang ini tidak bergantung
-           pada penjaga yang letaknya jauh di atas. Dan ia tidak bisa
-           menggantung: `lawan` cuma berdua kemungkinan, sedang berjalan
-           (trayeknya pasti habis) atau sudah berdiri. */
+           Justru karena roster itu tidak dipangkas, pasangan salamannya HARUS
+           dibaca sebagai slot (d.baris[slot-1]), bukan sebagai "orang terakhir
+           yang masih ikut". Dua-duanya sama selama tidak ada yang direbut;
+           begitu EKOR barisan direbut, yang kedua mundur satu slot sementara
+           titik tujuan penyalam tetap dihitung dari roster yang tidak
+           dipangkas — dan itulah pasangan yang berjauhan.
+
+           Terukur (scratchpad/sapu-salam.mjs — Agent sungguhan, route() dan
+           blok gerak update() ASLI, dt 1/60; 133 kombinasi terpakai dari
+           4 slot korban x 59 saat pencurian, 1..30 dtk langkah 0,5, SATU
+           korban per jalan): 643 salaman terjadi, SEMUANYA berjarak 16 px
+           tepat. Di 22 kejadian slot sebelahnya kosong dan salamannya
+           dilewati; di 22 detik yang sama itu aturan pop() akan menyalami
+           orang yang berdiri 32 px jauhnya — dua kali jarak rancangan, dengan
+           satu kursi kosong menganga di antaranya. Angka 32 itu batas untuk
+           SATU korban; tiap korban tambahan menggesernya 16 px lagi.
+
+           `lawan` yang null berarti tetangga sebelahnya pergi — ditangani
+           cabang tersendiri di atas, bukan digantung. Dan ia tidak bisa
+           menggantung selamanya: `lawan` cuma berdua kemungkinan, sedang
+           berjalan (trayeknya pasti habis) atau sudah berdiri. */
         d.salamMulai = E.umur;
         d.kini.pose = 'salam';
         d.pasangan = lawan;

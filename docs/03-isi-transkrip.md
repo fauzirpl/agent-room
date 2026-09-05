@@ -300,8 +300,7 @@ Berkas utama ditulis ulang atomik (`.tmp` lalu rename), dan baris aslinya
 tidak dibuang melainkan dipindah ke `token-riwayat.arsip.jsonl` — yang tidak
 pernah dibaca saat start, cuma jaminan kalau butirannya suatu hari dibutuhkan.
 Baris yang rusak tidak lagi dibuang diam-diam: dihitung dan dilaporkan satu
-baris di konsol. Keduanya tidak di-commit ke git (lihat `.gitignore`), sama
-seperti `.agent-room-token`.
+baris di konsol. Keduanya tidak di-commit ke git (lihat `.gitignore`).
 
 **Versi skema.** Tiga berkas di disk hidup lebih lama dari kode yang
 menulisnya — riwayat token, `agenda/*.jsonl`, `buku-induk.json` — dan
@@ -386,11 +385,17 @@ bertahan sebulan: `agenda/YYYY-MM-DD.jsonl`, berisi metadata event termasuk
 dipotong 120 karakter). Isi percakapan tidak pernah ditulis ke sana, dan
 dengan `AGENT_ROOM_ISI=off` `label`-nya pun ikut tidak ditulis.
 
-Ada **satu lalu lintas keluar** lagi selain `/cuaca`, dan sama-sama mati
-secara bawaan: **nota dinas keluar** (lihat bagiannya di atas). Dia baru hidup
-kalau `AGENT_ROOM_LAPOR` diisi URL, dan yang keluar cuma metadata keadaan
-tertahan — nama pegawai, nama folder, cabang, sebab — tidak pernah `pikir`,
-`ucap`, maupun prompt, terlepas dari `AGENT_ROOM_ISI`. Antrean disposisi juga
+Ada **dua lalu lintas keluar** lagi selain `/cuaca`, dan sama-sama mati
+secara bawaan. Pertama, **nota dinas keluar** (lihat bagiannya di atas). Dia
+baru hidup kalau `AGENT_ROOM_LAPOR` diisi URL, dan yang keluar cuma metadata
+keadaan tertahan — nama pegawai, nama folder, cabang, sebab — tidak pernah
+`pikir`, `ucap`, maupun prompt, terlepas dari `AGENT_ROOM_ISI`.
+
+Kedua, **suara ucap** (lihat [`docs/07-suara-nama.md`](07-suara-nama.md)). Dia
+baru hidup kalau kamu memasang kunci OpenRouter lewat panel ⚙️, dan yang
+keluar cuma kalimat notifikasinya — praktis: nama pegawai. Bukan isi
+percakapan, bukan nama folder, bukan prompt. Sekali per kalimat saja: klipnya
+disimpan, jadi nama yang sama tidak pernah dikirim dua kali. Antrean disposisi juga
 sengaja hidup **di memori saja**: prompt yang menunggu giliran tidak pernah
 ditulis ke disk, jadi tidak ada berkas berisi perintah eksekusi yang
 tertinggal setelah server mati.

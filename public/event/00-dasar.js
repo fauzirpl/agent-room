@@ -114,23 +114,95 @@ function pangkasLepas(E, daftar) {
    lewat — jalur yang sama yang sudah dipakai tolehan "rekan seproyek",
    dan yang juga membatalkan tolehnya begitu orangnya melangkah.
 
-   Yang sedang mengerjakan tool call TIDAK ikut menoleh: menaikkan
-   busyUntil-nya akan memperpanjang waktu kerja yang dicatat panel, dan
-   aturan 1 melarang event menyentuh pegawai yang sedang bekerja. */
-function menoleh(orang, tx, ty, lama) {
+   Yang sedang mengerjakan tool call TETAP ikut menoleh — kepala berputar
+   satu detik tidak mengganggu apa pun — tapi busyUntil-nya TIDAK dinaikkan:
+   angka itu persis yang menahan pose kerjanya, jadi menaikkannya akan
+   memperpanjang waktu kerja yang ditampilkan panel. Itu bentuk aturan 1 yang
+   sebenarnya di sini; rinciannya di badan fungsi. */
+function menoleh(orang, tx, ty, lama, ikutPunggung) {
   const ms = lama || 1200;
   for (const o of orang) {
-    if (o.path.length || o.eventKerja || o.state === 'work' || o.adaTugas) continue;
+    /* Yang sedang berjalan dilewati: update() memasang face tiap langkah, jadi
+       tulisan di sini tersapu lagi frame berikutnya. Yang sedang jadi pemeran
+       event lain juga — itu pemiliknya. */
+    if (o.path.length || o.eventKerja) continue;
+    /* SPRITE PUNGGUNG. drawPerson membaca `back = a.face === 'up'` dan
+       menggambar orangnya membelakangi kamera — tangan di laptop, wajah tidak
+       terlihat. Memutar face-nya jadi 'left'/'right' tidak membuat dia
+       "melirik": seluruh siluetnya berbalik, tangannya lepas dari laptop, dan
+       terbacanya seperti dia berdiri dan berputar 180 derajat. Diperiksa di
+       kanvas sungguhan, bukan ditaksir — dua pegawai di meja kerja bawah
+       sebelum/sesudah, dan dua kursi rapat sisi dekat.
+
+       Ini juga yang menggantikan pagar `state === 'work'` yang sempat dipasang
+       di sini. Pagar itu terdengar seperti Aturan 1, tapi salah sasaran: yang
+       bikin gambarnya rusak bukan orangnya sedang sibuk, melainkan arah
+       gambarnya kebetulan punggung — dan sebagian besar pegawai yang sibuk
+       memang menghadap laptopnya ('up'), jadi dua-duanya kelihatan sama dari
+       luar. Bedanya kelihatan di meja rapat: class Peserta ber-state 'work'
+       PERMANEN selama dia duduk (sama seperti adaTugas), padahal dia duduk
+       menghadap kamera ('down') dan memutar kepalanya terbaca persis seperti
+       yang dimaksud. Dengan pagar state, 5 dari 5 peserta rapat berhenti
+       bereaksi ke apa pun — kerumunan paling terbaca di ruangan diam di tempat
+       untuk seluruh 39 pemanggilan menoleh(). Dengan pagar sprite, yang diam
+       cuma yang memang tidak boleh diputar.
+
+       adaTugas juga tidak dipagari, dan alasannya sama: itu pagar PINJAM
+       (bisaDipinjam), sedangkan menoleh() tidak meminjam siapa-siapa — tidak
+       memasang eventKerja, tidak memberi perjalanan, tidak memasang pose.
+
+       Pagar ini PUNYA pengecualian yang sah, dan itu sebabnya ada
+       menolehKe() di bawah — lihat catatannya. */
+    if (!ikutPunggung && o.face === 'up') continue;
     const dx = tx - o.x, dy = ty - o.y;
     const arah = Math.abs(dx) > Math.abs(dy)
       ? (dx > 0 ? 'right' : 'left')
       : (dy > 0 ? 'down' : 'up');
     if (o.tolehBalik == null) o.tolehBalik = o.face;   // dipotret sekali saja
-    o.face = arah;
+    // tolehArah = pagar kepemilikan, dibaca tickKongsi() waktu memulihkan:
+    // kalau face-nya sudah bukan nilai ini, ada yang menulisinya sesudah kita.
+    o.face = o.tolehArah = arah;
     o.tolehSampai = Math.max(o.tolehSampai || 0, now + ms);
-    o.busyUntil = Math.max(o.busyUntil, now + ms);
+    /* busyUntil TIDAK dinaikkan untuk yang sedang state 'work', dan di situlah
+       Aturan 1 yang sebenarnya dijaga. busyUntil itu persis yang menahan pose
+       kerjanya: update() berbunyi `if (state === 'work' && now > busyUntil)
+       state = 'idle'`. Menaikkannya berarti ruangan menampilkan tool call yang
+       sudah selesai seolah masih jalan — bohong tentang sesi sungguhan, gara-
+       gara seekor tikus lewat di plafon. Untuk yang menganggur, angka ini
+       justru perlu: ia yang menahan langkah pulang IDLE_AFTER supaya dia tidak
+       ngeloyor pergi di tengah tolehan. */
+    if (o.state !== 'work') o.busyUntil = Math.max(o.busyUntil, now + ms);
   }
 }
+
+/* Semua menengadah ke plafon. Ada namanya sendiri karena menoleh() menuntut
+   SATU titik bersama, sedangkan "menengadah" itu arah yang sama untuk semua
+   orang di mana pun dia berdiri — dan tanpa nama, tiap penulis event
+   memecahkannya sendiri dengan `hadapkan(o, o.x, o.y - 200)` di dalam loop.
+   Itu yang dulu terjadi di tikus-lari-di-atas-plafon dan gempa-kecil, dan
+   hadapkan() menulis a.hadap yang LENGKET: enam penonton berdiri menengadah
+   ke plafon sampai sesinya berakhir.
+
+   Titiknya jauh DI ATAS kanvas, bukan `o.y - 200`, supaya satu titik bersama
+   tetap memberi 'up' untuk semua orang: |dy| minimal 800, sedangkan |dx|
+   paling besar selebar kanvas (W = 480), jadi cabang tegak selalu menang. */
+const mendongak = (orang, lama) => menoleh(orang, W / 2, -800, lama);
+
+/* Menoleh ke orang yang MENGHAMPIRI mejanya — dan ini satu-satunya jalur yang
+   boleh memutar sprite punggung.
+
+   Bedanya bukan teknis, tapi maksud, dan itu terlihat di kanvas. Pegawai meja
+   digambar 'up': punggung ke kamera, tangan di laptop. Memutarnya jadi
+   'left'/'right' menggantinya dengan sosok berdiri menyamping, tangan turun.
+   Untuk LIRIKAN sekilas (tikus di plafon, proyektor menyala) itu salah —
+   sepertinya dia berhenti bekerja dan berbalik badan gara-gara suara kecil.
+   Untuk orang yang berdiri di sebelah mejanya menyodorkan nota untuk diparaf,
+   itu justru yang benar: dia memang berhenti mengetik dan menghadap tamunya.
+
+   Tetap lewat menoleh(), jadi tetap face saja — hadap tidak disentuh, dan
+   tickKongsi() yang mengembalikannya. Yang berjalan dan yang jadi pemeran
+   event lain tetap dilewati. */
+const menolehKe = (orang, tx, ty, lama) => menoleh(orang, tx, ty, lama, true);
 
 /* Orang yang bukan pegawai: tamu, ojol, pedagang, kurir. Sengaja BUKAN turunan
    Agent — mereka tidak punya sesi, tidak boleh muncul di panel kru, dan tidak

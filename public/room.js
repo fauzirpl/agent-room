@@ -1753,7 +1753,7 @@ function buatKadis() {
     bawa: null, bawaSampai: 0, pose: null, laju: 1, bekuSampai: 0,
     butuh: null, macet: null, fx: null, stampUp: false,
     stamina: 1, antre: 0, tibaSampai: 0, dudukSejak: 0, bangunSejak: 0,
-    tolehSampai: 0, tolehRekan: null, tolehBalik: null, legaSampai: 0, gagalBerturut: 0,
+    tolehSampai: 0, tolehRekan: null, tolehBalik: null, tolehArah: null, legaSampai: 0, gagalBerturut: 0,
     tungguSejak: 0, tungguTotal: 0, calls: 0, gagal: 0,
     pulang: '', diKadis: false, sisipFase: '', sisipT: 0, sisipKeluar: 0,
     say() {}, goTo() {}, goToXY() {},
@@ -4376,6 +4376,7 @@ class Agent {
     this.tolehSampai = 0;    // now-timestamp: sedang menoleh sampai lewat ini
     this.tolehRekan = null;  // rekan yang sedang ditoleh (null = tolehan dari event)
     this.tolehBalik = null;  // face sebelum ditoleh, dikembalikan waktu tolehnya habis
+    this.tolehArah = null;   // face yang DIPASANG tolehan ini — pagar kepemilikan
     this.stamina = 1;        // 0..1, lihat STAMINA_*; reset per sesi karena satu Agent = satu sesi
     this.antre = 0;          // 0 = punya slot; n = urutan ke-n di antrean stasiun penuh (tickAntre)
     this.antreUrut = 0;      // nomor giliran global (antreSeq) — yang kecil maju duluan
@@ -4725,18 +4726,41 @@ class Agent {
            stasiunnya BEDA, dan stasiunPulang selalu 'think'/'idle'), jadi
            dia berdiri menyamping di depan laptopnya tanpa batas waktu.
            Sekarang menoleh() cuma menulis face dan menitipkan face lamanya
-           di tolehBalik — dikembalikan di sini. */
+           di tolehBalik — dikembalikan di sini.
+
+           Tolehan dari event berakhir karena WAKTUNYA HABIS atau karena
+           orangnya MULAI BERJALAN, dan cuma itu. Syarat `state === 'work'`
+           dulu ikut di sini sebagai "tool call datang, sudahi flourish-nya",
+           tapi ia bukan pendeteksi yang benar: peserta rapat ber-state 'work'
+           permanen selama duduk, jadi tolehan mereka batal di frame yang sama
+           dengan waktu dipasang — nol efek, tanpa gejala apa pun. Tool call
+           yang benar-benar memindahkan orangnya tetap tertangkap lewat
+           path.length; yang tidak memindahkannya memang tidak perlu
+           membatalkan putaran kepala satu detik. Aturan 1 dijaga menoleh() di
+           tempat yang lebih tepat: busyUntil tidak dinaikkan untuk orang yang
+           sedang state 'work' — lihat catatannya di 00-dasar.js. */
       const habis = r
         ? (!diam || now > this.tolehSampai || !kongsiDiam(r))
-        : (now > this.tolehSampai || this.path.length || this.state === 'work');
+        : (now > this.tolehSampai || this.path.length);
       if (habis) {
         this.tolehSampai = 0;
         this.tolehRekan = null;
         const balik = this.tolehBalik;
+        const arah = this.tolehArah;
         this.tolehBalik = null;
+        this.tolehArah = null;
+        /* Pagar kepemilikan. Kalau face-nya sudah BUKAN arah yang tolehan ini
+           pasang, ada yang menulisinya sesudah kita — dilepas begitu saja,
+           bukan ditarik balik. Tanpa pagar ini tolehan yang habis menghapus
+           arah milik event yang menulis face di tengah jendelanya, dan
+           potret `balik` yang basi itu yang menempel di badan orangnya.
+           Yang menulis hadap juga tertangkap di sini: hadapkan() menulis
+           `a.hadap = a.face = ...` sekaligus, dan goTo/goToXY/pulangKe
+           menuntut perjalanan baru (path.length, dijaga di bawah). */
+        const dirampas = arah && this.face !== arah;
         // balik menghadap laptop — kecuali sudah berjalan (face diatur langkah)
         // atau sedang menunggu kamu (setButuh sudah memasang 'down')
-        if (!this.path.length && !this.butuh) {
+        if (!dirampas && !this.path.length && !this.butuh) {
           this.face = r
             ? (this.hadap || STATIONS.think.face)
             : (balik || this.hadap || (STATIONS[this.station] || {}).face || 'down');
@@ -4750,7 +4774,7 @@ class Agent {
     this.kongsiCek = now + jedaKongsi();
     const r = rekanSeproyek(this, true);
     if (!r) return;
-    this.face = r.x > this.x ? 'right' : 'left';
+    this.face = this.tolehArah = r.x > this.x ? 'right' : 'left';
     this.tolehSampai = now + KONGSI_TOLEH_MS;
     this.tolehRekan = r;
     if (Math.random() < 0.2) this.say(esc(KONGSI_SAPA[(Math.random() * KONGSI_SAPA.length) | 0]));
@@ -5411,37 +5435,57 @@ function pastikanAudio() {
    sesudah titik ini. */
 let notifOn = false;
 
-/* Lonceng sinus 3 nada naik — beda timbre dan bentuk dari blip persegi biasa,
-   supaya "sesi ini kelar" (atau "butuh arahan kamu") kedengaran lain dari
-   sekadar tool call berikutnya. Disusul suara ngomong beneran kalau
-   browsernya punya Web Speech API: itu realisasi "Izin.." yang diminta —
-   bukan efek bunyi, tapi benar disuarakan. */
-function bunyiLonceng() {
+/* ---------- kosakata lonceng ----------
+   Dulu "selesai" dan "mohon arahan" memakai lonceng yang PERSIS SAMA, dan
+   yang membedakannya cuma kalimat TTS yang menyusul. Begitu TTS peramban
+   dicabut, dua kejadian yang artinya berlawanan jadi tidak bisa dibedakan
+   telinga — makanya motifnya yang dipisah, bukan sekadar ucapannya dihapus.
+
+   Pembagian tugasnya sekarang: MOTIF membawa jenis kejadian, UCAPAN (kalau
+   nyala) membawa nama orangnya. Arah nada dipilih supaya bisa dibedakan tanpa
+   perlu dihafal — naik = kabar baik, datar = ada yang memanggil, turun =
+   bukan kabar baik.
+
+   Satu fungsi untuk semuanya supaya amplop/attack-nya tidak bisa hanyut
+   sendiri-sendiri antar motif: yang boleh beda cuma nada, jarak, dan panjang. */
+function bunyiMotif(nada, jarak, panjang, puncak) {
   if (!audio) return;
+  if (audio.state === 'suspended') audio.resume().catch(() => {});
   const t0 = audio.currentTime;
-  [523.25, 659.25, 783.99].forEach((freq, i) => {   // C5 E5 G5
+  nada.forEach((freq, i) => {
     const o = audio.createOscillator(), g = audio.createGain();
     o.type = 'sine';
     o.frequency.value = freq;
-    const mulai = t0 + i * 0.1;
+    const mulai = t0 + i * jarak;
     g.gain.setValueAtTime(0.0001, mulai);
-    g.gain.exponentialRampToValueAtTime(0.1, mulai + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, mulai + 0.55);
+    g.gain.exponentialRampToValueAtTime(puncak, mulai + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, mulai + panjang);
     o.connect(g); g.connect(busNotif);
-    o.start(mulai); o.stop(mulai + 0.6);
+    o.start(mulai); o.stop(mulai + panjang + 0.05);
   });
 }
 
+// Tiga nada NAIK, ekor panjang — bel meja resepsionis. Pekerjaan kelar.
+const bunyiSelesai = () => bunyiMotif([523.25, 659.25, 783.99], 0.1, 0.55, 0.1);   // C5 E5 G5
+
+/* Dua nada SAMA dan pendek — interkom kantor, "ada yang memanggil". Sengaja
+   datar, bukan naik atau turun: yang terjadi bukan kabar baik dan bukan
+   kabar buruk, cuma pekerjaan yang berhenti menunggu kamu. */
+const bunyiPanggil = () => bunyiMotif([659.25, 659.25], 0.16, 0.22, 0.1);          // E5 E5
+
+// Dua nada TURUN dan pendek — sesi berhenti karena galat.
+const bunyiBerhenti = () => bunyiMotif([783.99, 587.33], 0.13, 0.3, 0.09);         // G5 D5
+
 function notifSelesai(nama) {
-  bunyiLonceng();
-  ucapSuara('Izin, ' + (nama ? nama + ' ' : 'tugasnya ') + 'selesai');
+  bunyiSelesai();
+  ucapKlip(UCAP.selesai(nama));
 }
 
 // Dipicu saat sesi minta izin atau bertanya dan menunggu jawabanmu — beda
 // dari notifSelesai (pekerjaan kelar), ini pekerjaan yang tertahan.
 function notifKonfirmasi() {
-  bunyiLonceng();
-  ucapSuara('Izin mohon arahan');
+  bunyiPanggil();
+  ucapKlip(UCAP.arahan());
 }
 
 /* ---------- pengingat sesi terkatung ----------
@@ -5453,23 +5497,14 @@ function notifKonfirmasi() {
    atau pegawainya dihapus (destroy). Tidak ada interval yang mengecek semua
    pegawai tiap detik. */
 
-// Dua nada TURUN dan pendek — kebalikan lonceng selesai yang tiga nada naik:
-// yang ini bukan kabar baik, cuma "masih ada yang menunggu kamu".
-function bunyiLoncengPengingat() {
-  if (!audio) return;
-  if (audio.state === 'suspended') audio.resume().catch(() => {});
-  const t0 = audio.currentTime;
-  [783.99, 659.25].forEach((freq, i) => {   // G5 E5
-    const o = audio.createOscillator(), g = audio.createGain();
-    o.type = 'sine';
-    o.frequency.value = freq;
-    const mulai = t0 + i * 0.14;
-    g.gain.setValueAtTime(0.0001, mulai);
-    g.gain.exponentialRampToValueAtTime(0.09, mulai + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, mulai + 0.3);
-    o.connect(g); g.connect(busNotif);
-    o.start(mulai); o.stop(mulai + 0.35);
-  });
+/* Pengingat memakai motif yang SAMA dengan kejadiannya, cuma DIULANG sekali.
+   Pengulangan itulah yang berarti "ini bukan kejadian baru, ini yang tadi
+   belum kamu tengok" — sekaligus tetap memberi tahu jenisnya, yang tidak bisa
+   dilakukan nada pengingat generik. */
+function bunyiPengingat(a) {
+  const motif = a.butuh ? bunyiPanggil : bunyiBerhenti;
+  motif();
+  setTimeout(motif, 700);
 }
 
 // Judul tab: awalan "(n) menunggu paraf · " selama ada pegawai terkatung,
@@ -5519,7 +5554,7 @@ function bunyikanPengingat(a, jenjang) {
   // sempat lolos — lebih baik diam daripada mengingatkan hal yang tidak ada
   if (!a.butuh && !a.macet) return;
   if (agents.get(a.id) !== a) return;
-  bunyiLoncengPengingat();
+  bunyiPengingat(a);
   notifPeramban(a, jenjang);
 }
 
@@ -5549,19 +5584,40 @@ function notifPeramban(a, jenjang) {
   } catch { /* konstruktor Notification bisa melempar di beberapa peramban seluler */ }
 }
 
-function ucapSuara(teks) {
-  if (!('speechSynthesis' in window)) return;
+/* ---------- suara ucap ----------
+   Dulu ini SpeechSynthesis bawaan peramban. Sekarang klip mp3 sungguhan yang
+   dibuat server sekali lewat OpenRouter lalu disimpan — lihat blok "suara
+   ucap" di server.mjs. Halaman sengaja tidak tahu apa-apa soal penyedia,
+   model, atau kunci: dia cuma meminta kalimat dan menerima audio (atau tidak).
+
+   Kalimatnya HARUS sama persis dengan `suaraKalimat` di server.mjs. Kalau
+   tidak, "panaskan cache" memanaskan kalimat yang tidak pernah dipakai dan
+   tiap notifikasi jadi memanggil OpenRouter lagi. Satu-satunya alasan daftar
+   ini ada di dua tempat: yang sini yang meminta, yang sana yang memanaskan. */
+const UCAP = {
+  selesai: (nama) => 'Izin, ' + (nama ? nama + ' ' : 'tugasnya ') + 'selesai',
+  arahan: () => 'Izin, mohon arahan',
+};
+
+/* Nyala/mati-nya dipegang SERVER (nama.json/suara.json), bukan localStorage —
+   supaya sama di semua tab dan bertahan sesudah server mati. Nilai di sini
+   cuma cermin yang diisi muatSuara() waktu halaman dibuka. */
+let ucapNyala = false;
+
+function ucapKlip(teks) {
+  if (!ucapNyala || !teks) return;
+  /* Server menjawab 204 kalau fiturnya mati, kuncinya belum dipasang, atau
+     OpenRouter gagal. 204 BUKAN galat yang perlu dilaporkan: loncengnya sudah
+     berbunyi duluan (bunyiSelesai/bunyiPanggil di atas), ucapan ini cuma
+     lapisan tambahan. Makanya tidak ada satu pun cabang di sini yang menulis
+     pesan ke layar. */
   try {
-    const u = new SpeechSynthesisUtterance(teks);
-    u.lang = 'id-ID';
-    u.rate = 1.05;
-    u.volume = 0.85 * VOL.notif;
-    // suara id-ID kalau browsernya punya; kalau tidak, ya suara default —
-    // getVoices() sering kosong di panggilan pertama, itu bukan galat
-    const suara = speechSynthesis.getVoices().find((v) => v.lang.startsWith('id'));
-    if (suara) u.voice = suara;
-    speechSynthesis.speak(u);
-  } catch { /* Web Speech API kadang absen atau ditolak browser headless */ }
+    const el = new Audio('/ucap?teks=' + encodeURIComponent(teks));
+    /* Elemen <audio> tidak lewat busNotif (itu Web Audio), jadi volumenya
+       dikalikan tangan di sini supaya slider notifikasi tetap berlaku. */
+    el.volume = Math.max(0, Math.min(1, 0.9 * VOL.notif));
+    el.play().catch(() => { /* 204, autoplay diblokir, atau tab ditutup */ });
+  } catch { /* konstruktor Audio bisa melempar di peramban yang dikunci */ }
 }
 
 /* ---------- musik lofi kantor ---------- */
@@ -5851,7 +5907,7 @@ function blip(freq, dur) {
    dikeluarkan BENDA di meja itu, bukan nada abstrak. Semua disintesis dari
    oscillator + satu buffer derau putih yang dibuat sekali, pendek (≤250 ms),
    dan pelan — ini latar, bukan lonceng. Lonceng notifikasi (notifSelesai,
-   bunyiLoncengPengingat) sengaja tidak lewat sini: itu kabar untuk kamu,
+   notifKonfirmasi, bunyiPengingat) sengaja tidak lewat sini: itu kabar untuk kamu,
    bukan suara ruangan.
 
    Tiga rem supaya sesi yang deras (Read beruntun, 20 tool call/detik) tidak
@@ -5964,7 +6020,7 @@ const FOLEY = {
     foleyDerauNada(k, t + 0.06 + Math.random() * 0.06, 'highpass', 2000, 0, 0.035, 0.012, 0.15);
   },
   // gagal: "deng" persegi pendek yang turun — beda dari lonceng galat
-  // (bunyiLonceng sinus tiga nada) yang jauh lebih panjang dan naik
+  // (bunyiSelesai sinus tiga nada) yang jauh lebih panjang dan naik
   gagal(k, t) {
     foleyNada(k, t, 'square', 300, 200, 0.03, 0.12);
   },
@@ -7098,7 +7154,6 @@ const izinTunggu = new Map();        // sesi 12-char -> { id, tool, ringkasan }
 
 const elKendaliMati = document.getElementById('kendaliMati');
 const elForm = document.getElementById('formTugas');
-const elKredensial = document.getElementById('kredensialPanel');
 const elNama = document.getElementById('tugasNama');
 const elPrompt = document.getElementById('tugasPrompt');
 const elCwd = document.getElementById('tugasCwd');
@@ -7133,12 +7188,6 @@ async function muatKendali() {
     // statusnya sengaja tidak pernah ditampilkan, apa pun jawaban server.
     elKendaliMati.hidden = true;
     elForm.hidden = true;
-    // Panel token headless tetap independen: /kredensial hanya menyala kalau
-    // kendali web (izin) nyala, jadi itu satu-satunya syarat kelihatan di sini.
-    if (elKredensial) {
-      elKredensial.hidden = !d.izin;
-      if (d.izin) statusKredensial(d);
-    }
   } catch (_) {
     elKendaliMati.textContent = 'server tidak menjawab';
   }
@@ -7195,76 +7244,6 @@ async function beriNama(sesi) {
   } catch (_) { /* nama tetap tampil lokal walau server tidak menjawab */ }
 }
 
-/* ------------------------------------------------------ token headless ----
-   Sesi yang dilahirkan halaman ini butuh kredensial sendiri. Boleh ditempel di
-   sini supaya tidak perlu mengatur env di terminal. Yang perlu kamu tahu: nilai
-   tokennya cuma berjalan satu arah — halaman mengirim, server menyimpan di
-   memori, dan tidak ada endpoint yang bisa membacanya kembali. Yang bisa dibaca
-   halaman hanya ADA atau TIDAK. */
-const elToken = document.getElementById('tokenNilai');
-const elTokenSimpan = document.getElementById('tokenSimpan');
-const elTokenHapus = document.getElementById('tokenHapus');
-const elTokenStatus = document.getElementById('tokenStatus');
-const elTokenIngat = document.getElementById('tokenIngat');
-
-function statusKredensial(d) {
-  if (!elTokenStatus) return;
-  const punya = Boolean(d && d.punyaKredensial);
-  elTokenStatus.className = 'kredensial-status' + (punya ? ' ok' : '');
-  const tempat = d && d.kredensialBerkas
-    ? 'diingat di berkas' : 'di memori server saja';
-  elTokenStatus.textContent = punya
-    ? 'tersimpan · ' + tempat + ' · dikirim sebagai ' + (d.kredensialEnv || 'env')
-    : 'belum ada — sesi baru memakai kredensial bawaan mesin';
-}
-
-async function kirimKredensial(nilai) {
-  if (!kendali.token) { statusKredensial(null); return; }
-  elTokenStatus.className = 'kredensial-status';
-  elTokenStatus.textContent = 'mengirim…';
-  try {
-    const res = await fetch('/kredensial', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        token: kendali.token, nilai,
-        simpan: elTokenIngat ? elTokenIngat.checked : false,
-      }),
-    });
-    const d = await res.json();
-    if (!d.ok) {
-      elTokenStatus.className = 'kredensial-status err';
-      elTokenStatus.textContent = d.pesan || 'gagal';
-      return;
-    }
-    // Kosongkan kolomnya begitu tersimpan: tidak ada gunanya nilai itu tetap
-    // menganggur di DOM setelah server memegangnya.
-    elToken.value = '';
-    statusKredensial({
-      punyaKredensial: d.punya, kredensialEnv: d.envKey, kredensialBerkas: d.berkas,
-    });
-    // gagal menulis berkas bukan gagal total: tokennya tetap dipakai sesi baru
-    if (d.pesan) {
-      elTokenStatus.className = 'kredensial-status err';
-      elTokenStatus.textContent = d.pesan;
-    }
-  } catch (err) {
-    elTokenStatus.className = 'kredensial-status err';
-    elTokenStatus.textContent = 'gagal menghubungi server: ' + err.message;
-  }
-}
-
-if (elTokenSimpan) {
-  elTokenSimpan.onclick = () => {
-    const nilai = elToken.value.trim();
-    if (!nilai) { elTokenStatus.className = 'kredensial-status err';
-                  elTokenStatus.textContent = 'kolomnya masih kosong'; return; }
-    kirimKredensial(nilai);
-  };
-  elTokenHapus.onclick = () => { elToken.value = ''; kirimKredensial(''); };
-  elToken.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); elTokenSimpan.click(); }
-  });
-}
 
 /* ------------------------------------------------------ loket disposisi ----
    Tugas yang dikirim waktu keempat slot penuh tidak ditolak, tapi menunggu di
@@ -8866,6 +8845,292 @@ setNotifPeramban.onclick = async () => {
   notifPerambanGambar();
 };
 notifPerambanGambar();
+
+/* ---------- panel suara ucap ----------
+   Semua setelan di blok ini tinggal di SERVER, bukan localStorage: kuncinya
+   memang tidak boleh ada di halaman, dan model/voice/daftar nama harus sama
+   untuk semua penonton dan bertahan sesudah server mati. Halaman cuma cermin.
+
+   Tidak ada satu pun rute di bawah yang memakai `kendali.token`. Token itu
+   penjaga jalur yang MELAHIRKAN SESI (--izinkan-perintah); menuntutnya di sini
+   berarti panel ini cuma hidup kalau servernya dijalankan dengan flag itu. */
+const setUcap = document.getElementById('setUcap');
+const setUcapKunci = document.getElementById('setUcapKunci');
+const setUcapKunciSimpan = document.getElementById('setUcapKunciSimpan');
+const setUcapKunciKet = document.getElementById('setUcapKunciKet');
+const setUcapModel = document.getElementById('setUcapModel');
+const setUcapModelDaftar = document.getElementById('setUcapModelDaftar');
+const setUcapVoice = document.getElementById('setUcapVoice');
+const setUcapVoiceDaftar = document.getElementById('setUcapVoiceDaftar');
+const setUcapCoba = document.getElementById('setUcapCoba');
+const setUcapKet = document.getElementById('setUcapKet');
+const setUcapCache = document.getElementById('setUcapCache');
+const setUcapPanasi = document.getElementById('setUcapPanasi');
+const setUcapBersih = document.getElementById('setUcapBersih');
+
+const ukuranSingkat = (b) => (b < 1024 ? b + ' B'
+  : b < 1024 * 1024 ? (b / 1024).toFixed(0) + ' KB'
+  : (b / 1024 / 1024).toFixed(1) + ' MB');
+
+function ucapKet(el, teks, jenis) {
+  el.className = 'pengaturan-izin-ket' + (jenis ? ' ' + jenis : '');
+  el.textContent = teks;
+}
+
+function ucapGambar(d) {
+  if (!d) return;
+  ucapNyala = Boolean(d.aktif);
+  setUcap.checked = ucapNyala;
+  if (typeof d.model === 'string') setUcapModel.value = d.model;
+  if (typeof d.voice === 'string') setUcapVoice.value = d.voice;
+  ucapKet(setUcapKunciKet, d.punyaKunci
+    ? 'terpasang · …' + d.kunciEkor
+    : 'belum ada — tanpa kunci, notifikasi memakai lonceng saja',
+  d.punyaKunci ? 'ok' : '');
+  const c = d.cache || { jumlah: 0, byte: 0 };
+  setUcapCache.textContent = c.jumlah
+    ? 'cache ' + c.jumlah + ' klip · ' + ukuranSingkat(c.byte)
+    : 'cache kosong';
+  setUcapBersih.disabled = !c.jumlah;
+}
+
+/* SEMUA panggilan panel ini lewat sini, supaya pesan gagalnya jujur.
+
+   Dulu semuanya berujung "gagal menghubungi server" — termasuk waktu
+   servernya menjawab dengan riang, cuma 404 karena PROSESNYA masih memuat
+   server.mjs versi lama (server.mjs dibaca sekali saat start; menyimpan
+   berkasnya tidak memuat ulang proses yang sedang jalan). Pesan yang salah
+   begitu menghabiskan waktu orang: yang dicurigai jadi kuncinya, padahal yang
+   perlu cuma menjalankan ulang `dinas`. */
+async function panelJson(jalur, opsi) {
+  let res;
+  try { res = await fetch(jalur, opsi); }
+  catch { return { galat: 'server tidak menjawab — apa `dinas` masih jalan?' }; }
+
+  if (res.status === 404) {
+    return { galat: 'server masih versi lama (' + jalur.split('?')[0]
+      + ' belum dikenal) — hentikan lalu jalankan ulang dinas' };
+  }
+  /* asalSah() di server menolak Origin selain 127.0.0.1/localhost. Yang paling
+     sering kejadian: ruangannya dibuka lewat IP LAN mesin ini, dari HP. */
+  if (res.status === 403) {
+    return { galat: 'ditolak server — buka ruangan lewat 127.0.0.1 atau localhost' };
+  }
+  let d = null;
+  try { d = await res.json(); }
+  catch { return { galat: 'jawaban server tidak terbaca (HTTP ' + res.status + ')' }; }
+  // 409/502 memang membawa pesan sendiri yang lebih berguna daripada kodenya
+  if (!res.ok && !d.pesan) return { galat: 'server menolak (HTTP ' + res.status + ')' };
+  return { d };
+}
+
+async function muatSuara() {
+  const r = await panelJson('/suara/setelan');
+  if (r.d) ucapGambar(r.d);
+  else ucapKet(setUcapKet, r.galat, 'err');
+}
+
+/* Kolom `kunci` sengaja cuma dikirim kalau memang sedang diganti — mengirim
+   string kosong berarti MENGHAPUS kunci, dan itu tidak boleh terjadi cuma
+   gara-gara kamu mengganti voice. */
+async function simpanSuara(patch, ket) {
+  const r = await panelJson('/suara/setelan', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (r.galat) { ucapKet(ket || setUcapKet, r.galat, 'err'); return null; }
+  const d = r.d;
+  if (!d.ok) { ucapKet(ket || setUcapKet, d.pesan || 'gagal', 'err'); return null; }
+  ucapGambar(d);
+  if (d.pesan) ucapKet(ket || setUcapKet, d.pesan, 'err');
+  else if (ket) ucapKet(ket, 'tersimpan', 'ok');
+  return d;
+}
+
+setUcap.onchange = async () => {
+  const mau = setUcap.checked;
+  const d = await simpanSuara({ aktif: mau });
+  /* Server menolak menyalakan tanpa kunci — centangnya dikembalikan oleh
+     ucapGambar(), tinggal jelaskan kenapa supaya tidak kelihatan macet. */
+  if (mau && d && !d.aktif) ucapKet(setUcapKet, 'pasang kunci OpenRouter dulu', 'err');
+  else ucapKet(setUcapKet, '', '');
+};
+setUcapModel.onchange = () => { gambarVoice(); simpanSuara({ model: setUcapModel.value }); };
+setUcapModel.oninput = gambarVoice;      // ikut waktu memilih dari datalist, sebelum blur
+setUcapVoice.onchange = () => simpanSuara({ voice: setUcapVoice.value });
+
+setUcapKunciSimpan.onclick = async () => {
+  const nilai = setUcapKunci.value.trim();
+  await simpanSuara({ kunci: nilai }, setUcapKunciKet);
+  // Kosongkan begitu server memegangnya: tidak ada gunanya nilai itu
+  // menganggur di DOM.
+  setUcapKunci.value = '';
+};
+
+/* Audisi. Sengaja lewat fetch, bukan `new Audio('/suara/coba')`: kalau
+   gagal, badannya JSON berisi sebabnya — dan sebab itu yang mau kamu baca
+   waktu sedang mencoba-coba model. */
+setUcapCoba.onclick = async () => {
+  setUcapCoba.disabled = true;
+  ucapKet(setUcapKet, 'membuat klip…', '');
+  /* Tidak lewat panelJson(): yang ditunggu di sini byte audio, bukan JSON.
+     Tapi bedanya 404-versi-lama vs galat sungguhan tetap harus terdengar
+     jelas — itu justru pertanyaan pertama waktu audisi tidak bunyi. */
+  try {
+    let res;
+    try { res = await fetch('/suara/coba'); }
+    catch { ucapKet(setUcapKet, 'server tidak menjawab — apa `dinas` masih jalan?', 'err'); return; }
+    if (res.status === 404) {
+      ucapKet(setUcapKet, 'server masih versi lama — hentikan lalu jalankan ulang dinas', 'err');
+      return;
+    }
+    const jenis = res.headers.get('content-type') || '';
+    if (!res.ok || !jenis.startsWith('audio/')) {
+      let pesan = 'gagal (' + res.status + ')';
+      try { pesan = (await res.json()).pesan || pesan; } catch { /* bukan JSON */ }
+      ucapKet(setUcapKet, pesan, 'err');
+      return;
+    }
+    const url = URL.createObjectURL(await res.blob());
+    const el = new Audio(url);
+    el.volume = Math.max(0, Math.min(1, 0.9 * VOL.notif));
+    el.onended = el.onerror = () => URL.revokeObjectURL(url);
+    await el.play().catch(() => {});
+    ucapKet(setUcapKet, 'terdengar? kalau ya, tinggal centang di atas', 'ok');
+    muatSuara();      // cache-nya barusan bertambah satu
+  } finally {
+    setUcapCoba.disabled = false;
+  }
+};
+
+setUcapPanasi.onclick = async () => {
+  setUcapPanasi.disabled = true;
+  ucapKet(setUcapKet, 'membuat klip untuk seluruh daftar nama… ini bisa lama', '');
+  try {
+    const r = await panelJson('/suara/panasi', { method: 'POST' });
+    if (r.galat) { ucapKet(setUcapKet, r.galat, 'err'); return; }
+    const d = r.d;
+    if (!d.ok) { ucapKet(setUcapKet, d.pesan || 'gagal', 'err'); return; }
+    const ringkas = d.dibuat + ' klip baru, ' + d.sudah + ' sudah ada'
+      + (d.gagal ? ', ' + d.gagal + ' gagal' : '');
+    ucapKet(setUcapKet, ringkas + (d.pesan ? ' — ' + d.pesan : ''), d.gagal ? 'err' : 'ok');
+    muatSuara();     // jumlah & ukuran cache-nya berubah
+  } finally {
+    setUcapPanasi.disabled = false;
+  }
+};
+
+setUcapBersih.onclick = async () => {
+  const r = await panelJson('/suara/cache', { method: 'DELETE' });
+  if (r.galat) { ucapKet(setUcapKet, r.galat, 'err'); return; }
+  ucapKet(setUcapKet, r.d.dibuang + ' klip dibuang', 'ok');
+  muatSuara();
+};
+
+/* Daftar model TTS diambil sekali waktu halaman dibuka. Gagal = datalist-nya
+   kosong dan kolomnya jadi kotak teks biasa — bukan galat yang perlu
+   ditampilkan, sebab ID model memang boleh diketik sendiri. */
+let modelSuara = [];
+
+/* Nama voice sama sekali tidak seragam antar penyedia — `Zephyr` (Google),
+   `flux-bree-en` (Deepgram), `English_radiant_girl` (MiniMax),
+   `en-US-Harper:MAI-Voice-2` (Microsoft) — dan voice yang salah bikin
+   permintaannya ditolak mentah-mentah. Daftarnya untung ikut di metadata
+   model, jadi kolom voice mengikuti model yang sedang dipilih alih-alih
+   menyuruh kamu menebak. */
+function gambarVoice() {
+  const m = modelSuara.find((x) => x.id === setUcapModel.value);
+  setUcapVoiceDaftar.innerHTML = '';
+  if (!m || !m.suara || !m.suara.length) {
+    // `suara: null` = penyedianya menerima voice bebas (mis. Fish Audio),
+    // bukan berarti tidak punya voice. Jangan dikosongkan seolah salah.
+    setUcapVoice.placeholder = m ? 'voice bebas' : 'Zephyr';
+    return;
+  }
+  for (const v of m.suara) {
+    const o = document.createElement('option');
+    o.value = v;
+    setUcapVoiceDaftar.appendChild(o);
+  }
+  setUcapVoice.placeholder = m.suara[0];
+}
+
+async function muatModelSuara() {
+  try {
+    // Gagal di sini sengaja tidak diteriakkan: kolom modelnya toh tetap bisa
+    // diketik manual, dan panel sudah punya satu tempat pesan galat.
+    const d = (await panelJson('/suara/model')).d;
+    if (!d || !d.model || !d.model.length) return;
+    modelSuara = d.model;
+    setUcapModelDaftar.innerHTML = '';
+    for (const m of d.model.slice(0, 60)) {
+      const o = document.createElement('option');
+      o.value = m.id;
+      /* Harga '0' itu angka sah (model gratis), jadi tidak boleh disaring
+         dengan cek kebenaran biasa — nanti yang gratis malah kelihatan
+         seperti yang harganya tidak diketahui. */
+      const h = m.harga === '' || m.harga == null ? ''
+        : Number(m.harga) === 0 ? ' · gratis'
+        : ' · $' + m.harga + '/karakter';
+      o.label = m.nama + h;
+      setUcapModelDaftar.appendChild(o);
+    }
+    gambarVoice();
+  } catch { /* offline: datalist tetap kosong, kolomnya tetap bisa diketik */ }
+}
+
+/* ---------- panel daftar nama ----------
+   Textarea DIBIARKAN KOSONG selama daftar bawaan yang berlaku, dan daftar
+   bawaannya dipasang jadi placeholder. Dengan begitu "kosong = bawaan" tidak
+   perlu dijelaskan kalimat: kelihatan sendiri. */
+const setNamaDaftar = document.getElementById('setNamaDaftar');
+const setNamaSimpan = document.getElementById('setNamaSimpan');
+const setNamaUndi = document.getElementById('setNamaUndi');
+const setNamaKet = document.getElementById('setNamaKet');
+
+async function muatNamaDaftar() {
+  const r = await panelJson('/nama/daftar');
+  if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
+  const d = r.d;
+  setNamaDaftar.placeholder = (d.bawaan || []).join('\n');
+  setNamaDaftar.value = d.pakaiBawaan ? '' : (d.penuh || []).join('\n');
+  ucapKet(setNamaKet, d.pakaiBawaan
+    ? 'memakai daftar bawaan (' + (d.bawaan || []).length + ' nama)'
+    : (d.penuh || []).length + ' nama', '');
+}
+
+setNamaSimpan.onclick = async () => {
+  const penuh = setNamaDaftar.value.split('\n').map((s) => s.trim()).filter(Boolean);
+  const r = await panelJson('/nama/daftar', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ penuh }),
+  });
+  if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
+  const d = r.d;
+  ucapKet(setNamaKet, d.pesan
+    || (d.pakaiBawaan ? 'kosong — kembali ke daftar bawaan' : 'tersimpan · ' + d.jumlah + ' nama'),
+  d.pesan ? 'err' : 'ok');
+  muatNamaDaftar();
+};
+
+/* Undi ulang. Nama pegawai yang sedang duduk berganti SEKARANG di semua
+   halaman — servernya menyiarkan event `nama` per kursi yang berubah, jadi
+   halaman ini tidak perlu menggambar ulang apa pun sendiri. */
+setNamaUndi.onclick = async () => {
+  setNamaUndi.disabled = true;
+  try {
+    const r = await panelJson('/nama/undi-ulang', { method: 'POST' });
+    if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
+    ucapKet(setNamaKet, r.d.diganti + ' kursi diundi ulang'
+      + (r.d.dilewati ? ', ' + r.d.dilewati + ' nama pilihanmu dibiarkan' : ''), 'ok');
+  } finally {
+    setNamaUndi.disabled = false;
+  }
+};
+
+muatSuara();
+muatModelSuara();
+muatNamaDaftar();
 
 /* Volume mixer per komponen — beda dari tiga checkbox di atas: angka 0..1 ini
    BOLEH diingat lewat localStorage, karena cuma pengali relatif dan tidak

@@ -122,49 +122,6 @@ const LAPOR_TIMEOUT_MS = 5 * 1000;
 const laporTerakhir = new Map();            // "sesi|jenis" -> ts kiriman terakhir
 let laporWarnTs = 0;                        // console.warn gagal kirim: maks 1/menit
 
-/* Kredensial untuk sesi yang dilahirkan halaman ini. Boleh ditempel dari web
-   supaya tidak perlu mengatur env di terminal, dengan empat batasan yang
-   sengaja dipasang dan tidak ditawar:
-   - disimpan DI MEMORI saja; tidak pernah ditulis ke disk, hilang saat server mati
-   - tidak pernah dikirim balik ke halaman; yang bisa dibaca cuma ada/tidaknya
-   - tidak pernah masuk log, konsol, maupun stream event
-   - diteruskan ke proses anak lewat ENV, bukan argv: daftar proses di Windows
-     bisa dibaca proses lain, isi env-nya tidak                                */
-let kredensial = null;                      // { nilai, envKey, sejak }
-
-/** Token dari `claude setup-token` dan kunci API dipakai lewat env yang berbeda.
-    Awalannya yang membedakan: sk-ant-api… kunci API, sk-ant-oat… token OAuth. */
-function envKredensial(nilai) {
-  return /^sk-ant-api/i.test(nilai) ? 'ANTHROPIC_API_KEY' : 'CLAUDE_CODE_OAUTH_TOKEN';
-}
-
-/* Kalau kamu mencentang "ingat di berkas", tokennya ditulis ke sini supaya
-   tidak perlu ditempel ulang tiap server dijalankan. Isinya token MENTAH —
-   perlakukan seperti kunci: jangan ikut di-commit, jangan dikirim ke siapa pun.
-   Mode 0600 berlaku di POSIX; di Windows yang berlaku ACL folder induknya. */
-const BERKAS_TOKEN = process.env.AGENT_ROOM_TOKEN_FILE
-  || path.join(__dirname, '.agent-room-token');
-
-function muatKredensial() {
-  let nilai = '';
-  try {
-    nilai = fs.readFileSync(BERKAS_TOKEN, 'utf8').trim();
-  } catch {
-    return;                                   // tidak ada berkasnya: wajar
-  }
-  if (!nilai) return;
-  kredensial = { nilai, envKey: envKredensial(nilai), sejak: Date.now(), dariBerkas: true };
-  console.log('[agent-room] kredensial headless dimuat dari ' + BERKAS_TOKEN
-    + ' (' + kredensial.envKey + ')');
-}
-
-function tulisBerkasToken(nilai) {
-  fs.writeFileSync(BERKAS_TOKEN, nilai + '\n', { mode: 0o600 });
-}
-
-function hapusBerkasToken() {
-  try { fs.unlinkSync(BERKAS_TOKEN); } catch { /* memang belum pernah ada */ }
-}
 const namaSesi = new Map();                 // sesi 12-char -> nama panggilan
 const peranSesi = new Map();                // sesi 12-char -> id jabatan
 // Id jabatan itu kunci tabel di sisi halaman, bukan teks bebas. Disaring di
@@ -971,12 +928,14 @@ const tokenSesi = new Map();                // sesi 12-char -> { input, output, 
      3. penulisnya (riwayatCatat/riwayatLebur) otomatis memakai angka baru.
    Berkas lama tidak pernah ditulis ulang hanya demi versi; migrasi hidup
    di memori sampai barisnya kebetulan ditulis ulang (pemadatan).           */
-const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1 };
+const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 1, suara: 1 };
 const versiSkema = (o) => (Number.isFinite(Number(o.v)) ? Number(o.v) : 0);
 function migrasiToken(o) { o.v = SKEMA.token; return o; }
 function migrasiAgenda(o) { o.v = SKEMA.agenda; return o; }
 function migrasiBukuInduk(o) { o.v = SKEMA.bukuInduk; return o; }
 function migrasiFormasi(o) { o.v = SKEMA.formasi; return o; }
+function migrasiNama(o) { o.v = SKEMA.nama; return o; }
+function migrasiSuara(o) { o.v = SKEMA.suara; return o; }
 
 const BERKAS_RIWAYAT_TOKEN = process.env.AGENT_ROOM_TOKEN_LOG
   || path.join(__dirname, 'token-riwayat.jsonl');
@@ -2190,21 +2149,99 @@ const PEGAWAI_SEPI_MS = 30 * 60 * 1000;     // penghuni sediam ini dianggap suda
    pegawaiLepas() baru dipanggil SESUDAH event pamitnya disiarkan.          */
 const PEGAWAI_KIND = new Set(['pre', 'post', 'stop', 'session-start', 'prompt']);
 
-/* Dua daftar nama bergaya pegawai dinas. Undiannya deterministik (lihat
-   pegawaiUndi), jadi URUTAN daftar ini ikut menentukan siapa yang lahir di
-   kursi mana: menyisipkan nama di TENGAH daftar akan mengganti nama pegawai
-   yang sudah bertugas. Kalau daftarnya mau diperpanjang, sambung di ujung.
+/* Daftar nama bergaya pegawai dinas — nama UTUH, bukan dua daftar yang
+   dipasang-pasangkan. Ini cuma BAWAAN: begitu kamu menyimpan daftarmu sendiri
+   lewat panel ⚙️ (jatuh ke nama.json), daftar itu yang dipakai — lihat
+   daftarNama(). Daftar bawaan tidak pernah dibuang, dia jaring pengaman kalau
+   nama.json hilang, kosong, atau rusak.
+
+   Undiannya deterministik (lihat pegawaiUndi), jadi URUTAN daftar ikut
+   menentukan siapa yang lahir di kursi mana: menyisipkan nama di TENGAH akan
+   mengganti nama pegawai yang BELUM tersimpan di formasi.json. Yang sudah
+   tersimpan tidak ikut berubah — namanya menempel di kursi. Kalau daftarnya
+   mau diperpanjang, sambung di ujung.
+
    Aksesori kepala di halaman mengikuti JABATAN, bukan nama, jadi kesan gender
    pada nama bukan janji gambar. */
-const NAMA_DEPAN = [
-  'Budi', 'Sri', 'Bambang', 'Dewi', 'Agus', 'Siti', 'Joko', 'Rina',
-  'Hendra', 'Ratna', 'Slamet', 'Endang', 'Bayu', 'Wulan', 'Darmanto', 'Tuti',
-  'Eko', 'Yanti', 'Rudi', 'Maryati', 'Suparman', 'Nunung', 'Wahyu', 'Titik',
+const NAMA_BAWAAN = [
+  'Budi Santoso', 'Sri Rahayu', 'Bambang Nugroho', 'Dewi Handayani',
+  'Agus Wijaya', 'Siti Kusuma', 'Joko Prasetyo', 'Rina Lestari',
+  'Hendra Hartono', 'Ratna Puspita', 'Slamet Setiawan', 'Endang Mulyani',
+  'Bayu Wibowo', 'Wulan Anggraini', 'Darmanto Suryana', 'Tuti Saputra',
+  'Eko Santoso', 'Yanti Rahayu', 'Rudi Nugroho', 'Maryati Handayani',
+  'Suparman Wijaya', 'Nunung Kusuma', 'Wahyu Prasetyo', 'Titik Lestari',
+  'Joko Hartono', 'Ratna Setiawan', 'Agus Mulyani', 'Dewi Wibowo',
+  'Bambang Anggraini', 'Sri Suryana', 'Budi Saputra', 'Siti Puspita',
 ];
-const NAMA_BELAKANG = [
-  'Santoso', 'Rahayu', 'Nugroho', 'Handayani', 'Wijaya', 'Kusuma', 'Prasetyo', 'Lestari',
-  'Hartono', 'Puspita', 'Setiawan', 'Wibowo', 'Anggraini', 'Suryana', 'Mulyani', 'Saputra',
-];
+
+/* Daftar nama pilihanmu, disimpan server (bukan localStorage) supaya sama di
+   semua tab dan bertahan sesudah server mati. Kosong = pakai NAMA_BAWAAN. */
+const BERKAS_NAMA = process.env.AGENT_ROOM_NAMA || path.join(__dirname, 'nama.json');
+const namaDaftar = { v: SKEMA.nama, penuh: [] };
+
+const NAMA_MAKS = 512;                      // batas atas daftar; jauh di atas kebutuhan
+const daftarNama = () => (namaDaftar.penuh.length ? namaDaftar.penuh : NAMA_BAWAAN);
+
+/* Nama dari manusia lewat panel: dipangkas, dibuang yang kosong, dibuang
+   kembar, dipotong 24 huruf (sama dengan batas /nama), dan dibatasi jumlahnya.
+   Urutannya DIPERTAHANKAN — undian deterministik bergantung pada urutan. */
+function namaBersih(arr) {
+  if (!Array.isArray(arr)) return [];
+  const keluar = [], ada = new Set();
+  for (const mentah of arr) {
+    if (typeof mentah !== 'string') continue;
+    const n = clip(mentah.replace(/\s+/g, ' ').trim(), 24);
+    if (!n || ada.has(n)) continue;
+    ada.add(n);
+    keluar.push(n);
+    if (keluar.length >= NAMA_MAKS) break;
+  }
+  return keluar;
+}
+
+function namaMuat() {
+  let teks = '';
+  try { teks = fs.readFileSync(BERKAS_NAMA, 'utf8'); }
+  catch (err) {
+    // belum ada memang wajar; "ada tapi tidak terbaca" tidak boleh diam-diam
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] nama: ' + path.basename(BERKAS_NAMA)
+        + ' tidak terbaca (' + err.message + '), memakai daftar bawaan');
+    }
+    return;
+  }
+  let o = null;
+  try { o = JSON.parse(teks); } catch { o = null; }
+  if (!o || typeof o !== 'object') {
+    console.warn('[agent-room] nama: isi ' + path.basename(BERKAS_NAMA)
+      + ' tidak terbaca sebagai JSON, memakai daftar bawaan');
+    return;
+  }
+  const v = versiSkema(o);
+  if (v > SKEMA.nama) {
+    console.warn('[agent-room] nama: ' + path.basename(BERKAS_NAMA) + ' ber-v' + v
+      + ' (server ini paham v' + SKEMA.nama + '), memakai daftar bawaan');
+    return;
+  }
+  migrasiNama(o);
+  namaDaftar.penuh = namaBersih(o.penuh);
+  if (namaDaftar.penuh.length) {
+    console.log('[agent-room] daftar nama dimuat: ' + namaDaftar.penuh.length
+      + ' nama dari ' + path.basename(BERKAS_NAMA));
+  }
+}
+
+function namaTulis() {
+  const isi = JSON.stringify({ v: SKEMA.nama, penuh: namaDaftar.penuh }, null, 2) + '\n';
+  const tmp = BERKAS_NAMA + '.tmp';
+  try {
+    fs.writeFileSync(tmp, isi);
+    fs.renameSync(tmp, BERKAS_NAMA);
+    return '';
+  } catch (err) {
+    return err.message;
+  }
+}
 
 const formasi = { v: SKEMA.formasi, proyek: {} };   // nama folder -> [kursi]; indeks 0 = pegawai tetap #1
 const slotSesi = new Map();                 // sesi 12-char -> { proyek, i } — memori saja, tidak pernah ke disk
@@ -2230,21 +2267,29 @@ function namaDipakai(kursi, kecuali) {
   return s;
 }
 
-/* Undian nama DETERMINISTIK: hash(proyek + '#' + kursi + '#' + salt), byte
-   pertama memilih nama depan, byte kedua nama belakang. Deterministik dipilih
-   supaya (a) formasi.json boleh hilang tanpa membuat seluruh kantor berganti
-   orang, dan (b) uji bisa menghitung ulang nama yang seharusnya keluar tanpa
-   mematok nama harfiah di dalam kodenya. `salt` dinaikkan (probe linear)
-   selama hasilnya sudah dipakai kursi lain. */
+/* Undian nama DETERMINISTIK: hash(proyek + '#' + kursi + '#' + salt), dua byte
+   pertama jadi indeks ke daftar nama yang sedang berlaku. Deterministik
+   dipilih supaya (a) formasi.json boleh hilang tanpa membuat seluruh kantor
+   berganti orang, dan (b) uji bisa menghitung ulang nama yang seharusnya
+   keluar tanpa mematok nama harfiah di dalam kodenya. `salt` dinaikkan (probe
+   linear) selama hasilnya sudah dipakai kursi lain. */
 function pegawaiUndi(proyek, i, dipakai) {
+  const daftar = daftarNama();
   for (let salt = 0; salt < 64; salt++) {
     const h = crypto.createHash('sha256').update(proyek + '#' + i + '#' + salt).digest();
-    const nama = NAMA_DEPAN[h[0] % NAMA_DEPAN.length] + ' ' + NAMA_BELAKANG[h[1] % NAMA_BELAKANG.length];
+    const nama = daftar[h.readUInt16BE(0) % daftar.length];
     if (!dipakai || !dipakai.has(nama)) return nama;
   }
-  // 384 kombinasi vs 12 kursi: tidak akan sampai sini, tapi jangan pernah
-  // mengembalikan nama kosong hanya karena undian mentok
-  return NAMA_DEPAN[i % NAMA_DEPAN.length] + ' ' + NAMA_BELAKANG[i % NAMA_BELAKANG.length];
+  /* Daftarnya lebih pendek daripada jumlah kursi — mungkin saja sekarang,
+     karena daftarnya kamu yang menyusun dan boleh cuma berisi satu nama.
+     Angka di belakang lebih jujur daripada dua pegawai bernama persis sama di
+     satu ruangan, dan jauh lebih baik daripada nama kosong. */
+  const dasar = daftar[i % daftar.length];
+  if (!dipakai || !dipakai.has(dasar)) return dasar;
+  for (let n = 2; n < 100; n++) {
+    if (!dipakai.has(dasar + ' ' + n)) return dasar + ' ' + n;
+  }
+  return dasar;
 }
 
 /* Buang formasi folder yang paling lama tidak ditengok sampai jumlah proyek
@@ -2476,6 +2521,9 @@ function formasiMuat() {
   if (n) console.log('[agent-room] formasi dimuat: ' + jumlahKursi + ' pegawai tetap di ' + n + ' proyek dari ' + BERKAS_FORMASI
     + (dibuang ? ' (' + dibuang + ' proyek terlama dibuang, batas ' + FORMASI_PROYEK_MAKS + ')' : ''));
 }
+// Urutannya penting: daftar nama harus sudah di tangan sebelum formasi dimuat,
+// sebab kursi yang namanya kosong di berkas diundi ulang saat pemuatan itu.
+namaMuat();
 formasiMuat();
 
 /* ------------------------------------------------------------ papan SKP ---
@@ -2951,9 +2999,12 @@ const SESI_RX = /"session_id"\s*:\s*"([0-9a-zA-Z-]{8,64})"/;
 /* ------------------------------------------------------------- cuaca ----
    Hujan di ruangan mengikuti hujan sungguhan di tempat servernya berdiri.
    Lokasi ditebak dari IP publik lewat geojs.io, cuacanya dari open-meteo.com
-   — dua-duanya tanpa kunci API. Ini SATU-SATUNYA lalu lintas keluar yang
-   dibuat server ini, hasilnya di-cache 10 menit, dan halaman tetap jalan
-   normal (jatuh ke hujan-sesekali acak) kalau endpoint ini gagal.
+   — dua-duanya tanpa kunci API. Hasilnya di-cache 10 menit, dan halaman tetap
+   jalan normal (jatuh ke hujan-sesekali acak) kalau endpoint ini gagal.
+
+   Ini salah satu dari DUA jalur keluar yang dibuat server ini; satunya lagi
+   suara ucap ke OpenRouter di bawah, yang bedanya mati bawaan dan tidak
+   pernah jalan sebelum kamu memasang kunci lewat panel ⚙️.
 
    AGENT_ROOM_CUACA: 'off' mematikan total (server tidak pernah keluar),
    atau 'lat,lon' (mis. '-6.2,106.8') menetapkan lokasi tanpa menebak IP. */
@@ -3030,6 +3081,266 @@ async function cuacaSekarang() {
     throw err;
   }
 }
+
+/* --------------------------------------------------------- suara ucap ----
+   Notifikasi "tugas selesai"/"mohon arahan" diucapkan dengan suara sungguhan,
+   bukan TTS bawaan peramban. Klipnya dibuat sekali lewat OpenRouter lalu
+   DISIMPAN — kalimatnya cuma berubah di bagian namanya, dan nama pegawai
+   jumlahnya berhingga, jadi sesudah beberapa kali pakai (atau sekali tekan
+   "panaskan cache") tidak ada lagi panggilan keluar.
+
+   Tiga hal yang bikin fitur ini tidak bisa merusak apa pun:
+   - MATI BAWAAN. Tanpa kunci OpenRouter, /ucap menjawab 204 dan halaman
+     jatuh ke lonceng earcon-nya sendiri — yang memang tidak butuh jaringan.
+   - Kuncinya tidak pernah keluar dari server. Panel cuma diberi tahu ADA/
+     TIDAK plus empat huruf terakhir; nilainya sendiri tidak pernah keluar.
+   - Gagal apa pun (jaringan, kuota, model dicabut) = 204, bukan 500. Bagi
+     halaman, "tidak ada klip" dan "belum diatur" itu keadaan yang sama.
+
+   Endpoint OpenRouter-nya OpenAI-compatible dan membalas byte audio mentah —
+   bukan JSON, bukan SSE — jadi cukup fetch polos dan dependencies tetap {}. */
+const DIR_SUARA = process.env.AGENT_ROOM_SUARA_DIR || path.join(__dirname, 'suara');
+const BERKAS_SUARA = process.env.AGENT_ROOM_SUARA || path.join(__dirname, 'suara.json');
+/* Kunci dipisah dari suara.json supaya suara.json aman di-`cat` kapan saja.
+   Mode 0600 berlaku di POSIX; di Windows yang berlaku ACL folder induknya —
+   dan itu memang sudah cukup untuk berkas sekecil ini. */
+const BERKAS_SUARA_KUNCI = process.env.AGENT_ROOM_SUARA_KUNCI
+  || path.join(__dirname, '.agent-room-suara-kunci');
+
+/* Alamat tujuannya boleh ditimpa lewat env. Dua gunanya: uji-suara.mjs
+   mengarahkannya ke OpenRouter palsu di localhost (uji tidak boleh pernah
+   benar-benar keluar jaringan), dan kamu bisa menunjuk endpoint
+   OpenAI-compatible sendiri kalau punya. Sengaja env, BUKAN panel: mengganti
+   ke mana kuncimu dikirim bukan setelan sehari-hari, dan tidak boleh bisa
+   diubah oleh apa pun yang datang dari halaman. */
+const SUARA_URL = process.env.AGENT_ROOM_SUARA_URL
+  || 'https://openrouter.ai/api/v1/audio/speech';
+const SUARA_MODEL_URL = process.env.AGENT_ROOM_SUARA_MODEL_URL
+  || 'https://openrouter.ai/api/v1/models?output_modalities=speech';
+const SUARA_TEKS_MAKS = 200;                // kalimat notifikasi itu pendek; ini pagar biaya
+const SUARA_KLIP_MAKS = 4 * 1024 * 1024;    // satu klip wajar < 100 KB; ini pagar kalau model salah
+const SUARA_TIMEOUT_MS = 20000;
+const SUARA_PANASI_MAKS = 64;               // batas satu kali "panaskan cache"
+
+/* Bawaan dipilih dari daftar TTS OpenRouter yang sungguhan, bukan dikira-kira:
+   Gemini Flash TTS satu-satunya yang nama voice-nya netral bahasa (Zephyr,
+   Puck, Kore, …) dan modelnya memang multibahasa. Hampir semua model TTS lain
+   di sana nama voice-nya bertanda bahasa — `-en`, `en_paul_*`, `English_*`,
+   `en-US-*` — alias Inggris duluan, dan kalimat kita bahasa Indonesia.
+   Harganya juga paling murah di daftar itu.
+
+   `preview` di nama modelnya memang risiko: model preview bisa dicabut. Kalau
+   itu terjadi, yang terjadi cuma /ucap balas 204 dan notifikasi kembali ke
+   lonceng — lalu kamu pilih model lain dari panel. Tidak ada yang rusak. */
+const suara = {
+  v: SKEMA.suara,
+  aktif: false,
+  model: 'google/gemini-3.1-flash-tts-preview',
+  voice: 'Zephyr',
+  kecepatan: 1,
+};
+let suaraKunci = '';
+/* Dedupe in-flight: tiga sesi selesai berbarengan dengan nama sama tidak boleh
+   jadi tiga panggilan berbayar. Kuncinya hash, jadi dua kalimat berbeda tetap
+   jalan paralel. */
+const suaraJalan = new Map();               // hash -> Promise<Buffer>
+
+const suaraSiap = () => Boolean(suara.aktif && suaraKunci && suara.model);
+
+/* Model/voice/format/kecepatan ikut di-hash: ganti voice = hash beda = klip
+   lama tidak pernah kepakai lagi, tanpa perlu invalidasi manual. Berkas
+   lamanya sengaja dibiarkan — bolak-balik ganti voice jadi gratis. */
+function suaraHash(teks) {
+  return crypto.createHash('sha256')
+    .update([teks, suara.model, suara.voice, 'mp3', suara.kecepatan].join('\0'))
+    .digest('hex').slice(0, 16);
+}
+const suaraBerkas = (hash) => path.join(DIR_SUARA, hash + '.mp3');
+
+function suaraMuat() {
+  try {
+    const nilai = fs.readFileSync(BERKAS_SUARA_KUNCI, 'utf8').trim();
+    if (nilai) suaraKunci = nilai;
+  } catch { /* belum ada: wajar, fiturnya memang mati bawaan */ }
+
+  let teks = '';
+  try { teks = fs.readFileSync(BERKAS_SUARA, 'utf8'); }
+  catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] suara: ' + path.basename(BERKAS_SUARA)
+        + ' tidak terbaca (' + err.message + '), memakai setelan bawaan');
+    }
+    return;
+  }
+  let o = null;
+  try { o = JSON.parse(teks); } catch { o = null; }
+  if (!o || typeof o !== 'object') {
+    console.warn('[agent-room] suara: isi ' + path.basename(BERKAS_SUARA)
+      + ' tidak terbaca sebagai JSON, memakai setelan bawaan');
+    return;
+  }
+  const v = versiSkema(o);
+  if (v > SKEMA.suara) {
+    console.warn('[agent-room] suara: ' + path.basename(BERKAS_SUARA) + ' ber-v' + v
+      + ' (server ini paham v' + SKEMA.suara + '), memakai setelan bawaan');
+    return;
+  }
+  migrasiSuara(o);
+  suara.aktif = Boolean(o.aktif);
+  if (typeof o.model === 'string' && o.model.trim()) suara.model = clip(o.model.trim(), 120);
+  if (typeof o.voice === 'string') suara.voice = clip(o.voice.trim(), 60);
+  const k = Number(o.kecepatan);
+  if (Number.isFinite(k) && k >= 0.25 && k <= 4) suara.kecepatan = k;
+  // Nilai kuncinya TIDAK dicetak — yang dicatat cuma ada/tidaknya.
+  console.log('[agent-room] suara ucap: ' + (suara.aktif ? 'nyala' : 'mati')
+    + ', model ' + suara.model + (suaraKunci ? ', kunci terpasang' : ', tanpa kunci'));
+}
+
+function suaraTulis() {
+  const isi = JSON.stringify({
+    v: SKEMA.suara, aktif: suara.aktif, model: suara.model,
+    voice: suara.voice, kecepatan: suara.kecepatan,
+  }, null, 2) + '\n';
+  const tmp = BERKAS_SUARA + '.tmp';
+  try {
+    fs.writeFileSync(tmp, isi);
+    fs.renameSync(tmp, BERKAS_SUARA);
+    return '';
+  } catch (err) { return err.message; }
+}
+
+function suaraKunciTulis(nilai) {
+  if (!nilai) {
+    suaraKunci = '';
+    try { fs.unlinkSync(BERKAS_SUARA_KUNCI); } catch { /* memang belum pernah ada */ }
+    console.log('[agent-room] kunci suara dihapus');
+    return '';
+  }
+  suaraKunci = nilai;
+  try {
+    fs.writeFileSync(BERKAS_SUARA_KUNCI, nilai + '\n', { mode: 0o600 });
+    console.log('[agent-room] kunci suara dipasang dan diingat di ' + BERKAS_SUARA_KUNCI);
+    return '';
+  } catch (err) {
+    // Gagal menulis bukan alasan membuang kunci yang sudah dipegang: sesi ini
+    // tetap bisa bersuara, cuma tidak bertahan sesudah server mati.
+    console.log('[agent-room] kunci suara dipasang (gagal ditulis ke berkas)');
+    return err.message;
+  }
+}
+
+/* Isi cache untuk dipajang panel. readdir + stat, bukan berkas indeks
+   terpisah: satu sumber kebenaran, tidak ada yang bisa hanyut. */
+function suaraIsiCache() {
+  let jumlah = 0, byte = 0;
+  let nama = [];
+  try { nama = fs.readdirSync(DIR_SUARA); } catch { return { jumlah: 0, byte: 0 }; }
+  for (const n of nama) {
+    if (!n.endsWith('.mp3')) continue;
+    try { byte += fs.statSync(path.join(DIR_SUARA, n)).size; jumlah++; }
+    catch { /* terhapus di tengah jalan: tidak usah dihitung */ }
+  }
+  return { jumlah, byte };
+}
+
+function suaraKosongkan() {
+  let dibuang = 0;
+  let nama = [];
+  try { nama = fs.readdirSync(DIR_SUARA); } catch { return 0; }
+  for (const n of nama) {
+    if (!n.endsWith('.mp3')) continue;
+    try { fs.unlinkSync(path.join(DIR_SUARA, n)); dibuang++; } catch { /* biarkan */ }
+  }
+  return dibuang;
+}
+
+/* Panggilan sungguhan ke OpenRouter. Melempar kalau gagal — pemanggilnya yang
+   memutuskan itu jadi 204 (jalur /ucap) atau pesan di panel (jalur coba). */
+async function suaraGenerate(teks) {
+  const putus = AbortSignal.timeout
+    ? AbortSignal.timeout(SUARA_TIMEOUT_MS)
+    : undefined;
+  const res = await fetch(SUARA_URL, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer ' + suaraKunci,
+      'content-type': 'application/json',
+      // dipakai OpenRouter buat atribusi; tidak wajib, tapi sopan
+      'x-title': 'agent-room',
+    },
+    body: JSON.stringify({
+      model: suara.model,
+      input: teks,
+      voice: suara.voice || undefined,
+      // WAJIB: bawaannya pcm, yang tidak bisa dimainkan <audio> apa adanya
+      response_format: 'mp3',
+      speed: suara.kecepatan !== 1 ? suara.kecepatan : undefined,
+    }),
+    signal: putus,
+  });
+  if (!res.ok) {
+    // badan galat OpenRouter itu JSON; ambil pesannya kalau ada
+    let ket = '';
+    try {
+      const j = JSON.parse(await res.text());
+      ket = j?.error?.message || j?.message || '';
+    } catch { /* bukan JSON: cukup kodenya */ }
+    throw new Error('OpenRouter ' + res.status + (ket ? ': ' + clip(ket, 200) : ''));
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (!buf.length) throw new Error('OpenRouter membalas klip kosong');
+  if (buf.length > SUARA_KLIP_MAKS) throw new Error('klip terlalu besar (' + buf.length + ' byte)');
+  return buf;
+}
+
+/* Jalur utama: cache -> in-flight -> generate. Selalu mengembalikan Buffer
+   atau melempar; tidak pernah mengembalikan null diam-diam. */
+async function suaraAmbil(teks) {
+  const hash = suaraHash(teks);
+  const berkas = suaraBerkas(hash);
+  try { return fs.readFileSync(berkas); } catch { /* belum ada: lanjut generate */ }
+
+  const jalan = suaraJalan.get(hash);
+  if (jalan) return jalan;
+
+  const tugas = (async () => {
+    const buf = await suaraGenerate(teks);
+    try {
+      fs.mkdirSync(DIR_SUARA, { recursive: true });
+      // .tmp lalu rename: jangan sampai ada yang menyajikan mp3 setengah tulis
+      const tmp = berkas + '.tmp';
+      fs.writeFileSync(tmp, buf);
+      fs.renameSync(tmp, berkas);
+    } catch (err) {
+      // Gagal menyimpan bukan gagal berbunyi: klipnya sudah di tangan.
+      // Cuma berarti berikutnya digenerate lagi.
+      console.warn('[agent-room] suara: klip gagal disimpan (' + err.message + ')');
+    }
+    return buf;
+  })().finally(() => suaraJalan.delete(hash));
+
+  suaraJalan.set(hash, tugas);
+  return tugas;
+}
+
+/* Kalimat yang diucapkan. Sengaja SATU tempat: halaman tidak boleh mengarang
+   kalimat sendiri, supaya isi cache tetap bisa ditebak dan "panaskan cache"
+   benar-benar memanaskan yang nanti dipakai. */
+const suaraKalimat = {
+  selesai: (nama) => 'Izin, ' + (nama ? nama + ' ' : 'tugasnya ') + 'selesai',
+  arahan: () => 'Izin, mohon arahan',
+};
+
+/* Semua kalimat yang mungkin dipakai roster sekarang — dipakai "panaskan
+   cache" dan cuma itu. Nama manual yang belum pernah muncul memang tidak
+   ikut; itu yang tersisa jadi generate saat runtime. */
+function suaraDaftarKalimat() {
+  const keluar = [suaraKalimat.arahan()];
+  for (const n of daftarNama().slice(0, SUARA_PANASI_MAKS)) keluar.push(suaraKalimat.selesai(n));
+  return keluar;
+}
+
+suaraMuat();
 
 /* --- event acak: dipecah per tema di public/event/, disambung di sini ----
    Semua bagian tetap <script> polos yang BERBAGI satu scope global (helper di
@@ -3233,7 +3544,7 @@ function lahirkanTugas(t) {
      berkas sementara — tidak ada yang tertinggal di disk). Yang masuk ke
      JSON itu cuma alamat server dan id tugas; KUNCINYA TIDAK, karena argv
      proses bisa dibaca proses lain di mesin yang sama. Kunci dititipkan lewat
-     env proses claude (di bawah, bersama kredensial) dan diwarisi proses MCP
+     env proses claude (di bawah) dan diwarisi proses MCP
      anaknya — CLI meneruskan env induk ke server MCP stdio. */
   const kunciIzin = t.paraf ? crypto.randomBytes(16).toString('hex') : '';
   if (t.paraf) {
@@ -3251,10 +3562,9 @@ function lahirkanTugas(t) {
 
   let anak;
   try {
-    // Kredensial lewat env, tidak pernah lewat argv: baris perintah proses
+    // Kunci izin lewat env, tidak pernah lewat argv: baris perintah proses
     // bisa dibaca proses lain di mesin yang sama, isi env-nya tidak.
     const lingkungan = { ...process.env };
-    if (kredensial) lingkungan[kredensial.envKey] = kredensial.nilai;
     if (kunciIzin) lingkungan.AGENT_ROOM_KUNCI_IZIN = kunciIzin;
     anak = spawn(CLAUDE, args, {
       cwd: kerja, shell: false, windowsHide: true, env: lingkungan,
@@ -3299,8 +3609,8 @@ function lahirkanTugas(t) {
     console.warn('[agent-room] sesi ' + sid.slice(0, 12) + ' belum mengirim apa pun '
       + (BISU_MS / 1000) + ' detik setelah lahir — hook maupun stream-json. '
       + 'Sesi headless butuh kredensial sendiri: jalankan server ini dari terminal '
-      + 'biasa tempat perintah claude normal jalan, atau siapkan token lewat: '
-      + 'claude setup-token');
+      + 'tempat perintah claude normal jalan, atau start dengan env-nya diisi: '
+      + 'CLAUDE_CODE_OAUTH_TOKEN=... node server.mjs --izinkan-perintah');
     const evBisu = {
       id: ++seq, ts: Date.now(), kind: 'tugas-bisu', session: sid.slice(0, 12),
       nama, tool: null, ok: false, cwd: baseName(kerja), cabang: cabangGit(kerja),
@@ -3734,10 +4044,6 @@ const server = http.createServer(async (req, res) => {
       // tidak ada endpoint yang mengubahnya balik dari sini.
       isiAktif: !ISI_MATI,
       cuacaAktif: CUACA_ATUR.toLowerCase() !== 'off',
-      // hanya ADA atau TIDAK, plus nama env-nya. Nilainya tidak pernah keluar.
-      punyaKredensial: Boolean(kredensial),
-      kredensialEnv: kredensial ? kredensial.envKey : '',
-      kredensialBerkas: Boolean(kredensial && kredensial.dariBerkas),
       berjalan: [...jalan.entries()].map(([id, j]) => ({
         sesi: id.slice(0, 12), nama: j.nama, mulai: j.mulai, cwd: j.cwd,
         cabang: cabangGit(j.cwd),
@@ -3868,6 +4174,256 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* ---------- daftar nama pegawai ----------
+     Rute tulis di bawah ini sengaja TIDAK meminta TOKEN, cuma asalSah() —
+     sama seperti /nama, /peran, dan /ambien. TOKEN itu penjaga jalur yang
+     MELAHIRKAN SESI (--izinkan-perintah), dan menuntutnya di sini berarti
+     panel ⚙️ cuma bisa dipakai kalau servernya dijalankan dengan flag itu.
+     Setelan ruangan harus bisa diatur dari ruangan. */
+  if (url.pathname === '/nama/daftar' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify({
+      penuh: namaDaftar.penuh,
+      bawaan: NAMA_BAWAAN,
+      pakaiBawaan: namaDaftar.penuh.length === 0,
+      maks: NAMA_MAKS,
+    }));
+    return;
+  }
+
+  if (url.pathname === '/nama/daftar' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = (await readBody(req)).teks;
+    let p;
+    try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400).end(); return; }
+    /* Daftar kosong BUKAN galat: itu cara mengembalikan daftar bawaan.
+       Dibedakan dari "belum pernah diatur" cuma oleh ada/tidaknya berkas. */
+    namaDaftar.penuh = namaBersih(p.penuh);
+    const galat = namaTulis();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true, jumlah: namaDaftar.penuh.length,
+      pakaiBawaan: namaDaftar.penuh.length === 0,
+      pesan: galat ? 'daftar dipakai, tapi gagal ditulis ke berkas: ' + galat : '',
+    }));
+    return;
+  }
+
+  /* Undi ulang nama kursi yang BUKAN pilihan manusia. Tanpa tombol ini,
+     mengganti daftar nama tidak kelihatan apa-apa — nama menempel di kursi
+     (formasi.json), dan daftar cuma dipakai waktu kursi baru lahir. Kursi
+     ber-`manual: true` tidak pernah disentuh: itu nama yang kamu ketik
+     sendiri lewat kartu pegawai. */
+  if (url.pathname === '/nama/undi-ulang' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    let diganti = 0, dilewati = 0;
+    for (const [proyek, kursi] of Object.entries(formasi.proyek)) {
+      if (!Array.isArray(kursi)) continue;
+      kursi.forEach((k, i) => {
+        if (!k) return;
+        if (k.manual) { dilewati++; return; }
+        const baru = pegawaiUndi(proyek, i, namaDipakai(kursi, i));
+        if (!baru || baru === k.nama) return;
+        k.nama = baru;
+        diganti++;
+        /* Kursi yang sedang diduduki harus ikut berganti SEKARANG di semua
+           halaman yang terbuka — kalau tidak, sprite-nya baru berganti nama
+           besok waktu sesinya lahir lagi. */
+        if (k.penghuni) {
+          namaSesi.set(k.penghuni, baru);
+          publish({ id: ++seq, ts: Date.now(), kind: 'nama', session: k.penghuni,
+                    nama: baru, tool: null, label: '', ok: true });
+        }
+      });
+    }
+    if (diganti) { formasiKotor = true; formasiTulis(true); }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, diganti, dilewati }));
+    return;
+  }
+
+  /* ---------- suara ucap ----------
+     Inti fiturnya. 204 di sini BUKAN galat, dan halaman memang tidak
+     memperlakukannya begitu: "belum diatur", "kuncinya salah", "OpenRouter
+     sedang mati", dan "teksnya kosong" semuanya berujung sama — tidak ada
+     klip, pakai lonceng saja. Satu-satunya jalur yang melaporkan sebab galat
+     ke manusia adalah /suara/coba, tempat manusianya memang sedang menunggu
+     jawaban. */
+  if (url.pathname === '/ucap' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const teks = clip((url.searchParams.get('teks') || '').replace(/\s+/g, ' ').trim(), SUARA_TEKS_MAKS);
+    if (!teks || !suaraSiap()) { res.writeHead(204).end(); return; }
+    try {
+      const buf = await suaraAmbil(teks);
+      /* Sengaja no-cache + ETag, BUKAN immutable: URL-nya cuma memuat teks,
+         jadi klip yang sama bisa berganti isi kalau model/voice-nya kamu
+         ubah. Revalidasi ke localhost harganya sepersekian milidetik dan
+         balasannya 304 tanpa badan — jauh lebih murah daripada memutar suara
+         lama dengan voice yang sudah kamu ganti. */
+      const etag = '"' + suaraHash(teks) + '"';
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304, { etag }).end(); return; }
+      res.writeHead(200, {
+        'content-type': 'audio/mpeg',
+        'content-length': buf.length,
+        etag,
+        'cache-control': 'private, no-cache',
+      });
+      res.end(buf);
+    } catch (err) {
+      console.warn('[agent-room] suara: ' + err.message);
+      res.writeHead(204).end();
+    }
+    return;
+  }
+
+  if (url.pathname === '/suara/setelan' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const isi = suaraIsiCache();
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    // Nilai kuncinya tidak pernah keluar — cuma ada/tidak plus empat huruf
+    // terakhir, supaya kamu bisa memastikan yang terpasang kunci yang mana.
+    res.end(JSON.stringify({
+      aktif: suara.aktif, model: suara.model, voice: suara.voice, kecepatan: suara.kecepatan,
+      punyaKunci: Boolean(suaraKunci),
+      kunciEkor: suaraKunci ? suaraKunci.slice(-4) : '',
+      siap: suaraSiap(),
+      cache: isi,
+      contoh: suaraKalimat.selesai('Sri Rahayu'),
+    }));
+    return;
+  }
+
+  if (url.pathname === '/suara/setelan' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = (await readBody(req)).teks;
+    let p;
+    try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400).end(); return; }
+
+    let pesanKunci = '';
+    // `kunci` tidak dikirim = jangan disentuh; '' = hapus; teks = pasang.
+    if (typeof p.kunci === 'string') {
+      const nilai = p.kunci.trim();
+      if (nilai && (/\s/.test(nilai) || nilai.length > 500)) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, pesan: 'bentuknya tidak seperti kunci' }));
+        return;
+      }
+      pesanKunci = suaraKunciTulis(nilai);
+    }
+    if (typeof p.aktif === 'boolean') suara.aktif = p.aktif;
+    if (typeof p.model === 'string' && p.model.trim()) suara.model = clip(p.model.trim(), 120);
+    if (typeof p.voice === 'string') suara.voice = clip(p.voice.trim(), 60);
+    const k = Number(p.kecepatan);
+    if (Number.isFinite(k) && k >= 0.25 && k <= 4) suara.kecepatan = k;
+    /* Menyalakan tanpa kunci itu setelan yang tidak bisa jalan; lebih baik
+       ditolak halus di sini daripada diam-diam 204 tiap notifikasi. */
+    if (suara.aktif && !suaraKunci) suara.aktif = false;
+
+    const galat = suaraTulis();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true, aktif: suara.aktif, siap: suaraSiap(),
+      punyaKunci: Boolean(suaraKunci), kunciEkor: suaraKunci ? suaraKunci.slice(-4) : '',
+      pesan: pesanKunci ? 'kunci dipakai, tapi gagal ditulis ke berkas: ' + pesanKunci
+        : galat ? 'setelan dipakai, tapi gagal ditulis ke berkas: ' + galat : '',
+    }));
+    return;
+  }
+
+  /* Daftar model TTS, diambilkan server supaya halaman tidak perlu tahu
+     apa-apa soal OpenRouter. Daftarnya publik — tidak butuh kunci — jadi
+     kamu bisa memilih model dulu, memasang kunci belakangan. */
+  if (url.pathname === '/suara/model' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    try {
+      const r = await fetch(SUARA_MODEL_URL, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(SUARA_TIMEOUT_MS) : undefined,
+      });
+      if (!r.ok) throw new Error('OpenRouter ' + r.status);
+      const j = await r.json();
+      const model = (Array.isArray(j?.data) ? j.data : []).map((m) => ({
+        id: String(m?.id || ''),
+        nama: String(m?.name || m?.id || ''),
+        // bentuk `pricing` beda-beda antar penyedia; diteruskan apa adanya dan
+        // halaman yang memutuskan mau menampilkannya atau tidak
+        harga: m?.pricing?.audio || m?.pricing?.prompt || '',
+        /* Nama voice TIDAK seragam antar penyedia — `Zephyr`, `flux-bree-en`,
+           `English_radiant_girl`, `en-US-Harper:MAI-Voice-2` — dan voice yang
+           salah bikin permintaan ditolak. Untung daftarnya ikut di metadata
+           model, jadi panel bisa menawarkannya alih-alih menyuruh menebak.
+           `null` artinya penyedianya menerima voice bebas (Fish Audio), bukan
+           artinya tidak punya voice. */
+        suara: Array.isArray(m?.supported_voices) ? m.supported_voices.slice(0, 120) : null,
+      })).filter((m) => m.id);
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+      res.end(JSON.stringify({ ok: true, model }));
+    } catch (err) {
+      /* Gagal mengambil daftar bukan gagal fatal: panel turun jadi kotak teks
+         biasa, ID model tetap bisa diketik manual. */
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, model: [], pesan: clip(err.message, 200) }));
+    }
+    return;
+  }
+
+  /* Audisi. Sengaja TIDAK menuntut `aktif` — gunanya justru mendengar dulu
+     sebelum memutuskan menyalakan. Yang dituntut cuma kunci. */
+  if (url.pathname === '/suara/coba' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    if (!suaraKunci || !suara.model) {
+      res.writeHead(409, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, pesan: 'pasang kunci OpenRouter dulu' }));
+      return;
+    }
+    try {
+      const buf = await suaraAmbil(suaraKalimat.selesai('Sri Rahayu'));
+      res.writeHead(200, {
+        'content-type': 'audio/mpeg', 'content-length': buf.length,
+        'cache-control': 'private, no-cache',
+      });
+      res.end(buf);
+    } catch (err) {
+      res.writeHead(502, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, pesan: clip(err.message, 200) }));
+    }
+    return;
+  }
+
+  /* Panaskan cache: buat semua kalimat untuk roster sekarang sekaligus, satu
+     per satu (bukan berbarengan) supaya tidak menghantam OpenRouter dan
+     supaya kegagalan di tengah tetap menyisakan yang sudah jadi. */
+  if (url.pathname === '/suara/panasi' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    if (!suaraKunci || !suara.model) {
+      res.writeHead(409, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, pesan: 'pasang kunci OpenRouter dulu' }));
+      return;
+    }
+    const mulai = Date.now();
+    let dibuat = 0, sudah = 0, gagal = 0, pesan = '';
+    for (const teks of suaraDaftarKalimat()) {
+      if (Date.now() - mulai > 120000) { pesan = 'berhenti di tengah karena kelamaan; tekan lagi untuk melanjutkan'; break; }
+      let ada = false;
+      try { fs.accessSync(suaraBerkas(suaraHash(teks))); ada = true; } catch { ada = false; }
+      if (ada) { sudah++; continue; }
+      try { await suaraAmbil(teks); dibuat++; }
+      catch (err) { gagal++; if (!pesan) pesan = clip(err.message, 200); }
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, dibuat, sudah, gagal, pesan, cache: suaraIsiCache() }));
+    return;
+  }
+
+  if (url.pathname === '/suara/cache' && req.method === 'DELETE') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const dibuang = suaraKosongkan();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, dibuang, cache: suaraIsiCache() }));
+    return;
+  }
+
   /* Jabatan pegawai. Disimpan server, bukan di halaman, supaya tetap melekat
      waktu halaman dibuka ulang dan sama di semua penonton. */
   if (url.pathname === '/peran' && req.method === 'POST') {
@@ -3957,56 +4513,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  /* Simpan atau hapus kredensial headless. Dijaga token + cek Origin yang sama
-     dengan /perintah — gerbangnya memang harus sama, karena yang bisa menyuruh
-     mesin ini bekerja sudah pasti bisa menentukan kredensial yang dipakainya. */
-  if (url.pathname === '/kredensial' && req.method === 'POST') {
-    if (!asalSah(req)) { res.writeHead(403).end(); return; }
-    const body = (await readBody(req)).teks;
-    let p;
-    try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400).end(); return; }
-
-    const balas = (kode, obj) => {
-      res.writeHead(kode, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(obj));
-    };
-    if (!IZIN) return balas(403, { ok: false, pesan: 'kendali web mati' });
-    if (p.token !== TOKEN) return balas(403, { ok: false, pesan: 'token tidak cocok' });
-
-    const nilai = String(p.nilai || '').trim();
-    if (!nilai) {
-      kredensial = null;
-      hapusBerkasToken();          // hapus berarti hapus, termasuk yang di disk
-      console.log('[agent-room] kredensial headless dihapus');
-      return balas(200, { ok: true, punya: false });
-    }
-    // Sanity check seadanya: token asli tidak punya spasi dan tidak sepanjang esai.
-    if (/\s/.test(nilai) || nilai.length > 500) {
-      return balas(400, { ok: false, pesan: 'bentuknya tidak seperti token' });
-    }
-    const simpan = p.simpan !== false;
-    kredensial = { nilai, envKey: envKredensial(nilai), sejak: Date.now(), dariBerkas: simpan };
-    // Nilainya TIDAK dicetak — yang dicatat cuma nama env-nya.
-    console.log('[agent-room] kredensial headless dipasang untuk ' + kredensial.envKey);
-
-    if (!simpan) {
-      hapusBerkasToken();          // pilihan "jangan diingat" harus mencabut yang lama
-      return balas(200, { ok: true, punya: true, envKey: kredensial.envKey, berkas: false });
-    }
-    try {
-      tulisBerkasToken(nilai);
-      console.log('[agent-room] token diingat di ' + BERKAS_TOKEN);
-    } catch (err) {
-      // Gagal menulis bukan alasan membuang token yang sudah dipegang: sesinya
-      // tetap bisa jalan sekarang, cuma tidak bertahan setelah server mati.
-      kredensial.dariBerkas = false;
-      return balas(200, {
-        ok: true, punya: true, envKey: kredensial.envKey, berkas: false,
-        pesan: 'token dipakai, tapi gagal ditulis ke berkas: ' + err.code,
-      });
-    }
-    return balas(200, { ok: true, punya: true, envKey: kredensial.envKey, berkas: true });
-  }
 
   if (url.pathname === '/perintah' && req.method === 'POST') {
     if (!asalSah(req)) { res.writeHead(403).end(); return; }
@@ -4353,7 +4859,6 @@ server.on('error', (err) => {
   throw err;
 });
 
-if (IZIN) muatKredensial();     // hanya berguna kalau halaman boleh melahirkan sesi
 
 server.listen(PORT, HOST, () => {
   console.log(`[agent-room] ruangan siap  ->  http://${HOST}:${PORT}`);

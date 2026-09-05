@@ -217,12 +217,15 @@ const jalurProyek = (dir) => path.join(dir, 'proyek-uji');
 const ENV_DATA = (dir) => ({
   AGENT_ROOM_PAGU: path.join(dir, 'pagu.json'),
   AGENT_ROOM_TOKEN_LOG: path.join(dir, 'token-riwayat.jsonl'),
-  AGENT_ROOM_TOKEN_FILE: path.join(dir, '.agent-room-token'),
   AGENT_ROOM_AGENDA_DIR: path.join(dir, 'agenda'),
   AGENT_ROOM_BUKU_INDUK: path.join(dir, 'buku-induk.json'),
   AGENT_ROOM_KLIPING_LOG: path.join(dir, 'kliping-mingguan.jsonl'),
   AGENT_ROOM_FORMASI: path.join(dir, 'formasi.json'),
   AGENT_ROOM_TUNDA_DIR: path.join(dir, 'tunda'),
+  AGENT_ROOM_NAMA: path.join(dir, 'nama.json'),
+  AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
+  AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
+  AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
 });
 
 /* Jam mesin yang bisa digeser DARI LUAR proses server, tanpa menyentuh satu

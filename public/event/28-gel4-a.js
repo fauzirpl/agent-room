@@ -20,10 +20,9 @@
       pemeranStasiun() semuanya akan mengembalikan ORANG LAIN, bukan yang
       sedang duduk di meja rapat. Karena itu pengibasnya wajib pegawai
       menganggur yang berjalan ke depan meja, dan reaksi yang duduk cuma
-      lewat o.face + say() — bukan lewat E.aktor. (Dulu lewat menoleh();
-      kenapa tidak lagi, ditulis panjang di tick() bagian 4.)
+      lewat menoleh() + say() — bukan lewat E.aktor.
 
-   2. buku-tamu-ditandatangani (TIDAK dibuat, sengaja).
+   2. buku-tamu-ditandatangani (dipindahkan, bukan dibuat di sini).
       Seluruh alasan usulan ini lolos triase adalah BEKAS PERMANEN: buku yang
       halamannya makin penuh sepanjang sesi, sekelas RUANGAN.edaran. Bekas
       permanen butuh penggambar yang hidup di luar umur event — artinya
@@ -36,10 +35,12 @@
       dicatat di 27-serba-kecil.js (bulu ayam & bungkus gorengan): RUANGAN
       memang persisten, tapi yang MENGGAMBARnya ada di room.js, dan menaruh
       data yang tidak punya cabang gambar cuma menambah sampah tak terlihat.
-      Jadi event ini dilewati, bukan dipalsukan. Spesifikasi lengkapnya (meja
-      14x8 di x185..199 kaki y=296, sortY 296, RUANGAN.bukuTamu dicap 10,
-      min(5,n) garis tinta di halaman kiri sisanya di kanan) dilaporkan ke
-      pemegang room.js apa adanya.
+      Jadi event ini dilewati DI SINI dan spesifikasinya dilaporkan apa adanya
+      ke pemegang room.js — yang kemudian membuatnya utuh: drawBukuTamu() +
+      RUANGAN.bukuTamu di public/room.js, eventnya di 38-buku-tamu.js. Satu
+      angka di spesifikasi itu ternyata salah dan diubah di sana: mejanya
+      dipindah ke x52..66, bukan x185..199, karena slotKe(8, 23) menaruh slot
+      menganggur ke-9 tepat di x=190 — di dalam mejanya.
    ========================================================================== */
 
 daftarEvent(
@@ -144,151 +145,53 @@ daftarEvent(
        tidak, ia cuma lenyap begitu durasinya habis. */
     if (!d.tiba && !d.naik && E.umur > 11) d.naik = true;
 
-    /* 4. yang duduk mendongak.
+    /* 4. yang duduk mendongak — lewat menoleh() biasa.
 
-       TIDAK memakai menoleh(), dan itu bukan selera. menoleh() memanggil
-       hadapkan(), yang menulis o.hadap — dan o.hadap itu LENGKET: di room.js
-       yang menulisnya ulang cuma goTo/goToXY/pulangKe (ketiganya menuntut
-       perjalanan baru) dan Peserta.bubar() yang menolkannya saat peserta
-       keluar dari rapat, sedangkan peserta rapat justru TIDAK berjalan lagi
-       selama dia masih duduk — jadi selama adegan ini nilai yang ditulis
-       event tetap menempel di badannya, tidak ada yang membereskan. Begitu
-       event ini menulis hadap, ia terpaksa MENARIKNYA BALIK sendiri
-       belakangan — dan tarikan itulah akar T2. Pagar !o.eventKerja yang dulu
-       dipasang di tarikan itu cuma menangkap event yang MEMINJAM orangnya;
-       menoleh() sendiri — cara paling umum event lain memutar orang, 27
-       pemanggilan di 17 berkas event (dihitung dari kode tanpa komentar,
-       4 Sep 2026) — tidak memasang eventKerja sama sekali (lihat menoleh() di
-       00-dasar.js: cuma hadapkan() + busyUntil), jadi arah yang baru saja
-       dipasang tetangga tetap tersapu lewat pintu itu.
+       Dulu bagian ini punya ±100 baris mesin toleh sendiri (d.noleh +
+       pulihToleh) dan alasannya sah pada waktunya: menoleh() versi lama
+       memanggil hadapkan(), yang menulis o.hadap — dan hadap itu LENGKET.
+       Yang menulisnya ulang cuma goTo/goToXY/pulangKe (ketiganya menuntut
+       perjalanan baru) dan Peserta.bubar(), sedangkan peserta rapat justru
+       TIDAK berjalan lagi selama dia masih duduk: arah yang dipasang event
+       menempel di badannya sampai rapatnya bubar, dan event yang memasangnya
+       terpaksa menariknya balik sendiri.
 
-       Yang ditulis sekarang CUMA o.face, dan hadap tidak disentuh sama sekali
-       — cuma DIBACA sebagai saksi di pulihToleh(). face bukan field lengket:
-       room.js memulihkannya sendiri dari o.hadap di arrive(), setButuh(), dan
-       tickPulang(), dan tickKongsi memang preseden persis untuk toleh sesaat
-       seperti ini ("cuma `face`, bukan `hadap`, jadi arah hadap stasiunnya
-       tidak berubah"). Karena hadap tidak pernah ditulis, event ini secara
-       struktural TIDAK BISA lagi menghapus hadapkan() milik siapa pun — arah
-       yang tetangga pasang di hadap tetap utuh, dan pemulihan face di sini
-       malah IKUT ke sana (lihat pulihToleh). Yang paling parah masih mungkin
-       tinggal satu tulisan face yang salah waktu, dan nilainya pun bukan
-       potret basi detik 4,5 melainkan salah satu dari dua arah yang memang
-       sah buat orang itu.
+       menoleh() sekarang tidak menulis hadap sama sekali (00-dasar.js): ia
+       menulis face, menitipkan face lama di o.tolehBalik + arah yang ia pasang
+       di o.tolehArah, dan tickKongsi() yang memulihkannya — dengan pagar
+       kepemilikan yang persis sama seperti pulihToleh() dulu ("kalau face-nya
+       sudah bukan arah yang kita pasang, ada yang menulisinya sesudah kita:
+       dilepas, bukan ditarik balik"). Pengecualian kursi sisi DEKAT yang dulu
+       dipasang di sini juga sudah pindah ke sana, dan jadi aturan yang lebih
+       umum: siapa pun yang face-nya 'up' dilewati, karena drawPerson membaca
+       `back = a.face === 'up'` — memutar mereka membalik seluruh sprite dari
+       punggung jadi muka, bukan melirik. Dua kursi sisi dekat memang duduk
+       'up', jadi tetap ikut terlindungi tanpa perlu disebut namanya.
 
-       Terukur, bukan diklaim (scratchpad/sapu-t2.mjs — tick()/selesai() ASLI
-       di sandbox uji-event.mjs, tujuh peserta duduk palsu di kursi sisi jauh,
-       aksi event tetangga disuntikkan pada detik tertentu): sapuan 4 cara
-       tetangga memutar orang (menoleh / hadapkan langsung / pinjam+hadapkan /
-       tulis face saja) x 7 kursi x 45 detik penyuntikan (0..11 dtk, langkah
-       0,25) x 3 arah tujuan = 3.696 kombinasi yang benar-benar terpakai
-       (sisanya jatuh sesudah eventnya mati). Versi lama membanting arah
-       tetangga di 1.274 di antaranya: menoleh 364, hadapkan 364, tulis-face-
-       saja 546, pinjam 0 — cuma cabang pinjam itu yang dijaga pagar lama,
-       dan itulah kenapa vonis rondenya "ditambal". Versi ini: 42, semuanya
-       satu kelas yang memang tidak bisa dibedakan dari face saja — lihat
-       pulihToleh().
+       Jadi yang tersisa di sini tinggal panggilannya. Diperiksa di ruangan
+       sungguhan, bukan di sandbox: lima peserta didudukkan di kursi sisi jauh,
+       lalu tolehan dijalankan — 5 dari 5 berputar dan kembali sendiri 1,5
+       detik kemudian, 0 tulisan ke hadap, dan dua pegawai di meja kerja (yang
+       face-nya 'up') tidak tersentuh sama sekali, busyUntil-nya pun tidak.
 
        Daftarnya diambil ULANG di dalam callback, tidak disimpan di mulai():
-       peserta rapat bisa bubar di tengah adegan.
-
-       Yang duduk di dua kursi sisi DEKAT (slotIdx >= KURSI_N) tetap
-       DIKECUALIKAN, tapi alasan lamanya sudah TIDAK berlaku: cabang kursi
-       dekat di frame() (`a.station === 'rapat' && a.hadap === 'up'`) membaca
-       hadap, dan hadap sekarang tidak pernah disentuh, jadi tidak ada lagi
-       lompatan z-order. Alasan yang tersisa ada di drawPerson: `back = a.face
-       === 'up'`. Dua kursi itu duduk MEMBELAKANGI kamera (goTo memberi mereka
-       hadap 'up', arrive() menyalinnya ke face), jadi mengubah face mereka
-       jadi 'left'/'right' membalik seluruh sprite dari punggung jadi
-       muka-samping — terbaca seperti kursinya diputar 180 derajat, bukan
-       seperti melirik. Yang di sisi jauh sudah face 'down', jadi aman. */
+       peserta rapat bisa bubar di tengah adegan. */
     pada(E, 4.5, () => {
-      /* Saringannya SAMA PERSIS dengan yang dipakai menoleh() (melewati siapa
-         pun yang o.path.length || o.eventKerja): yang sedang dipinjam event
-         lain atau sedang berjalan memang bukan milik event ini untuk diputar.
-         Saringan yang sama juga menjaga `dekat` di bawah supaya say() tidak
-         menimpa balon ucap milik event lain. */
-      const duduk = S.orang.filter((o) => o.station === 'rapat' && !o.antre
-        && o.dudukSejak && o.slotIdx < KURSI_N && !o.eventKerja && !o.path.length);
+      const duduk = S.orang.filter((o) => o.station === 'rapat' && !o.antre && o.dudukSejak);
       if (!duduk.length) return;
-      /* hadapkan() sengaja tidak dipanggil — dia menulis hadap. Arahnya
-         dihitung dengan rumus yang sama persis (00-dasar.js hadapkan), cuma
-         hasilnya ditaruh di face. Kursi jauh ada di y 192 dan x 189..303, jadi
-         yang benar-benar berputar cuma empat kursi terluar (x 284/208/303/189
-         -> left/right/left/right); tiga kursi tengah (246/265/227) memang sudah
-         menghadap 'down' ke arah laba-labanya. */
-      d.noleh = [];
-      for (const o of duduk) {
-        const dx = 246 - o.x, dy = 214 - o.y;
-        const arah = Math.abs(dx) > Math.abs(dy)
-          ? (dx > 0 ? 'right' : 'left')
-          : (dy > 0 ? 'down' : 'up');
-        // face SEBELUM ditulis (itu yang dibatalkan nanti) + hadap sebagai
-        // SAKSI, cuma dibaca, tidak pernah ditulis — lihat pulihToleh().
-        d.noleh.push([o, arah, o.face, o.hadap]);
-        o.face = arah;
-        o.busyUntil = Math.max(o.busyUntil, now + 1600);
-      }
-      const dekat = duduk.slice().sort((x, y) => Math.abs(x.x - 246) - Math.abs(y.x - 246))[0];
-      if (dekat) dekat.say('pindah dulu ya');   // dibilang ke laba-labanya, bukan ke kursinya
+      /* 1600 ms, bukan 1200 bawaan: kibasnya sendiri 3,5 detik, dan kepala
+         yang balik menunduk sebelum orangnya mulai mengibas terbaca seperti
+         mereka kehilangan minat. Kursi jauh ada di y 192 dan x 189..303, jadi
+         yang benar-benar berputar cuma empat kursi terluar; tiga kursi tengah
+         (246/265/227) memang sudah menghadap 'down' ke arah laba-labanya. */
+      menoleh(duduk, 246, 214, 1600);
+      /* Yang bicara disaring lebih ketat daripada yang menoleh: say() menimpa
+         balon ucap yang sedang dipakai, jadi yang sedang jadi pemeran event
+         lain atau sedang berjalan pergi tidak dipilih. */
+      const bicara = duduk.filter((o) => !o.eventKerja && !o.path.length)
+        .sort((x, y) => Math.abs(x.x - 246) - Math.abs(y.x - 246))[0];
+      if (bicara) bicara.say('pindah dulu ya');   // dibilang ke laba-labanya, bukan ke kursinya
     });
-
-    /* 5. tolehnya berakhir 1,6 detik sesudah potret: 4,5 + 1,6 = 6,1 detik
-       TETAP (bukan E.umur + N — lihat catatan pada() di bagian 2).
-
-       Dulu pemulihan ini cuma ada di selesai(), dan itu bukan cuma soal
-       kebersihan. Angka 1600 (dulu argumen `lama` menoleh(), sekarang
-       busyUntil di atas) cuma menahan LANGKAH orangnya 1,6 detik; arah
-       hadapnya sendiri bertahan sampai eventnya mati — terukur 4,517 s.d.
-       10,983 detik pada jalur normal tanpa gangguan. Jadi ada hampir 5 detik
-       (6,1 -> 10,98) waktu event ini masih memegang klaim atas arah orang
-       yang sudah tidak dipakainya — dan di sapuan, 266 dari 364 tabrakan
-       menoleh versi lama memang jatuh di jendela sesudah 6,1 itu. */
-    if (d.noleh && E.umur >= 6.1) E.def.pulihToleh(E);
-  },
-
-  /* BUKAN kait room.js — helper milik event ini sendiri, dipanggil dari tick()
-     (saat tolehnya habis di detik 6,1) dan dari selesai() (jaring terakhir
-     kalau eventnya keburu mati lebih dulu; terukur: mati paksa di detik 5,02
-     tetap memulihkan ketujuh face dan mengosongkan d.noleh). Satu salinan,
-     dua pemanggil.
-
-     Pagarnya CUMA `o.face !== arah`, dan justru itu pagar kepemilikan yang
-     sebenarnya: kalau face-nya sudah bukan nilai yang event ini tulis, ada yang
-     menimpanya sesudah itu — dilepas, bukan ditarik balik. Pagar !o.eventKerja
-     sengaja TIDAK dipakai lagi; event tetangga boleh meminjam orangnya tanpa
-     menyentuh face sama sekali, dan kalau pemulihannya dilewati karena itu,
-     toleh milik event INI yang nyangkut di badan orang. Yang sedang berjalan
-     dilewati karena update() memasang face tiap langkah dan arrive()
-     memulihkannya dari hadap begitu dia sampai.
-
-     Nilai yang dikembalikan dipilih dari SAKSI hadap, bukan dari satu potret
-     buta, dan dua cabangnya lahir dari dua kelas kegagalan yang benar-benar
-     terukur di sapuan (masing-masing nol kalau cabangnya dipakai, ratusan
-     kalau tidak):
-       hadap BERUBAH sejak potret -> ada yang memindahkan arah duduk resminya
-         (hadapkan/menoleh/goTo). Ikut ke sana: face = o.hadap, persis yang
-         dilakukan arrive() dan setButuh(). Tanpa cabang ini, 28 kombinasi per
-         cara-tetangga (84 total) berakhir dengan hadap milik tetangga tapi
-         face lama milik event ini.
-       hadap TETAP -> tidak ada yang memindahkannya; yang dibatalkan cuma
-         tulisan sendiri, jadi face dikembalikan seperti sebelum event ini
-         menyentuhnya. Tanpa cabang ini, 378 kombinasi (tetangga yang menulis
-         face sebelum potret detik 4,5) ikut tersapu jadi arah duduk resmi.
-
-     Sisa yang TIDAK bisa ditutup dari sini, dan angkanya jujur 42 dari 3.696:
-     tetangga yang menulis face SAJA — tanpa hadap — dengan arah yang KEBETULAN
-     sama dengan arah yang event ini pasang, di dalam jendela 4,5-6,1 (di
-     sapuan: dua kursi yang arahnya 'right' x 7 detik penyuntikan x 3 tujuan).
-     Dari face saja dua tulisan itu memang tidak bisa dibedakan. Akibatnya pun
-     yang paling ringan sekelasnya: toleh tetangga berakhir lebih cepat dari
-     maunya, tidak ada field lengket yang rusak. */
-  pulihToleh(E) {
-    for (const [o, arah, faceLama, hadapLama] of E.data.noleh || []) {
-      if (!o || o.path.length || o.face !== arah) continue;
-      const balik = o.hadap !== hadapLama ? o.hadap : faceLama;
-      o.face = balik || (STATIONS[o.station] || {}).face || 'down';
-    }
-    E.data.noleh = null;
   },
 
   /* Satu hook, satu sortY (250): di ATAS taplak meja rapat (drawRapat 249)
@@ -360,14 +263,12 @@ daftarEvent(
            bertahan 'up' (membelakangi) — itu yang lebih benar untuk orang
            yang ditinggal berdiri di lantai, bukan di depan mejanya. */
     for (const a of E.aktor) { a.pose = null; a.bawa = null; a.doingEvent = ''; a.hadap = null; }
-    /* Peserta rapat tidak pernah masuk E.aktor, jadi matikanEvent() tidak akan
-       membereskan mereka. Yang perlu dibereskan tinggal SATU field non-lengket
-       (face), dan itu pun normalnya sudah selesai di detik 6,1 lewat tick();
-       pemanggilan di sini cuma jaring untuk event yang mati lebih cepat.
-       Pose mereka tidak disentuh sama sekali — event ini tidak pernah
-       memasangnya, dan menyapu pose semua penghuni meja rapat berarti
-       menghapus pose milik event lain yang kebetulan jalan barengan. */
-    E.def.pulihToleh(E);
+    /* Peserta rapat tidak perlu dibereskan dari sini. Mereka tidak pernah masuk
+       E.aktor, dan satu-satunya yang event ini tulis di badan mereka adalah
+       face lewat menoleh() — yang dipulihkan tickKongsi() di update() masing-
+       masing, jalan terus baik eventnya masih hidup maupun sudah mati. Kalau
+       eventnya mati di detik 5,0 sekalipun, tolehnya tetap berakhir di
+       waktunya sendiri; tidak ada yang menggantung. */
   },
 },
 

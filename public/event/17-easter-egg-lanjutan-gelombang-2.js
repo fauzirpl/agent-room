@@ -314,8 +314,16 @@ daftarEvent(
   tick(E) {
     const { salah, sebelah } = E.data;
     if (!salah) return;
-    pada(E, 3, () => { if (sebelah) sebelah.say('itu kursi Pak Kadis'); });
+    /* masihMain() di DALAM tiap callback, bukan sekali di atas: pada() itu
+       tertunda, dan yang menentukan bukan keadaan waktu tick berjalan
+       melainkan keadaan waktu callback-nya benar-benar menyala. Tanpa ini,
+       pegawai yang direbut tool call sungguhan di detik 0..4 tetap disuruh
+       pindah kursi di detik 4 — dan panelnya saat itu jelas-jelas sedang
+       menulis tool call. Dua orangnya dijaga terpisah karena bisa direbut
+       sendiri-sendiri. */
+    pada(E, 3, () => { if (masihMain(E, sebelah)) sebelah.say('itu kursi Pak Kadis'); });
     pada(E, 4, () => {
+      if (!masihMain(E, salah)) return;
       salah.say('eh, maaf');
       const baru = slotBebas('rapat', salah);
       if (baru >= 0) { salah.slotIdx = baru; salah.goTo('rapat'); }

@@ -4,6 +4,17 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 [Keep a Changelog](https://keepachangelog.com/id/1.1.0/); versi mengikuti
 [Semantic Versioning](https://semver.org/lang/id/).
 
+## [Belum dirilis]
+
+### Dihapus
+
+- Panel **token headless** beserta endpoint `POST /kredensial`, berkas
+  `.agent-room-token`, dan env `AGENT_ROOM_TOKEN_FILE`. Kredensial untuk sesi
+  yang dilahirkan halaman kini ditempuh lewat env proses server saja
+  (`CLAUDE_CODE_OAUTH_TOKEN=... node server.mjs --izinkan-perintah`), yang
+  memang sudah diwarisi proses anaknya — jadi tidak ada kemampuan yang hilang,
+  cuma satu jalur penyimpanan kunci mentah di disk yang tidak ada lagi.
+
 ## [0.1.0] — 2026-09-03
 
 Rilis pertama yang diberi nomor. Ringkasan dari riwayat commit sampai hari ini.

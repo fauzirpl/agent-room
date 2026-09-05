@@ -117,7 +117,7 @@
    lagi — di 0,595 (MOD.lajuGlobal 0,7 × LAJU_LELAH 0,85) dua dari 60 susunan
    mati "DURASI HABIS" di detik 34,02 sesudah cuma 2 dari 3 balon.
 
-   Dan angka konstanta apa pun MEMANG tidak bisa cukup, karena laju pemeran
+   Angka konstanta yang KECIL memang tidak bisa cukup, karena laju pemeran
    ini bukan cuma milik dia sendiri. Dua event lain menurunkan a.laju orang
    yang kebetulan sedang berjalan, tanpa peduli dia sedang dipinjam event
    siapa: hujan-pertama-bau-tanah (18-suasana-lanjutan-...) memasang
@@ -127,20 +127,39 @@
    dikecualikan cuma adaTugas dan pemerannya sendiri, bukan pemeran event
    lain. Kalikan dengan MOD.lajuGlobal 0,7 dan LAJU_LELAH 0,85: langkah kurir
    bisa jatuh ke 0,357×, dan trayek terpanjang 906 px jadi 48,8 detik jalan
-   kaki saja. Tidak ada konstanta yang menutup itu tanpa jadi pagar hampir
-   semenit yang menggantungkan slot kalau ada yang tersendat.
+   kaki saja. Jadi pagarnya memang harus hampir semenit — dan ternyata itu
+   tidak menggantungkan slot siapa pun: kelasnya 'latar' tanpa bentrokDengan,
+   dan kurir yang benar-benar berhenti maju ditutup penjaga macet dalam 6
+   detik, jauh sebelum pagarnya.
 
    Jadi tenggatnya sekarang DIHITUNG DARI TRAYEKNYA, di tick():
-     * selama sisa trayek kurir masih memendek, E.sisa ditahan di lantai 4
-       detik — jadi pagar durasi TIDAK PERNAH jatuh di tengah satu mata
-       rantai, berapa pun lambatnya langkah itu.
      * begitu tidak ada kemajuan 6 detik berturut-turut, event menyerah
        (E.selesaiCepat) — itu yang menjaga aturan 11, bukan durasi. Terukur:
        laju dipaksa 0 pada detik 1/5/10/16 -> event mati 6,0 detik kemudian,
        persis, di keempat-empatnya.
      * lama tayang sesungguhnya tetap ditentukan E.data.tutupPada: 2,5 detik
        sesudah baris ketiga.
-   Angka 4 dipilih karena lebih besar dari ekor 2,5 detik. Angka 6 karena
+
+   Di sini DULU ada mekanisme ketiga, dan ia dibuang: `E.sisa = Math.max(
+   E.sisa, 4)` tiap frame selama kurirnya masih maju. Niatnya benar (pagar
+   durasi tidak boleh jatuh di tengah satu mata rantai), tapi akibatnya
+   melampaui niat itu. tickEvent() menulis `E.umur += dt; E.sisa -= dt`, jadi
+   E.sisa TIDAK LAIN dari durasi - umur: satu-satunya yang bisa dilakukan
+   lantai itu adalah membuat event hidup MELEWATI durasinya, tanpa ujung,
+   selama kurirnya masih melangkah semilimeter pun. Angka `durasi` berhenti
+   berarti apa-apa — dan itu bukan tafsiran: sapuan 84 jalan (6 posisi awal x
+   7 pengali laju x {tanpa beku, beku 8 dtk}, Agent sungguhan dengan route()
+   dan update() asli, scratchpad/sapu-titipan.mjs) mencatat NOL kematian
+   karena durasi, dan umur terpanjang 63,92 detik dengan durasi tertulis 40.
+   Selama 63,92 detik itu tiga sesi SUNGGUHAN dipegang betah = true.
+
+   Yang berlaku sekarang adalah kebiasaan berkas tetangga (halal-bihalal:
+   "durasi = pagar terakhir, bukan panjang adegan"): lantainya dihapus dan
+   durasinya dibesarkan ke 76 — 63,92 terukur + 12 detik margin. Pagarnya
+   kembali jadi pagar, dan di laju normal adegannya tetap bubar di detik
+   18..31 lewat tutupPada seperti sebelumnya.
+
+   Angka 6 dipilih karena
    jeda terpanjang yang SAH tanpa kemajuan adalah jeda 3 detik itu (+ satu dt
    harness = 4); pembekuan dari event lain TIDAK ikut dihitung karena
    dikecualikan terpisah lewat bekuSampai — dan itu perlu, sebab jeda-maghrib
@@ -153,7 +172,7 @@ daftarEvent(
 
 {
   id: 'pesan-titipan-berubah-isi',
-  /* durasi 40 = PAGAR TERAKHIR, bukan lama tayang, dan bukan yang menentukan
+  /* durasi 76 = PAGAR TERAKHIR, bukan lama tayang, dan bukan yang menentukan
      punchline. Yang menutup event ini adalah E.data.tutupPada (2,5 detik
      sesudah baris ketiga) dan penjaga macet di tick().
 
@@ -170,15 +189,23 @@ daftarEvent(
        laju 0,8   : 60/60, mati 20,52..30,28
        laju 0,7   : 60/60, mati 22,15..33,32
        laju 0,595 : 60/60, punchline paling telat 35,15, mati 24,52..37,67
-       laju 0,4165: 60/60, mati 31,38..50,13   <- LEWAT pagar 40
-       laju 0,357 : 60/60, mati 35,12..57,00   <- LEWAT pagar 40
+       laju 0,4165: 60/60, mati 31,38..50,13   <- LEWAT pagar 40 yang lama
+       laju 0,357 : 60/60, mati 35,12..57,00   <- LEWAT pagar 40 yang lama
 
-     Jadi 40 memang menutup sampai 0,595 sendirian (37,67 + 2,3 detik sisa),
-     tapi dua baris terakhir menunjukkan kenapa itu tidak boleh jadi andalan:
-     yang menyelesaikan dua baris itu adalah lantai E.sisa di tick(), bukan
-     angka ini. Buktinya langsung: sapuan yang sama dengan durasi DIPAKSA
-     6 / 12 / 30 / 40 memberi angka yang identik persis di ketujuh pengali —
-     durasi tidak lagi menyentuh hasil apa pun.
+     Dua baris terakhir itu yang dulu menembus pagar 40, dan yang membuat
+     mereka tetap selesai adalah lantai E.sisa di tick() — bukan angka durasi.
+     Lantai itu sekarang dibuang (alasan lengkapnya di kepala berkas), jadi
+     angka di sini harus benar-benar lebih besar dari umur terpanjang yang
+     mungkin, bukan sekadar lebih besar dari yang biasa.
+
+     Sapuan kedua yang menentukan angkanya (scratchpad/sapu-titipan.mjs, 84
+     jalan = 6 posisi awal x 7 pengali laju yang sama x {tanpa beku, beku 8
+     detik di detik 6}): NOL dari 84 mati karena durasi, dan umur terpanjang
+     63,92 detik (laju 0,357 + pembekuan 8 detik). 76 = 63,92 + 12 detik
+     margin. Kalau kelak ada event yang memperlambat lebih jauh lagi dari
+     0,357, rantai ini akan terpotong di detik 76 — dan itu memang yang
+     dikehendaki: satu punchline hilang di kasus ekstrem lebih baik daripada
+     event yang secara struktural tidak punya ujung.
 
      Pagar selonggar ini tidak menggantungkan slot: kelasnya 'latar' tanpa
      bentrokDengan (tidak ada panggung yang terkunci), dan kurir yang benar-
@@ -186,7 +213,7 @@ daftarEvent(
      ditaksir (laju dipaksa 0 pada detik 1/5/10/16 -> mati 7,02/11,02/16,00/
      22,02). Cooldown juga tidak ikut molor: cooldownSampai diset di
      nyalakanEvent (room.js), bukan saat mati. */
-  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 40,
+  kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 76,
   // "rapat jam 2 di ruang kadis" janggal diucapkan tengah malam atau hari
   // libur; nol = tidak ikut undian sama sekali di babak itu.
   babak: { malam: 0, libur: 0 },
@@ -285,10 +312,14 @@ daftarEvent(
            lebih lama dari ambang mana pun yang masuk akal. Itu bukan macet,
            itu ruangan yang memang sedang berhenti.
 
-       Selama masih maju, E.sisa ditahan di lantai 4 detik supaya pagar durasi
-       tidak pernah jatuh di tengah mata rantai; begitu berhenti maju 6 detik,
-       event menyerah sendiri. Itu yang menutup aturan 11, bukan durasi. */
-    const MACET = 6, LANTAI = 4;
+       Begitu berhenti maju 6 detik, event menyerah sendiri. Itu yang menutup
+       aturan 11.
+
+       Di sini DULU ada satu baris lagi: `E.sisa = Math.max(E.sisa, 4)` tiap
+       frame selama rantainya masih maju, alasannya "supaya pagar durasi tidak
+       pernah jatuh di tengah mata rantai". Baris itu dibuang, dan durasinya
+       yang dibesarkan jadi pagar sungguhan — lihat catatan di atas `durasi`. */
+    const MACET = 6;
     let px = 0, wx = bawa.x, wy = bawa.y;
     for (const t of bawa.path) { px += Math.hypot(t.x - wx, t.y - wy); wx = t.x; wy = t.y; }
     const maju = E.data.i + (E.data.tunggu ? 't' : 'j') + Math.round(px);
@@ -296,7 +327,6 @@ daftarEvent(
       E.data.maju = maju; E.data.majuSejak = E.umur;
     }
     if (E.umur - E.data.majuSejak > MACET) { E.selesaiCepat = true; return; }
-    E.sisa = Math.max(E.sisa, LANTAI);
 
     if (bawa.diam && !E.data.tunggu) {
       E.data.tunggu = true;

@@ -45,11 +45,13 @@ daftarEvent(
     }
     // yang tidak ikut menepi cuma berhenti sebentar dan menengadah
     pada(E, 0.2, () => {
-      for (const o of S.orang) {
-        if (o.eventKerja === E || o.adaTugas) continue;
-        hadapkan(o, o.x, o.y - 200);
-        o.busyUntil = Math.max(o.busyUntil, now + 1000);
-      }
+      /* mendongak() menyaring sendiri siapa yang tidak boleh diputar: yang
+         sedang berjalan, yang sedang dipinjam event lain, dan siapa pun yang
+         face-nya 'up' (sprite punggung — memutarnya membalik siluetnya, bukan
+         membuatnya mendongak). Pagar adaTugas yang dulu ada di sini sengaja
+         tidak diteruskan: peserta rapat memakainya PERMANEN, dan gempa yang
+         tidak membuat meja rapat mendongak sama sekali justru yang aneh. */
+      mendongak(S.orang, 1000);
     });
     // pulang satu per satu ke stasiun asalnya, bukan serentak
     pada(E, 7, () => {

@@ -215,12 +215,15 @@ daftarEvent(
   id: 'lirik-jam-dinding',
   kelas: 'latar', bobot: B.sering, cooldown: 240, durasi: 2,
   syarat: (S) => S.orang.some((o) => o.diam),
-  mulai(E, S) { E.data.a = pilih(S.orang.filter((o) => o.diam)); },
+  // face !== 'up': yang membelakangi kamera dilewati menoleh() (sprite
+  // punggung), jadi memilihnya berarti eventnya jadi adegan tanpa adegan
+  mulai(E, S) { E.data.a = pilih(S.orang.filter((o) => o.diam && o.face !== 'up')); },
   tick(E) {
     const a = E.data.a;
     if (!a) return;
     MOD.jamSorot = 1;
-    pada(E, 0.2, () => hadapkan(a, 168, 38));
+    // menoleh(), bukan hadapkan(): a tidak pernah dipinjam event ini
+    pada(E, 0.2, () => menoleh([a], 168, 38, 1600));
   },
 },
 

@@ -1,4 +1,5 @@
-# token headless: kunci mentah, jangan pernah ikut di-commit
+# peninggalan fitur token headless yang sudah dicabut: tetap diabaikan supaya
+# berkas lama di mesin siapa pun tidak pernah ikut ter-commit
 .agent-room-token
 
 # riwayat token: data pemakaian pribadi, bukan kode
@@ -24,3 +25,13 @@ pagu.json.tmp
 # formasi pegawai tetap: nama & jabatan penghuni kursi per folder, data lokal
 formasi.json
 formasi.json.tmp
+
+# suara ucap: setelan, kunci OpenRouter, dan cache klip — data lokal, bukan kode
+suara.json
+suara.json.tmp
+.agent-room-suara-kunci
+suara/
+
+# daftar nama pegawai pilihanmu: data lokal (daftar bawaan ada di server.mjs)
+nama.json
+nama.json.tmp

@@ -11,7 +11,7 @@ fiturnya yang perlu dipikir ulang, bukan aturannya. Alasan lengkap tiap
 keputusan desain ada di [DESIGN.md](DESIGN.md).
 
 Berkas lokal yang **tidak boleh** ikut ke repo maupun ke paket:
-`.agent-room-token`, `token-riwayat*.jsonl`, `kliping-*`, `agenda/`. Semuanya
+`token-riwayat*.jsonl`, `kliping-*`, `agenda/`. Semuanya
 sudah ada di `.gitignore`, dan daftar `files` di `package.json` memang tidak
 menyebutnya.
 

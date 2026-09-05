@@ -129,6 +129,122 @@ bukan tentang satu wujud yang kurang: **fixture yang tidak pernah memenuhi
 sebuah syarat membuat event yang memakainya tidak pernah diuji, dan itu tidak
 kelihatan sebagai kegagalan.**
 
+Dan pelajarannya berlaku lagi, di tempat yang sama. Orang palsu itu masih
+punya satu kebohongan: `face`-nya `'down'` untuk semua, padahal pegawai di meja
+kerja sungguhan menghadap `'up'` (`STATIONS.think.face` — membelakangi
+penonton, menghadap laptopnya) dan tidak ada satu pun peserta rapat di
+fixture-nya. Selama itu, pagar apa pun yang bergantung pada **arah gambar**
+tidak pernah teruji. Sesudah `face`/`hadap` diambil dari `STATIONS` dan dua
+"duduk di kursi rapat" ditambahkan, satu event lagi ketahuan menulis `hadap`
+ke penonton (`rapat-pimpinan-dadakan`) dan satu lagi ketahuan melanggar
+Aturan 1 (`salah-duduk-kursi-kadis`) — jangkauan Uji Rebutan naik 213 → 215,
+dan jumlah event yang syaratnya tidak pernah bisa benar turun 106 → 103.
+
+Sisa 103 itu **belum tentu** lubang: banyak yang memang bergantung tanggal,
+cuaca, jam, atau jabatan tertentu. Tapi angkanya layak dibaca tiap kali ada
+bug yang "tidak mungkin lolos" ternyata lolos.
+
+#### Arah hadap penonton: `menoleh()`, bukan `hadapkan()`
+
+Orang di ruangan ini punya **dua** field arah, dan cuma satu yang aman
+disentuh dari event.
+
+| field | siapa yang mengembalikannya |
+|---|---|
+| `face` | dipasang ulang tiap langkah `update()`, dan dipulihkan `arrive()`, `setButuh()`, `tickPulang()`, `tickKongsi()` |
+| `hadap` | **tidak ada** — cuma `goTo`/`goToXY`/`pulangKe`, dan ketiganya menuntut perjalanan baru |
+
+`hadapkan(o, tx, ty)` menulis **dua-duanya**. Untuk pemeran yang dipinjam event
+itu tidak apa-apa: dia berjalan lagi sesudah adegannya, dan langkah itu menulis
+ulang `hadap`. Untuk **penonton** itu racun. Pegawai yang sudah duduk di
+mejanya tidak pernah dapat perjalanan baru — `handle()` cuma memanggil `goTo()`
+kalau stasiun tool-nya *berbeda*, dan `stasiunPulang()` orang yang sudah di
+mejanya mengembalikan stasiun yang sedang ditempatinya. Jadi arah yang ditulis
+event menempel **sampai sesinya berakhir**: pegawai berdiri menyamping di depan
+laptopnya karena ada tikus lewat di plafon dua puluh menit lalu.
+
+Yang benar untuk penonton:
+
+| helper (`00-dasar.js`) | untuk |
+|---|---|
+| `menoleh(daftar, tx, ty, ms)` | lirikan sesaat ke satu titik |
+| `mendongak(daftar, ms)` | "semua menengadah" — satu titik bersama tidak bisa menyatakannya |
+| `menolehKe(daftar, tx, ty, ms)` | orang yang **menghampiri mejanya** — satu-satunya yang boleh memutar sprite punggung |
+
+Keduanya cuma menulis `face`, menitipkan `face` lama di `o.tolehBalik` + arah
+yang mereka pasang di `o.tolehArah`, lalu `tickKongsi()` yang mengembalikannya.
+`tolehArah` itu **pagar kepemilikan**: kalau saat tolehnya habis `face`-nya
+sudah bukan arah itu, ada yang menulisinya sesudah kita — dilepas, bukan
+ditarik balik, supaya tolehan yang berakhir tidak menghapus arah milik event
+tetangga.
+
+`menoleh()` juga yang memegang daftar siapa yang tidak boleh diputar, supaya
+tidak ada event yang perlu menulisnya sendiri: yang sedang berjalan, yang
+sedang dipinjam event lain, dan **siapa pun yang `face`-nya sudah `'up'`**.
+Yang terakhir itu pagar *sprite*, bukan pagar sopan santun: `drawPerson`
+membaca `back = a.face === 'up'` dan menggambar orangnya membelakangi kamera,
+tangan di laptop, wajah tidak terlihat. Memutarnya jadi `'left'`/`'right'`
+tidak membuat dia melirik — seluruh siluetnya berbalik dan tangannya lepas
+dari laptop, terbaca seperti dia berdiri lalu berputar 180 derajat. Pegawai di
+meja kerja dan dua kursi rapat sisi dekat sama-sama duduk `'up'`, jadi
+dua-duanya terlindungi oleh satu aturan.
+
+Pagar itu punya pengecualian yang sah, dan `menolehKe()` yang memegangnya.
+Bedanya maksud, bukan teknis: untuk **lirikan** (tikus di plafon, proyektor
+menyala) memutar pegawai meja terbaca seperti dia berhenti bekerja dan
+berbalik badan gara-gara suara kecil — salah. Untuk orang yang **berdiri di
+sebelah mejanya** menyodorkan nota untuk diparaf, berbalik menghadap tamunya
+justru yang benar. Kalau ragu, pakai `menoleh()`.
+
+Dua pagar yang **sengaja tidak** ada di situ, dan dua-duanya pernah dicoba:
+
+* `adaTugas` — itu pagar *pinjam* (`bisaDipinjam`), sedangkan menoleh tidak
+  meminjam siapa pun: tidak memasang `eventKerja`, tidak memberi perjalanan,
+  tidak memasang pose.
+* `state === 'work'` — terdengar seperti Aturan 1, tapi salah sasaran. Yang
+  merusak gambarnya bukan orangnya sedang sibuk, melainkan arah gambarnya
+  kebetulan punggung; keduanya cuma **kelihatan** sama karena kebanyakan
+  pegawai sibuk memang menghadap laptopnya.
+
+Bedanya kelihatan di meja rapat. `class Peserta` ber-`state 'work'` **permanen**
+selama dia duduk — sama strukturalnya dengan `adaTugas`, bukan "sedang sibuk
+satu langkah" — padahal dia duduk menghadap kamera. Dengan pagar `state`, 5
+dari 5 peserta rapat berhenti bereaksi ke apa pun: kerumunan paling terbaca di
+ruangan diam di tempat untuk seluruh 39 pemanggilan `menoleh()`.
+
+Aturan 1 tetap dijaga, cuma di tempat yang benar: **`busyUntil` tidak dinaikkan
+untuk orang ber-`state 'work'`.** `busyUntil` persis yang menahan pose
+kerjanya (`update()`: `if (state === 'work' && now > busyUntil) state =
+'idle'`), jadi menaikkannya membuat ruangan menampilkan tool call yang sudah
+selesai seolah masih jalan — bohong tentang sesi sungguhan gara-gara seekor
+tikus lewat di plafon. Untuk yang menganggur angka itu justru perlu: ia yang
+menahan langkah pulang `IDLE_AFTER` supaya orangnya tidak ngeloyor pergi di
+tengah tolehan.
+
+`node uji-arah.mjs` menjaganya, semantik bukan regex: tiap event dijalankan
+sampai habis, siapa yang pernah masuk `E.aktor` dicatat kumulatif, lalu `hadap`
+semua orang **di luar** daftar itu dibandingkan dengan potret sebelum event
+mulai. Sembilan event pernah melanggarnya sekaligus, dan tidak satu pun harness
+lain melihatnya: tidak ada exception, tidak ada NaN, tidak ada peringatan.
+
+#### `durasi` itu pagar, dan tidak boleh dilucuti
+
+`tickEvent()` menulis `E.umur += dt; E.sisa -= dt` — jadi `E.sisa` tidak lain
+dari `durasi - umur`. Konsekuensinya: menulis `E.sisa` dari dalam `tick()`
+**hanya bisa berarti satu hal**, yaitu membuat event hidup melewati durasinya.
+
+`pesan-titipan-berubah-isi` pernah memasang `E.sisa = Math.max(E.sisa, 4)` tiap
+frame selama kurirnya masih maju, dengan niat yang benar: pagar durasi tidak
+boleh jatuh di tengah satu mata rantai. Akibatnya melampaui niat itu — pagarnya
+tidak jatuh sama sekali. Sapuan 84 jalan mencatat **nol** kematian karena
+durasi dan umur terpanjang 63,92 detik dengan `durasi: 40` tertulis di
+registri, selama itu memegang tiga sesi sungguhan pada `betah = true`.
+
+Kebiasaan yang dipakai sekarang, sama seperti `halal-bihalal-lebaran`: **durasi
+= pagar terakhir, bukan panjang adegan.** Ukur umur terpanjang yang mungkin,
+tulis angka itu plus margin, dan biarkan adegannya berakhir sendiri lewat
+`E.selesaiCepat`. Jangan menahan `E.sisa`.
+
 #### `MOD` milik bersama: tulis `true` saja
 
 `resetMod()` mengosongkan `MOD` setiap frame, jadi tidak ada yang perlu

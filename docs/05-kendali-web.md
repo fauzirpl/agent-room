@@ -27,7 +27,7 @@ dipakai ulang.
 | `POST /izin/tanya` · `GET /izin/tunggu` | pintu proses MCP anak (`mcp-izin.mjs`); dijaga kunci per-tugas, bukan token halaman |
 | `POST /nama` | beri nama panggilan ke sesi mana pun, termasuk sesi terminal |
 | `POST /peran` | tetapkan jabatan sesi mana pun; id yang tidak dikenal ditolak |
-| `POST /kredensial` | pasang atau hapus token headless; nilainya tidak pernah bisa dibaca kembali |
+| `GET /folder` | daftar subfolder untuk penelusur folder kerja |
 
 **Formulir tugasnya sendiri sengaja disembunyikan di halaman ini**, apa pun
 jawaban `/kendali` — `muatKendali()` di [public/room.js](../public/room.js)
@@ -35,8 +35,7 @@ memaksa `elForm.hidden = true` tanpa syarat, jadi menyalakan
 `--izinkan-perintah` tidak lagi memunculkan kotak nama/prompt/folder di
 sidebar. Endpoint di tabel atas tetap hidup dan bisa dipanggil langsung kalau
 kamu punya jalan lain ke token per-jalannya; yang hilang cuma jalan pintas
-lewat formulir bawaan. Panel **token headless** (di bawah) dikecualikan dari
-penyembunyian ini — lihat kenapa di bagiannya sendiri.
+lewat formulir bawaan.
 
 ### Antrean disposisi
 
@@ -166,53 +165,6 @@ tidak bisa dipindah modelnya dari luar, jadi kartu pegawai hanya menampilkannya,
 tidak menawarkan dropdown. Sesi terminal menampilkan model kalau payload
 hook-nya kebetulan membawanya — itu tidak dijamin ada.
 
-### Token headless
-
-Sesi yang dilahirkan halaman ini butuh kredensialnya sendiri; login aplikasi
-Claude di desktop tidak ikut terpakai. Daripada mengatur env di terminal,
-tokennya bisa ditempel dari panel: buka **token headless**, tempel, **Simpan**.
-Env yang dipakai ditentukan bentuk tokennya:
-
-| Awalan | Dikirim sebagai |
-|---|---|
-| `sk-ant-api…` | `ANTHROPIC_API_KEY` |
-| selainnya, mis. `sk-ant-oat…` dari `claude setup-token` | `CLAUDE_CODE_OAUTH_TOKEN` |
-
-Panelnya **berdiri sendiri**, lepas dari formulir tugas yang disembunyikan di
-atas — `id="kredensialPanel"` di [public/index.html](../public/index.html),
-ditampilkan/disembunyikan sendiri oleh `muatKendali()`. Syaratnya cuma `izin`
-dari `GET /kendali`, bukan `siap`: `POST /kredensial` di server memang cuma
-mensyaratkan kendali web menyala, tidak peduli biner `claude`-nya sudah
-ketemu atau belum, jadi panelnya ikut syarat yang sama persis. Kendali web
-mati sama sekali → panelnya juga tidak pernah muncul, karena `/kredensial`
-toh akan menolak semuanya (tidak ada token per-jalan buat dikirim).
-
-Tiga batasan yang berlaku apa pun pilihanmu:
-
-- **satu arah**: tidak ada endpoint yang bisa membacanya kembali. `/kendali`
-  hanya melaporkan ada/tidak, nama env-nya, dan tersimpan di berkas atau tidak
-- tidak pernah masuk log, konsol, maupun stream event; yang dicatat cuma nama
-  env-nya
-- diteruskan ke proses anak lewat **env, bukan argv** — baris perintah sebuah
-  proses bisa dibaca proses lain di mesin yang sama, isi env-nya tidak
-
-Soal umurnya, kamu yang memilih lewat centang **ingat di berkas**:
-
-| Centang | Tokennya |
-|---|---|
-| mati | hidup di memori server saja, hilang begitu server berhenti |
-| nyala | ditulis ke `.agent-room-token` di samping `server.mjs`, dimuat sendiri tiap server start |
-
-Berkas itu berisi token **mentah** — perlakukan seperti kunci. Server menulisnya
-dengan mode `0600` (berlaku di POSIX; di Windows yang berlaku ACL folder
-induknya) dan namanya sudah masuk `.gitignore`. Pindah tempat lewat
-`AGENT_ROOM_TOKEN_FILE`. Menekan **Hapus** membuang keduanya sekaligus, memori
-dan berkas; menyimpan ulang dengan centang dimatikan juga mencabut berkas lama.
-
-Gerbangnya sama dengan `/perintah`: token per-jalan + cek `Origin`. Memang harus
-sama, karena yang sudah bisa menyuruh mesin ini bekerja pasti juga bisa
-menentukan kredensial yang dipakainya.
-| `GET /folder` | daftar subfolder untuk penelusur folder kerja |
 
 ### Kenapa penelusur foldernya dilayani server
 
@@ -311,11 +263,12 @@ halaman tidak perlu ditebak sama sekali.
 Sesi headless butuh kredensial sendiri. Kalau server dijalankan dari lingkungan
 yang autentikasinya dibrokeri host (mis. dari dalam sesi Claude Code lain, atau
 dari aplikasi Claude di desktop), proses anaknya akan menggantung tanpa keluaran.
-Jalankan servernya dari terminal biasa tempat `claude` normal jalan, atau
-siapkan token panjang umur:
+Jalankan servernya dari terminal biasa tempat `claude` normal jalan, atau bikin
+token panjang umur lalu isikan lewat env waktu server dijalankan:
 
 ```bash
-claude setup-token
+claude setup-token          # salin hasilnya
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat... node server.mjs --izinkan-perintah
 ```
 
 Gejalanya khas dan menyesatkan: pegawainya **muncul** di ruangan (itu dibuat oleh

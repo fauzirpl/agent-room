@@ -157,8 +157,14 @@ daftarEvent(
       // meja kosong dilewati tanpa berhenti — tidak ada yang diparaf di situ
       const tuan = S.orang.find((o) => o.station === 'think' && Math.abs(o.x - mejaX) < 8);
       if (tuan) {
-        hadapkan(tuan, a.x, a.y);
-        tuan.busyUntil = Math.max(tuan.busyUntil, now + 1200);
+        /* menolehKe(), bukan hadapkan(): yang diparaf ini BUKAN pemeran event
+           ini, dan hadapkan() menulis a.hadap yang lengket — arah itu menempel
+           di badannya sampai dia berjalan lagi, dan pegawai yang sudah duduk di
+           mejanya tidak pernah berjalan lagi. Varian -Ke, bukan menoleh()
+           biasa, karena dia duduk membelakangi kamera di mejanya: ada orang
+           berdiri di sebelahnya menyodorkan nota, jadi berbalik menghadap tamu
+           memang yang dimaksud — bukan lirikan sekilas. */
+        menolehKe([tuan], a.x, a.y, 1200);
         spawn('ink', mejaX, 300);
       }
       E.data.i++;
@@ -243,7 +249,9 @@ daftarEvent(
       const tunda = t.state === 'work' ? 3 : 0;
       if (E.umur - E.data.tibaPada > 2.5 + tunda) {
         spawn('ink', t.x, t.y - 14); spawn('ink', t.x, t.y - 14);
-        hadapkan(t, a.x, a.y);
+        // -Ke: pembawa edaran berdiri di sebelah mejanya, jadi berbalik
+        // menghadapnya memang yang dimaksud (lihat menolehKe di 00-dasar.js)
+        menolehKe([t], a.x, a.y, 1200);
         E.data.i++; E.data.menuju = false; E.data.tibaPada = null;
       }
     }

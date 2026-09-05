@@ -164,8 +164,12 @@ daftarEvent(
   mulai(E, S) {
     E.data.orang = S.orang.filter((o) => !o.adaTugas);
     for (const o of E.data.orang) o.bekuSampai = now + 8000;
-    const a = E.data.orang.find((o) => !o.path.length);
-    if (a) hadapkan(a, 212, 40);
+    // face !== 'up' diutamakan: yang membelakangi kamera dilewati menoleh()
+    const a = E.data.orang.find((o) => !o.path.length && o.face !== 'up');
+    // menoleh(), bukan hadapkan(): tidak ada pemeran yang dipinjam di sini,
+    // jadi arah lengket yang ditulis hadapkan() tidak punya yang membereskan.
+    // 8000 ms = sepanjang pembekuan di baris atas.
+    if (a) menoleh([a], 212, 40, 8000);
   },
   tick() { MOD.ambPlus = 0.04; },
 },

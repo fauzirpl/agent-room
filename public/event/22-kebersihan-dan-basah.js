@@ -255,7 +255,8 @@ daftarEvent(
       if (dekat) {
         E.data.sapa = true;
         dekat.say('permisi, Pak — awas licin');
-        hadapkan(dekat, T.x, 252);
+        // -Ke: OB-nya berdiri tepat di depannya dan menyapa, bukan lewat saja
+        menolehKe([dekat], T.x, 252, 1200);
       }
     }
     pada(E, 3, () => menoleh(S.orang, 120, 252, 900));

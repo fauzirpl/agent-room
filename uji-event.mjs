@@ -399,7 +399,7 @@ export function muatKonteks() {
     globalThis.__jembatan__ = {
       EVENT_ACAK, eventById, MOD, RUANGAN, CUACA, jabatanDari,
       eventHidup, cooldownSampai, agents, peserta, standby, PROPS,
-      SORT_KURSI_DEKAT, MEJA_KERJA_X, MEJA_KERJA_Y, STATIONS,
+      SORT_KURSI_DEKAT, MEJA_KERJA_X, MEJA_KERJA_Y, STATIONS, KURSI_N, KURSI_TOTAL,
       // Kelas: dideklarasikan 'class', jadi TIDAK otomatis jadi properti
       // context (yang jadi properti cuma 'function'/'var'). Tanpa jembatan
       // ini, ctx.Agent jatuh ke dummy catch-all global sandbox dan
@@ -461,19 +461,34 @@ export function buatSatuOrang(ctx, jenis) {
   // boolean lama tetap diterima supaya pemanggil lain tidak ikut diubah
   const j = jenis === true ? 'kerja' : (jenis || 'nganggur');
   const diMeja = j === 'kerja' || j === 'diam-di-meja';
+  const diRapat = j === 'duduk-di-rapat';
+  const st = diRapat ? 'rapat' : (diMeja ? 'think' : 'idle');
+  /* face/hadap DIAMBIL DARI STATIONS, bukan 'down' untuk semua. Pernah 'down'
+     untuk semua, dan itu menyembunyikan satu kelas bug utuh: pegawai di meja
+     kerja sungguhan menghadap 'up' (membelakangi penonton, menghadap
+     laptopnya — STATIONS.think.face), dan drawPerson menggambar face 'up'
+     sebagai SPRITE PUNGGUNG. Pagar mana pun yang bergantung pada arah gambar
+     tidak pernah teruji selama fixture-nya menghadap kamera semua. */
+  const arah = (ctx.__jembatan__.STATIONS[st] || {}).face || 'down';
   const o = {
     id: 'palsu-' + idOrangPalsu,
     x: 100, y: 300, slotIdx: 0,
-    station: diMeja ? 'think' : 'idle',
-    state: j === 'kerja' ? 'work' : 'idle',
-    face: 'down', hadap: null,
+    station: st,
+    // peserta rapat sungguhan (class Peserta) ber-state 'work' PERMANEN selama
+    // dia duduk, bukan cuma saat ada tool call — itu yang ditiru di sini
+    state: (j === 'kerja' || diRapat) ? 'work' : 'idle',
+    // dudukSejak dipasang arrive() untuk yang benar-benar duduk di kursi rapat;
+    // banyak event menyaringnya (`o.dudukSejak && o.station === 'rapat'`)
+    dudukSejak: diRapat ? msBeku : 0,
+    betah: diRapat,
+    face: arah, hadap: arah,
     path: [],
     busyUntil: 0,
     // dibedakan tiap orang supaya pinjamAktor() (urut arrivedAt, paling lama
     // diam didahulukan) deterministik, bukan tabrakan nilai sama
     arrivedAt: msBeku - idOrangPalsu * 60000,
     adaTugas: false,
-    betah: false, betahAsli: false,
+    betahAsli: false,
     eventKerja: null,
     alpha: 1,
     doingEvent: '',
@@ -512,14 +527,24 @@ export function buatSatuOrang(ctx, jenis) {
    orang di 'think' hampir selalu lanjut menghitung jarak dari mejanya. */
 export function buatOrangPalsu(ctx, n, kerjaCount) {
   const arr = [];
-  const { MEJA_KERJA_X, MEJA_KERJA_Y } = ctx.__jembatan__;
+  const { MEJA_KERJA_X, MEJA_KERJA_Y, STATIONS } = ctx.__jembatan__;
   for (let i = 0; i < n; i++) {
-    const diMeja = i >= kerjaCount && i < kerjaCount + 2;
-    const o = buatSatuOrang(ctx, i < kerjaCount ? 'kerja' : (diMeja ? 'diam-di-meja' : 'nganggur'));
+    const k = i - kerjaCount;
+    const diMeja = k >= 0 && k < 2;
+    const diRapat = k >= 2 && k < 4;
+    const jenis = i < kerjaCount ? 'kerja'
+      : (diMeja ? 'diam-di-meja' : (diRapat ? 'duduk-di-rapat' : 'nganggur'));
+    const o = buatSatuOrang(ctx, jenis);
     if (diMeja) {
-      o.slotIdx = i - kerjaCount;
+      o.slotIdx = k;
       o.x = MEJA_KERJA_X[o.slotIdx];
       o.y = MEJA_KERJA_Y;
+    }
+    if (diRapat) {
+      // kursi sisi JAUH (slotIdx < KURSI_N), berjajar 19 px seperti slotKe()
+      o.slotIdx = k - 2;
+      o.x = STATIONS.rapat.x + (o.slotIdx ? 19 : 0);
+      o.y = STATIONS.rapat.y;
     }
     arr.push(o);
   }
@@ -530,7 +555,7 @@ export function buatOrangPalsu(ctx, n, kerjaCount) {
 // objek raksasa. Dikutip dari bentuk potretRuangan() asli (room.js).
 export function buatS(ctx, { jam, hujan, petir, ramai }) {
   setJamPalsu(jam);                     // new Date().getHours() di sandbox = S.jam
-  const orang = buatOrangPalsu(ctx, ramai ? 6 : 0, ramai ? 2 : 0);
+  const orang = buatOrangPalsu(ctx, ramai ? 8 : 0, ramai ? 2 : 0);
   const lampu = jam < 5.4 || jam >= 18.8 ? 1 : (jam >= 7.2 && jam < 16.8 ? 0 : 0.5);
   const { bisaDipinjam } = ctx;
   const S = {

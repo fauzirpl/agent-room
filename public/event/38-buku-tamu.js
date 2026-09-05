@@ -56,7 +56,6 @@ daftarEvent(
     E.data.t = { x: -14, y: 288, fase: 'masuk' };
     E.data.tinta = 0;                 // partikel tinta yang sudah dilepas
     E.data.tambah = 0;                // baris yang sudah ditambahkan, maks 2
-    E.data.noleh = [];                // [orang, hadapLama, faceLama]
   },
   tick(E, dt, S) {
     const T = E.data.t;
@@ -71,16 +70,31 @@ daftarEvent(
         // Tenggat MUTLAK disimpan sekali. pada(E, E.umur + 6, ...) tidak
         // akan pernah menyala — pada() itu one-shot pada detik TETAP.
         E.data.tandaSampai = E.umur + 6;
-        // Yang kebetulan menganggur menoleh sebentar. hadap/face itu field
-        // LENGKET dan lepaskanAktor tidak meresetnya (dan tamu ini memang
-        // tidak meminjam siapa pun), jadi arah lamanya dicatat dan
-        // dikembalikan sendiri di selesai().
-        for (const o of S.orang) {
-          if (o.eventKerja || o.path.length || E.data.noleh.length >= 3) continue;
-          E.data.noleh.push([o, o.hadap, o.face]);
-          hadapkan(o, 60, 286);
-          o.busyUntil = Math.max(o.busyUntil, now + 1500);
-        }
+        /* Yang kebetulan menganggur menoleh sebentar — lewat menoleh(), bukan
+           hadapkan(). hadapkan() menulis o.hadap yang LENGKET dan tidak
+           dibereskan siapa-siapa (pegawai yang sudah duduk di stasiunnya tidak
+           pernah dapat goTo() baru), jadi event ini dulu harus menariknya balik
+           sendiri di selesai() — artinya selama 24 detik penuh ada orang yang
+           melotot ke meja buku tamu. menoleh() cuma menulis face, menahannya
+           1,5 detik, lalu tickKongsi() yang mengembalikannya; siapa yang tidak
+           boleh diputar (berjalan, dipinjam event lain, atau digambar
+           membelakangi kamera) juga sudah jadi urusan menoleh().
+
+           menoleh() biasa, BUKAN menolehKe(): tamunya berdiri di mejanya
+           sendiri di pojok, tidak menghampiri siapa pun. Yang terjadi cuma
+           lirikan, jadi pegawai yang sedang menghadap laptopnya tidak perlu
+           berbalik badan.
+
+           Tiga orang TERDEKAT, bukan tiga pertama di array: urutan S.orang itu
+           urutan penghuni() (agents, peserta, standby), tidak ada hubungannya
+           dengan siapa yang masuk akal menoleh ke pintu. Saringannya sengaja
+           SAMA dengan saringan menoleh() supaya "tiga terdekat" menghitung tiga
+           orang yang benar-benar akan berputar, bukan tiga yang lalu dilewati
+           diam-diam di dalam. */
+        const calon = S.orang
+          .filter((o) => !o.eventKerja && !o.path.length && o.face !== 'up')
+          .sort((p, q) => jarakKe(p, 60, 286) - jarakKe(q, 60, 286));
+        menoleh(calon.slice(0, 3), 60, 286, 1500);
       }
       return;
     }
@@ -124,16 +138,11 @@ daftarEvent(
       '#6b4a2a', '#d9ab5e', T.fase === 'masuk' ? 'map' : null);
   },
   selesai(E) {
-    // Tidak ada aktor yang dipinjam, tidak ada pose/bawa/MOD yang dipasang.
-    // Yang WAJIB dikembalikan cuma arah orang yang tadi menoleh: pegawai
-    // yang duduk di stasiun 'think' tidak pernah dapat goTo() baru, jadi
-    // arah itu akan nyangkut selamanya kalau dibiarkan.
-    for (const [o, hadap, face] of E.data.noleh || []) {
-      if (o.eventKerja) continue;      // sudah dipakai event/tool call lain
-      o.hadap = hadap;
-      o.face = face;
-    }
-    // RUANGAN.bukuTamu memang SENGAJA tidak dibersihkan — itu bekasnya.
+    // Kosong, dan itu memang jawabannya. Tidak ada aktor yang dipinjam, tidak
+    // ada pose/bawa/MOD yang dipasang, dan tolehan di fase 'tanda' dipulihkan
+    // tickKongsi() di update() masing-masing orang — jalan terus baik eventnya
+    // masih hidup maupun sudah mati, jadi tidak ada yang perlu ditarik balik
+    // dari sini. RUANGAN.bukuTamu memang SENGAJA tidak dibersihkan: itu bekasnya.
   },
   sortY: 292,
 },

@@ -25,16 +25,15 @@ macOS/Linux). Dia melapor dulu sebelum kantornya dibuka:
                C:\Users\...\Claude\claude-code\2.1.247\claude.exe
                PATH menunjuk 2.1.25 — dilewati, yang dipakai 2.1.247
   hook         15 event terpasang  (15 global)
-  kredensial   tersimpan  (.agent-room-token)
   kendali web  mati  (nyalakan: dinas --kendali)
   alamat       http://127.0.0.1:4517
   ----------------------------------------------------
 ```
 
-Tiga baris pertama itu alasan dia ada. Ketiganya tidak kelihatan kalau
-`server.mjs` dijalankan langsung, dan justru ketiganya yang paling sering bikin
-orang bingung: biner claude mana yang sebenarnya akan dipanggil, hook-nya sudah
-terpasang atau belum, dan kredensial headless-nya ada atau tidak.
+Dua baris pertama itu alasan dia ada. Keduanya tidak kelihatan kalau
+`server.mjs` dijalankan langsung, dan justru keduanya yang paling sering bikin
+orang bingung: biner claude mana yang sebenarnya akan dipanggil, dan hook-nya
+sudah terpasang atau belum.
 
 Baris `PATH menunjuk ...` itu **jebakan dua instalasi** yang dibereskan sendiri:
 semua kandidat biner dikumpulkan, versinya ditanya satu per satu, dan yang
@@ -184,7 +183,6 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_PORT` | `4517` | ganti port (install ulang hook setelah diubah) |
 | `AGENT_ROOM_HOST` | `127.0.0.1` | alamat bind |
 | `AGENT_ROOM_CLAUDE` | hasil `where claude` | tunjuk biner claude tertentu, kalau PATH menemukan instalasi yang salah |
-| `AGENT_ROOM_TOKEN_FILE` | `.agent-room-token` | tempat token headless diingat, kalau centangnya dinyalakan |
 | `AGENT_ROOM_TOKEN_LOG` | `token-riwayat.jsonl` | tempat riwayat token lintas sesi ditulis (lihat **Riwayat lintas sesi**) |
 | `AGENT_ROOM_KLIPING_LOG` | `kliping-mingguan.jsonl` | tempat arsip kliping mingguan ditulis (lihat **Arsip kliping mingguan**); checkpoint minggu berjalan ikut ke folder yang sama |
 | `AGENT_ROOM_AGENDA_DIR` | `agenda/` | folder buku agenda harian (lihat **Buku agenda**) |

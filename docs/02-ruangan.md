@@ -778,7 +778,8 @@ dua-duanya tanpa kunci API. Kalau di luar memang hujan, di jendela ikut hujan:
   deras-redanya, dan **gemuruh** menyusul tiap kilat
 - mulai/redanya hujan dicatat di log aktivitas
 
-Ini **satu-satunya lalu lintas keluar** yang dibuat server, hasilnya di-cache
+Ini salah satu lalu lintas keluar yang dibuat server (yang lain: nota dinas
+keluar dan suara ucap, dua-duanya mati bawaan), hasilnya di-cache
 10 menit, dan kegagalannya tidak pernah berisik: server lama, offline, atau
 API tumbang membuat halaman jatuh ke mode **hujan sesekali** — dadu
 deterministik per jam (sekitar 1 dari 5 jam gerimis), sama untuk semua

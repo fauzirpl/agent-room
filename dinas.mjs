@@ -15,11 +15,10 @@
 //   dinas --mcp           -> cara mendaftarkan kantor sebagai MCP server ke Claude Code
 //   dinas --mcp --json    -> cuma JSON mcpServers-nya
 //
-// Gunanya bukan menghemat ketikan. Ada tiga hal yang tidak bisa dilihat
+// Gunanya bukan menghemat ketikan. Ada dua hal yang tidak bisa dilihat
 // `node server.mjs` sendirian dan justru itu yang paling sering bikin orang
-// bingung: biner claude mana yang sebenarnya akan dipanggil, hook-nya sudah
-// terpasang atau belum, dan kredensial headless-nya ada atau tidak. Ketiganya
-// dilaporkan sebelum servernya jalan.
+// bingung: biner claude mana yang sebenarnya akan dipanggil, dan hook-nya
+// sudah terpasang atau belum. Keduanya dilaporkan sebelum servernya jalan.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -199,13 +198,6 @@ function cekHook() {
   };
 }
 
-/* Kredensial headless: yang dilaporkan cuma ADA atau TIDAK. Isinya tidak pernah
-   dibaca, apalagi dicetak — berkas itu berisi token mentah. */
-function cekToken() {
-  const berkas = process.env.AGENT_ROOM_TOKEN_FILE || path.join(DIR, '.agent-room-token');
-  try { return fs.statSync(berkas).size > 0 ? berkas : null; } catch { return null; }
-}
-
 const tundaDir = () => process.env.AGENT_ROOM_TUNDA_DIR || path.join(os.homedir(), '.agent-room', 'tunda');
 function hitungTunda() {
   try { return fs.readdirSync(tundaDir()).filter((n) => /^\d{13}-[a-z0-9]{1,12}\.json$/.test(n)).length; }
@@ -213,7 +205,7 @@ function hitungTunda() {
 }
 
 /* ————— laporan sebelum kantor dibuka ————— */
-function laporan(bin, hook, token) {
+function laporan(bin, hook) {
   const baris = (k, v) => console.log('  ' + abu(k.padEnd(13)) + v);
   console.log(tebal('  status kantor'));
   console.log(abu('  ' + '-'.repeat(52)));
@@ -237,10 +229,6 @@ function laporan(bin, hook, token) {
       + abu('  (' + [hook.proyek && hook.proyek + ' project', hook.global && hook.global + ' global']
         .filter(Boolean).join(', ') + ')')
     : kuning('belum terpasang') + abu('  (pasang: dinas --pasang)'));
-
-  baris('kredensial', token
-    ? hijau('tersimpan') + abu('  (' + path.basename(token) + ')')
-    : abu('belum ada') + abu('  — cuma perlu kalau memakai kendali web'));
 
   baris('kendali web', KENDALI
     ? kuning('AKTIF') + abu('  — halaman boleh melahirkan sesi & menelusuri folder')
@@ -424,7 +412,6 @@ if (ada('--layanan')) {
   r.on('close', (k) => process.exit(k ?? 0));
 } else {
   const bin = kandidatClaude();
-  const token = cekToken();
 
   if (ada('--pasang')) {
     const a = [path.join(DIR, 'install.mjs')]; if (GLOBAL) a.push('--global');
@@ -432,14 +419,14 @@ if (ada('--layanan')) {
       stdio: 'inherit', cwd: process.cwd(),
       env: { ...process.env, AGENT_ROOM_PORT: String(PORT) },
     });
-    hasil.on('close', (k) => (k === 0 ? mulai(bin, token) : process.exit(k ?? 1)));
+    hasil.on('close', (k) => (k === 0 ? mulai(bin) : process.exit(k ?? 1)));
   } else {
-    mulai(bin, token);
+    mulai(bin);
   }
 }
 
-function mulai(bin, token) {
-  laporan(bin, cekHook(), token);
+function mulai(bin) {
+  laporan(bin, cekHook());
   if (ada('--periksa')) {
     console.log(abu('  (--periksa: cuma memeriksa, kantornya tidak dibuka)'));
     console.log();

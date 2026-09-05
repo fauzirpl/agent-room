@@ -21,11 +21,13 @@
 //      mematikan proses tanpa menjalankan handler 'exit', sehingga berkasnya
 //      tidak sempat ditulis dan ujinya akan bohong.
 //
-// Nama pegawai TIDAK PERNAH dipatok harfiah di berkas ini. Daftar NAMA_DEPAN
-// dan NAMA_BELAKANG dibaca dari server.mjs lalu undiannya dihitung ulang
-// dengan rumus yang sama — jadi menambah nama di ujung daftar tidak
-// memerahkan uji ini, tapi menyisipkan nama di tengah (yang memang mengganti
-// orang) langsung ketahuan.
+// Nama pegawai TIDAK PERNAH dipatok harfiah di berkas ini. Daftar NAMA_BAWAAN
+// dibaca dari server.mjs lalu undiannya dihitung ulang dengan rumus yang sama
+// — jadi menambah nama di ujung daftar tidak memerahkan uji ini, tapi
+// menyisipkan nama di tengah (yang memang mengganti orang) langsung ketahuan.
+//
+// Yang diuji di sini SELALU daftar bawaan: kantor sementaranya lahir tanpa
+// nama.json, jadi daftarNama() di server jatuh ke NAMA_BAWAAN.
 //
 // Pakai:
 //   node uji-pegawai.mjs            jalankan semua kasus
@@ -69,16 +71,19 @@ function daftarDariSumber(src, kunci) {
   return (m[1].match(/'[^']+'/g) || []).map((s) => s.slice(1, -1));
 }
 const SUMBER = fs.readFileSync(SERVER, 'utf8');
-const NAMA_DEPAN = daftarDariSumber(SUMBER, 'NAMA_DEPAN');
-const NAMA_BELAKANG = daftarDariSumber(SUMBER, 'NAMA_BELAKANG');
+const NAMA_BAWAAN = daftarDariSumber(SUMBER, 'NAMA_BAWAAN');
 
 function undi(proyek, i, dipakai = new Set()) {
   for (let salt = 0; salt < 64; salt++) {
     const h = crypto.createHash('sha256').update(proyek + '#' + i + '#' + salt).digest();
-    const nama = NAMA_DEPAN[h[0] % NAMA_DEPAN.length] + ' ' + NAMA_BELAKANG[h[1] % NAMA_BELAKANG.length];
+    const nama = NAMA_BAWAAN[h.readUInt16BE(0) % NAMA_BAWAAN.length];
     if (!dipakai.has(nama)) return nama;
   }
-  return NAMA_DEPAN[i % NAMA_DEPAN.length] + ' ' + NAMA_BELAKANG[i % NAMA_BELAKANG.length];
+  // cermin cabang mentok di pegawaiUndi(): angka di belakang, bukan nama kembar
+  const dasar = NAMA_BAWAAN[i % NAMA_BAWAAN.length];
+  if (!dipakai.has(dasar)) return dasar;
+  for (let n = 2; n < 100; n++) if (!dipakai.has(dasar + ' ' + n)) return dasar + ' ' + n;
+  return dasar;
 }
 
 /* ------------------------------------------------------- kantor sementara --- */
@@ -113,10 +118,18 @@ async function coba(dir, port, tambahan = {}) {
       AGENT_ROOM_TUNDA_DIR: path.join(dir, 'tunda'),
       AGENT_ROOM_TOKEN_LOG: path.join(dir, 'token-riwayat.jsonl'),
       AGENT_ROOM_KLIPING_LOG: path.join(dir, 'kliping.jsonl'),
-      AGENT_ROOM_TOKEN_FILE: path.join(dir, '.agent-room-token'),
       // pagu cuma DIBACA server, tapi tetap diarahkan ke folder sementara:
       // uji tidak boleh membaca satu pun berkas repo yang tidak dikendalikannya
       AGENT_ROOM_PAGU: path.join(dir, 'pagu.json'),
+      /* Wajib diarahkan ke kantor sementara: tanpa ini server memungut
+         nama.json/suara.json milik repo yang sedang diuji, dan undian
+         tandingan di atas (yang selalu memakai NAMA_BAWAAN) langsung
+         berbeda dari yang keluar. Uji tidak boleh ikut nasib daftar nama
+         pilihan orang yang kebetulan menjalankannya. */
+      AGENT_ROOM_NAMA: path.join(dir, 'nama.json'),
+      AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
+      AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
+      AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
       AGENT_ROOM_KUNCI: '',
       AGENT_ROOM_LAPOR: '',
       AGENT_ROOM_CUACA: '',

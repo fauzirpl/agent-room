@@ -630,35 +630,6 @@ body {
   color: var(--navy); font-size: 10.5px; user-select: all; word-break: break-all;
 }
 
-/* ---------- token headless ---------- */
-.kredensial { border: 1px dashed var(--khaki-tua); border-radius: 3px; padding: 6px 8px; }
-.kredensial > summary {
-  cursor: pointer; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--tinta-pudar); list-style: none;
-}
-.kredensial > summary::-webkit-details-marker { display: none; }
-.kredensial > summary::before { content: "▸ "; }
-.kredensial[open] > summary::before { content: "▾ "; }
-.kredensial > summary:hover { color: var(--tinta); }
-.kredensial-nota { margin: 7px 0; font-size: 9.5px; line-height: 1.5; color: var(--tinta-pudar); }
-.kredensial input { width: 100%; }
-.kredensial-aksi { display: flex; gap: 5px; margin-top: 6px; }
-#formTugas .kredensial-aksi button {
-  flex: 1; background: none; border: 1px solid var(--khaki-tua); color: var(--tinta-pudar);
-  border-radius: 3px; font: inherit; font-size: 10px; padding: 4px; cursor: pointer;
-}
-#formTugas .kredensial-aksi button:hover { color: var(--tinta); border-color: var(--navy); }
-.kredensial-status { margin-top: 5px; font-size: 9.5px; line-height: 1.4; color: var(--tinta-pudar); }
-.kredensial-status.ok { color: var(--hijau); }
-.kredensial-status.err { color: var(--merah); }
-
-.kredensial-ingat {
-  display: flex; align-items: center; gap: 5px;
-  margin-top: 6px; font-size: 9.5px; color: var(--tinta-pudar); cursor: pointer;
-}
-.kredensial-ingat input { width: auto; margin: 0; accent-color: var(--navy); }
-.kredensial-ingat code { color: #5a4e36; font-size: 9px; }
-
 /* ---------- modal kabar ----------
    Rangkanya dipinjam dari penelusur folder (.dlg), isinya berlagak GRUP
    WHATSAPP KANTOR: kepala hijau tua dengan nama grup + daftar anggota, badan
@@ -909,6 +880,42 @@ body {
 .pengaturan-izin button:disabled { opacity: .45; cursor: default; }
 .pengaturan-izin-ket { font-size: 9.5px; color: var(--tinta-pudar); }
 .pengaturan-grup .kartu-info { border-top: 0; padding-top: 0; grid-template-columns: 92px 1fr; }
+
+/* ---------- suara ucap & daftar nama ----------
+   Blok setelan yang isinya kolom isian, bukan sekadar centang. Menjorok 22px
+   sama seperti .pengaturan-vol/.pengaturan-izin supaya kelihatan bergantung
+   pada baris centang di atasnya. Sengaja TIDAK disembunyikan waktu centangnya
+   mati: kolom kunci di dalamnya justru yang harus diisi dulu sebelum
+   centangnya bisa dinyalakan sama sekali. */
+.suara-atur { padding: 2px 0 4px 22px; }
+.suara-baris {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 0; font-size: 11px; color: var(--tinta);
+}
+.suara-baris > span:first-child { width: 88px; flex-shrink: 0; color: var(--tinta-pudar); font-size: 9.5px; }
+.suara-baris input[type="password"], .suara-baris input[type="text"], .suara-baris select {
+  flex: 1; min-width: 0;
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 11px; padding: 3px 5px;
+}
+.suara-baris button, .suara-baris-cache button {
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font: inherit; font-size: 10.5px; padding: 4px 8px;
+  cursor: pointer; flex-shrink: 0;
+}
+.suara-baris button:hover, .suara-baris-cache button:hover { border-color: var(--navy); }
+.suara-baris button:disabled, .suara-baris-cache button:disabled { opacity: .45; cursor: default; }
+.suara-baris-cache { justify-content: space-between; }
+.suara-baris-cache > span:first-child { flex: 1; width: auto; }
+#setNamaDaftar {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  background: var(--putih); border: 1px solid var(--khaki-tua); border-radius: 3px;
+  color: var(--tinta); font-family: inherit; font-size: 11px; line-height: 1.6;
+  padding: 5px 6px;
+}
+/* Pesan status: hijau kalau tersimpan, merah kalau gagal. */
+.pengaturan-izin-ket.ok { color: var(--hijau); }
+.pengaturan-izin-ket.err { color: var(--merah); }
 
 /* ---------- daftar kru: kepala seksi per proyek & pin ----------
    Kepala seksi = map gantung di lemari arsip: label khaki tua kecil dengan

@@ -525,8 +525,8 @@ daftarEvent(
     if (!E.data.menuju) { E.data.menuju = true; a.goToXY(t.x + 14, t.y, 'left'); }
     if (a.diam) {
       for (let i = 0; i < 4; i++) spawn('idea', t.x, t.y - 26);
-      hadapkan(t, a.x, a.y);
-      t.busyUntil = Math.max(t.busyUntil, now + 1600);
+      // -Ke: yang mengedarkan undangan berdiri di sebelah mejanya
+      menolehKe([t], a.x, a.y, 1600);
       if (E.data.i === 1) t.say('sabtu ya, jangan lupa');
       E.data.i++; E.data.menuju = false;
     }

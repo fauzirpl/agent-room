@@ -92,7 +92,6 @@ Dokumen ini dipecah per tema ke folder `docs/` (bagian panjangnya sudah 1.800 ba
   - [Antrean disposisi](docs/05-kendali-web.md#antrean-disposisi)
   - [Paraf dari ruangan](docs/05-kendali-web.md#paraf-dari-ruangan)
   - [Model yang dipakai](docs/05-kendali-web.md#model-yang-dipakai)
-  - [Token headless](docs/05-kendali-web.md#token-headless)
   - [Kenapa penelusur foldernya dilayani server](docs/05-kendali-web.md#kenapa-penelusur-foldernya-dilayani-server)
   - [Sesi dari halaman ini tidak muncul di aplikasi Claude](docs/05-kendali-web.md#sesi-dari-halaman-ini-tidak-muncul-di-aplikasi-claude)
   - [Dua sumber untuk sesi dari halaman](docs/05-kendali-web.md#dua-sumber-untuk-sesi-dari-halaman)

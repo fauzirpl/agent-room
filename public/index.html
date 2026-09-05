@@ -57,28 +57,6 @@
         <button type="submit" id="tugasKirim">Tugaskan</button>
         <div class="kendali-pesan" id="tugasPesan"></div>
       </form>
-      <!-- Independen dari formTugas: kelihatan begitu kendali web nyala di server,
-           walau fitur "tugaskan dari browser" di atas tetap sengaja disembunyikan. -->
-      <details class="kredensial" id="kredensialPanel" hidden>
-        <summary>token headless</summary>
-        <p class="kredensial-nota">
-          Dipakai sesi yang dilahirkan halaman ini, dan tidak pernah dikirim balik
-          ke halaman. Tanpa centang di bawah, tokennya cuma hidup di memori server
-          dan hilang saat server berhenti; dengan centang, ditulis apa adanya ke
-          berkas lokal — perlakukan berkas itu seperti kunci.
-        </p>
-        <input id="tokenNilai" type="password" autocomplete="off" spellcheck="false"
-               placeholder="tempel token dari: claude setup-token">
-        <label class="kredensial-ingat">
-          <input type="checkbox" id="tokenIngat" checked>
-          ingat di berkas <code>.agent-room-token</code>
-        </label>
-        <div class="kredensial-aksi">
-          <button type="button" id="tokenSimpan">Simpan</button>
-          <button type="button" id="tokenHapus">Hapus</button>
-        </div>
-        <div class="kredensial-status" id="tokenStatus"></div>
-      </details>
     </div>
     <!-- ringkasan ?kadis=1 (tampilan HP): diisi kadisGambar() di room.js, cuma
          tampil di mode itu; di mode biasa tetap tersembunyi -->
@@ -254,6 +232,78 @@
           Tiga centang di atas sengaja tidak diingat browser — selalu mati
           waktu halaman dibuka lagi, karena bunyi baru boleh jalan sesudah
           klik kamu. Volumenya diingat.
+        </p>
+      </div>
+      <div class="pengaturan-grup">
+        <h3>Suara ucap</h3>
+        <label class="pengaturan-baris">
+          <span>🗣️ ucapkan notifikasi</span>
+          <input type="checkbox" id="setUcap">
+        </label>
+        <p class="pengaturan-nota">
+          Tanpa ini, notifikasi tetap berbunyi — cuma lonceng saja: tiga nada
+          naik untuk tugas selesai, dua nada datar untuk yang menunggu
+          jawabanmu, dua nada turun untuk yang berhenti. Loncengnya tidak
+          pernah butuh jaringan.
+        </p>
+        <div class="suara-atur">
+          <label class="suara-baris">
+            <span>kunci OpenRouter</span>
+            <input type="password" id="setUcapKunci" placeholder="sk-or-v1-…"
+                   autocomplete="off" spellcheck="false">
+            <button type="button" id="setUcapKunciSimpan">Simpan</button>
+          </label>
+          <div class="pengaturan-izin-ket" id="setUcapKunciKet"></div>
+
+          <!-- input+datalist, bukan select: daftar model boleh gagal diambil
+               (offline, OpenRouter mati) dan kolomnya tetap bisa diketik. -->
+          <label class="suara-baris">
+            <span>model</span>
+            <input type="text" id="setUcapModel" list="setUcapModelDaftar"
+                   placeholder="google/gemini-3.1-flash-tts-preview" spellcheck="false">
+            <datalist id="setUcapModelDaftar"></datalist>
+          </label>
+          <label class="suara-baris">
+            <span>voice</span>
+            <input type="text" id="setUcapVoice" list="setUcapVoiceDaftar"
+                   placeholder="Zephyr" spellcheck="false">
+            <datalist id="setUcapVoiceDaftar"></datalist>
+            <button type="button" id="setUcapCoba">▶ coba</button>
+          </label>
+          <div class="pengaturan-izin-ket" id="setUcapKet"></div>
+
+          <div class="suara-baris suara-baris-cache">
+            <span id="setUcapCache">cache —</span>
+            <button type="button" id="setUcapPanasi">panaskan cache</button>
+            <button type="button" id="setUcapBersih">kosongkan</button>
+          </div>
+        </div>
+        <p class="pengaturan-nota">
+          Klip dibuat sekali per kalimat lalu disimpan di server, jadi nama
+          yang sama tidak pernah digenerate dua kali. Kuncinya disimpan server
+          dan tidak pernah dikirim balik ke halaman ini. Kalau kunci belum
+          dipasang atau OpenRouter gagal, notifikasi diam-diam kembali ke
+          lonceng — tidak ada yang rusak.
+        </p>
+      </div>
+      <div class="pengaturan-grup">
+        <h3>Nama pegawai</h3>
+        <p class="pengaturan-nota">
+          Nama yang dipakai waktu kursi baru lahir, satu per baris. Kosongkan
+          untuk kembali ke daftar bawaan.
+        </p>
+        <textarea id="setNamaDaftar" rows="8" spellcheck="false"
+                  aria-label="daftar nama pegawai"></textarea>
+        <div class="suara-baris suara-baris-cache">
+          <span id="setNamaKet"></span>
+          <button type="button" id="setNamaSimpan">Simpan</button>
+          <button type="button" id="setNamaUndi">undi ulang</button>
+        </div>
+        <p class="pengaturan-nota">
+          Mengganti daftar tidak mengganti nama pegawai yang sudah bertugas —
+          nama menempel di kursi, bukan di sesi. <b>undi ulang</b> memberi nama
+          baru ke kursi yang namanya hasil undian; nama yang kamu ketik sendiri
+          lewat kartu pegawai tidak pernah disentuh.
         </p>
       </div>
       <div class="pengaturan-grup">
