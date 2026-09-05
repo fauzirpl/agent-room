@@ -6,6 +6,18 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ## [Belum dirilis]
 
+### Ditambahkan
+
+- **Jenis kelamin pegawai.** Aksesori kepala tidak lagi murni ikut jabatan:
+  pegawai perempuan selalu digambar berjilbab (warnanya tetap ikut jabatan),
+  laki-laki tidak pernah — jadi "Budi" di kursi auditor tidak lagi berjilbab
+  dan "Sri" di kursi pranata madya tidak lagi berkumis. Ditebak dari nama
+  depan, bisa ditimpa dari panel setelan (`Nama | jabatan | P`) maupun dropdown
+  di kartu pegawai; timpaannya menempel di nama dan tersimpan di `nama.json`
+  (v3). Rute baru `POST /jk`, dijaga `uji-jk.mjs`.
+- Keenam belas jabatan kini punya warna kerudungnya sendiri di tabel `JABATAN`.
+
+
 ### Dihapus
 
 - Panel **token headless** beserta endpoint `POST /kredensial`, berkas

@@ -129,7 +129,7 @@ Tidak ada berkas indeks cache: jumlah dan ukuran klip dihitung dari
 yang bisa hanyut.
 
 Kunci dipisah dari `suara.json` supaya `suara.json` aman dibuka/di-`cat` kapan
-saja. Polanya meniru `BERKAS_TOKEN` di [`server.mjs:145`](../server.mjs) —
+saja. Aturannya sama dengan kunci mana pun di server ini —
 termasuk aturan **nilainya tidak pernah dicetak ke konsol**, yang dicatat cuma
 nama berkasnya.
 
@@ -151,6 +151,7 @@ tanpa merusak berkas orang lain.
 | `GET /nama/daftar` | daftar nama + daftar bawaan, untuk panel |
 | `POST /nama/daftar` | simpan roster (kosong = kembali ke bawaan) |
 | `POST /nama/undi-ulang` | undi ulang kursi yang bukan pilihan manusia |
+| `POST /jk` | timpa jenis kelamin satu nama dari kartu pegawai (`''` = cabut, kembali ke tebakan) |
 
 Semua rute di atas dijaga `asalSah(req)` saja — **tanpa `TOKEN`**, berbeda
 dari [`/perintah`](../server.mjs). Alasannya: `TOKEN` cuma diberikan ke
@@ -226,6 +227,66 @@ v1 (`penuh` berisi larik string) tetap terbaca apa adanya: `namaBersih()`
 menerima string maupun objek, jadi naik versi tidak butuh kode migrasi
 tersendiri. `peran` disaring BENTUKNYA saja di server — tabel jabatannya milik
 halaman, dan server tidak berhak menebak id mana yang sah.
+
+### Jenis kelamin pegawai
+
+Aksesori kepala dulu murni milik **jabatan**: `auditor`, `arsiparis`, dan
+`humas` ber-`head: 'jilbab'`, `sandiman` dan `kadis` berpeci, `pranata_madya`
+berkumis. Nama datang dari daftar yang lain dan diundi ke kursi, jadi hasilnya
+bisa ganjil: "Budi Santoso" yang kebagian kursi auditor digambar berjilbab, dan
+"Sri Rahayu" yang jadi pranata madya digambar berkumis.
+
+Sekarang jenis kelamin menang atas jabatan **untuk kepala saja**. Baju, warna,
+motif batik, dan kacamata tetap milik jabatan.
+
+| `jk` | Kepalanya |
+|---|---|
+| `P` | selalu jilbab, warnanya ikut jabatan |
+| `L` | tidak pernah jilbab; jabatan berjilbab jatuh ke rambut. Peci TIDAK dicabut — itu tanda jabatan, bukan tanda gender |
+| `''` | ikut jabatan, persis seperti sebelum fitur ini ada |
+
+Keadaan ketiga itu yang bikin tamu event, peserta rapat, dan sprite di uji lama
+tidak berubah satu piksel pun — dijaga `uji-jk.mjs` dengan membandingkan hasil
+gambar piksel per piksel.
+
+**Dari mana nilainya.** Dua lapis, dan lapis pertama yang menanggung beban:
+
+1. **Tebakan** dari nama depan (`tebakJk()` di [server.mjs](../server.mjs)) —
+   dua daftar nama depan Indonesia plus akhiran yang memang menandai gender
+   (`-wati`, `-ningsih` perempuan; `-wan`, `-uddin` laki-laki). Ini yang bikin
+   ke-32 nama bawaan langsung benar tanpa siapa pun mengatur apa-apa.
+2. **Timpaan** manual per nama, disimpan di `nama.json` (`.jk`), untuk yang
+   tidak tertebak atau tertebak salah.
+
+Nama depan yang ambigu (Dian, Dwi, Tri, Nur, Ade) sengaja **tidak** dimasukkan
+ke daftar: jatuh ke `''` jauh lebih baik daripada menebak salah setengah waktu.
+
+**Timpaannya menempel di NAMA, bukan di sesi.** Besok orang yang sama digambar
+sama, di tab mana pun, dan sesi terminal yang kebetulan bernama sama ikut.
+Kuncinya dinormalkan (huruf kecil, spasi tunggal), jadi "  budi   SANTOSO " dan
+"Budi Santoso" satu orang.
+
+Dua tempat menulis ke peta yang sama — sengaja satu peta, supaya tidak ada dua
+sumber kebenaran yang bisa berselisih:
+
+| Dari | Caranya |
+|---|---|
+| panel ⚙️ | ruas ketiga di baris daftar nama: `Sri Rahayu \| auditor \| P` |
+| kartu pegawai | dropdown **jenis kelamin**, langsung ke `POST /jk` |
+
+Panel mengirim petanya **utuh** tiap simpan, dihitung dari peta lama ditambah
+apa yang tertulis di kotak. Nama yang tidak ada barisnya tidak kehilangan
+timpaannya — dia mungkin dipasang lewat kartu pegawai, dan kotak itu sering
+memang kosong (daftar bawaan). Yang ada barisnya tapi tanpa `L`/`P` memang
+dicabut; itu caranya membatalkan.
+
+**Warna kerudung ditulis di tabel jabatan, bukan diturunkan dari warna baju.**
+Sempat diturunkan, dan itu salah: `terapkanSeragamHarian()` menimpa `pal.main`
+tiap hari, jadi di hari kemeja putih SELURUH kantor kebagian abu-abu yang sama.
+Sekarang keenam belas jabatan punya warnanya sendiri — kerabat gelap dari warna
+khas jabatan itu — dan `uji-jk.mjs` menolak jabatan baru yang lahir tanpa
+warnanya.
+
 
 ### Dua mode penugasan
 

@@ -692,6 +692,7 @@ function potretRuangan() {
     sesi.push({
       sesi: id,
       nama: namaSesi.get(id) || '',
+      jk: jkDari(namaSesi.get(id) || ''),
       peran: peranSesi.get(id) || '',
       model: modelSesi.get(id) || '',
       proyek: s.cwd || '',
@@ -928,7 +929,7 @@ const tokenSesi = new Map();                // sesi 12-char -> { input, output, 
      3. penulisnya (riwayatCatat/riwayatLebur) otomatis memakai angka baru.
    Berkas lama tidak pernah ditulis ulang hanya demi versi; migrasi hidup
    di memori sampai barisnya kebetulan ditulis ulang (pemadatan).           */
-const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 2, suara: 1 };
+const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 3, suara: 1 };
 const versiSkema = (o) => (Number.isFinite(Number(o.v)) ? Number(o.v) : 0);
 function migrasiToken(o) { o.v = SKEMA.token; return o; }
 function migrasiAgenda(o) { o.v = SKEMA.agenda; return o; }
@@ -2182,11 +2183,104 @@ const NAMA_BAWAAN = [
    formasi. Bawaan sengaja TIDAK berjabatan: nama karangan tidak punya jabatan
    sungguhan, dan menebaknya cuma bikin sprite berseragam asal-asalan. */
 const BERKAS_NAMA = process.env.AGENT_ROOM_NAMA || path.join(__dirname, 'nama.json');
-const namaDaftar = { v: SKEMA.nama, penugasan: '', penuh: [] };
+const namaDaftar = { v: SKEMA.nama, penugasan: '', penuh: [], jk: Object.create(null) };
 const BAWAAN_ENTRI = NAMA_BAWAAN.map((n) => ({ nama: n, peran: '' }));
 
 const NAMA_MAKS = 512;                      // batas atas daftar; jauh di atas kebutuhan
 const daftarNama = () => (namaDaftar.penuh.length ? namaDaftar.penuh : BAWAAN_ENTRI);
+
+/* ------------------------------------------------------- jenis kelamin ---
+   Sebelum ini aksesori kepala murni ikut JABATAN: auditor, arsiparis, dan
+   humas selalu berjilbab, sandiman dan kadis berpeci, pranata madya berkumis.
+   Akibatnya "Budi Santoso" yang kebagian kursi auditor tetap digambar
+   berjilbab, dan "Sri Rahayu" yang jadi pranata madya tetap berkumis. Nama
+   pegawai di kantor dinas jelas gendernya, jadi gambarnya sekarang ikut.
+
+   Dua lapis, sengaja:
+   - TEBAKAN dari nama depan. Ini yang bikin 32 nama bawaan langsung benar
+     tanpa siapa pun perlu mengatur apa-apa.
+   - TIMPAAN manual per nama (namaDaftar.jk), untuk nama yang tidak tertebak
+     atau tertebak salah. Ditulis dari dua tempat — kolom ketiga di panel
+     daftar nama dan tombol di kartu pegawai — tapi disimpan di SATU peta
+     supaya tidak ada dua sumber kebenaran yang bisa berselisih.
+
+   Yang tidak tertebak dan tidak ditimpa menghasilkan '' — dan '' berarti
+   "biarkan seperti dulu", yaitu ikut jabatan. Jadi tamu event, sprite lama,
+   dan nama asing tidak pernah berubah rupa gara-gara fitur ini.
+
+   Daftarnya nama DEPAN, bukan nama keluarga: marga Indonesia (Santoso,
+   Wijaya, Lestari) tidak menandai gender, jadi ikut menebaknya cuma menambah
+   salah. Yang ambigu (Dian, Dwi, Tri, Nur, Ade) sengaja TIDAK dimasukkan —
+   lebih baik jatuh ke '' daripada menebak salah setengah waktu. */
+const JK_DEPAN_L = new Set([
+  'adi', 'agus', 'ahmad', 'aji', 'andi', 'anton', 'arif', 'asep', 'bagus',
+  'bambang', 'bayu', 'budi', 'cahyo', 'dadang', 'dani', 'darmanto', 'dedi',
+  'deni', 'didik', 'dimas', 'doni', 'eko', 'endro', 'fajar', 'gunawan',
+  'hadi', 'hamzah', 'hari', 'hendra', 'hendro', 'heru', 'ilham', 'imam',
+  'indra', 'irfan', 'iwan', 'joko', 'lukman', 'mahmud', 'malik', 'muhammad',
+  'mulyono', 'nanang', 'panji', 'priyo', 'purnomo', 'rahmat', 'ramadhan',
+  'randi', 'rendi', 'ridwan', 'rizal', 'rudi', 'sigit', 'slamet', 'subagyo',
+  'sudirman', 'sugeng', 'suharto', 'sukamto', 'sunarto', 'suparman',
+  'supriyanto', 'surya', 'sutrisno', 'taufik', 'teguh', 'tono', 'untung',
+  'wahyu', 'waluyo', 'wawan', 'yanto', 'yudi', 'yusuf', 'zaenal',
+]);
+const JK_DEPAN_P = new Set([
+  'ajeng', 'ani', 'anis', 'anita', 'asih', 'ayu', 'dara', 'desi', 'dewi',
+  'diah', 'dina', 'elis', 'endang', 'erna', 'eva', 'fitri', 'gita', 'hana',
+  'hesti', 'ida', 'indah', 'intan', 'ira', 'kartika', 'lastri', 'lia',
+  'lina', 'maryati', 'mega', 'mira', 'murni', 'novi', 'nunung', 'nurul',
+  'prita', 'purwanti', 'putri', 'rahayu', 'ratih', 'ratna', 'retno', 'rina',
+  'rini', 'risma', 'rita', 'sari', 'siti', 'sri', 'sulastri', 'susi', 'tini',
+  'tita', 'titik', 'tuti', 'umi', 'wati', 'widya', 'wulan', 'yani', 'yanti',
+  'yeni', 'yuli', 'yuni', 'zahra',
+]);
+
+/* Akhiran yang di bahasa Indonesia memang menandai gender, dipakai cuma kalau
+   nama depannya tidak ada di kedua daftar: -wati/-ningsih menandai perempuan
+   persis seperti -wan/-uddin menandai laki-laki. Diperiksa sesudah daftar
+   supaya nama yang sudah pasti tidak bisa dibelokkan akhirannya. */
+const JK_AKHIRAN = [
+  [/(wati|ningsih|ningrum|astuti|asih|yanti|ati)$/, 'P'],
+  [/(wan|anto|onto|udin|uddin|syah|man)$/, 'L'],
+];
+
+/** Tebak dari NAMA DEPAN saja; '' berarti tidak tahu (ikut jabatan). */
+function tebakJk(nama) {
+  const depan = String(nama || '').trim().toLowerCase().split(/\s+/)[0] || '';
+  if (!depan) return '';
+  if (JK_DEPAN_L.has(depan)) return 'L';
+  if (JK_DEPAN_P.has(depan)) return 'P';
+  for (const [pola, jk] of JK_AKHIRAN) if (pola.test(depan)) return jk;
+  return '';
+}
+
+const jkKunci = (nama) => String(nama || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** Timpaan menang atas tebakan. Inilah satu-satunya cara membaca jenis
+    kelamin di server — jangan panggil tebakJk() langsung dari tempat lain. */
+function jkDari(nama) {
+  const k = jkKunci(nama);
+  if (!k) return '';
+  return namaDaftar.jk[k] || tebakJk(k);
+}
+
+/* Peta timpaan dari luar: cuma 'L'/'P' yang diterima, kunci dinormalkan, dan
+   jumlahnya dibatasi seperti daftar namanya sendiri. Nilai lain (termasuk ''
+   dan null) berarti "cabut timpaannya, kembali ke tebakan". */
+function jkBersih(obj) {
+  const keluar = Object.create(null);
+  if (!obj || typeof obj !== 'object') return keluar;
+  let n = 0;
+  for (const [nama, jk] of Object.entries(obj)) {
+    if (jk !== 'L' && jk !== 'P') continue;
+    const k = jkKunci(clip(String(nama), 24));
+    if (!k || keluar[k]) continue;
+    keluar[k] = jk;
+    if (++n >= NAMA_MAKS) break;
+  }
+  return keluar;
+}
+
 
 /* Dua cara menugaskan orang ke sesi:
 
@@ -2263,6 +2357,7 @@ function namaMuat() {
      maupun objek, jadi naik versi tidak butuh kode migrasi tersendiri —
      berkas lama terbaca apa adanya dan jadi entri tanpa jabatan. */
   namaDaftar.penuh = namaBersih(o.penuh);
+  namaDaftar.jk = jkBersih(o.jk);
   namaDaftar.penugasan = o.penugasan === 'tetap' ? 'tetap' : (o.penugasan === 'acak' ? 'acak' : '');
   if (namaDaftar.penuh.length) {
     const berjabatan = namaDaftar.penuh.filter((e) => e.peran).length;
@@ -2273,7 +2368,7 @@ function namaMuat() {
 }
 
 function namaTulis() {
-  const isi = JSON.stringify({ v: SKEMA.nama, penuh: namaDaftar.penuh }, null, 2) + '\n';
+  const isi = JSON.stringify({ v: SKEMA.nama, penuh: namaDaftar.penuh, jk: namaDaftar.jk }, null, 2) + '\n';
   const tmp = BERKAS_NAMA + '.tmp';
   try {
     fs.writeFileSync(tmp, isi);
@@ -2744,6 +2839,9 @@ const dasarSesi = (sesi, cwd, ts) => ({
   label: '',
   ok: true,
   ...(namaSesi.has(sesi) ? { nama: namaSesi.get(sesi) } : {}),
+  /* jk ikut menempel di sini, bukan dihitung ulang di halaman: timpaan manualnya
+     hidup di nama.json, dan cuma server yang memegangnya. '' = ikut jabatan. */
+  ...(namaSesi.has(sesi) ? { jk: jkDari(namaSesi.get(sesi)) } : {}),
   ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
   ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
 });
@@ -3834,7 +3932,7 @@ function terimaEvent(raw, opsi = {}) {
     const idPengumuman = ev.id;
     ev.id = ++seq;
     publish({ id: idPengumuman, ts: ev.ts, kind: 'nama', session: ev.session, cwd: ev.cwd,
-              nama: tetap.nama, peran: tetap.peran || '',
+              nama: tetap.nama, peran: tetap.peran || '', jk: jkDari(tetap.nama),
               tetap: { slot: tetap.slot, sejak: tetap.sejak, baru: tetap.baru },
               tool: null, label: '', ok: true });
   }
@@ -4242,7 +4340,7 @@ const server = http.createServer(async (req, res) => {
           formasiJadwalkanTulis();
         }
         publish({ id: ++seq, ts: Date.now(), kind: 'nama', session: sesi,
-                  nama: namaSesi.get(sesi) || '', tool: null, label: '', ok: true });
+                  nama: namaSesi.get(sesi) || '', jk: jkDari(namaSesi.get(sesi) || ''), tool: null, label: '', ok: true });
       }
       res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
     } catch {
@@ -4257,11 +4355,42 @@ const server = http.createServer(async (req, res) => {
      MELAHIRKAN SESI (--izinkan-perintah), dan menuntutnya di sini berarti
      panel ⚙️ cuma bisa dipakai kalau servernya dijalankan dengan flag itu.
      Setelan ruangan harus bisa diatur dari ruangan. */
+  /* Timpaan jenis kelamin dari kartu pegawai. Menempel di NAMA, bukan di
+     sesi: besok orang yang sama digambar sama, di tab mana pun, dan sesi
+     terminal yang kebetulan bernama sama ikut. Kiriman selain 'L'/'P'
+     (termasuk '') berarti cabut timpaannya — kembali ke tebakan nama.
+     Tanpa TOKEN, sekelas /nama dan /peran: ini setelan rupa ruangan, bukan
+     jalur yang melahirkan sesi. */
+  if (url.pathname === '/jk' && req.method === 'POST') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const body = (await readBody(req)).teks;
+    try {
+      const { sesi, nama: namaLangsung, jk } = JSON.parse(body || '{}');
+      const nama = clip(String(namaLangsung || (sesi ? namaSesi.get(sesi) : '') || ''), 24);
+      const k = jkKunci(nama);
+      if (!k) { res.writeHead(400).end(); return; }
+      if (jk === 'L' || jk === 'P') namaDaftar.jk[k] = jk;
+      else delete namaDaftar.jk[k];
+      const galat = namaTulis();
+      /* Disiarkan supaya tab lain ikut berubah tanpa reload. Yang dikirim
+         NAMA-nya, bukan sesi: satu nama bisa dipakai beberapa kursi. */
+      publish({ id: ++seq, ts: Date.now(), kind: 'jk', session: sesi || '',
+                nama, jk: jkDari(nama), tool: null, label: '', ok: true });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, nama, jk: jkDari(nama), tebakan: tebakJk(nama),
+        pesan: galat ? 'dipakai, tapi gagal ditulis ke berkas: ' + galat : '' }));
+    } catch {
+      res.writeHead(400).end();
+    }
+    return;
+  }
+
   if (url.pathname === '/nama/daftar' && req.method === 'GET') {
     if (!asalSah(req)) { res.writeHead(403).end(); return; }
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
     res.end(JSON.stringify({
       penuh: namaDaftar.penuh,
+      jk: namaDaftar.jk,
       bawaan: NAMA_BAWAAN,
       pakaiBawaan: namaDaftar.penuh.length === 0,
       maks: NAMA_MAKS,
@@ -4281,11 +4410,17 @@ const server = http.createServer(async (req, res) => {
     /* Daftar kosong BUKAN galat: itu cara mengembalikan daftar bawaan.
        Dibedakan dari "belum pernah diatur" cuma oleh ada/tidaknya berkas. */
     namaDaftar.penuh = namaBersih(p.penuh);
+    /* Peta jk dikirim UTUH tiap simpan, bukan tambal-sulam: panelnya memang
+       menampilkan seluruh daftar sekaligus, jadi menghapus baris = mencabut
+       timpaannya. Kalau field-nya tidak ada sama sekali, yang lama dibiarkan
+       — itu bedanya panel lama (tanpa kolom jk) dari panel yang mengosongkan. */
+    if (p.jk !== undefined) namaDaftar.jk = jkBersih(p.jk);
     if (p.penugasan === 'tetap' || p.penugasan === 'acak') namaDaftar.penugasan = p.penugasan;
     const galat = namaTulis();
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       ok: true, jumlah: namaDaftar.penuh.length,
+      jk: namaDaftar.jk,
       pakaiBawaan: namaDaftar.penuh.length === 0,
       berjabatan: namaDaftar.penuh.filter((e) => e.peran).length,
       penugasan: penugasan(),

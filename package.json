@@ -20,6 +20,7 @@
     "uji-katalog.mjs",
     "uji-tenggat.mjs",
     "uji-arah.mjs",
+    "uji-jk.mjs",
     "selaras-katalog.mjs",
     "uji-sisip.mjs",
     "uji-sisip.golden.json",
@@ -43,7 +44,7 @@
   },
   "scripts": {
     "start": "node dinas.mjs",
-    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-ulang.mjs"
+    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-jk.mjs && node uji-ulang.mjs"
   },
   "repository": {
     "type": "git",

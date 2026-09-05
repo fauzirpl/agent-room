@@ -2995,39 +2995,39 @@ const JABATAN = [
   { id: 'kadis', nama: 'Kepala Dinas', singkat: 'Kadis',
     padanan: 'CTO / Kepala Teknologi',
     tugas: 'menentukan arah kerja, menandatangani disposisi, memutuskan yang tidak selesai di bawah',
-    pal: { main: '#6b3f21', pants: '#33302a', skin: '#d9a273', hair: '#1b1410', head: 'peci', kumis: true, pattern: '#d9ab5e' } },
+    pal: { main: '#6b3f21', pants: '#33302a', skin: '#d9a273', hair: '#1b1410', head: 'peci', jilbab: '#462814', kumis: true, pattern: '#d9ab5e' } },
   { id: 'sekdis', nama: 'Sekretaris Dinas', singkat: 'Sekdis',
     padanan: 'Engineering Manager',
     tugas: 'mengatur orang, jadwal, dan anggaran supaya tiap bidang bisa jalan',
-    pal: { main: '#c9b178', pants: '#6d6547', skin: '#e8b98b', hair: '#1d1712', head: 'peci' } },
+    pal: { main: '#c9b178', pants: '#6d6547', skin: '#e8b98b', hair: '#1d1712', head: 'peci', jilbab: '#7d6a44' } },
   { id: 'kabid', nama: 'Kepala Bidang', singkat: 'Kabid',
     padanan: 'Manajer Proyek',
     tugas: 'memegang satu program dari perencanaan sampai laporan akhir',
-    pal: { main: '#2f4470', pants: '#22293a', skin: '#c98f63', hair: '#14100d', head: 'peci', pattern: '#8fa8d8' } },
+    pal: { main: '#2f4470', pants: '#22293a', skin: '#c98f63', hair: '#14100d', head: 'peci', jilbab: '#1e2b48', pattern: '#8fa8d8' } },
   { id: 'kasi', nama: 'Kepala Seksi', singkat: 'Kasi',
     padanan: 'Ketua Tim / Tech Lead',
     tugas: 'membagi pekerjaan harian ke stafnya dan ikut turun tangan sendiri',
-    pal: { main: '#c9b178', pants: '#6d6547', skin: '#f0c79c', hair: '#332417', head: 'hair' } },
+    pal: { main: '#c9b178', pants: '#6d6547', skin: '#f0c79c', hair: '#332417', head: 'hair', jilbab: '#8a7550' } },
   { id: 'analis_sistem', nama: 'Analis Sistem Informasi', singkat: 'Analis Sistem',
     padanan: 'Arsitek Sistem',
     tugas: 'merancang bentuk sistem sebelum ada yang mulai mengetik',
-    pal: { main: '#3f6285', pants: '#2a3646', skin: '#e0ae80', hair: '#241a12', head: 'hair', kacamata: true } },
+    pal: { main: '#3f6285', pants: '#2a3646', skin: '#e0ae80', hair: '#241a12', head: 'hair', jilbab: '#283e54', kacamata: true } },
   { id: 'pranata_madya', nama: 'Pranata Komputer Ahli Madya', singkat: 'Pranata Madya',
     padanan: 'Senior Engineer',
     tugas: 'menggarap bagian yang paling sulit dan membenahi warisan lama',
-    pal: { main: '#b9a26a', pants: '#5f5940', skin: '#d9a273', hair: '#2b2119', head: 'hair', kumis: true } },
+    pal: { main: '#b9a26a', pants: '#5f5940', skin: '#d9a273', hair: '#2b2119', head: 'hair', jilbab: '#6f6140', kumis: true } },
   { id: 'pranata_muda', nama: 'Pranata Komputer Ahli Muda', singkat: 'Pranata Muda',
     padanan: 'Backend Engineer',
     tugas: 'membangun layanan dan basis data yang dipakai aplikasi lain',
-    pal: { main: '#3c6b4e', pants: '#2c3a30', skin: '#e8b98b', hair: '#1d1712', head: 'hair' } },
+    pal: { main: '#3c6b4e', pants: '#2c3a30', skin: '#e8b98b', hair: '#1d1712', head: 'hair', jilbab: '#264430' } },
   { id: 'pranata_pertama', nama: 'Pranata Komputer Ahli Pertama', singkat: 'Pranata Pertama',
     padanan: 'Frontend Engineer',
     tugas: 'menggarap tampilan yang dipakai langsung oleh pemohon layanan',
-    pal: { main: '#6f97a8', pants: '#33454c', skin: '#f0c79c', hair: '#241a12', head: 'hair' } },
+    pal: { main: '#6f97a8', pants: '#33454c', skin: '#f0c79c', hair: '#241a12', head: 'hair', jilbab: '#465f6b' } },
   { id: 'sandiman', nama: 'Sandiman', singkat: 'Sandiman',
     padanan: 'Security Engineer',
     tugas: 'menjaga kerahasiaan data dan memeriksa celah keamanan',
-    pal: { main: '#2b3138', pants: '#1d2128', skin: '#d9a273', hair: '#14100d', head: 'peci' } },
+    pal: { main: '#2b3138', pants: '#1d2128', skin: '#d9a273', hair: '#14100d', head: 'peci', jilbab: '#1b1f24' } },
   { id: 'auditor', nama: 'Auditor Internal', singkat: 'Auditor',
     padanan: 'QA Engineer',
     tugas: 'menguji hasil kerja dan mencatat temuan sebelum dikirim keluar',
@@ -3035,7 +3035,7 @@ const JABATAN = [
   { id: 'statistisi', nama: 'Statistisi', singkat: 'Statistisi',
     padanan: 'Data Analyst',
     tugas: 'mengolah angka jadi tabel dan grafik yang bisa dibaca pimpinan',
-    pal: { main: '#5b4d86', pants: '#332c4d', skin: '#d9a273', hair: '#1d1712', head: 'hair', kacamata: true } },
+    pal: { main: '#5b4d86', pants: '#332c4d', skin: '#d9a273', hair: '#1d1712', head: 'hair', jilbab: '#392f54', kacamata: true } },
   { id: 'arsiparis', nama: 'Arsiparis', singkat: 'Arsiparis',
     padanan: 'Technical Writer',
     tugas: 'menata dokumentasi supaya orang berikutnya tidak mulai dari nol',
@@ -3047,15 +3047,15 @@ const JABATAN = [
   { id: 'analis_kebijakan', nama: 'Analis Kebijakan', singkat: 'Analis Kebijakan',
     padanan: 'Product Manager',
     tugas: 'menerjemahkan kebutuhan jadi rumusan kerja yang bisa dieksekusi',
-    pal: { main: '#4f6b3c', pants: '#2e3a28', skin: '#e0ae80', hair: '#241a12', head: 'hair', pattern: '#a8c98a', kacamata: true } },
+    pal: { main: '#4f6b3c', pants: '#2e3a28', skin: '#e0ae80', hair: '#241a12', head: 'hair', jilbab: '#324426', pattern: '#a8c98a', kacamata: true } },
   { id: 'teknisi', nama: 'Teknisi Jaringan', singkat: 'Teknisi',
     padanan: 'DevOps / SRE',
     tugas: 'menjaga server, jaringan, dan penyaluran hasil kerja ke produksi',
-    pal: { main: '#c07a2a', pants: '#4a3a26', skin: '#d9a273', hair: '#1d1712', head: 'hair' } },
+    pal: { main: '#c07a2a', pants: '#4a3a26', skin: '#d9a273', hair: '#1d1712', head: 'hair', jilbab: '#7a4d1b' } },
   { id: 'magang', nama: 'Tenaga Magang', singkat: 'Magang',
     padanan: 'Intern',
     tugas: 'membantu pekerjaan ringan sambil belajar alur kantor',
-    pal: { main: '#dfe4ea', pants: '#2e3440', skin: '#f0c79c', hair: '#241a12', head: 'hair' } },
+    pal: { main: '#dfe4ea', pants: '#2e3440', skin: '#f0c79c', hair: '#241a12', head: 'hair', jilbab: '#8e9299' } },
 ];
 
 const JABATAN_ID = new Map(JABATAN.map((j) => [j.id, j]));
@@ -3072,6 +3072,51 @@ const PERAN_BAWAAN = [
 const PERAN_STANDBY = ['magang', 'arsiparis', 'statistisi', 'teknisi'];
 const PERAN_PESERTA = ['analis_kebijakan', 'auditor', 'analis_sistem', 'statistisi', 'humas'];
 const peranBawaan = (i) => PERAN_BAWAAN[i % PERAN_BAWAAN.length];
+
+/* ------------------------------------------------------- jenis kelamin ----
+   Aksesori kepala dulu murni milik JABATAN: auditor/arsiparis/humas selalu
+   berjilbab, sandiman/kadis berpeci, pranata madya berkumis. Pegawai bernama
+   Budi yang kebagian kursi auditor jadi digambar berjilbab. Sekarang jenis
+   kelamin menang atas jabatan untuk urusan kepala saja — baju, warna, dan
+   kacamata tetap milik jabatan.
+
+   Datangnya dari SERVER (ev.jk), bukan ditebak di sini: timpaan manualnya
+   tersimpan di nama.json, dan cuma server yang memegang berkas itu. Halaman
+   menyimpannya per sesi, sama persis seperti namaPanggilan.
+
+   '' berarti tidak diketahui, dan itu bukan keadaan darurat: rupanya kembali
+   ikut jabatan seperti sebelum fitur ini ada. Itu yang bikin tamu event,
+   peserta rapat, dan sprite di uji lama tidak berubah satu piksel pun. */
+const jkSesi = new Map();            // sesi 12-char -> 'L' | 'P'
+
+/* a.jk dipakai sprite yang bukan sesi (tamu event, peserta rapat) yang mau
+   memaksa rupanya sendiri; sisanya ikut petanya. */
+const jkAgen = (a) => a.jk || (a.id ? jkSesi.get(a.id) : '') || '';
+
+/* Kepala yang BENAR-BENAR digambar, sesudah jenis kelamin ikut bicara:
+   perempuan selalu berjilbab (warnanya tetap ikut jabatan), laki-laki tidak
+   pernah — jabatan berjilbab jatuh ke rambut, bukan ke peci, karena peci
+   adalah tanda jabatan tersendiri di tabel ini. */
+function kepalaEfektif(a) {
+  const h = (a.pal && a.pal.head) || 'hair';
+  const jk = jkAgen(a);
+  if (jk === 'P') return 'jilbab';
+  if (jk === 'L') return h === 'jilbab' ? 'hair' : h;
+  return h;
+}
+
+/* Jabatan berjilbab tidak punya warna rambut, dan yang berambut tidak punya
+   warna jilbab — dulu memang tidak perlu, karena kepalanya tidak pernah
+   bertukar. Sekarang bisa, jadi dua-duanya butuh cadangan. Jilbabnya
+   diturunkan dari warna baju jabatan itu supaya tiap jabatan tetap kelihatan
+   beda, bukan satu warna untuk seluruh kantor. */
+const RAMBUT_CADANGAN = '#241a12';
+/* Dua-duanya deklarasi `function`, bukan const arrow: harness uji memuat
+   room.js di dalam vm, dan yang otomatis jadi properti context cuma
+   `function`/`var` — const tidak. uji-jk.mjs memanggil keduanya langsung. */
+function jilbabWarna(p) { return p.jilbab || lerpHex(p.main, '#2b2b33', 0.45); }
+function rambutWarna(p) { return p.hair || RAMBUT_CADANGAN; }
+
 
 /* --------------------------------------------------------- seragam harian ---
    Bukan bagian dari katalog event acak (event-acak.js) -- ini aturan tetap,
@@ -3263,18 +3308,22 @@ function drawHead(a, x, yDagu) {
   const rm = (k, yy, w, h, c) => r(cermin(arah, x, k, w), yy, w, h, c);
   const kulit = p.skin, tk = garisTepi(kulit);
   const yT = yDagu - 8;
-  const jilbab = p.head === 'jilbab';
+  const kepala = kepalaEfektif(a);
+  const jilbab = kepala === 'jilbab';
+  const kerudung = jilbab ? jilbabWarna(p) : '';
+  const rambut = rambutWarna(p);
+  const kumis = p.kumis && jkAgen(a) !== 'P';
 
-  gumpal(x - 4, yT, 8, 8, jilbab ? p.jilbab : kulit);
-  r(x + 3, yT + 1, 1, 6, sh(jilbab ? p.jilbab : kulit, 0.9));       // pipi kanan teduh
+  gumpal(x - 4, yT, 8, 8, jilbab ? kerudung : kulit);
+  r(x + 3, yT + 1, 1, 6, sh(jilbab ? kerudung : kulit, 0.9));       // pipi kanan teduh
 
   if (jilbab) {
-    r(x - 3, yT + 1, 3, 1, lerpHex(p.jilbab, '#ffffff', 0.18));      // kilap ubun-ubun kerudung
+    r(x - 3, yT + 1, 3, 1, lerpHex(kerudung, '#ffffff', 0.18));      // kilap ubun-ubun kerudung
     if (!back) {                                                      // jendela wajah, bersudut bulat
       if (arah) { rm(0, yT + 2, 3, 1, kulit); rm(-1, yT + 3, 5, 4, kulit); rm(0, yT + 7, 3, 1, kulit); }
       else { r(x - 2, yT + 2, 4, 1, kulit); r(x - 3, yT + 3, 6, 4, kulit); r(x - 2, yT + 7, 4, 1, kulit); }
     }
-  } else if (p.head === 'peci') {
+  } else if (kepala === 'peci') {
     // songkok: lebih tinggi dari tudung rambut, kilap di kiri-atas, pita di
     // tepi bawah. Melorot sedikit (peciMiring) lalu dirapikan lagi oleh event.
     const px = x + (a.peciMiring || 0);
@@ -3285,27 +3334,27 @@ function drawHead(a, x, yDagu) {
     r(px - 4, yT, 8, 3, PECI.isi);
     r(px - 3, yT - 1, 3, 1, PECI.kilap);
     r(px - 4, yT + 2, 8, 1, PECI.pita);
-    if (arah) rm(-4, yT + 3, 1, 2, p.hair);                          // cambang, cuma sisi belakang
-    else { r(x - 4, yT + 3, 1, 2, p.hair); r(x + 3, yT + 3, 1, 2, p.hair); }
+    if (arah) rm(-4, yT + 3, 1, 2, rambut);                          // cambang, cuma sisi belakang
+    else { r(x - 4, yT + 3, 1, 2, rambut); r(x + 3, yT + 3, 1, 2, rambut); }
   } else {
-    const th = garisTepi(p.hair);
+    const th = garisTepi(rambut);
     r(x - 3, yT - 1, 6, 1, th);
     r(x - 4, yT, 1, 1, th); r(x + 3, yT, 1, 1, th);
-    r(x - 3, yT, 6, 1, p.hair);
+    r(x - 3, yT, 6, 1, rambut);
     r(x - 5, yT + 1, 1, 2, th); r(x + 4, yT + 1, 1, 2, th);
-    r(x - 4, yT + 1, 8, 2, p.hair);
-    r(x - 3, yT + 1, 3, 1, lerpHex(p.hair, '#ffffff', 0.22));         // kilap
+    r(x - 4, yT + 1, 8, 2, rambut);
+    r(x - 3, yT + 1, 3, 1, lerpHex(rambut, '#ffffff', 0.22));         // kilap
     if (back) {                                                       // tengkuk tertutup rambut
       r(x - 5, yT + 3, 1, 3, th); r(x + 4, yT + 3, 1, 3, th);
-      r(x - 4, yT + 3, 8, 3, p.hair);
+      r(x - 4, yT + 3, 8, 3, rambut);
     } else if (arah) {                                                // samping: belakang kepala tertutup
       rm(-5, yT + 3, 1, 3, th);
-      rm(-4, yT + 3, 4, 3, p.hair);
-      rm(0, yT + 3, 2, 1, p.hair);                                    // poni menyapu ke dahi
+      rm(-4, yT + 3, 4, 3, rambut);
+      rm(0, yT + 3, 2, 1, rambut);                                    // poni menyapu ke dahi
     } else {
-      r(x - 4, yT + 3, 3, 1, p.hair);                                 // poni samping
-      r(x + 3, yT + 3, 1, 1, p.hair);
-      r(x - 4, yT + 4, 1, 1, p.hair); r(x + 3, yT + 4, 1, 1, p.hair); // cambang
+      r(x - 4, yT + 3, 3, 1, rambut);                                 // poni samping
+      r(x + 3, yT + 3, 1, 1, rambut);
+      r(x - 4, yT + 4, 1, 1, rambut); r(x + 3, yT + 4, 1, 1, rambut); // cambang
     }
   }
 
@@ -3340,8 +3389,8 @@ function drawHead(a, x, yDagu) {
       else { r(x - 3, yT + 6, 6, 3, MASKER); r(x - 3, yT + 7, 6, 1, MASKER_LIPAT); }
     } else {
       if (a.mulut) { if (arah) rm(1, yT + 6, 2, 2, MULUT_NGUAP); else r(x - 1, yT + 6, 2, 2, MULUT_NGUAP); }   // menguap
-      else if (!p.kumis) { if (arah) rm(2, yT + 7, 1, 1, sh(kulit, 0.72)); else r(x - 1, yT + 7, 2, 1, sh(kulit, 0.72)); }
-      if (p.kumis) { if (arah) rm(1, yT + 6, 3, 1, KUMIS); else r(x - 2, yT + 6, 4, 1, KUMIS); }
+      else if (!kumis) { if (arah) rm(2, yT + 7, 1, 1, sh(kulit, 0.72)); else r(x - 1, yT + 7, 2, 1, sh(kulit, 0.72)); }
+      if (kumis) { if (arah) rm(1, yT + 6, 3, 1, KUMIS); else r(x - 2, yT + 6, 4, 1, KUMIS); }
     }
   }
   if (a.pulpenDiTelinga) {                                            // bolpoin diselipkan di telinga
@@ -3561,7 +3610,7 @@ function drawPerson(a) {
   // Untuk yang berjilbab dia turun ke yb-11, baris pertama yang masih
   // kelihatan di bawah juntaian — tetap ada penandanya, cuma jadi pita terang
   // di dada, bukan di pundak.
-  const yPangkat = p.head === 'jilbab' ? yb - 11 : yb - 15;
+  const yPangkat = kepalaEfektif(a) === 'jilbab' ? yb - 11 : yb - 15;
   const badan = () => {
     if (arah) {
       r(x - 2, yb - 16, 4, 1, tm);
@@ -3683,8 +3732,8 @@ function drawPerson(a) {
     }
   }
 
-  if (p.head === 'jilbab') {                 // kerudung menjuntai menutup bahu, jarum emas di depan
-    if (arah) gumpal(x - 4, yb - 16, 8, 4, p.jilbab); else gumpal(x - 5, yb - 16, 10, 4, p.jilbab);
+  if (kepalaEfektif(a) === 'jilbab') {       // kerudung menjuntai menutup bahu, jarum emas di depan
+    if (arah) gumpal(x - 4, yb - 16, 8, 4, jilbabWarna(p)); else gumpal(x - 5, yb - 16, 10, 4, jilbabWarna(p));
     if (!back) rm(arah ? 1 : 0, yb - 14, 1, 1, P.gold);
   }
 
@@ -3717,7 +3766,7 @@ function drawPerson(a) {
   drawHead(a, x, yDagu);
   // leher memutus garis dagu di tengah: kepala terbaca menyambung ke badan,
   // bukan menempel di atasnya. Yang tertunduk dagunya sudah tenggelam di bahu.
-  if (p.head !== 'jilbab' && yDagu === yb - 17) r(x - 1, yDagu, 2, 1, sh(kulit, 0.75));
+  if (kepalaEfektif(a) !== 'jilbab' && yDagu === yb - 17) r(x - 1, yDagu, 2, 1, sh(kulit, 0.75));
   // perkakas mejanya disembunyikan selagi menunggu: tangannya sedang penuh
   if (kerja && !a.butuh) drawTool(a, x, yb);
   if (a.bawa) drawBawaan(a, x, yb);
@@ -6475,6 +6524,14 @@ function bukaKartu(a) {
     '<div class="kartu-info" id="kartuInfo"></div>' +
     '<div class="kartu-paraf" id="kartuParaf" hidden></div>' +
     '<label class="kartu-pilih">jabatan<select id="kartuPeran">' + opsiJabatan() + '</select></label>' +
+    /* Jenis kelamin menimpa aksesori kepala saja (jilbab/rambut/peci);
+       baju dan warna tetap milik jabatan di atas. "ikut jabatan" = biarkan
+       seperti sebelum fitur ini ada. */
+    '<label class="kartu-pilih">jenis kelamin<select id="kartuJk">'
+      + '<option value="">ikut tebakan nama</option>'
+      + '<option value="L">laki-laki</option>'
+      + '<option value="P">perempuan</option>'
+    + '</select></label>' +
     '<div class="kartu-aksi" id="kartuAksi"></div>' +
     '<div class="kartu-riwayat"><h3>riwayat</h3><ul id="kartuRiwayat"></ul></div>';
 
@@ -6483,6 +6540,10 @@ function bukaKartu(a) {
   const sel = document.getElementById('kartuPeran');
   sel.value = a.peran;
   sel.onchange = () => gantiPeran(a, sel.value);
+
+  const selJk = document.getElementById('kartuJk');
+  selJk.value = jkAgen(a);
+  selJk.onchange = () => gantiJk(a, selJk.value);
 
   const aksi = document.getElementById('kartuAksi');
   const jenis = jenisAgen(a);
@@ -6653,6 +6714,8 @@ function perbaruiKartu() {
   // jangan timpa pilihan yang sedang dibuka orangnya
   const sel = document.getElementById('kartuPeran');
   if (sel && document.activeElement !== sel) sel.value = a.peran;
+  const selJk = document.getElementById('kartuJk');
+  if (selJk && document.activeElement !== selJk) selJk.value = jkAgen(a);
 }
 
 /* Blok paraf di kartu. Tiga keadaan yang harus TERLIHAT BEDA, karena
@@ -6858,6 +6921,12 @@ function handle(ev) {
   if (ev.mesin) a.mesin = ev.mesin;
   if (ev.model) a.model = ev.model;
   if (ev.nama) namaPanggilan.set(ev.session, ev.nama);
+  /* jk selalu ikut nama dari server. undefined = event ini tidak bicara soal
+     jenis kelamin (mis. event lama di putar ulang agenda), jadi yang tersimpan
+     dibiarkan; '' = server memang bilang tidak tahu, dan itu berarti hapus. */
+  if (ev.jk !== undefined) {
+    if (ev.jk) jkSesi.set(ev.session, ev.jk); else jkSesi.delete(ev.session);
+  }
   // jabatan disimpan server, jadi ikut menempel walau halaman dibuka ulang
   if (ev.peran && ev.peran !== a.peran) {
     peranAwal.set(ev.session, ev.peran);
@@ -7070,9 +7139,20 @@ function handle(ev) {
       pushLog(ev, 'mark', ['masuk kantor', ev.cwd || '']);
       break;
     }
+    /* Timpaan jenis kelamin dari kartu pegawai. Menempel di NAMA, jadi satu
+       kiriman bisa mengubah beberapa kursi sekaligus — semua sesi yang
+       namanya sama ikut, termasuk yang dibuka di tab lain. */
+    case 'jk': {
+      for (const [sesi, n] of namaPanggilan) {
+        if (n !== ev.nama) continue;
+        if (ev.jk) jkSesi.set(sesi, ev.jk); else jkSesi.delete(sesi);
+      }
+      break;
+    }
     case 'nama': {
       if (ev.nama) namaPanggilan.set(ev.session, ev.nama);
       else namaPanggilan.delete(ev.session);
+      if (!ev.nama) jkSesi.delete(ev.session);
       /* Cuma PELANTIKAN kursi formasi yang membawa `tetap` (server:
          pegawaiTetapPasang). Ganti nama lewat kartu pegawai datang tanpa
          field itu, dan memang tidak pantas menerbitkan nota lapor masuk. */
@@ -7229,6 +7309,22 @@ if (elForm) {
     elKirim.disabled = false;
   });
 }
+
+/* Timpaan jenis kelamin. Menempel di NAMA (server menyimpannya di nama.json),
+   jadi besok orang yang sama digambar sama — dan tab lain ikut lewat event
+   kind:'jk'. Dipasang optimistis di sini supaya sprite-nya berubah seketika,
+   tidak menunggu event pulang. */
+async function gantiJk(a, jk) {
+  a.jk = jk;                            // '' = kembali ikut peta/tebakan
+  try {
+    await fetch('/jk', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sesi: a.id, nama: namaKru(a), jk }),
+    });
+  } catch { /* gagal kirim: rupanya tetap berubah di tab ini sampai reload */ }
+  renderCrew();
+}
+
 
 async function beriNama(sesi) {
   const kini = namaPanggilan.get(sesi) || '';
@@ -9091,12 +9187,31 @@ const setPenugasan = document.getElementById('setPenugasan');
 const setPenugasanKet = document.getElementById('setPenugasanKet');
 const setNamaPeranKet = document.getElementById('setNamaPeranKet');
 
-/* Satu baris = satu orang: "Nama | id_jabatan". Jabatannya opsional; tanpa
-   itu sprite-nya memakai jabatan bawaan urutan kursi seperti dulu. */
-const barisNama = (e) => (e.peran ? e.nama + ' | ' + e.peran : e.nama);
+/* Satu baris = satu orang: "Nama | id_jabatan | L". Dua ruas terakhir
+   opsional. Tanpa jabatan, sprite-nya memakai jabatan bawaan urutan kursi
+   seperti dulu; tanpa L/P, jenis kelaminnya ditebak server dari nama depan.
+
+   Ruas ketiga itu TIMPAAN, bukan penyimpanan utama: dia tidak ikut masuk ke
+   entri nama, melainkan ke peta terpisah (nama.json .jk) yang dipakai bersama
+   tombol di kartu pegawai. Makanya baris tanpa L/P berarti "cabut timpaannya,
+   kembali ke tebakan" — bukan "biarkan apa adanya". */
+let jkPeta = Object.create(null);       // potret terakhir peta timpaan dari server
+const jkKunciPanel = (n) => String(n || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+const barisNama = (e) => {
+  const jk = jkPeta[jkKunciPanel(e.nama)] || '';
+  if (jk) return e.nama + ' | ' + (e.peran || '') + ' | ' + jk;
+  return e.peran ? e.nama + ' | ' + e.peran : e.nama;
+};
 function uraiBarisNama(baris) {
-  const [nama, peran] = baris.split('|');
-  return { nama: (nama || '').trim(), peran: (peran || '').trim() };
+  const [nama, peran, jk] = baris.split('|');
+  const g = (jk || '').trim().toUpperCase();
+  return {
+    nama: (nama || '').trim(),
+    peran: (peran || '').trim(),
+    jk: g === 'L' || g === 'P' ? g : '',
+    jkAsing: Boolean(g) && g !== 'L' && g !== 'P' ? g : '',
+  };
 }
 
 /* Daftar id jabatan yang sah diambil dari JABATAN, bukan diketik ulang di
@@ -9120,6 +9235,7 @@ async function muatNamaDaftar() {
   if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
   const d = r.d;
   penugasanGambar(d);
+  jkPeta = d.jk || Object.create(null);   // dipakai barisNama() di bawah
   setNamaDaftar.placeholder = (d.bawaan || []).join('\n');
   setNamaDaftar.value = d.pakaiBawaan ? '' : (d.penuh || []).map(barisNama).join('\n');
   const berjabatan = (d.penuh || []).filter((e) => e.peran).length;
@@ -9137,6 +9253,14 @@ function peranKetGambar() {
   const dipakai = setNamaDaftar.value.split('\n').map(uraiBarisNama)
     .filter((e) => e.nama && e.peran).map((e) => e.peran);
   const asing = [...new Set(dipakai.filter((p) => !PERAN_ID.has(p)))];
+  const jkAsing = [...new Set(setNamaDaftar.value.split('\n').map(uraiBarisNama)
+    .filter((e) => e.nama && e.jkAsing).map((e) => e.jkAsing))];
+  if (jkAsing.length) {
+    setNamaPeranKet.className = 'pengaturan-nota err';
+    setNamaPeranKet.textContent = 'ruas ketiga cuma boleh L atau P — yang ini tidak: '
+      + jkAsing.join(', ');
+    return;
+  }
   setNamaPeranKet.className = 'pengaturan-nota' + (asing.length ? ' err' : '');
   setNamaPeranKet.textContent = asing.length
     ? 'jabatan tidak dikenal: ' + asing.join(', ') + ' — yang sah: ' + [...PERAN_ID].join(', ')
@@ -9146,9 +9270,18 @@ setNamaDaftar.oninput = peranKetGambar;
 
 async function simpanNamaDaftar(tambahan) {
   const penuh = setNamaDaftar.value.split('\n').map(uraiBarisNama).filter((e) => e.nama);
+  /* Peta dikirim UTUH, dihitung dari peta lama + apa yang tertulis sekarang.
+     Nama yang TIDAK ada di kotak ini tidak boleh kehilangan timpaannya: dia
+     mungkin dipasang lewat kartu pegawai, dan kotak ini sering kosong (daftar
+     bawaan). Yang ada barisnya tapi tanpa L/P memang dicabut — itu caranya. */
+  const jk = { ...jkPeta };
+  for (const e of penuh) {
+    const k = jkKunciPanel(e.nama);
+    if (e.jk) jk[k] = e.jk; else delete jk[k];
+  }
   const r = await panelJson('/nama/daftar', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ penuh, ...tambahan }),
+    body: JSON.stringify({ penuh: penuh.map((e) => ({ nama: e.nama, peran: e.peran })), jk, ...tambahan }),
   });
   if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
   const d = r.d;
