@@ -796,6 +796,57 @@ kasus('17. AGENT_ROOM_PEGAWAI_TETAP=off mengembalikan perilaku sebelum fitur ini
     'berkasnya lahir juga padahal fiturnya dimatikan');
 });
 
+/* 18 — saklar mode penugasan yang dipilih di panel harus selamat dari
+   restart. Pernah tidak: namaMuat() membaca `penugasan` dari nama.json dan
+   POST /nama/daftar mengisinya, tapi namaTulis() cuma menulis {v, penuh} —
+   jadi pilihan 'tetap' diam-diam kembali ke 'acak' tiap server nyala ulang,
+   dan satu-satunya cara membuatnya bertahan adalah AGENT_ROOM_PENUGASAN,
+   yang justru mengunci saklarnya di panel.
+
+   Env-nya DIKOSONGKAN di sini — harness ini memasang 'tetap' buat 17 kasus
+   di atas, dan env yang menang akan membuat uji ini lulus tanpa pernah
+   menyentuh nama.json. Yang diuji justru jalur berkasnya. */
+kasus('18. mode penugasan pilihan panel bertahan sesudah server nyala ulang', async () => {
+  const dir = path.join(TMP, 'k18');
+  const tanpaEnv = { AGENT_ROOM_PENUGASAN: '' };
+  const bacaNama = (d) => JSON.parse(fs.readFileSync(path.join(d, 'nama.json'), 'utf8'));
+  const daftar = async (k) => (await (await fetch(k.alamat + '/nama/daftar')).json());
+
+  let k = await buka(dir, tanpaEnv);
+  try {
+    const awal = await daftar(k);
+    sama('selama env tidak ikut campur, bawaannya acak', awal.penugasan, 'acak');
+    benar('  dan saklarnya tidak terkunci', awal.penugasanTerkunci === false,
+      'panel malah diberi tahu saklarnya terkunci');
+    const r = await kirimJson(k, '/nama/daftar', { penuh: ['Oji', 'Sumala'], penugasan: 'tetap' });
+    sama('panel memilih "tetap": dijawab 200', r.status, 200);
+    sama('  dan langsung berlaku di server yang sama', (await daftar(k)).penugasan, 'tetap');
+  } finally { await tutup(k); }
+
+  sama('pilihannya mendarat di nama.json', bacaNama(dir).penugasan, 'tetap');
+
+  k = await buka(dir, tanpaEnv);
+  try {
+    sama('server yang baru nyala masih melaporkan "tetap"', (await daftar(k)).penugasan, 'tetap');
+  } finally { await tutup(k); }
+
+  /* '' = belum pernah dipilih. Ditulis apa adanya, bukan dipaksa jadi 'acak':
+     penugasan() sudah menerjemahkannya waktu dibaca, dan bedanya dipakai
+     panel buat membedakan bawaan dari pilihan sadar. */
+  const dir2 = path.join(TMP, 'k18b');
+  const k2 = await buka(dir2, tanpaEnv);
+  try { await kirimJson(k2, '/nama/daftar', { penuh: ['Oji'] }); } finally { await tutup(k2); }
+  const isi2 = bacaNama(dir2);
+  benar('menyimpan daftar tanpa menyentuh saklar tetap menulis medannya',
+    Object.prototype.hasOwnProperty.call(isi2, 'penugasan'), 'kunci penugasan tidak ada di berkas');
+  sama('  dan isinya tidak dikarang jadi pilihan sadar', isi2.penugasan, '');
+
+  const k3 = await buka(dir2, tanpaEnv);
+  try {
+    sama('  waktu dibaca lagi tetap jatuh ke acak', (await daftar(k3)).penugasan, 'acak');
+  } finally { await tutup(k3); }
+});
+
 /* ================================================================ jalan === */
 console.log(tebal('\nUji formasi pegawai tetap') + abu('  (folder sementara: ' + TMP + ')'));
 for (const { judul, fn } of KASUS) {

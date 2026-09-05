@@ -2368,7 +2368,13 @@ function namaMuat() {
 }
 
 function namaTulis() {
-  const isi = JSON.stringify({ v: SKEMA.nama, penuh: namaDaftar.penuh, jk: namaDaftar.jk }, null, 2) + '\n';
+  /* `penugasan` ikut ditulis APA ADANYA, termasuk waktu isinya ''. '' berarti
+     "belum pernah dipilih", dan penugasan() sudah menerjemahkannya jadi 'acak'
+     saat dibaca; memaksanya jadi 'acak' di sini menghapus bedanya, padahal
+     panel memakai beda itu buat tahu mana bawaan dan mana pilihan sadar. */
+  const isi = JSON.stringify({
+    v: SKEMA.nama, penugasan: namaDaftar.penugasan, penuh: namaDaftar.penuh, jk: namaDaftar.jk,
+  }, null, 2) + '\n';
   const tmp = BERKAS_NAMA + '.tmp';
   try {
     fs.writeFileSync(tmp, isi);
