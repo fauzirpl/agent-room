@@ -928,7 +928,7 @@ const tokenSesi = new Map();                // sesi 12-char -> { input, output, 
      3. penulisnya (riwayatCatat/riwayatLebur) otomatis memakai angka baru.
    Berkas lama tidak pernah ditulis ulang hanya demi versi; migrasi hidup
    di memori sampai barisnya kebetulan ditulis ulang (pemadatan).           */
-const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 1, suara: 1 };
+const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 2, suara: 1 };
 const versiSkema = (o) => (Number.isFinite(Number(o.v)) ? Number(o.v) : 0);
 function migrasiToken(o) { o.v = SKEMA.token; return o; }
 function migrasiAgenda(o) { o.v = SKEMA.agenda; return o; }
@@ -2175,25 +2175,60 @@ const NAMA_BAWAAN = [
 ];
 
 /* Daftar nama pilihanmu, disimpan server (bukan localStorage) supaya sama di
-   semua tab dan bertahan sesudah server mati. Kosong = pakai NAMA_BAWAAN. */
+   semua tab dan bertahan sesudah server mati. Kosong = pakai NAMA_BAWAAN.
+
+   Satu entri = { nama, peran }. `peran` boleh kosong; kalau diisi, dia ikut
+   menempel ke orangnya, bukan ke kursinya — itu bedanya dengan slot.peran di
+   formasi. Bawaan sengaja TIDAK berjabatan: nama karangan tidak punya jabatan
+   sungguhan, dan menebaknya cuma bikin sprite berseragam asal-asalan. */
 const BERKAS_NAMA = process.env.AGENT_ROOM_NAMA || path.join(__dirname, 'nama.json');
-const namaDaftar = { v: SKEMA.nama, penuh: [] };
+const namaDaftar = { v: SKEMA.nama, penugasan: '', penuh: [] };
+const BAWAAN_ENTRI = NAMA_BAWAAN.map((n) => ({ nama: n, peran: '' }));
 
 const NAMA_MAKS = 512;                      // batas atas daftar; jauh di atas kebutuhan
-const daftarNama = () => (namaDaftar.penuh.length ? namaDaftar.penuh : NAMA_BAWAAN);
+const daftarNama = () => (namaDaftar.penuh.length ? namaDaftar.penuh : BAWAAN_ENTRI);
+
+/* Dua cara menugaskan orang ke sesi:
+
+   'tetap' — nama menempel di KURSI. Sesi yang datang ke folder yang sama
+             mewarisi nama penghuni kursi itu; undiannya deterministik. Ini
+             perilaku asli fitur pegawai tetap, dan yang dijaga uji-pegawai.
+
+   'acak'  — nama menempel di ORANG. Tiap sesi baru menarik satu orang acak
+             dari daftar, lengkap dengan jabatannya. Ruangan jadi berganti
+             wajah; harganya, "besok dipanggil dengan nama yang sama" tidak
+             lagi berlaku.
+
+   Env menang atas berkas: uji-pegawai memakainya untuk menguji mode 'tetap'
+   tanpa bergantung pada isi nama.json milik siapa pun. */
+const PENUGASAN_ENV = String(process.env.AGENT_ROOM_PENUGASAN || '').trim().toLowerCase();
+const PENUGASAN_SAH = new Set(['tetap', 'acak']);
+function penugasan() {
+  if (PENUGASAN_SAH.has(PENUGASAN_ENV)) return PENUGASAN_ENV;
+  return namaDaftar.penugasan === 'tetap' ? 'tetap' : 'acak';
+}
 
 /* Nama dari manusia lewat panel: dipangkas, dibuang yang kosong, dibuang
    kembar, dipotong 24 huruf (sama dengan batas /nama), dan dibatasi jumlahnya.
-   Urutannya DIPERTAHANKAN — undian deterministik bergantung pada urutan. */
+   Urutannya DIPERTAHANKAN — undian mode 'tetap' bergantung pada urutan.
+
+   Menerima string ("Oji") maupun objek ({nama, peran}), supaya nama.json v1
+   dan tempelan lama dari panel tetap masuk tanpa perlu diubah tangan. */
 function namaBersih(arr) {
   if (!Array.isArray(arr)) return [];
   const keluar = [], ada = new Set();
   for (const mentah of arr) {
-    if (typeof mentah !== 'string') continue;
-    const n = clip(mentah.replace(/\s+/g, ' ').trim(), 24);
+    const asal = typeof mentah === 'string' ? { nama: mentah } : mentah;
+    if (!asal || typeof asal.nama !== 'string') continue;
+    const n = clip(asal.nama.replace(/\s+/g, ' ').trim(), 24);
     if (!n || ada.has(n)) continue;
+    /* Id jabatan disaring BENTUKNYA saja, sama seperti POST /peran: tabel
+       jabatannya hidup di halaman, bukan di sini, dan server tidak berhak
+       menebak id mana yang sah. Yang tidak berbentuk id dibuang jadi ''. */
+    const p = typeof asal.peran === 'string' && PERAN_SAH.test(asal.peran.trim())
+      ? asal.peran.trim() : '';
     ada.add(n);
-    keluar.push(n);
+    keluar.push({ nama: n, peran: p });
     if (keluar.length >= NAMA_MAKS) break;
   }
   return keluar;
@@ -2224,10 +2259,16 @@ function namaMuat() {
     return;
   }
   migrasiNama(o);
+  /* v1 menyimpan `penuh` sebagai larik string. namaBersih() menerima string
+     maupun objek, jadi naik versi tidak butuh kode migrasi tersendiri —
+     berkas lama terbaca apa adanya dan jadi entri tanpa jabatan. */
   namaDaftar.penuh = namaBersih(o.penuh);
+  namaDaftar.penugasan = o.penugasan === 'tetap' ? 'tetap' : (o.penugasan === 'acak' ? 'acak' : '');
   if (namaDaftar.penuh.length) {
+    const berjabatan = namaDaftar.penuh.filter((e) => e.peran).length;
     console.log('[agent-room] daftar nama dimuat: ' + namaDaftar.penuh.length
-      + ' nama dari ' + path.basename(BERKAS_NAMA));
+      + ' nama (' + berjabatan + ' berjabatan) dari ' + path.basename(BERKAS_NAMA)
+      + ', penugasan ' + penugasan());
   }
 }
 
@@ -2274,7 +2315,7 @@ function namaDipakai(kursi, kecuali) {
    keluar tanpa mematok nama harfiah di dalam kodenya. `salt` dinaikkan (probe
    linear) selama hasilnya sudah dipakai kursi lain. */
 function pegawaiUndi(proyek, i, dipakai) {
-  const daftar = daftarNama();
+  const daftar = daftarNama().map((e) => e.nama);
   for (let salt = 0; salt < 64; salt++) {
     const h = crypto.createHash('sha256').update(proyek + '#' + i + '#' + salt).digest();
     const nama = daftar[h.readUInt16BE(0) % daftar.length];
@@ -2290,6 +2331,23 @@ function pegawaiUndi(proyek, i, dipakai) {
     if (!dipakai.has(dasar + ' ' + n)) return dasar + ' ' + n;
   }
   return dasar;
+}
+
+/* Undian mode 'acak': satu orang, betulan acak, tiap sesi baru. Yang sedang
+   duduk di kursi lain proyek yang sama dikecualikan supaya tidak ada dua orang
+   bernama sama di satu ruangan; kalau daftarnya habis (sesi lebih banyak
+   daripada nama), pagarnya dilepas dan kembar diterima — lebih baik kembar
+   daripada sesi yang tidak dapat nama sama sekali.
+
+   Undiannya rata, tanpa bobot. Komposisi daftarnya sendiri yang menentukan
+   siapa sering muncul: kantor sungguhan isinya memang lebih banyak staf
+   daripada kepala bidang, jadi undian rata di atas daftar yang jujur sudah
+   menghasilkan ruangan yang masuk akal tanpa mesin pembobot apa pun. */
+function pegawaiAcak(dipakai) {
+  const daftar = daftarNama();
+  const luang = dipakai ? daftar.filter((e) => !dipakai.has(e.nama)) : daftar;
+  const kolam = luang.length ? luang : daftar;
+  return kolam[Math.floor(Math.random() * kolam.length)];
 }
 
 /* Buang formasi folder yang paling lama tidak ditengok sampai jumlah proyek
@@ -2383,7 +2441,26 @@ function pegawaiTetapPasang(ev) {
     baru = true;
   }
   const slot = kursi[i];
-  if (!slot.nama) slot.nama = pegawaiUndi(proyek, i, namaDipakai(kursi, i));
+  /* Di sinilah dua mode penugasan berpisah.
+
+     'tetap': nama diundi SEKALI lalu menempel di kursi selamanya (`!slot.nama`).
+     'acak' : nama diundi ULANG tiap kali kursinya ditempati sesi baru — itulah
+              yang membuat ruangan berganti wajah.
+
+     Nama yang kamu ketik sendiri lewat kartu pegawai (`manual`) menang di
+     kedua mode: itu keputusan manusia, bukan hasil undian, dan piket acak
+     tidak berhak membatalkannya. Begitu juga jabatan yang kamu setel sendiri
+     (`peranManual`) — jabatan bawaan orangnya cuma dipakai kalau kamu belum
+     pernah menyetel jabatan kursi itu. */
+  if (penugasan() === 'acak' && !slot.manual) {
+    const orang = pegawaiAcak(namaDipakai(kursi, i));
+    if (orang) {
+      slot.nama = orang.nama;
+      if (!slot.peranManual) slot.peran = orang.peran || '';
+    }
+  } else if (!slot.nama) {
+    slot.nama = pegawaiUndi(proyek, i, namaDipakai(kursi, i));
+  }
   slot.penghuni = ev.session;
   slot.terakhir = ev.ts || kini;
   if (ev.cabang) slot.cabangTerakhir = clip(ev.cabang, 48);
@@ -3336,7 +3413,7 @@ const suaraKalimat = {
    ikut; itu yang tersisa jadi generate saat runtime. */
 function suaraDaftarKalimat() {
   const keluar = [suaraKalimat.arahan()];
-  for (const n of daftarNama().slice(0, SUARA_PANASI_MAKS)) keluar.push(suaraKalimat.selesai(n));
+  for (const e of daftarNama().slice(0, SUARA_PANASI_MAKS)) keluar.push(suaraKalimat.selesai(e.nama));
   return keluar;
 }
 
@@ -4188,6 +4265,10 @@ const server = http.createServer(async (req, res) => {
       bawaan: NAMA_BAWAAN,
       pakaiBawaan: namaDaftar.penuh.length === 0,
       maks: NAMA_MAKS,
+      penugasan: penugasan(),
+      // env menang atas berkas; panel perlu tahu supaya tidak menawarkan
+      // saklar yang tidak akan berpengaruh apa-apa
+      penugasanTerkunci: PENUGASAN_SAH.has(PENUGASAN_ENV),
     }));
     return;
   }
@@ -4200,11 +4281,15 @@ const server = http.createServer(async (req, res) => {
     /* Daftar kosong BUKAN galat: itu cara mengembalikan daftar bawaan.
        Dibedakan dari "belum pernah diatur" cuma oleh ada/tidaknya berkas. */
     namaDaftar.penuh = namaBersih(p.penuh);
+    if (p.penugasan === 'tetap' || p.penugasan === 'acak') namaDaftar.penugasan = p.penugasan;
     const galat = namaTulis();
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       ok: true, jumlah: namaDaftar.penuh.length,
       pakaiBawaan: namaDaftar.penuh.length === 0,
+      berjabatan: namaDaftar.penuh.filter((e) => e.peran).length,
+      penugasan: penugasan(),
+      penugasanTerkunci: PENUGASAN_SAH.has(PENUGASAN_ENV),
       pesan: galat ? 'daftar dipakai, tapi gagal ditulis ke berkas: ' + galat : '',
     }));
     return;
@@ -4223,17 +4308,39 @@ const server = http.createServer(async (req, res) => {
       kursi.forEach((k, i) => {
         if (!k) return;
         if (k.manual) { dilewati++; return; }
-        const baru = pegawaiUndi(proyek, i, namaDipakai(kursi, i));
-        if (!baru || baru === k.nama) return;
-        k.nama = baru;
+        /* Ikut mode yang sedang berlaku: di 'acak' tombol ini berarti
+           "kocok sekarang", di 'tetap' berarti "hitung ulang undian dengan
+           daftar yang baru". Dua-duanya yang diharapkan orang waktu menekannya. */
+        let baru, peranBaru = null;
+        if (penugasan() === 'acak') {
+          const orang = pegawaiAcak(namaDipakai(kursi, i));
+          if (!orang) return;
+          baru = orang.nama;
+          if (!k.peranManual) peranBaru = orang.peran || '';
+        } else {
+          baru = pegawaiUndi(proyek, i, namaDipakai(kursi, i));
+        }
+        const namaGanti = Boolean(baru) && baru !== k.nama;
+        const peranGanti = peranBaru !== null && peranBaru !== k.peran;
+        if (!namaGanti && !peranGanti) return;
+        if (namaGanti) k.nama = baru;
+        if (peranGanti) k.peran = peranBaru;
         diganti++;
         /* Kursi yang sedang diduduki harus ikut berganti SEKARANG di semua
            halaman yang terbuka — kalau tidak, sprite-nya baru berganti nama
-           besok waktu sesinya lahir lagi. */
+           besok waktu sesinya lahir lagi. Jabatan disiarkan terpisah karena
+           halaman memang menanganinya lewat event `peran`, bukan `nama`. */
         if (k.penghuni) {
-          namaSesi.set(k.penghuni, baru);
-          publish({ id: ++seq, ts: Date.now(), kind: 'nama', session: k.penghuni,
-                    nama: baru, tool: null, label: '', ok: true });
+          if (namaGanti) {
+            namaSesi.set(k.penghuni, k.nama);
+            publish({ id: ++seq, ts: Date.now(), kind: 'nama', session: k.penghuni,
+                      nama: k.nama, tool: null, label: '', ok: true });
+          }
+          if (peranGanti) {
+            if (k.peran) peranSesi.set(k.penghuni, k.peran); else peranSesi.delete(k.penghuni);
+            publish({ id: ++seq, ts: Date.now(), kind: 'peran', session: k.penghuni,
+                      peran: k.peran, tool: null, label: '', ok: true });
+          }
         }
       });
     }

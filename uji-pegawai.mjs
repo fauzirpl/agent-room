@@ -126,6 +126,11 @@ async function coba(dir, port, tambahan = {}) {
          tandingan di atas (yang selalu memakai NAMA_BAWAAN) langsung
          berbeda dari yang keluar. Uji tidak boleh ikut nasib daftar nama
          pilihan orang yang kebetulan menjalankannya. */
+      /* Ke-17 kasus di berkas ini menguji janji mode 'tetap' ("besok
+         dipanggil dengan nama yang sama"). Sejak piket acak jadi bawaan,
+         modenya harus dipatok dari sini — kalau tidak, ujinya menguji mode
+         yang salah dan mengeluh nama berubah padahal memang seharusnya. */
+      AGENT_ROOM_PENUGASAN: 'tetap',
       AGENT_ROOM_NAMA: path.join(dir, 'nama.json'),
       AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
       AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),

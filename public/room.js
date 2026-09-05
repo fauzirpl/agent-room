@@ -9087,31 +9087,83 @@ const setNamaDaftar = document.getElementById('setNamaDaftar');
 const setNamaSimpan = document.getElementById('setNamaSimpan');
 const setNamaUndi = document.getElementById('setNamaUndi');
 const setNamaKet = document.getElementById('setNamaKet');
+const setPenugasan = document.getElementById('setPenugasan');
+const setPenugasanKet = document.getElementById('setPenugasanKet');
+const setNamaPeranKet = document.getElementById('setNamaPeranKet');
+
+/* Satu baris = satu orang: "Nama | id_jabatan". Jabatannya opsional; tanpa
+   itu sprite-nya memakai jabatan bawaan urutan kursi seperti dulu. */
+const barisNama = (e) => (e.peran ? e.nama + ' | ' + e.peran : e.nama);
+function uraiBarisNama(baris) {
+  const [nama, peran] = baris.split('|');
+  return { nama: (nama || '').trim(), peran: (peran || '').trim() };
+}
+
+/* Daftar id jabatan yang sah diambil dari JABATAN, bukan diketik ulang di
+   sini — kalau tabelnya bertambah, catatan di panel ikut bertambah sendiri.
+   Server sengaja tidak ikut memvalidasi id: tabelnya memang milik halaman. */
+const PERAN_ID = new Set(JABATAN.map((j) => j.id));
+
+function penugasanGambar(d) {
+  const acak = d.penugasan !== 'tetap';
+  setPenugasan.value = acak ? 'acak' : 'tetap';
+  setPenugasan.disabled = Boolean(d.penugasanTerkunci);
+  setPenugasanKet.textContent = d.penugasanTerkunci
+    ? 'dikunci lewat AGENT_ROOM_PENUGASAN — saklar ini tidak berpengaruh'
+    : acak
+      ? 'tiap sesi baru menarik satu orang acak dari daftar, lengkap dengan jabatannya. Ruangan berganti wajah, tapi "besok dipanggil dengan nama yang sama" tidak lagi berlaku.'
+      : 'nama menempel di kursi: sesi berikutnya di folder yang sama mewarisi nama penghuni kursi itu. Orangnya jadi itu-itu saja, dan memang itu maksudnya.';
+}
 
 async function muatNamaDaftar() {
   const r = await panelJson('/nama/daftar');
   if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
   const d = r.d;
+  penugasanGambar(d);
   setNamaDaftar.placeholder = (d.bawaan || []).join('\n');
-  setNamaDaftar.value = d.pakaiBawaan ? '' : (d.penuh || []).join('\n');
+  setNamaDaftar.value = d.pakaiBawaan ? '' : (d.penuh || []).map(barisNama).join('\n');
+  const berjabatan = (d.penuh || []).filter((e) => e.peran).length;
   ucapKet(setNamaKet, d.pakaiBawaan
     ? 'memakai daftar bawaan (' + (d.bawaan || []).length + ' nama)'
-    : (d.penuh || []).length + ' nama', '');
+    : (d.penuh || []).length + ' nama, ' + berjabatan + ' berjabatan', '');
+  peranKetGambar();
 }
 
-setNamaSimpan.onclick = async () => {
-  const penuh = setNamaDaftar.value.split('\n').map((s) => s.trim()).filter(Boolean);
+/* Id jabatan yang tidak dikenal TIDAK ditolak — server menyimpannya asal
+   bentuknya id, dan menolaknya berarti kamu kehilangan seluruh tempelan cuma
+   gara-gara satu salah ketik. Yang dilakukan cuma memberi tahu, plus memajang
+   daftar id yang sah supaya tidak perlu menebak. */
+function peranKetGambar() {
+  const dipakai = setNamaDaftar.value.split('\n').map(uraiBarisNama)
+    .filter((e) => e.nama && e.peran).map((e) => e.peran);
+  const asing = [...new Set(dipakai.filter((p) => !PERAN_ID.has(p)))];
+  setNamaPeranKet.className = 'pengaturan-nota' + (asing.length ? ' err' : '');
+  setNamaPeranKet.textContent = asing.length
+    ? 'jabatan tidak dikenal: ' + asing.join(', ') + ' — yang sah: ' + [...PERAN_ID].join(', ')
+    : 'id jabatan yang sah: ' + [...PERAN_ID].join(', ');
+}
+setNamaDaftar.oninput = peranKetGambar;
+
+async function simpanNamaDaftar(tambahan) {
+  const penuh = setNamaDaftar.value.split('\n').map(uraiBarisNama).filter((e) => e.nama);
   const r = await panelJson('/nama/daftar', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ penuh }),
+    body: JSON.stringify({ penuh, ...tambahan }),
   });
   if (r.galat) { ucapKet(setNamaKet, r.galat, 'err'); return; }
   const d = r.d;
   ucapKet(setNamaKet, d.pesan
-    || (d.pakaiBawaan ? 'kosong — kembali ke daftar bawaan' : 'tersimpan · ' + d.jumlah + ' nama'),
+    || (d.pakaiBawaan ? 'kosong — kembali ke daftar bawaan'
+      : 'tersimpan · ' + d.jumlah + ' nama, ' + d.berjabatan + ' berjabatan'),
   d.pesan ? 'err' : 'ok');
   muatNamaDaftar();
-};
+}
+
+setNamaSimpan.onclick = () => simpanNamaDaftar({});
+/* Saklar penugasan ikut menyimpan daftarnya sekalian: dua-duanya tinggal di
+   nama.json, dan orang yang baru mengetik daftar lalu menggeser saklar tidak
+   boleh kehilangan ketikannya. */
+setPenugasan.onchange = () => simpanNamaDaftar({ penugasan: setPenugasan.value });
 
 /* Undi ulang. Nama pegawai yang sedang duduk berganti SEKARANG di semua
    halaman — servernya menyiarkan event `nama` per kursi yang berubah, jadi

@@ -288,9 +288,18 @@
       </div>
       <div class="pengaturan-grup">
         <h3>Nama pegawai</h3>
+        <label class="pengaturan-baris">
+          <span>🧑‍💼 penugasan</span>
+          <select id="setPenugasan" aria-label="cara menugaskan pegawai">
+            <option value="acak">piket acak — orang berganti tiap sesi</option>
+            <option value="tetap">pegawai tetap — nama menempel di kursi</option>
+          </select>
+        </label>
+        <p class="pengaturan-nota" id="setPenugasanKet"></p>
         <p class="pengaturan-nota">
-          Nama yang dipakai waktu kursi baru lahir, satu per baris. Kosongkan
-          untuk kembali ke daftar bawaan.
+          Satu orang per baris. Jabatan opsional, dipisah tanda <code>|</code> —
+          <code>Oji | pranata_pertama</code>. Kosongkan seluruhnya untuk kembali
+          ke daftar bawaan.
         </p>
         <textarea id="setNamaDaftar" rows="8" spellcheck="false"
                   aria-label="daftar nama pegawai"></textarea>
@@ -299,11 +308,12 @@
           <button type="button" id="setNamaSimpan">Simpan</button>
           <button type="button" id="setNamaUndi">undi ulang</button>
         </div>
+        <p class="pengaturan-nota" id="setNamaPeranKet"></p>
         <p class="pengaturan-nota">
-          Mengganti daftar tidak mengganti nama pegawai yang sudah bertugas —
-          nama menempel di kursi, bukan di sesi. <b>undi ulang</b> memberi nama
-          baru ke kursi yang namanya hasil undian; nama yang kamu ketik sendiri
-          lewat kartu pegawai tidak pernah disentuh.
+          Menyimpan daftar tidak langsung mengganti pegawai yang sedang
+          bertugas — <b>undi ulang</b> yang melakukannya sekarang juga. Nama
+          yang kamu ketik sendiri lewat kartu pegawai tidak pernah disentuh,
+          di mode mana pun.
         </p>
       </div>
       <div class="pengaturan-grup">

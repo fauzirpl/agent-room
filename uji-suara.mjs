@@ -478,12 +478,13 @@ async function kasus8(palsu) {
   });
   sama('simpan: yang sah saja yang masuk', simpan.d.jumlah, 3);
   const isi = (await json(k, '/nama/daftar')).d.penuh;
-  sama('  spasi berlebih dipangkas', isi[0], 'Oji');
-  sama('  urutan dipertahankan', isi[1], 'Sumala');
-  sama('  kembar dibuang', isi.filter((n) => n === 'Oji').length, 1);
-  sama('  dipotong 24 huruf', isi[2].length, 24);
-  benar('  yang bukan teks diabaikan tanpa melempar', isi.every((n) => typeof n === 'string'),
-    'ada entri bukan string yang lolos');
+  sama('  spasi berlebih dipangkas', isi[0].nama, 'Oji');
+  sama('  urutan dipertahankan', isi[1].nama, 'Sumala');
+  sama('  kembar dibuang', isi.filter((e) => e.nama === 'Oji').length, 1);
+  sama('  dipotong 24 huruf', isi[2].nama.length, 24);
+  benar('  yang bukan teks diabaikan tanpa melempar',
+    isi.every((e) => e && typeof e.nama === 'string' && typeof e.peran === 'string'),
+    'ada entri yang bentuknya bukan {nama, peran}');
 
   const kosong = await kirim(k, '/nama/daftar', { penuh: [] });
   sama('daftar kosong = kembali ke bawaan, bukan galat', kosong.d.pakaiBawaan, true);
@@ -621,6 +622,130 @@ async function kasus12() {
     'tidak dilayani: ' + hilang.join(', ') + ' — panel akan menjawab "server masih versi lama"');
 }
 
+async function kasus13(palsu) {
+  console.log(tebal('\nKasus 13: piket acak — orangnya berganti, jabatannya ikut'));
+  const dir = sandboxBaru('m');
+  const k = await buka(dir, palsu, { AGENT_ROOM_PENUGASAN: 'acak' });
+
+  await kirim(k, '/nama/daftar', {
+    penuh: [
+      { nama: 'Bu Alis', peran: 'kabid' },
+      { nama: 'Oji', peran: 'pranata_pertama' },
+      { nama: 'Bu Mega', peran: 'kasi' },
+      { nama: 'Odir', peran: 'statistisi' },
+      { nama: 'Ijal', peran: 'teknisi' },
+      { nama: 'Tendi', peran: 'analis_sistem' },
+    ],
+  });
+  const daftar = (await json(k, '/nama/daftar')).d;
+  sama('jabatan ikut tersimpan', daftar.berjabatan ?? daftar.penuh.filter((e) => e.peran).length, 6);
+  sama('  mode yang berlaku', daftar.penugasan, 'acak');
+
+  /* Satu kursi, dipakai berkali-kali oleh sesi yang datang-pergi. Di mode
+     'tetap' namanya akan sama terus; di 'acak' harus berganti-ganti. Inilah
+     inti keluhan "orangnya itu-itu aja". */
+  const dilihat = new Map();
+  let benar_nama = true;
+  for (let n = 0; n < 24; n++) {
+    const sesi = ('piket' + n + '-aaaaaa').slice(0, 12);
+    await kirim(k, '/event', {
+      hook_event_name: 'PreToolUse', session_id: sesi,
+      cwd: path.join(dir, 'kantor-piket'), tool_name: 'Read', tool_input: { file_path: 'a.txt' },
+    });
+    await tidur(60);
+    const o = (await json(k, '/ruangan')).d.sesi.find((x) => x.sesi === sesi);
+    benar_nama = benar_nama && Boolean(o && o.nama);
+    if (o && o.nama) dilihat.set(o.nama, o.peran);
+    /* Pamitnya WAJIB SessionEnd, bukan Stop: cuma session-end yang memanggil
+       pegawaiLepas() dan mengosongkan kursinya. Dengan Stop, kursinya menumpuk
+       sampai FORMASI_MAKS lalu sesi berikutnya jalan tanpa nama sama sekali —
+       dan ujinya diam-diam menguji hal lain. */
+    await kirim(k, '/event', {
+      hook_event_name: 'SessionEnd', session_id: sesi,
+      cwd: path.join(dir, 'kantor-piket'), tool_name: null,
+    });
+    await tidur(60);
+  }
+
+  benar('tiap sesi kebagian nama', benar_nama, 'ada sesi yang lahir tanpa nama');
+  benar('24 sesi berturut-turut memunculkan banyak orang berbeda '
+    + abu('(' + dilihat.size + ' nama)'), dilihat.size >= 4,
+  'cuma ' + dilihat.size + ' nama yang pernah muncul: ' + [...dilihat.keys()].join(', '));
+  benar('  semuanya dari daftar', [...dilihat.keys()].every((n) => daftar.penuh.some((e) => e.nama === n)),
+    'ada nama di luar daftar: ' + [...dilihat.keys()].join(', '));
+
+  /* "menyesuaikan tingkat pekerjaan": jabatan menempel di ORANGNYA, jadi
+     siapa pun yang muncul harus membawa jabatan yang benar — bukan jabatan
+     bawaan urutan kursi. */
+  const petaBenar = new Map(daftar.penuh.map((e) => [e.nama, e.peran]));
+  const salah = [...dilihat.entries()].filter(([n, p]) => p !== petaBenar.get(n));
+  benar('  tiap orang membawa jabatannya sendiri', salah.length === 0,
+    salah.map(([n, p]) => n + ' dapat ' + JSON.stringify(p) + ', harusnya ' + petaBenar.get(n)).join(' | '));
+
+  await tutup(k);
+}
+
+async function kasus14(palsu) {
+  console.log(tebal('\nKasus 14: piket acak tetap menghormati yang kamu tetapkan'));
+  const dir = sandboxBaru('n');
+  const k = await buka(dir, palsu, { AGENT_ROOM_PENUGASAN: 'acak' });
+  await kirim(k, '/nama/daftar', {
+    penuh: [{ nama: 'Oji', peran: 'pranata_pertama' }, { nama: 'Odir', peran: 'statistisi' },
+            { nama: 'Ijal', peran: 'teknisi' }, { nama: 'Tendi', peran: 'analis_sistem' }],
+  });
+  const proyek = path.join(dir, 'kantor-manual');
+  const hook = (sesi) => kirim(k, '/event', {
+    hook_event_name: 'PreToolUse', session_id: sesi,
+    cwd: proyek, tool_name: 'Read', tool_input: { file_path: 'a.txt' },
+  });
+  await hook('manual-aaaa1');
+  await tidur(150);
+  await kirim(k, '/nama', { sesi: 'manual-aaaa1', nama: 'Pak Kadis' });
+  await kirim(k, '/peran', { sesi: 'manual-aaaa1', peran: 'kadis' });
+
+  const lihat = async (sesi) => (await json(k, '/ruangan')).d.sesi.find((x) => x.sesi === sesi);
+  sama('nama pilihanmu terpasang', (await lihat('manual-aaaa1'))?.nama, 'Pak Kadis');
+
+  /* Undi ulang berkali-kali: kursi manual tidak boleh tergeser sekali pun,
+     dan jabatan yang kamu setel sendiri juga tidak. */
+  for (let n = 0; n < 5; n++) await kirim(k, '/nama/undi-ulang', {});
+  const o = await lihat('manual-aaaa1');
+  sama('  lima kali undi ulang tidak menggesernya', o?.nama, 'Pak Kadis');
+  sama('  jabatan yang kamu setel juga tidak', o?.peran, 'kadis');
+
+  await tutup(k);
+}
+
+async function kasus15(palsu) {
+  console.log(tebal('\nKasus 15: mode tetap masih benar-benar tetap'));
+  const dir = sandboxBaru('o');
+  const k = await buka(dir, palsu, { AGENT_ROOM_PENUGASAN: 'tetap' });
+  await kirim(k, '/nama/daftar', {
+    penuh: [{ nama: 'Oji' }, { nama: 'Odir' }, { nama: 'Ijal' }, { nama: 'Tendi' }, { nama: 'Bale' }],
+  });
+  sama('mode yang berlaku', (await json(k, '/nama/daftar')).d.penugasan, 'tetap');
+  sama('  env mengunci saklar panel', (await json(k, '/nama/daftar')).d.penugasanTerkunci, true);
+
+  const proyek = path.join(dir, 'kantor-tetap');
+  const nama = new Set();
+  for (let n = 0; n < 8; n++) {
+    const sesi = ('tetap' + n + '-aaaaaa').slice(0, 12);
+    await kirim(k, '/event', {
+      hook_event_name: 'PreToolUse', session_id: sesi,
+      cwd: proyek, tool_name: 'Read', tool_input: { file_path: 'a.txt' },
+    });
+    await tidur(60);
+    const o = (await json(k, '/ruangan')).d.sesi.find((x) => x.sesi === sesi);
+    if (o) nama.add(o.nama);
+    await kirim(k, '/event', { hook_event_name: 'SessionEnd', session_id: sesi, cwd: proyek, tool_name: null });
+    await tidur(60);
+  }
+  // Kursi yang sama dipakai bergantian: di mode tetap namanya WAJIB satu-satunya
+  sama('delapan sesi bergantian di kursi yang sama = satu nama saja', nama.size, 1);
+
+  await tutup(k);
+}
+
 /* ================================================================= main === */
 const palsu = await openrouterPalsu();
 try {
@@ -636,6 +761,9 @@ try {
   await kasus10();
   await kasus11(palsu);
   await kasus12();
+  await kasus13(palsu);
+  await kasus14(palsu);
+  await kasus15(palsu);
 } finally {
   await palsu.tutup();
   if (!SIMPAN) { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* biarkan */ } }

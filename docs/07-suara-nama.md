@@ -212,12 +212,45 @@ Dulu namanya diundi dari dua konstanta: `NAMA_DEPAN` (24) × `NAMA_BELAKANG`
 (16) = 384 kombinasi. Sekarang satu daftar nama utuh, `NAMA_BAWAAN` (32),
 dan daftar itu boleh kamu ganti seluruhnya dari panel.
 
-Bentuk `nama.json` — **nama utuh saja**, tidak ada lagi dua daftar yang
-dipasang-pasangkan:
+Bentuk `nama.json` (v2) — **nama utuh**, plus jabatan opsional dan cara
+penugasan:
 
 ```json
-{ "v": 1, "penuh": ["Oji", "Sumala", "Pak Kadis Wibowo"] }
+{ "v": 2,
+  "penugasan": "acak",
+  "penuh": [ { "nama": "Bu Alis", "peran": "kabid" },
+             { "nama": "Oji", "peran": "pranata_pertama" } ] }
 ```
+
+v1 (`penuh` berisi larik string) tetap terbaca apa adanya: `namaBersih()`
+menerima string maupun objek, jadi naik versi tidak butuh kode migrasi
+tersendiri. `peran` disaring BENTUKNYA saja di server — tabel jabatannya milik
+halaman, dan server tidak berhak menebak id mana yang sah.
+
+### Dua mode penugasan
+
+| Mode | Nama menempel di | Akibat |
+|---|---|---|
+| `tetap` | **kursi** | Sesi berikutnya di folder yang sama mewarisi nama penghuni kursi itu. Undiannya deterministik. Perilaku asli fitur pegawai tetap. |
+| `acak` (bawaan) | **orang** | Tiap sesi baru menarik satu orang acak dari daftar, lengkap dengan jabatannya. Ruangan berganti wajah. |
+
+Saklarnya di panel ⚙️; `AGENT_ROOM_PENUGASAN` menang atas berkas (dipakai
+`uji-pegawai.mjs` untuk menguji mode `tetap` tanpa bergantung pada nama.json
+milik siapa pun).
+
+Kenapa `acak` jadi bawaan: dengan `tetap`, jumlah nama yang bisa kamu lihat =
+jumlah kursi = sesi terbanyak yang pernah jalan bersamaan di folder itu.
+Daftar 18 nama pun cuma memunculkan 4-5 orang, selamanya, dan itu terasa
+seperti daftarnya tidak terpakai. Ini keluhan sungguhan, bukan hipotesis.
+
+Undiannya **rata, tanpa bobot**. Komposisi daftarnya sendiri yang menentukan
+siapa sering muncul: kantor sungguhan isinya memang lebih banyak staf daripada
+kepala bidang, jadi undian rata di atas daftar yang jujur sudah menghasilkan
+ruangan yang masuk akal tanpa mesin pembobot apa pun.
+
+Yang TIDAK pernah disentuh piket acak: nama yang kamu ketik sendiri lewat
+kartu pegawai (`manual`) dan jabatan yang kamu setel sendiri (`peranManual`).
+Itu keputusan manusia, dan undian tidak berhak membatalkannya.
 
 - Berkasnya tidak ada / kosong / rusak → **jatuh ke `NAMA_BAWAAN`** (32 nama
   utuh di `server.mjs`). Ruangan tidak boleh pernah kehabisan nama, dan
@@ -339,7 +372,7 @@ yang perlu dibongkar.
 
 ## Uji
 
-[`uji-suara.mjs`](../uji-suara.mjs) — 103 pemeriksaan, headless, **tanpa
+[`uji-suara.mjs`](../uji-suara.mjs) — 115 pemeriksaan, headless, **tanpa
 jaringan**. `server.mjs` sungguhan dinyalakan sebagai proses anak dengan
 `AGENT_ROOM_SUARA_URL` diarahkan ke OpenRouter palsu di localhost. Uji ini
 tidak pernah butuh kunci sungguhan; kalau suatu hari dia mulai butuh, itu bug.
@@ -358,6 +391,9 @@ tidak pernah butuh kunci sungguhan; kalau suatu hari dia mulai butuh, itu bug.
 | 10 | Lint: kalimat di `UCAP` (room.js) dan `suaraKalimat` (server.mjs) sama persis — kalau hanyut, "panaskan cache" jadi sia-sia dan tidak ada galat apa pun yang muncul |
 | 11 | Daftar model **dan `supported_voices`** diteruskan (`null` tetap `null`, bukan `[]`); penyedia daftar mati → `ok:false` + daftar kosong, bukan 500 |
 | 12 | Lint: setiap rute yang dipanggil `room.js` benar-benar dilayani `server.mjs` |
+| 13 | Piket acak: 24 sesi berturut-turut di satu kursi memunculkan banyak orang berbeda, semuanya dari daftar, dan tiap orang membawa jabatannya sendiri |
+| 14 | Piket acak tetap menghormati nama & jabatan yang kamu setel sendiri, walau diundi ulang lima kali |
+| 15 | Mode `tetap` masih benar-benar tetap: delapan sesi bergantian di kursi yang sama = satu nama saja |
 
 Lima mutasi disuntikkan untuk membuktikan ujinya menggigit, dan semuanya
 tertangkap: `response_format` dicabut, voice dicabut dari kunci hash, dedupe

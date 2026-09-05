@@ -914,6 +914,7 @@ body {
   padding: 5px 6px;
 }
 /* Pesan status: hijau kalau tersimpan, merah kalau gagal. */
+.pengaturan-nota.err { color: var(--merah); }
 .pengaturan-izin-ket.ok { color: var(--hijau); }
 .pengaturan-izin-ket.err { color: var(--merah); }
 
