@@ -47,6 +47,11 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 
 - Setiap tool call Claude Code jadi gerakan di ruangan, bukan cuma baris log
 - Balon pikiran & kotak kabar — isi transkrip beneran, bukan cuma nama tool
+- **Serah terima antar sesi**: sesi Claude yang baru masuk di folder yang
+  sama bisa langsung tahu apa yang sudah terjadi beberapa jam terakhir —
+  berkas apa yang disunting, apa yang gagal, siapa yang masih menunggu
+  paraf. Dirangkum dari buku agenda yang memang sudah ada: tanpa model
+  bahasa, tanpa jaringan keluar
 - 272 event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat) —
   angka dihitung otomatis: `node uji-katalog.mjs`
 - Cuaca sungguhan di jendela + siklus siang–malam
@@ -61,9 +66,19 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 
 Kantor ini juga bisa jadi **MCP server**: sesi Claude Code mana pun bisa
 bertanya "siapa yang lagi tertahan?", "sesi mana yang hidup?", "token hari
-ini berapa?", atau mencari buku agenda — tanpa membuka halaman. Jalankan
-`node dinas.mjs --mcp` untuk perintah `claude mcp add`-nya (atau `--mcp --json`
-untuk blok `mcpServers`). Hanya-baca, metadata saja; kantornya harus sedang jalan.
+ini berapa?", "tadi di folder ini terjadi apa?", atau mencari buku agenda —
+tanpa membuka halaman. Jalankan `node dinas.mjs --mcp` untuk perintah
+`claude mcp add`-nya (atau `--mcp --json` untuk blok `mcpServers`). Hanya-baca,
+metadata saja; kantornya harus sedang jalan.
+
+Yang paling kepakai dari situ: **serah terima**. `ruangan_serah_terima`
+merangkum satu folder beberapa jam terakhir — sesi mana saja yang
+menyentuhnya, berkas apa yang disunting, berapa tool yang gagal,
+subperintah git apa yang dipakai, dan siapa yang masih tertahan minta izin —
+jadi sesi yang baru masuk tidak menabrak kerja rekan seproyeknya. Isinya
+dijahit dari buku agenda yang sudah lama ditulis kantor ini, jadi jawabannya
+sama tiap kali ditanya dan tidak butuh kunci apa pun. Rinciannya di
+[docs/05](docs/05-kendali-web.md#catatan-serah-terima-serah-terima).
 
 Tanpa dependency — cuma butuh Node dan `curl`. Alasan di balik tiap
 keputusan desain (kenapa `curl` bukan Node, kenapa hujan bukan event acak,
@@ -115,6 +130,11 @@ removes it, `--coba` only shows what would be run).
 
 - Every Claude Code tool call becomes motion in the room, not just a log line
 - Thought bubbles & a news box — actual transcript content, not just tool names
+- **Shift handover between sessions**: a Claude session starting work in a
+  folder someone else just left can see what happened there in the last few
+  hours — which files were edited, what failed, who is still waiting on a
+  human. Stitched from the activity log the office already keeps: no language
+  model, no outbound network
 - 272 random ambient events (a cat wanders in, the UPS beeps, someone brings
   fried snacks to the meeting table) — counted automatically by `node uji-katalog.mjs`
 - Real weather in the window, synced to actual conditions, plus a day/night cycle
@@ -126,9 +146,19 @@ removes it, `--coba` only shows what would be run).
 
 The office doubles as an **MCP server**: any Claude Code session can ask
 "who is waiting on me?", "which sessions are alive?", "how many tokens today?",
-or search the activity log — without opening the page. Run
-`node dinas.mjs --mcp` to get the `claude mcp add` command (or `--mcp --json`
-for an `mcpServers` block). Read-only, metadata only; the office must be running.
+"what happened in this folder earlier?", or search the activity log — without
+opening the page. Run `node dinas.mjs --mcp` to get the `claude mcp add`
+command (or `--mcp --json` for an `mcpServers` block). Read-only, metadata
+only; the office must be running.
+
+The one that earns its keep: **handover**. `ruangan_serah_terima` summarises a
+single folder over the last few hours — which sessions touched it, which files
+they edited, how many tool calls failed, which git subcommands ran, and who is
+still blocked waiting for a human — so a session picking up the work doesn't
+walk over a colleague's. It is stitched from the activity log the office has
+kept all along, so the answer is the same every time you ask and needs no API
+key. Details in [docs/05](docs/05-kendali-web.md#catatan-serah-terima-serah-terima)
+(Indonesian).
 
 Zero dependencies — just Node and `curl`. The reasoning behind every design
 choice (why `curl` instead of Node, why rain isn't a random event, why shell
