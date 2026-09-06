@@ -61,6 +61,7 @@ const tolak = (t, ket) => {
   console.log('  ' + merah('✗') + ' ' + t + (ket ? '\n      ' + merah(String(ket).slice(0, 400)) : ''));
 };
 const benar = (t, syarat, ket) => { if (syarat) lulus(t); else tolak(t, ket || ''); };
+const samaJson = (t, dapat, harap) => sama(t, JSON.stringify(dapat), JSON.stringify(harap));
 const sama = (t, dapat, harap) => {
   if (dapat === harap) lulus(t + ' ' + abu('= ' + JSON.stringify(dapat)));
   else tolak(t, 'dapat ' + JSON.stringify(dapat) + ', harusnya ' + JSON.stringify(harap));
@@ -459,6 +460,18 @@ async function kasus4(cli) {
   benar('  kalimatnya menyebut proyek, jendela, dan siapa yang tertahan',
     /proyek-mcp/.test(serah.kalimat) && /8 jam/.test(serah.kalimat) && /[Tt]ertahan/.test(serah.kalimat),
     serah.kalimat);
+  /* Kalimatnya bukan cetakan data: server mengurut subperintah git secara
+     ABJAD, dan itu menenggelamkan `push` di bawah `add`/`cat-file`/`config`
+     — padahal "tadi ada yang commit atau push?" pertanyaan yang dibawa
+     orang ke serah terima. Yang mengubah pohon harus disebut duluan. */
+  const gitBanyak = belah(await cli.panggil('ruangan_serah_terima', { proyek: 'proyek-git' }));
+  const dGit = (gitBanyak.data || {}).ringkas || {};
+  samaJson('  data tetap urut abjad (bentuk yang stabil)', dGit.git,
+    ['add', 'cat-file', 'commit', 'config', 'push', 'status']);
+  // jangkarnya `, git ` — tanpa koma, `proyek-git dalam` ikut tertangkap
+  const potongan = /, git ([a-z/-]+)./.exec(gitBanyak.kalimat);
+  sama('  tapi kalimatnya menyebut yang mengubah pohon lebih dulu',
+    potongan && potongan[1], 'commit/push/add/cat-file/config');
   /* Isi kerja tidak lewat pintu ini. `disunting` dan `rencana` memang berasal
      dari label — sekelas yang sudah lama dilayani /agenda — tapi teks bebas
      milik keadaan tertahan TIDAK: `butuhManusia` menyimpan label perintahnya,
@@ -631,6 +644,19 @@ async function utama() {
       agent_id: 'ag-uji-1', agent_type: 'Explore',
       tool_name: 'Grep', tool_input: { pattern: 'telaahRisiko' },
     });
+    /* Satu sesi di proyek LAIN dengan enam subperintah git yang berbeda —
+       tiga di antaranya mengubah pohon, tiga cuma membaca, dan abjadnya
+       sengaja menaruh yang membaca lebih dulu. */
+    await hook(kantor, 'SessionStart', 'sesi-git-dd', { source: 'startup', cwd: '/tmp/proyek-git' });
+    for (const perintah of ['rtk git status', 'rtk git add -A', 'rtk git commit -m "x"',
+      'rtk git push origin master', 'git config user.name', 'git cat-file -p HEAD']) {
+      await hook(kantor, 'PreToolUse', 'sesi-git-dd', {
+        cwd: '/tmp/proyek-git', tool_name: 'Bash', tool_input: { command: perintah },
+      });
+    }
+    // ditutup lagi: semaian ini cuma butuh JEJAKnya di buku agenda, dan
+    // menambah sesi hidup keempat akan menggeser kasus 4 yang sudah ada
+    await hook(kantor, 'SessionEnd', 'sesi-git-dd', { cwd: '/tmp/proyek-git' });
     await hook(kantor, 'Stop', 'sesi-kerja-aa', {});
     await tidur(150);
 

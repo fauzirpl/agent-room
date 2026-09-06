@@ -61,6 +61,18 @@ const lama = (ms) => {
 };
 const rb = (n) => (Number(n) || 0).toLocaleString('id-ID');
 
+/* Server mengembalikan subperintah git urut abjad — bentuk yang stabil, dan
+   itu benar untuk DATA. Untuk KALIMAT ia salah: `add`, `cat-file`, `config`
+   naik duluan dan `push` tenggelam di bawah potongan lima, padahal "tadi ada
+   yang commit atau push?" persis pertanyaan yang dibawa orang ke serah
+   terima. Yang mengubah pohon disebut dulu; sisanya menyusul, tetap abjad. */
+const GIT_PENTING = ['commit', 'push', 'merge', 'rebase', 'revert', 'reset',
+  'cherry-pick', 'pull', 'stash', 'checkout', 'tag'];
+const gitUrut = (a) => [
+  ...GIT_PENTING.filter((g) => a.includes(g)),
+  ...a.filter((g) => !GIT_PENTING.includes(g)),
+];
+
 /* ————— tools ————— */
 const TOOLS = [
   {
@@ -318,7 +330,7 @@ const TOOLS = [
         if (k.berkas) bagian.push(`${k.berkas} berkas disunting`);
         if (k.toolCall) bagian.push(`${rb(k.toolCall)} tool call`);
         if (k.gagal) bagian.push(`${k.gagal} gagal`);
-        if (k.git.length) bagian.push('git ' + k.git.slice(0, 5).join('/'));
+        if (k.git.length) bagian.push('git ' + gitUrut(k.git).slice(0, 5).join('/'));
         ringkas = `${k.sesi} sesi menyentuh ${r.proyek} dalam ${r.jam} jam terakhir`
           + (bagian.length ? ': ' + bagian.join(', ') : '')
           + '. ' + (k.hidup ? `${k.hidup} masih hidup` : 'Semuanya sudah selesai')
