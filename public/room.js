@@ -6738,6 +6738,10 @@ function perbaruiKartu() {
     }
     if (a.token) baris.push(['token', formatToken(a.token)]);
     if (a.biaya) baris.push(['biaya', formatBiaya(a.biaya)]);
+    /* Surat kuasa: sejauh mana sesi ini boleh bertindak tanpa bertanya.
+       Nilai yang tidak dikenal server lewat apa adanya, jadi barisnya tidak
+       pernah mengarang nama mode baru. */
+    if (a.kuasa || a.mode) baris.push(['surat kuasa', a.kuasa || a.mode]);
   }
   // Buku induk: karier FOLDER-nya, bukan sesi ini — sengaja baris terpisah
   // dengan label "sejak dipantau", supaya tidak tertukar dengan tool call di atas.
@@ -6802,6 +6806,12 @@ function perbaruiParaf(a) {
           ? 'pertanyaannya tidak bisa dijawab dari sini'
           : 'izinnya tidak lewat loket paraf')
       : 'sesi terminal · jawab di terminal tempat sesinya jalan');
+    /* Sesi berkuasa penuh TIDAK akan pernah minta izin, jadi diamnya bukan
+       tanda ia sedang menunggu dijawab. Tanpa kalimat ini, dua keadaan yang
+       artinya berlawanan terlihat persis sama di kartu. */
+    if (a.mode === 'bypassPermissions' || a.mode === 'dontAsk') {
+      catat('sesi ini berkuasa penuh — tidak akan pernah minta izin');
+    }
     return;
   }
   catat('sesi halaman · bisa diparaf di sini', 'bisa');
@@ -6968,6 +6978,8 @@ function handle(ev) {
   // mesin pengirim: hanya ada kalau sesinya datang dari kantor cabang
   if (ev.mesin) a.mesin = ev.mesin;
   if (ev.model) a.model = ev.model;
+  // surat kuasa: status sesi, bukan peristiwa — yang terakhir terlihat berlaku
+  if (ev.mode) { a.mode = ev.mode; a.kuasa = ev.kuasa || ''; }
   if (ev.nama) namaPanggilan.set(ev.session, ev.nama);
   /* jk selalu ikut nama dari server. undefined = event ini tidak bicara soal
      jenis kelamin (mis. event lama di putar ulang agenda), jadi yang tersimpan
@@ -7008,6 +7020,13 @@ function handle(ev) {
       toolCount++;
       statTools.textContent = toolCount;
       nowDoing.textContent = p.doing;
+      /* Berputar-putar: nota, bukan rem. Tidak ada yang ditahan — cuma
+         disebut, sekali per kejadian (server yang meredamnya). */
+      if (ev.putar) {
+        const kata = ev.putar === 'ulang-sama' ? 'mengulang hal yang sama' : 'bolak-balik dua berkas';
+        p.say('sepertinya saya ' + esc(kata), 'err');
+        pushLog(ev, 'mark', ['berputar-putar', kata]);
+      }
       pushLog(ev);
       bukaRapat(ev);
       foley(foleyUntuk(ev.tool, st), p);

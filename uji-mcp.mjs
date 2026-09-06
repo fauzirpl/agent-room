@@ -334,18 +334,36 @@ async function kasus4(cli) {
   const keadaan = daftar.map((d) => d.keadaan).sort();
   benar('  satu butuh-manusia, satu macet', JSON.stringify(keadaan) === JSON.stringify(['butuh-manusia', 'macet']),
     JSON.stringify(keadaan));
-  const KUNCI_TERTAHAN = ['sesi', 'nama', 'proyek', 'cabang', 'mesin', 'keadaan', 'sebab', 'tool', 'sejakTerakhir'];
+  /* `tertahanSelama` dihitung dari stempel `sejak` pada keadaan tertahan, bukan
+     ditebak dari kapan sesi terakhir bersuara — dua hal yang berbeda. */
+  const KUNCI_TERTAHAN = ['sesi', 'nama', 'proyek', 'cabang', 'mesin', 'keadaan', 'sebab', 'tool', 'sejakTerakhir', 'tertahanSelama'];
   const kurang = daftar.length ? KUNCI_TERTAHAN.filter((k) => !(k in daftar[0])) : KUNCI_TERTAHAN;
   benar('  tiap baris membawa kunci yang dijanjikan', kurang.length === 0, 'kunci hilang: ' + kurang.join(', '));
 
   const aktif = belah(await cli.panggil('ruangan_sesi_aktif'));
   const sesi = (aktif.data || {}).sesi || [];
   sama('tiga sesi hidup terbaca', sesi.length, 3);
-  const KUNCI_SESI = ['sesi', 'nama', 'proyek', 'cabang', 'toolTerakhir', 'keadaan', 'lamaHidup'];
+  const KUNCI_SESI = ['sesi', 'nama', 'proyek', 'cabang', 'toolTerakhir', 'keadaan', 'lamaHidup', 'mode', 'kuasa'];
   const kurang2 = sesi.length ? KUNCI_SESI.filter((k) => !(k in sesi[0])) : KUNCI_SESI;
   benar('  tiap sesi membawa kunci yang dijanjikan', kurang2.length === 0, 'kunci hilang: ' + kurang2.join(', '));
   benar('  `jk` di hulu tidak ikut bocor ke MCP', !('jk' in (sesi[0] || {})),
     'mcp-room mulai meneruskan field yang tidak dipetakannya');
+
+  /* Surat kuasa. Yang penting bagi agen lain: sesi berkuasa penuh TIDAK akan
+     pernah minta paraf, jadi diamnya bukan tanda ia sedang menunggu dijawab. */
+  /* Id sesi dipotong 12 karakter di server, jadi cocokkan awalannya —
+     bukan string utuh yang kita kirim. */
+  const berkuasa = sesi.find((s) => s.sesi.startsWith('sesi-macet'));
+  sama('mode izin sesi terbaca apa adanya', (berkuasa || {}).mode, 'bypassPermissions');
+  sama('  diterjemahkan jadi surat kuasa', (berkuasa || {}).kuasa, 'kuasa penuh');
+  const tanpaMode = sesi.find((s) => s.sesi.startsWith('sesi-izin'));
+  sama('  sesi tanpa mode tidak dikarang-karang', (tanpaMode || {}).kuasa, '');
+
+  /* Berputar-putar. Sesi kerja disemai tiga Read yang PERSIS sama; sesi izin
+     disemai tool berbeda-beda dan tidak boleh ikut tertandai. */
+  const berputar = sesi.find((s) => s.sesi.startsWith('sesi-kerja'));
+  sama('sesi yang mengulang operasi sama ditandai', (berputar || {}).putar, 'ulang-sama');
+  sama('  sesi yang tidak mengulang tidak ditandai', (tanpaMode || {}).putar, '');
 
   const token = belah(await cli.panggil('ruangan_token_hari_ini'));
   const t = (token.data || {}).hariIni || {};
@@ -493,10 +511,16 @@ async function utama() {
     /* Semai keadaan: satu sesi bekerja, satu minta izin, satu macet. */
     await hook(kantor, 'SessionStart', 'sesi-kerja-aa', { source: 'startup' });
     await hook(kantor, 'PreToolUse', 'sesi-kerja-aa', { tool_name: 'Read', tool_input: { file_path: '/tmp/a.txt' } });
+    /* Tiga Read yang PERSIS sama: memicu detektor berputar-putar. */
+    for (let i = 0; i < 3; i++) {
+      await hook(kantor, 'PreToolUse', 'sesi-kerja-aa', {
+        tool_name: 'Read', tool_input: { file_path: '/tmp/berulang.txt' },
+      });
+    }
     await hook(kantor, 'SessionStart', 'sesi-izin-bb', { source: 'startup' });
     await hook(kantor, 'PermissionRequest', 'sesi-izin-bb', { tool_name: 'Bash', tool_input: { command: 'rm -rf build' } });
     await hook(kantor, 'SessionStart', 'sesi-macet-cc', { source: 'startup' });
-    await hook(kantor, 'StopFailure', 'sesi-macet-cc', { error: 'api_error' });
+    await hook(kantor, 'StopFailure', 'sesi-macet-cc', { error: 'api_error', permission_mode: 'bypassPermissions' });
 
     /* Satu subagent di bawah sesi-kerja-aa, lalu satu tool call MILIK peserta
        itu (payload membawa agent_id, persis seperti hook yang menyala di dalam

@@ -76,6 +76,10 @@ const TOOLS = [
         keadaan: s.butuh ? 'butuh-manusia' : 'macet',
         sebab: s.butuh ? s.butuh.sebab : s.macet.jenis,
         tool: s.tool, sejakTerakhir: lama(kini - s.terakhir),
+        /* Berapa lama benar-benar tertahan — bukan lagi ditebak dari kapan
+           sesi terakhir bersuara. Sesi bisa terus mengirim event sambil tetap
+           menunggu dijawab, jadi dua angka itu memang berbeda. */
+        tertahanSelama: lama(kini - (((s.butuh || s.macet) || {}).sejak || s.terakhir)),
       }));
       const antre = r.antrean || { jumlah: 0, nama: [] };
       const ringkas = tertahan.length === 0 && antre.jumlah === 0
@@ -95,6 +99,16 @@ const TOOLS = [
       const kini = r.ts || Date.now();
       const sesi = (r.sesi || []).map((s) => ({
         sesi: s.sesi, nama: s.nama, peran: s.peran, model: s.model,
+        /* Sejauh mana sesi ini boleh bertindak tanpa bertanya. Yang penting
+           bagi agen lain: sesi berkuasa penuh TIDAK akan pernah minta paraf,
+           jadi diamnya bukan tanda ia sedang menunggu dijawab. */
+        mode: s.mode || '', kuasa: s.kuasa || '',
+        /* Sesi yang terdeteksi mandek di tempat: mengulang operasi yang sama,
+           atau menyunting dua berkas bolak-balik. Nota, bukan rem. */
+        putar: s.putar || '',
+        /* Seberapa penuh jendela konteksnya. Orkestrator bisa tahu sesi mana
+           yang sebentar lagi kehilangan ingatan — sebelum kompaksi terjadi. */
+        konteks: s.konteks ? { pakai: s.konteks.pakai, jendela: s.konteks.jendela, persen: Math.round(s.konteks.rasio * 100) } : null,
         proyek: s.proyek, cabang: s.cabang, mesin: s.mesin,
         toolTerakhir: s.tool, kind: s.kind,
         sejak: new Date(s.sejak).toISOString(), lamaHidup: lama(kini - s.sejak),

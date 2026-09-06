@@ -441,6 +441,8 @@ tidak ada hitungan baru:
 | `agent_room_galat_halaman` | gauge | laporan `POST /galat` yang tersimpan (maks 50) |
 | `agent_room_sse_dibuang_total`, `agent_room_sse_dilebur_total`, `agent_room_sse_diputus_total` | counter | rem SSE (di bawah) |
 | `agent_room_tunda_berkas`, `agent_room_tunda_diserap_total` | gauge/counter | kotak surat hook offline |
+| `agent_room_konteks_rasio` | gauge | rasio jendela konteks TERPENUH di antara sesi hidup (`1.0` = penuh). Yang ingin dipantau orang adalah "apakah ada sesi yang hampir kehilangan ingatan", bukan rata-ratanya |
+| `agent_room_sesi_mode{mode}` | gauge | sesi hidup menurut `permission_mode`-nya. Kardinalitasnya kecil dan tetap (enum CLI), jadi aman jadi label — beda dari nama proyek. Sesi tanpa mode masuk `mode="tak-diketahui"` |
 | `agent_room_peserta_hidup`, `agent_room_peserta_diam` | gauge | subagent yang masih tercatat di bawah sesi induknya, dan yang di antaranya tidak terdengar lebih dari sepuluh menit. Angka kedua baru jujur sejak `agent_id` dibaca pada `pre`/`post` — sebelum itu jam terakhir peserta membeku di detik ia masuk |
 | `agent_room_uptime_seconds` | gauge | `process.uptime()` |
 | `agent_room_pagu_proyek_serapan_rasio`, `agent_room_pagu_proyek_terlampaui` | gauge | dua deret berlabel `proyek="…"` dari pagu anggaran token; **hanya terbit** kalau `AGENT_ROOM_METRICS_PROYEK=1` dan `pagu.json` ada (20 proyek teratas menurut rasio) |

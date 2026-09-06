@@ -199,6 +199,7 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_URL` | *(kosong)* | dibaca **installer** & `mcp-room.mjs`: alamat kantor pusat yang dituju hook mesin ini, mis. `http://kantor.lan:4517` |
 | `AGENT_ROOM_HOST_IZIN` | *(kosong)* | nama Host tambahan yang diterima penjaga Host, dipisah koma (nama mesin di LAN, nama tunnel) |
 | `AGENT_ROOM_TUNDA_DIR` | `~/.agent-room/tunda` | kotak surat hook offline: dibaca `hook.mjs --tunda` (penulis), server (pemungut), dan `dinas --periksa` (lihat **Kotak surat hook offline**) |
+| `AGENT_ROOM_KONTEKS` | `200000` | jendela konteks yang diasumsikan waktu menghitung meteran konteks. Sengaja tidak ditebak dari nama model — nama tampilan berubah antar versi; kalau sebuah sesi terlihat memakai lebih dari ini, jendelanya dinaikkan sendiri ke 1.000.000 dan tidak turun lagi |
 | `AGENT_ROOM_METRICS_PROYEK` | *(kosong)* | `1` menambahkan label `proyek` pada metrik token di `/metrics` (lihat **Pemantauan**) |
 | `AGENT_ROOM_NAMA` | `nama.json` | tempat daftar nama pegawai pilihanmu disimpan (lihat [Suara ucap & daftar nama](07-suara-nama.md)) |
 | `AGENT_ROOM_SUARA` | `suara.json` | tempat setelan suara ucap disimpan (aktif, model, voice, format) |

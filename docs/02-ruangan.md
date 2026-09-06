@@ -340,6 +340,85 @@ bolak-balik). Notulen sisa rapat sekarang dihitung dari `pernahDuduk`, bukan
 dari "sedang di kursi" — sejak peserta bisa pergi ke stasiun, dia bisa sedang
 di lemari arsip waktu rapatnya ditutup.
 
+### Surat kuasa: seberapa jauh sesi boleh bertindak sendiri
+
+Tiap payload hook membawa `permission_mode`, dan sampai sekarang ia dibuang
+utuh. Akibatnya pemilik tidak bisa membedakan sesi yang **memang tidak akan
+pernah minta paraf** dari sesi yang sedang diam-diam menunggu dijawab — dua
+keadaan yang di ruangan terlihat persis sama.
+
+| `permission_mode` | Surat kuasa |
+|---|---|
+| `default` | diawasi |
+| `plan` | magang |
+| `acceptEdits` | kuasa stempel |
+| `delegate` | kuasa delegasi |
+| `dontAsk`, `bypassPermissions` | kuasa penuh |
+
+Nilai yang tidak dikenal **dilewatkan apa adanya tanpa terjemahan**: menebak
+nama mode baru lebih buruk daripada menampilkan nilai mentahnya.
+
+Ini **status, bukan peristiwa**. Tidak ada kind baru, tidak ada baris agenda
+baru, dan `?ulang=` tidak perlu tahu apa-apa soal ini — yang terakhir terlihat
+itulah yang berlaku. Satu jebakan yang ditutup sejak awal: hook yang menyala di
+dalam subagent memakai `session_id` **induk** tapi membawa mode miliknya sendiri
+(agen bawaan sering `dontAsk`), jadi yang dipercaya hanya event yang tidak
+ber-`agent_id`. Tanpa pagar itu surat kuasa induk akan berkedip sepanjang hari.
+
+Di kartu pegawai ia jadi satu baris; di kartu paraf sesi terminal ia menambah
+satu kalimat, *sesi ini berkuasa penuh — tidak akan pernah minta izin*.
+
+### Berapa lama benar-benar tertahan
+
+`butuhManusia` dan `macetSesi` dulu tidak menyimpan **kapan** sesi mulai
+tertahan, jadi yang bertanya lewat MCP terpaksa menebaknya dari kapan sesi
+terakhir bersuara. Dua hal yang berbeda: sesi bisa terus mengirim event sambil
+tetap menunggu dijawab.
+
+Sekarang keduanya membawa `sejak`, dan angkanya **bertahan** selama sesi itu
+belum lepas dari tertahan — permintaan izin kedua dari sesi yang sama bukan
+tunggu baru, ia tunggu yang sama yang belum dijawab. Jalur paraf memakai
+`izin.sejak` yang sudah ada, bukan membuat stempel kedua: satu permintaan harus
+punya satu sumber waktu.
+
+### Berputar-putar
+
+Agen yang mandek di tempat terlihat seperti pegawai rajin: tool call naik,
+stamina turun, tidak ada satu pun tanda bahwa dia sedang mengulang. Dua pola
+yang belum punya padanan di mana pun sekarang dideteksi server:
+
+| Pola | Kapan |
+|---|---|
+| `ulang-sama` | operasi yang **persis** sama diulang ≥ 3 kali berturut-turut |
+| `bolak-balik` | menyunting a lalu b lalu a lagi, ≥ 2 putaran |
+
+"Persis" dihitung dari **sidik jari operasi** (`sidikTool()`) atas `tool_input`
+mentah, bukan dari label: membaca dua berkas berbeda bukan pengulangan, dan
+label yang sudah dipotong tidak bisa membedakan keduanya.
+
+Yang **sengaja tidak ikut**: gagal berturut-turut. Itu sudah dihitung halaman
+dan dipakai event acak inspektorat; menghitungnya ulang di server berarti
+ruangan menampilkan dua angka untuk satu fakta.
+
+Notanya terbit **sekali per kejadian**, bukan tiap tool call sesudahnya, dan
+seperti biasa: nota, bukan rem. Tidak ada yang ditahan.
+
+### Meteran jendela konteks
+
+Sesi terminal tidak pernah memberitahu seberapa penuh konteksnya — pemilik baru
+tahu waktu balon *merapikan catatan* muncul, dan sesudah itu agen sering lupa
+arahan awal.
+
+Angkanya sudah lewat di depan mata selama ini: masuk + cache dibaca + cache
+ditulis pada baris asisten **terakhir** adalah ukuran prompt yang benar-benar
+dikirim ke model. Itu yang dipakai, bukan jumlah kumulatif sesi.
+
+Jendelanya **tidak ditebak dari nama model** — `modelDari()` mendahulukan nama
+tampilan yang berubah antar versi, jadi mencocokkan `1m` di sana adalah tebakan
+yang akan salah diam-diam. Urutannya: `AGENT_ROOM_KONTEKS` kalau disetel sadar,
+lalu **pengamatan** — begitu sebuah sesi terlihat memakai lebih dari jendela
+bawaan, jendelanya dinaikkan dan tidak pernah turun lagi sampai sesi berakhir.
+
 ### Pohon delegasi di server
 
 Seluruh keadaan peserta dulu hidup di halaman saja, jadi mati begitu tab

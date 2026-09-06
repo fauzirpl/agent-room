@@ -142,6 +142,124 @@ const PERAN_SAH = /^[a-z][a-z_]{0,23}$/;
    Polanya longgar karena id model sah bisa berupa alias (`opus`), id penuh
    (`claude-opus-5`), maupun id penyedia lain yang memakai titik dan titik dua. */
 const modelSesi = new Map();            // sesi 12-char -> id/nama model
+const modeSesi = new Map();             // sesi 12-char -> permission_mode apa adanya
+/* Surat kuasa: seberapa jauh sebuah sesi boleh bertindak tanpa bertanya.
+ *
+ * Tiap payload hook membawa `permission_mode`, dan sampai sekarang ia dibuang
+ * utuh. Akibatnya pemilik tidak bisa membedakan sesi yang MEMANG tidak akan
+ * pernah minta paraf dari sesi yang sedang diam-diam menunggu dijawab — dua
+ * keadaan yang di ruangan terlihat persis sama.
+ *
+ * Nilainya enum milik CLI, bukan karangan kita. Yang tidak dikenal DILEWATKAN
+ * apa adanya tanpa terjemahan: menebak-nebak nama mode baru lebih buruk
+ * daripada menampilkan nilai mentahnya. */
+const MODE_KUASA = {
+  default: 'diawasi',
+  plan: 'magang',
+  acceptEdits: 'kuasa stempel',
+  delegate: 'kuasa delegasi',
+  dontAsk: 'kuasa penuh',
+  bypassPermissions: 'kuasa penuh',
+};
+const kuasaDari = (mode) => MODE_KUASA[mode] || '';
+
+/* ------------------------------------------------------- berputar-putar ---
+ * Agen yang mandek di tempat terlihat seperti pegawai rajin: tool call naik,
+ * stamina turun, tidak ada satu pun tanda bahwa dia sedang mengulang.
+ *
+ * Dua pola yang benar-benar belum punya padanan di mana pun:
+ *
+ *   ulang-sama    operasi yang PERSIS sama diulang >= 3 kali berturut-turut.
+ *                 Persis di sini berarti sidik jarinya sama — bukan cuma nama
+ *                 tool-nya, karena membaca dua berkas berbeda bukan
+ *                 pengulangan.
+ *   bolak-balik   menyunting a lalu b lalu a lagi, >= 2 putaran. Ini pola
+ *                 "ragu-ragu" yang paling mahal dan paling sulit dilihat
+ *                 manusia dari log yang mengalir.
+ *
+ * Yang SENGAJA tidak ikut: gagal berturut-turut. Itu sudah dihitung halaman
+ * (`gagalBerturut` di room.js) dan dipakai event acak inspektorat; menghitung
+ * ulang di server berarti ruangan menampilkan DUA angka untuk satu fakta.
+ * Menyatukannya pekerjaan tersendiri.
+ *
+ * NOTA, BUKAN REM: tidak ada yang ditahan, tidak ada tool yang ditolak.
+ */
+const PUTAR_TOOL_EDIT = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const PUTAR_ULANG_MIN = 3;      // berapa kali operasi sama berturut-turut
+const PUTAR_BOLAK_MIN = 2;      // berapa putaran a→b→a
+const PUTAR_RIWAYAT = 12;       // panjang jejak per sesi yang disimpan
+const putarSesi = new Map();    // sesi -> { jejak: [sidik], edit: [berkas], tanda: '' }
+
+/* Sidik jari satu operasi. Dihitung dari `tool_input` MENTAH, bukan dari
+   `ev.label` yang sudah dipotong dan diterjemahkan: dua Read atas berkas yang
+   sama tapi offset berbeda bukan pengulangan, dan labelnya tidak membedakan
+   keduanya. */
+function sidikTool(tool, input) {
+  const i = input && typeof input === 'object' ? input : {};
+  const p = (v) => String(v == null ? '' : v).slice(0, 200);
+  switch (tool) {
+    case 'Read': case 'NotebookRead':
+      return 'read:' + p(i.file_path || i.notebook_path) + '#' + p(i.offset || 0) + '+' + p(i.limit || 0);
+    case 'Edit': case 'Write': case 'MultiEdit': case 'NotebookEdit':
+      return 'edit:' + p(i.file_path || i.notebook_path) + '#' + p(i.old_string || i.new_string || i.content).slice(0, 80);
+    case 'Bash': case 'PowerShell':
+      return 'sh:' + p(i.command);
+    case 'Grep': case 'Glob':
+      return 'cari:' + p(i.pattern) + '@' + p(i.path);
+    default:
+      return tool + ':' + p(Object.values(i).find((v) => typeof v === 'string'));
+  }
+}
+
+/* Nama berkas yang disunting, untuk pola bolak-balik. Kosong = bukan suntingan,
+   jadi tidak ikut dihitung. */
+function berkasEdit(tool, input) {
+  if (!PUTAR_TOOL_EDIT.has(tool)) return '';
+  const i = input && typeof input === 'object' ? input : {};
+  return baseName(i.file_path || i.notebook_path || '');
+}
+
+/* Dipanggil dari `terimaEvent()` untuk kind `pre`. Mengembalikan penanda kalau
+   polanya BARU terdeteksi pada event ini, kosong kalau tidak — supaya notanya
+   terbit sekali per kejadian, bukan tiap tool call sesudahnya. */
+function periksaPutar(ev, raw) {
+  if (ev.kind !== 'pre' || !ev.tool) return '';
+  const s = putarSesi.get(ev.session) || { jejak: [], edit: [], tanda: '' };
+  putarSesi.set(ev.session, s);
+
+  const sidik = sidikTool(ev.tool, raw.tool_input);
+  s.jejak.push(sidik);
+  if (s.jejak.length > PUTAR_RIWAYAT) s.jejak.shift();
+
+  const berkas = berkasEdit(ev.tool, raw.tool_input);
+  if (berkas) {
+    s.edit.push(berkas);
+    if (s.edit.length > PUTAR_RIWAYAT) s.edit.shift();
+  }
+
+  // ulang-sama: ekor jejak yang seluruhnya sidik yang sama
+  let sama = 0;
+  for (let i = s.jejak.length - 1; i >= 0 && s.jejak[i] === sidik; i--) sama++;
+
+  // bolak-balik: a b a b … pada ekor daftar berkas yang disunting
+  let putaran = 0;
+  const e = s.edit;
+  if (e.length >= 4) {
+    const a = e[e.length - 1]; const b = e[e.length - 2];
+    if (a !== b) {
+      let i = e.length - 1;
+      while (i >= 0 && e[i] === (((e.length - 1 - i) % 2) ? b : a)) i--;
+      putaran = Math.floor((e.length - 1 - i) / 2);
+    }
+  }
+
+  const tanda = sama >= PUTAR_ULANG_MIN ? 'ulang-sama'
+    : putaran >= PUTAR_BOLAK_MIN ? 'bolak-balik' : '';
+  if (!tanda) { s.tanda = ''; return ''; }
+  if (s.tanda === tanda) return '';        // sudah dilaporkan; jangan berisik tiap call
+  s.tanda = tanda;
+  return tanda;
+}
 const MODEL_SAH = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 
 function modelDari(raw) {
@@ -341,7 +459,8 @@ const macetSesi = new Map();                // sesi 12-char -> { jenis, label, g
    yang sama waktu galat API menghentikannya, bukan cuma balon sesaat yang
    hilang begitu `rec.hasil` datang. */
 function tandaiMacet(sesi, jenis, label, galat) {
-  const keadaan = { jenis, label, galat: galat || '' };
+  const lalu = macetSesi.get(sesi);
+  const keadaan = { jenis, label, galat: galat || '', sejak: (lalu && lalu.sejak) || Date.now() };
   macetSesi.set(sesi, keadaan);
   return keadaan;
 }
@@ -606,6 +725,26 @@ function normalize(raw) {
   if (bawa && !modelSesi.has(ev.session)) modelSesi.set(ev.session, bawa);
   const model = modelSesi.get(ev.session);
   if (model) ev.model = model;
+  /* Mode kuasa disimpan sebagai STATUS, tidak pernah jadi peristiwa. Hook yang
+     menyala di dalam subagent memakai session_id INDUK tapi membawa mode-nya
+     sendiri (agen bawaan sering `dontAsk`), jadi menerbitkan event tiap kali
+     nilainya berubah akan berkedip palsu sepanjang hari. Yang terakhir
+     terlihat itulah yang berlaku; tidak ada kind baru, tidak ada baris agenda
+     baru, dan `?ulang=` tidak perlu tahu apa-apa soal ini. */
+  /* Hook yang menyala DI DALAM subagent memakai session_id induk tapi membawa
+     mode miliknya sendiri (agen bawaan sering `dontAsk`). Kalau itu ikut
+     disimpan, surat kuasa induk akan berkedip-kedip sepanjang hari antara
+     mode aslinya dan mode pesertanya. Jadi yang dipercaya cuma event yang
+     memang milik sesi utama — dan `agent_id` itulah pembedanya. */
+  if (raw.permission_mode && !raw.agent_id) modeSesi.set(ev.session, clip(raw.permission_mode, 20));
+  const modeKini = modeSesi.get(ev.session);
+  if (modeKini) {
+    /* Field PASIF, bukan peristiwa: tidak ada kind baru, dan `agendaBaris()`
+       memakai daftar putih jadi keduanya tidak pernah sampai ke disk. Halaman
+       memerlukannya karena ia tidak pernah menanyai `/ruangan`. */
+    ev.mode = modeKini;
+    ev.kuasa = kuasaDari(modeKini);
+  }
   if (tool === 'Task' || tool === 'Agent' || tool === 'Workflow') {
     ev.peserta = pesertaRapat(tool, raw.tool_input);
   }
@@ -675,7 +814,14 @@ function normalize(raw) {
     : kind === 'pre' && TOOL_TANYA.has(tool) ? 'tanya'
     : '';
   if (sebab) {
-    const keadaan = { sebab, alasan: ev.alasan || '', label: ev.label || '' };
+    /* `sejak` bertahan selama sesi itu belum lepas dari tertahan: permintaan
+       izin kedua dari sesi yang sama bukan tunggu baru, ia tunggu yang sama
+       yang belum dijawab. Yang mereset cuma pencabutan di cabang `else`. */
+    const lalu = butuhManusia.get(ev.session);
+    const keadaan = {
+      sebab, alasan: ev.alasan || '', label: ev.label || '',
+      sejak: (lalu && lalu.sejak) || Date.now(),
+    };
     butuhManusia.set(ev.session, keadaan);
     ev.butuh = keadaan;
   } else if (butuhManusia.delete(ev.session)) {
@@ -705,6 +851,9 @@ function catatSesiHidup(ev) {
   if (ev.cabang !== undefined) s.cabang = ev.cabang || '';
   if (ev.mesin) s.mesin = ev.mesin;
   if (ev.tool) { s.tool = ev.tool; s.toolTs = ev.ts; }
+  if (ev.putar) { s.putar = ev.putar; s.putarTs = ev.ts; }
+  const mode = modeSesi.get(ev.session);
+  if (mode) s.mode = mode;
   sesiHidup.set(ev.session, s);
   catatPesertaHidup(ev);
 }
@@ -783,6 +932,10 @@ function potretRuangan() {
       jk: jkDari(namaSesi.get(id) || ''),
       peran: peranSesi.get(id) || '',
       model: modelSesi.get(id) || '',
+      mode: s.mode || '',
+      putar: s.putar || '',
+      konteks: konteksSesi.get(id) || null,
+      kuasa: kuasaDari(s.mode || ''),
       proyek: s.cwd || '',
       cabang: s.cabang || '',
       mesin: s.mesin || '',
@@ -791,8 +944,11 @@ function potretRuangan() {
       kind: s.kind || '',
       sejak: s.sejak,
       terakhir: s.terakhir,
-      butuh: butuh ? { sebab: butuh.sebab } : null,
-      macet: macet ? { jenis: macet.jenis } : null,
+      /* `sejak` ikut supaya yang bertanya lewat MCP tidak perlu lagi menebak
+         lama tertahan dari `terakhir` — dua hal yang berbeda: sesi bisa terus
+         mengirim event sambil tetap menunggu dijawab. */
+      butuh: butuh ? { sebab: butuh.sebab, sejak: butuh.sejak || null } : null,
+      macet: macet ? { jenis: macet.jenis, sejak: macet.sejak || null } : null,
       /* Field TAMBAHAN, bukan pengganti: konsumen lama (`orang()` di
          uji-pegawai.mjs, kartu pegawai, mcp-room) tidak berubah artinya. */
       peserta,
@@ -1003,6 +1159,25 @@ function jalurTranskrip(raw) {
    basi. Menghitung dolarnya sendiri berarti memelihara tabel harga per model
    yang berubah tiap Anthropic mengubah harga — sengaja belum dilakukan. */
 const tokenSesi = new Map();                // sesi 12-char -> { input, output, cacheTulis, cacheBaca }
+const konteksSesi = new Map();              // sesi 12-char -> { pakai, jendela, rasio }
+/* Jendela konteks yang diasumsikan. SENGAJA tidak ditebak dari nama model:
+   `modelDari()` mendahulukan nama tampilan, yang berubah antar versi, jadi
+   mencocokkan '1m' di sana adalah tebakan yang akan salah diam-diam.
+   Urutannya: env yang disetel sadar, lalu PENGAMATAN — begitu sebuah sesi
+   pernah terlihat memakai lebih dari jendela bawaan, jendelanya dinaikkan dan
+   tidak pernah turun lagi sampai sesi itu berakhir. Data mengalahkan tebakan. */
+const KONTEKS_BAWAAN = Number(process.env.AGENT_ROOM_KONTEKS) || 200000;
+const KONTEKS_BESAR = 1000000;
+function konteksPakai(sesi, d) {
+  const pakai = d.input + d.cacheBaca + d.cacheTulis;
+  const lalu = konteksSesi.get(sesi);
+  let jendela = (lalu && lalu.jendela) || KONTEKS_BAWAAN;
+  if (pakai > jendela && jendela < KONTEKS_BESAR) jendela = KONTEKS_BESAR;
+  const rasio = jendela > 0 ? Math.min(1, Math.round((pakai / jendela) * 1000) / 1000) : 0;
+  const k = { pakai, jendela, rasio };
+  konteksSesi.set(sesi, k);
+  return { konteks: pakai, jendela, rasio };
+}
 
 /* ------------------------------------------------------ riwayat token -----
    tokenSesi di atas cuma hidup di memori selama SATU sesi — restart server
@@ -1689,6 +1864,8 @@ function agendaBaris(ev) {
   if (ev.lambat) b.lambat = true;                         // tool MCP > 8 detik
   if (ev.tunda) b.tunda = true;                           // diserap dari kotak surat hook offline
   if (ev.model) b.model = ev.model;
+  // enum dua nilai, bukan isi kerja — aman ikut ke disk seperti sebab tertahan
+  if (ev.putar) b.putar = ev.putar;
   if (ev.nama) b.nama = ev.nama;
   if (ev.peran) b.peran = ev.peran;
   if (ev.mesin) b.mesin = ev.mesin;
@@ -2679,6 +2856,9 @@ function pegawaiLepas(sesi) {
   namaSesi.delete(sesi);
   peranSesi.delete(sesi);
   modelSesi.delete(sesi);
+  modeSesi.delete(sesi);
+  putarSesi.delete(sesi);
+  konteksSesi.delete(sesi);
   const alamat = slotSesi.get(sesi);
   if (!alamat) return;
   slotSesi.delete(sesi);
@@ -3099,7 +3279,16 @@ function serapTranskrip(sesi, rec, o) {
     const t = tokenSesi.get(sesi) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
     t.input += d.input; t.output += d.output; t.cacheTulis += d.cacheTulis; t.cacheBaca += d.cacheBaca;
     tokenSesi.set(sesi, t);
-    publish({ ...dasar(), kind: 'token', token: { ...t } });
+    /* Seberapa penuh jendela konteksnya SEKARANG. Angkanya bukan jumlah
+       kumulatif seperti `t`, melainkan ukuran prompt permintaan TERAKHIR:
+       masuk + cache dibaca + cache ditulis pada baris asisten ini. Itulah yang
+       benar-benar dikirim ke model, dan itulah yang akan memicu pemadatan.
+
+       Sesi terminal tidak pernah memberitahu ini dengan cara lain — pemilik
+       baru tahu waktu balon "merapikan catatan" muncul, dan sesudah itu agen
+       sering lupa arahan awal. */
+    const konteks = konteksPakai(sesi, d);
+    publish({ ...dasar(), kind: 'token', token: { ...t, ...konteks } });
     riwayatCatat(Number.isFinite(ts) ? ts : Date.now(), baseName(o.cwd || ''), modelSesi.get(sesi), d);
   }
 }
@@ -3153,6 +3342,7 @@ function serapStream(rec, sid, m) {
   }
   if (m.type === 'system' && m.subtype === 'init') {
     if (m.model && !modelSesi.has(sesi)) modelSesi.set(sesi, m.model);
+    if (m.permissionMode) modeSesi.set(sesi, String(m.permissionMode).slice(0, 20));
     if (!rec.hidup) {
       publish(dasar({ kind: 'session-start', label: 'lewat stream-json',
                       model: modelSesi.get(sesi) }));
@@ -4014,6 +4204,14 @@ function terimaEvent(raw, opsi = {}) {
     if (Number.isFinite(opsi.ts) && opsi.ts > 0) ev.ts = opsi.ts;
   }
   tandaiHidup(ev.session);
+  /* Pola berputar-putar dihitung dari kejadian HIDUP saja. Event yang
+     diserap dari kotak surat offline datang berjam-jam terlambat dan
+     berurutan rapat, jadi ia akan memalsukan pengulangan yang tidak pernah
+     terjadi — preseden yang sama dengan laporKeluar() di bawah. */
+  if (!opsi.tunda) {
+    const putar = periksaPutar(ev, raw);
+    if (putar) ev.putar = putar;
+  }
   /* Pelantikan pegawai tetap dulu, baru kegiatannya diumumkan: halaman harus
      tahu siapa orangnya sebelum melihat apa yang dikerjakannya. Event 'nama'
      terbit sekali per penempatan dan SENGAJA tidak masuk buku agenda sama
@@ -4153,6 +4351,19 @@ function metrikTeks() {
   metrik('agent_room_events_total', 'counter', 'Event yang disiarkan lewat publish() sejak proses hidup.', [['', metrikEventTotal]]);
   metrik('agent_room_viewers', 'gauge', 'Klien SSE /stream yang sedang tersambung.', [['', clients.size]]);
   metrik('agent_room_sesi_hidup', 'gauge', 'Sesi Claude Code yang masih mengirim hook (jendela 3 jam).', [['', potret.sesi.length]]);
+  /* Berapa sesi hidup di tiap mode kuasa. Kardinalitasnya kecil dan tetap
+     (enum CLI), jadi aman jadi label — beda dari nama proyek. */
+  const perMode = new Map();
+  for (const s of potret.sesi) {
+    const m = s.mode || 'tak-diketahui';
+    perMode.set(m, (perMode.get(m) || 0) + 1);
+  }
+  metrik('agent_room_sesi_mode', 'gauge', 'Sesi hidup menurut mode izinnya (permission_mode).',
+    [...perMode].map(([m, n]) => ['mode="' + m + '"', n]));
+  /* Rasio TERTINGGI di antara sesi hidup: yang ingin dipantau orang adalah
+     'apakah ADA sesi yang hampir kehilangan ingatan', bukan rata-ratanya. */
+  const rasioMaks = potret.sesi.reduce((m, s) => Math.max(m, (s.konteks && s.konteks.rasio) || 0), 0);
+  metrik('agent_room_konteks_rasio', 'gauge', 'Rasio jendela konteks terpenuh di antara sesi hidup (1.0 = penuh).', [['', rasioMaks]]);
   metrik('agent_room_peserta_hidup', 'gauge', 'Subagent yang masih tercatat hidup di bawah sesi induknya.', [['', potret.delegasi.hidup]]);
   metrik('agent_room_peserta_diam', 'gauge', 'Subagent hidup yang tidak terdengar lebih dari sepuluh menit.', [['', potret.delegasi.diam]]);
   metrik('agent_room_sesi_tertahan', 'gauge', 'Sesi hidup yang tertahan: butuh manusia atau macet karena galat.',
@@ -4986,7 +5197,10 @@ const server = http.createServer(async (req, res) => {
     // Event yang sama bentuknya dengan izin-minta dari hook, ditambah `paraf`:
     // pose butuh manusia, pengingat terkatung, dan nota dinas keluar semuanya
     // ikut jalan tanpa perlu tahu dari mana izinnya datang.
-    const keadaan = { sebab: 'izin', alasan: ringkasan, label: ringkasan };
+    /* Jam tunggunya diambil dari `izin.sejak` yang sudah ada, bukan dibuat
+       baru: satu permintaan paraf harus punya SATU sumber waktu, kalau tidak
+       kartu dan register bisa menyebut dua angka untuk kejadian yang sama. */
+    const keadaan = { sebab: 'izin', alasan: ringkasan, label: ringkasan, sejak: izin.sejak };
     butuhManusia.set(sesi, keadaan);
     const ev = {
       id: ++seq, ts: izin.sejak, kind: 'izin-minta', session: sesi,

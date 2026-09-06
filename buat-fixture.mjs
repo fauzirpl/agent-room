@@ -134,6 +134,8 @@ const MAKS_BYTE_BAWAAN = 96000;
  *   durasi     cuma dipakai panel /agenda, bukan ruangan
  *   lambat, tunda, jenis   penanda server, tidak dibaca handle() */
 export const BIDANG_PUTIH = new Set([
+  // enum dua nilai dari detektor berputar-putar; bukan isi kerja
+  'putar',
   'ts', 'kind', 'session', 'cwd', 'cabang', 'tool', 'label', 'ok',
   'galat', 'alasan', 'interupsi', 'model', 'nama', 'peran', 'mesin',
   'agen', 'agenId', 'panggilan', 'golongan', 'sebelumnya', 'peserta',
