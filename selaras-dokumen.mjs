@@ -265,6 +265,71 @@ function pasanganMetrik() {
   } else oke('tidak ada metrik hantu di dokumen');
 }
 
+/* ================================================== 5. PAPAN INFORMASI ===== */
+/* Papan "Tentang kantor ini" (dibuka dengan mengklik X-banner di ruangan)
+   menyebutkan nama paket, alamat repo, cara menjalankan, dan syarat Node.
+   Semuanya SALINAN dari package.json, dan salinan yang tidak dijaga akan
+   berbohong pada hari repo dipindah atau paketnya diganti nama — persis kelas
+   hanyut yang berkas ini memang ada untuk mencegahnya. Bedanya dengan empat
+   pasangan di atas: yang diadu kode vs MANIFES, bukan kode vs dokumen.
+
+   Yang TIDAK diperiksa di sini: nomor versi, karena papan itu memang sengaja
+   tidak menyebut versi (halaman tidak punya jalan membacanya — lihat catatan
+   di blok "papan informasi" room.js). Kalau suatu saat servernya menerbitkan
+   versi, tambahkan pemeriksaannya di sini juga, jangan cuma diketik di papan. */
+function pasanganTentang() {
+  seksi('5. PAPAN INFORMASI — string di room.js vs package.json');
+  const room = baca('public/room.js');
+  let pkg = {};
+  try { pkg = JSON.parse(baca('package.json') || '{}'); } catch { pkg = {}; }
+
+  const repoPkg = String((pkg.repository && pkg.repository.url) || '')
+    .replace(/^git\+/, '').replace(/\.git$/, '');
+  const mRepo = room.match(/const TENTANG_REPO = '([^']+)'/);
+  const repoRoom = mRepo ? mRepo[1] : '';
+  const mBaris = room.match(/const TENTANG_BARIS = \[([\s\S]*?)\n\];/);
+  const isi = mBaris ? mBaris[1] : '';
+
+  if (!repoRoom || !isi) {
+    hanyut('papan informasi tidak terbaca di room.js',
+      'cari TENTANG_REPO / TENTANG_BARIS — kalau namanya diganti, perbarui pola di sini');
+    return;
+  }
+  if (!repoPkg) {
+    hanyut('package.json tidak punya repository.url', 'papan informasi tidak bisa diadu ke apa pun');
+    return;
+  }
+
+  if (repoRoom === repoPkg) oke('alamat repo sama dengan package.json (' + repoPkg + ')');
+  else hanyut('alamat repo di papan informasi beda dengan package.json',
+    'room.js "' + repoRoom + '" vs package.json "' + repoPkg + '"');
+
+  const nama = String(pkg.name || '');
+  if (nama && isi.includes('<code>' + nama + '</code>')) oke('nama paket "' + nama + '" disebut apa adanya');
+  else hanyut('nama paket di papan informasi tidak cocok package.json#name',
+    'harap menyebut <code>' + nama + '</code>');
+
+  // `npx github:<pemilik>/<paket>` harus menunjuk repo yang sama, bukan repo lama
+  const jalur = repoPkg.replace(/^https?:\/\/github\.com\//, '');
+  if (isi.includes('npx github:' + jalur)) oke('perintah jalan menunjuk ' + jalur);
+  else hanyut('perintah "npx github:…" di papan tidak menunjuk repo di package.json',
+    'harap "npx github:' + jalur + '"');
+
+  const mNode = String((pkg.engines && pkg.engines.node) || '').match(/(\d+)/);
+  if (mNode) {
+    if (isi.includes('Node ' + mNode[1] + ' ke atas')) oke('syarat Node ' + mNode[1] + ' sama dengan engines.node');
+    else hanyut('syarat Node di papan beda dengan package.json#engines',
+      'engines.node "' + pkg.engines.node + '" — papan harus menulis "Node ' + mNode[1] + ' ke atas"');
+  }
+
+  const adaDep = Object.keys(pkg.dependencies || {}).length > 0;
+  const klaimTanpa = isi.includes('tanpa dependensi');
+  if (adaDep === !klaimTanpa) oke(adaDep ? 'papan tidak mengklaim tanpa dependensi' : 'klaim "tanpa dependensi" benar');
+  else hanyut('klaim dependensi di papan tidak cocok package.json',
+    adaDep ? 'package.json punya dependencies — cabut klaim "tanpa dependensi" dari papan'
+           : 'dependencies kosong — papan boleh (dan sebaiknya) menyebutnya');
+}
+
 /* ------------------------------------------------------------- jalankan --- */
 
 console.log(tebal('selaras-dokumen') + abu(' — permukaan protokol di kode vs dokumentasinya'));
@@ -272,6 +337,7 @@ pasanganHook();
 pasanganUji();
 pasanganEnv();
 pasanganMetrik();
+pasanganTentang();
 
 if (PENGECUALIAN.length) {
   seksi('Pengecualian yang sedang berlaku');
@@ -280,5 +346,5 @@ if (PENGECUALIAN.length) {
 
 console.log('\n' + (temuan
   ? merah(tebal(temuan + ' hanyut')) + (PERIKSA ? '' : abu('  (jalankan dengan --periksa untuk menggagalkan)'))
-  : hijau(tebal('SELARAS')) + abu(' — empat pasangan cocok')));
+  : hijau(tebal('SELARAS')) + abu(' — lima pasangan cocok')));
 process.exit(PERIKSA && temuan ? 1 : 0);

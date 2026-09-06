@@ -54,7 +54,94 @@ const LANE_DOWN = 252;     // lajur di depan meja rapat
 const LANE_L = 160;        // penghubung kiri, celah antara bendera dan karpet
 const LANE_R = 337;        // penghubung kanan
 
+/* Pantri. SATU sumber angka untuk dua hal yang dulu terpisah: bentuk sekat
+   yang digambar drawPantry(), dan rintangan yang dihindari route().
+
+   Sekatnya dulu cuma gambar. Diukur dengan memanggil route() yang asli untuk
+   lima titik asal (meja kerja, meja rapat, lemari arsip, ruang tunggu, rak
+   server) x dua belas tujuan pantri yang benar-benar dipakai event: 60 dari 60
+   jalur menembus panel kirinya di y=252 — persis di lajur bawah. Penulis event
+   sudah menghindarinya satu per satu dengan tangan ("berhenti sebelum sekat
+   pantry (x414)", "berakhir di x=404, aman dari sekat kiri pantry", "x=452
+   tidak bisa: pantry menempati x414..478"), yang artinya beban itu ada di
+   orang, bukan di router. Sekarang di router.
+
+   Tapaknya SENGAJA tidak berubah (x414..478, y196..288): puluhan event sudah
+   menaruh orang di koordinat dalamnya, dan sortY prop-nya dikunci golden
+   z-order. Yang baru cuma BUKAAN PINTU di panel kiri — sebelumnya panel itu
+   utuh dari atas ke bawah, jadi pantri ini secara harfiah tidak punya jalan
+   masuk, dan satu-satunya cara semua orang selama ini masuk adalah menembus
+   kayunya.
+
+   pintu 256..280 dipilih dari tiga batasan sekaligus: di bawah stul meja kafe
+   (berhenti y=262) supaya orang lewat tidak menembusnya, di atas tong sampah
+   (mulai y=278), dan ambangnya (272) HARUS lebih besar dari sortY prop pantri
+   (270) — kalau tidak, orang yang berdiri di ambang pintu digambar DI BELAKANG
+   sekatnya sendiri dan terlihat tertelan. */
+const PANTRI = {
+  x: 414, y: 196, w: 64, h: 92,      // tapak sekat, sama seperti sebelumnya
+  tebal: 6,                          // tebal panel kiri
+  atas: 7,                           // tinggi panel belakang
+  pintuY: 256, pintuH: 24,           // bukaan di panel kiri: y 256..280
+};
+PANTRI.x1 = PANTRI.x + PANTRI.w;                     // 478
+PANTRI.y1 = PANTRI.y + PANTRI.h;                     // 288
+// Garis kaki orang yang lewat pintu. BUKAN titik tengah bukaan (268), tapi
+// 272: harus lebih besar dari sortY prop pantri (270), kalau tidak orang yang
+// sedang di ambang digambar DI BELAKANG sekatnya sendiri dan terlihat tertelan.
+PANTRI.ambang = 272;
+const PANTRI_LUAR = 404;    // titik tunggu di depan pintu, masih di luar sekat
+const PANTRI_DALAM = 428;   // titik pertama di dalam, sesudah kusen
+/* Kolom memutar untuk yang tujuannya di lantai BAWAH pantri. Bukan 404 seperti
+   pintunya: turun di 404 berarti menginjak kaki kipas berdiri (x390..410,
+   y292..295, drawKipas). 380 bebas perabot dari lajur bawah sampai y=300, dan
+   mendatar di y=300 lewat DI BAWAH kaki kipas dan DI ATAS deret meja (y322). */
+const PANTRI_MEMUTAR = 380;
+const PANTRI_BAWAH = 300;
+// Di dalam RUANG pantri (bukan di kayu sekatnya, bukan di lantai bawahnya).
+const diPantri = (x, y) => x > PANTRI.x + PANTRI.tebal
+  && y > PANTRI.y + PANTRI.atas && y < PANTRI.y1;
+/* Kantong: lantai di BAWAH pantri. Satu-satunya jalan antara kantong ini dan
+   sisa ruangan adalah menyusur di depan sekat — lewat mana pun selain itu
+   menembus tapak pantri, dan itulah yang dilakukan tiga event yang menyuruh
+   orang ke (444,300)/(452,300) sebelum ini. */
+const diKantongPantri = (x, y) => x > PANTRI.x && y >= PANTRI.y1;
+
+/* Jendela BACA untuk harness uji (uji-pantri.mjs), pola yang sama dengan
+   sisipRujukan() di blok ruang kadis: deklarasi FUNGSI, bukan const, karena
+   di classic script cuma function declaration yang otomatis jadi properti
+   objek global — jadi harness bisa mengambil konstanta blok ini tanpa
+   menyentuh __jembatan__ milik uji-event.mjs (berkas orang lain). Tidak ada
+   jalur mutasi di sini: yang dikembalikan objek aslinya, dan yang menghitung
+   jalur tetap route() yang dipakai halaman sungguhan. */
+function pantriRujukan() {
+  return {
+    PANTRI, PANTRI_LUAR, PANTRI_DALAM, PANTRI_MEMUTAR, PANTRI_BAWAH,
+    diPantri, diKantongPantri, LANE_UP, LANE_DOWN, STATIONS,
+  };
+}
+
 const canvas = document.getElementById('room');
+/* Supersampling (HD). Kisi logika ruangan TETAP 480x356: semua koordinat di
+   berkas ini, semua golden uji, dan kamera tidak berubah sedikit pun. Yang
+   berubah cuma berapa piksel nyata yang berdiri di balik satu piksel dunia.
+   Kanvasnya dibikin SS kali lebih besar lalu ctx diskalakan SS kali, jadi satu
+   piksel dunia = kotak SS x SS piksel kanvas.
+
+   Yang KOTAK tetap kotak: r()/fillRect berkoordinat bulat jatuh persis di
+   batas kotak SS x SS, jadi pixel-art-nya tidak jadi kabur. Yang BUKAN kotak
+   akhirnya punya piksel sungguhan alih-alih tangga 480 px yang diperbesar
+   peramban: teks papan nama & layar, arc jam/rambu, gradien lantai, glow
+   lampu, foto pejabat yang miring, dan semua detail HD di bawah yang memang
+   ditulis dalam pecahan piksel dunia.
+
+   SS dihitung fit() dari skala tampil x devicePixelRatio, jadi kanvasnya tidak
+   pernah lebih kasar dari layar yang menampilkannya; ?hd=1..4 memaksa angka,
+   ?hd=0 mengunci SS=1 -- kisi 480x356 apa adanya seperti sebelum ada berkas
+   ini, buat mesin lemah atau buat membandingkan. Bahan baru (serat cat,
+   terazo, bayangan) TETAP digambar di SS=1, cuma butirnya kembali sekasar
+   satu piksel dunia; yang dimatikan resolusinya, bukan desainnya. */
+let SS = 1;
 canvas.width = W;
 canvas.height = H;
 const ctx = canvas.getContext('2d');
@@ -99,6 +186,8 @@ for (const el of [document.documentElement, document.body]) {
 const RUANG_URL = MODE_URL.get('ruang') || '';
 const ULANG_URL = MODE_URL.get('ulang') || '';
 const ULANG_LAJU = Number(MODE_URL.get('laju')) || 0;
+// ?hd= : piksel nyata per piksel dunia (lihat SS di atas). null = otomatis.
+const HD_PAKSA = MODE_URL.has('hd') ? Math.max(0, Number(MODE_URL.get('hd')) || 0) : null;
 
 function fit() {
   // overlay: stageInner full-bleed (padding 0), jadi tepi 36 px yang biasa
@@ -112,6 +201,11 @@ function fit() {
   scale = MODE_OVERLAY ? Math.max(1, Math.floor(s)) : s >= 2 ? Math.floor(s) : Math.max(0.6, s);
   canvas.style.width = W * scale + 'px';
   canvas.style.height = H * scale + 'px';
+  // Piksel nyata di balik kisi: sebanyak yang benar-benar dipakai layar
+  // (skala CSS x devicePixelRatio), dibulatkan ke atas. Dibatasi 3 supaya laju
+  // gambar tidak jatuh di layar HiDPI besar -- 3 sudah 9x piksel.
+  pasangSS(HD_PAKSA != null ? HD_PAKSA
+    : Math.min(3, Math.ceil(scale * (window.devicePixelRatio || 1))));
   const cr = canvas.getBoundingClientRect();
   const pr = stageInner.getBoundingClientRect();
   offX = cr.left - pr.left;
@@ -119,6 +213,40 @@ function fit() {
   panggungW = pr.width;
 }
 new ResizeObserver(fit).observe(stageInner);
+
+/* Mengubah ukuran kanvas MENGHAPUS isinya dan mengembalikan state ctx ke
+   bawaan, jadi ini cuma jalan waktu SS benar-benar berganti, bukan tiap
+   ResizeObserver. Yang di-cache seukuran kanvas -- pendar neon, vignette --
+   ikut dibuang supaya tidak tertinggal di resolusi lama. */
+function pasangSS(s) {
+  s = Math.max(1, Math.min(4, Math.round(s) || 1));
+  if (s === SS) return;
+  SS = s;
+  canvas.width = W * SS;
+  canvas.height = H * SS;
+  ctx.imageSmoothingEnabled = false;
+  /* Kanvas SS kali diserahkan ke peramban untuk dipaskan ke ukuran CSS. SS=1:
+     itu perbesaran, dan 'pixelated' yang benar supaya piksel tetap kotak.
+     SS>1: buffernya lebih rapat dari layar, jadi yang dibutuhkan justru
+     penyaringan halus -- itu bagian "sampling" dari supersampling. Tanpa ini
+     satu piksel dunia bisa jatuh jadi 2 baris layar di satu tempat dan 3 di
+     tempat lain (skala tampil 1,81 x dpr 1,25 di layar penulisnya), yang
+     kebaca sebagai garis tepi belang -- persis keluhan "kurang HD" itu.
+
+     KECUALI overlay. Penyaringan halus bekerja dengan MENCAMPUR piksel
+     bertetangga, dan di ?overlay=chroma tetangga tiap sprite adalah hijau
+     #00ff00: campurannya jadi piksel setengah hijau yang tidak bisa dibuang
+     chroma key dan menyisakan rumbai hijau di sekeliling pegawai. 'pixelated'
+     tidak pernah mencampur apa pun, jadi overlay tetap memakainya -- teks dan
+     lengkungnya tetap naik resolusi lewat SS, cuma penskalaan akhirnya yang
+     dijaga tidak membaurkan warna. */
+  canvas.style.imageRendering = SS > 1 && !MODE_OVERLAY ? 'auto' : 'pixelated';
+  neonCache.length = 0;
+  vignetteCache = null;
+  vignetteKunci = '';
+  dindingCache = null;
+  lantaiCache = null;
+}
 
 /* ---------------------------------------------------------------- palette */
 const P = {
@@ -663,16 +791,368 @@ function kedipNeon(i) {
   return Math.max(0, fl * MOD.lampu * (1 - MOD.neonMati[i]));
 }
 
-function drawWall() {
-  r(0, 0, W, 70, P.cream);                       // dinding atas krem
-  r(0, 70, W, 30, P.mint);                       // wainscot hijau mint
-  r(0, 70, W, 2, P.rail);
-  r(0, 100, W, 10, P.base);                      // plin bawah
-  r(0, 108, W, 2, sh(P.base, 0.7));
-  for (let x = 96; x < W; x += 96) {             // garis pilar samar
-    r(x, 4, 1, 66, P.creamD);
-    r(x, 72, 1, 28, P.mintD);
+/* ================================================================ bahan ===
+   Dinding dan lantai dulu bidang warna rata: dua pita cat di atas, satu kisi
+   ubin di bawah. Begitu jumlah pikselnya dinaikkan (SS di kepala berkas),
+   justru itu yang paling kelihatan datar -- yang kurang bukan resolusinya,
+   melainkan BAHANNYA. Tiga lapisan di bawah menambahkan bahan itu: serat cat
+   dan jatuh cahaya di dinding, terazo dan kilap nat di lantai, lalu bayangan
+   tempel supaya perabot berdiri di atas lantai alih-alih ditempel padanya.
+
+   Dua yang pertama STATIS -- tidak menyentuh now, RUANGAN, maupun MOD -- jadi
+   digambar SEKALI ke kanvas offscreen dan sesudahnya cuma satu drawImage per
+   frame. Tanpa itu ribuan fillRect serat/terazo diulang 60 kali sedetik demi
+   gambar yang sama persis. Cache-nya dibuang tiap SS berganti (pasangSS)
+   karena isinya digambar dalam piksel kanvas, bukan piksel dunia. */
+
+/* Acak yang TETAP: satu pola untuk selamanya, bukan Math.random(). Lantai
+   yang bintik terazonya pindah tiap muat ulang bukan lantai, itu kedipan. */
+function acakTetap(a, b) {
+  let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x165667b1, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 15), 0x27d4eb2f);
+  h = Math.imul(h ^ (h >>> 13), 0x165667b1);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/* Kanvas offscreen selebar ruangan, setinggi `tinggi` satuan dunia, sudah
+   diskalakan SS -- jadi isinya ditulis dalam koordinat dunia biasa dan
+   1/SS adalah satu piksel kanvas: setipis yang bisa digambar. */
+function kanvasBahan(tinggi) {
+  const c = document.createElement('canvas');
+  c.width = W * SS;
+  c.height = Math.round(tinggi * SS);
+  const k = c.getContext('2d');
+  k.setTransform(SS, 0, 0, SS, 0, 0);
+  return [c, k, (x, y, w, h, col) => { k.fillStyle = col; k.fillRect(x, y, w, h); }];
+}
+
+let dindingCache = null, dindingKunci = '';
+function dindingLapis() {
+  if (dindingCache && dindingKunci === String(SS)) return dindingCache;
+  const [c, k, rk] = kanvasBahan(FLOOR_TOP);
+  const p = 1 / SS;                              // satu piksel kanvas
+
+  rk(0, 0, W, 70, P.cream);                      // dinding atas krem
+  rk(0, 70, W, 30, P.mint);                      // wainscot hijau mint
+  rk(0, 100, W, 10, P.base);                     // plin bawah
+
+  /* Serat cat rol: bintik setipis satu piksel kanvas, dua arah -- terang DAN
+     gelap. Yang cuma gelap kebaca sebagai kotor; yang dua arah kebaca sebagai
+     permukaan yang benar-benar dicat. Di ?hd=0 (SS=1) p jadi 1 dan seratnya
+     rontok kembali ke bintik pixel-art seperti dulu. */
+  for (let y = 1; y < 100; y++) {
+    for (let x = 0; x < W; x += 2) {
+      const a = acakTetap(x, y * 2);
+      if (a < 0.80) continue;
+      const mint = y >= 70;
+      k.globalAlpha = 0.03 + (a - 0.80) * 0.30;
+      k.fillStyle = a > 0.90 ? (mint ? '#e6f3ea' : '#fffaf0') : (mint ? '#5f7d68' : '#a89c80');
+      k.fillRect(x + (a * 10 | 0) % 2, y, p * 2, p);
+    }
   }
+  k.globalAlpha = 1;
+
+  /* Jatuh cahaya. Lampu TL menempel di plafon, jadi dinding paling terang di
+     pucuk dan makin redup ke kaki. Ini yang memberi dinding ARAH; sebelumnya
+     krem 0..70 benar-benar satu nilai dari plafon sampai lis. */
+  const gd = k.createLinearGradient(0, 0, 0, 100);
+  gd.addColorStop(0, 'rgba(255,252,238,0.22)');
+  gd.addColorStop(0.30, 'rgba(255,250,232,0.05)');
+  gd.addColorStop(0.70, 'rgba(38,46,40,0.05)');
+  gd.addColorStop(1, 'rgba(28,36,30,0.17)');
+  k.fillStyle = gd;
+  k.fillRect(0, 0, W, 100);
+
+  // pilar samar: garis gelap seperti dulu, DITAMBAH sisi terang setipis satu
+  // piksel kanvas, jadi kebaca sebagai tonjolan pilaster bukan goresan
+  for (let x = 96; x < W; x += 96) {
+    rk(x, 4, 1, 66, P.creamD);
+    rk(x, 72, 1, 28, P.mintD);
+    k.globalAlpha = 0.45;
+    k.fillStyle = '#fffaf0'; k.fillRect(x + 1, 4, p, 66);
+    k.fillStyle = '#e2f2e6'; k.fillRect(x + 1, 72, p, 28);
+    k.globalAlpha = 1;
+  }
+
+  // lis pemisah: tiga tingkat -- pucuk kena cahaya, badan, lalu bayangan yang
+  // jatuh ke wainscot di bawahnya. Dulu satu pita rata 2 px tanpa arah.
+  rk(0, 68, W, 2, sh(P.rail, 1.24));
+  rk(0, 70, W, 2, P.rail);
+  k.globalAlpha = 0.30; k.fillStyle = '#1d2a22';
+  k.fillRect(0, 72, W, 2.5);
+  k.globalAlpha = 1;
+
+  // sudut dinding-lantai: plin dan lantai di kakinya tidak pernah seterang
+  // bidang di atasnya. Tanpa ini dinding kebaca mengambang di atas ubin.
+  const gp = k.createLinearGradient(0, 94, 0, FLOOR_TOP);
+  gp.addColorStop(0, 'rgba(18,26,20,0)');
+  gp.addColorStop(1, 'rgba(18,26,20,0.30)');
+  k.fillStyle = gp;
+  k.fillRect(0, 94, W, FLOOR_TOP - 94);
+
+  // pucuk plin dikembalikan terang DI ATAS gradasi: itu bibir yang menonjol
+  rk(0, 100, W, 1, sh(P.base, 1.4));
+  k.globalAlpha = 0.5; k.fillStyle = sh(P.base, 1.7);
+  k.fillRect(0, 101, W, p);
+  k.globalAlpha = 1;
+  rk(0, 108, W, 2, sh(P.base, 0.7));
+
+  dindingCache = c; dindingKunci = String(SS);
+  return c;
+}
+
+let lantaiCache = null, lantaiKunci = '';
+function lantaiLapis() {
+  if (lantaiCache && lantaiKunci === String(SS)) return lantaiCache;
+  const FH = H - FLOOR_TOP;
+  const [c, k, rk] = kanvasBahan(FH);            // y=0 di lapisan ini = FLOOR_TOP
+  const p = 1 / SS;
+
+  rk(0, 0, W, FH, P.tile);
+  for (let gy = 0; gy * 24 < FH + 24; gy++) {
+    for (let gx = 0; gx * 24 < W; gx++) {
+      const y = gy * 24, x = gx * 24;
+      if ((gx * 7 + gy * 13) % 5 === 0) rk(x + 1, y + 1, 23, 23, P.tileD);   // ubin belel
+
+      /* Nada per-ubin: tiap ubin sedikit beda tua-mudanya, seperti ubin yang
+         dipasang dari beberapa dus berbeda. Satu rect per ubin, dan justru
+         ini yang paling cepat menghapus kesan "kisi digambar komputer". */
+      const nada = acakTetap(gx * 7919 + 11, gy * 6271 + 3);
+      k.globalAlpha = 0.04 + nada * 0.08;
+      k.fillStyle = nada > 0.5 ? '#ffffff' : '#59665a';
+      k.fillRect(x, y, 24, 24);
+
+      /* Terazo. Ubin kantor dinas memang ubin agregat, dan serpihnya yang
+         membuat lantai punya bahan alih-alih jadi bidang abu-abu rata.
+         Butirnya sebesar SATU piksel KANVAS -- setengah piksel dunia waktu
+         SS=2 -- jadi dari jarak tonton dia tidak kebaca sebagai bintik,
+         melainkan sebagai permukaan yang bertekstur. Itu bagian yang paling
+         langsung menjawab "kurang HD": di SS=1 butir sehalus ini memang
+         tidak punya tempat untuk digambar. */
+      for (let i = 0; i < 56; i++) {
+        const u = acakTetap(gx * 131 + i * 7717, gy * 977 + i * 13);
+        const v = acakTetap(gy * 419 + i * 6131, gx * 263 + i * 29);
+        const t = acakTetap(gx * 31337 + i * 101, gy * 17389 + i * 37);
+        k.globalAlpha = 0.16 + t * 0.42;
+        k.fillStyle = t > 0.80 ? '#fbfcf7' : t > 0.52 ? '#9ba396' : t > 0.24 ? '#7d857a' : '#cfc7ae';
+        k.fillRect(x + 1 + u * 22, y + 1 + v * 22, p * (t > 0.86 ? 2 : 1), p * (t > 0.62 ? 2 : 1));
+      }
+      k.globalAlpha = 1;
+
+      /* Ubin retak. Dulu SATU bentuk yang sama persis di tiap ubin terpilih:
+         di kisi 480 px itu lolos, tapi begitu resolusinya naik, stensil yang
+         berulang itu langsung kebaca sebagai tanda panah, bukan sebagai
+         retak. Sekarang tiap ubin dapat patahannya sendiri -- empat ruas
+         dengan panjang dan belokan dari acakTetap -- dan digambar lebih
+         tipis (satu setengah piksel kanvas) supaya retak yang jauh tidak
+         lebih tegas daripada nat di sebelahnya. */
+      if ((gx * 11 + gy * 3) % 17 === 0) {
+        k.strokeStyle = P.grout;
+        k.lineWidth = Math.max(p, 1.5 * p);
+        k.beginPath();
+        let rx = x + 3 + acakTetap(gx * 811, gy * 409) * 8;
+        let ry = y + 4 + acakTetap(gy * 613, gx * 227) * 14;
+        k.moveTo(rx, ry);
+        for (let j = 0; j < 4; j++) {
+          rx += 2 + acakTetap(gx * 97 + j * 71, gy * 173 + j * 13) * 5;
+          ry += acakTetap(gy * 89 + j * 37, gx * 151 + j * 59) * 8 - 4;
+          k.lineTo(rx, ry);
+        }
+        k.stroke();
+        k.lineWidth = 1;
+      }
+    }
+  }
+
+  /* Nat: garis gelap seperti dulu, DITAMBAH kilap setipis satu piksel kanvas
+     di sisi seberangnya. Bibir terang itulah yang membuat ubin terbaca
+     menonjol dan lantainya terbaca dipoles, bukan sekadar kisi garis. */
+  for (let y = 0; y < FH; y += 24) {
+    k.globalAlpha = 0.55; k.fillStyle = '#6f776c';       // sisi atas masuk bayangan
+    k.fillRect(0, y - p, W, p);
+    k.globalAlpha = 1; rk(0, y, W, 1, P.grout);
+    k.globalAlpha = 0.85; k.fillStyle = '#f7f9f4';       // bibir ubin berikutnya kena cahaya
+    k.fillRect(0, y + 1, W, p); k.globalAlpha = 1;
+  }
+  for (let x = 0; x < W; x += 24) {
+    k.globalAlpha = 0.4; k.fillStyle = '#6f776c';
+    k.fillRect(x - p, 0, p, FH);
+    k.globalAlpha = 1; rk(x, 0, 1, FH, P.grout);
+    k.globalAlpha = 0.7; k.fillStyle = '#f7f9f4';
+    k.fillRect(x + 1, 0, p, FH); k.globalAlpha = 1;
+  }
+
+  /* Lantai pantri: ubin keramik kecil 12 px, bukan terazo 24 px seperti sisa
+     ruangan. Ini yang paling murah membuat pantri terbaca sebagai RUANG LAIN
+     dan bukan sebagai perabot yang kebetulan berkumpul di pojok — orang
+     mengenali batas ruangan dari lantainya sebelum dari sekatnya. Digambar di
+     lapisan lantai (bukan di drawPantry) supaya orang yang berdiri di dalam
+     pantri tidak ketimpa ubinnya sendiri: prop pantri ber-sortY 270, jadi
+     siapa pun di y<270 akan tertutup kalau lantainya ikut digambar di sana. */
+  {
+    const ax = PANTRI.x + PANTRI.tebal, ay = PANTRI.y + PANTRI.atas - FLOOR_TOP;
+    const aw = PANTRI.x1 - ax + 2, ah = PANTRI.y1 - PANTRI.y - PANTRI.atas;
+    rk(ax, ay, aw, ah, '#e3dccb');
+    for (let i = 0; i < 60; i++) {                    // bintik halus, senada terazo
+      const u = acakTetap(i * 7717 + 13, 991), v = acakTetap(i * 6131 + 5, 733);
+      k.globalAlpha = 0.20 + v * 0.2;
+      k.fillStyle = v > 0.5 ? '#f7f3e8' : '#bdb6a4';
+      k.fillRect(ax + u * (aw - 1), ay + v * (ah - 1), p, p);
+    }
+    k.globalAlpha = 1;
+    for (let y = ay; y < ay + ah; y += 12) {           // nat ubin kecil
+      k.globalAlpha = 0.7; rk(ax, y, aw, 1, '#cbc3b0'); k.globalAlpha = 1;
+      k.globalAlpha = 0.8; k.fillStyle = '#fbf7ee'; k.fillRect(ax, y + 1, aw, p); k.globalAlpha = 1;
+    }
+    for (let x = ax; x < ax + aw; x += 12) {
+      k.globalAlpha = 0.55; rk(x, ay, 1, ah, '#cbc3b0'); k.globalAlpha = 1;
+      k.globalAlpha = 0.65; k.fillStyle = '#fbf7ee'; k.fillRect(x + 1, ay, p, ah); k.globalAlpha = 1;
+    }
+    // sudut tempat lantai bertemu sekat: gelap, seperti sudut dinding di atas
+    const gk = k.createLinearGradient(ax, 0, ax + 7, 0);
+    gk.addColorStop(0, 'rgba(20,28,22,0.26)'); gk.addColorStop(1, 'rgba(20,28,22,0)');
+    k.fillStyle = gk; k.fillRect(ax, ay, 7, ah);
+  }
+
+  // gradasi lantai lama (hangat di kaki dinding, dingin di tepi bawah layar)
+  const fg = k.createLinearGradient(0, 0, 0, FH);
+  fg.addColorStop(0, 'rgba(255,250,230,.16)');
+  fg.addColorStop(1, 'rgba(60,70,60,.16)');
+  k.fillStyle = fg;
+  k.fillRect(0, 0, W, FH);
+
+  // bayangan sudut yang dijatuhkan dinding ke ubin di kakinya
+  const ga = k.createLinearGradient(0, 0, 0, 15);
+  ga.addColorStop(0, 'rgba(20,28,22,0.30)');
+  ga.addColorStop(1, 'rgba(20,28,22,0)');
+  k.fillStyle = ga;
+  k.fillRect(0, 0, W, 15);
+
+  // kilap poles: satu pita cahaya lebar sejajar deret jendela
+  const gs = k.createLinearGradient(150, 0, 330, FH);
+  gs.addColorStop(0, 'rgba(255,255,246,0)');
+  gs.addColorStop(0.45, 'rgba(255,255,246,0.075)');
+  gs.addColorStop(1, 'rgba(255,255,246,0)');
+  k.fillStyle = gs;
+  k.fillRect(0, 0, W, FH);
+
+  lantaiCache = c; lantaiKunci = String(SS);
+  return c;
+}
+
+/* Kuas bayangan: satu gradasi radial digambar sekali ke sprite kecil, lalu
+   ditarik-lebarkan jadi elips di tiap kaki perabot. Satu sprite + drawImage
+   jauh lebih murah daripada createRadialGradient dua puluh kali per frame. */
+let bayangSprite = null;
+function bayangBulat() {
+  if (bayangSprite) return bayangSprite;
+  const n = 64;
+  const c = document.createElement('canvas'); c.width = n; c.height = n;
+  const k = c.getContext('2d');
+  const g = k.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  g.addColorStop(0, 'rgba(22,30,24,1)');
+  g.addColorStop(0.42, 'rgba(22,30,24,0.62)');
+  g.addColorStop(1, 'rgba(22,30,24,0)');
+  k.fillStyle = g; k.fillRect(0, 0, n, n);
+  bayangSprite = c;
+  return c;
+}
+
+/* Bayangan tempel di kaki perabot -- penambah kedalaman termurah yang ada.
+   Tanpa dia tiap benda kebaca DITEMPEL ke lantai, bukan BERDIRI di atasnya,
+   dan itu sisa rasa datar yang paling terasa sesudah resolusinya dinaikkan.
+
+   Tabelnya ditulis tangan, bukan diukur otomatis: PROPS tidak menyimpan lebar
+   maupun garis pijak, dan memindai piksel tiap frame jauh lebih mahal
+   daripada tiga belas baris angka. Angkanya diambil dari fungsi gambar
+   masing-masing (drawArsip x26 w56 dasar 118, drawServer x364 w52 dasar 118,
+   drawPlant x20 y258, ...). Meja rapat TIDAK ada di sini: drawRapat sudah
+   menggambar bayangannya sendiri, dan meja kerja dibaca dari MEJA_KERJA_X
+   supaya tidak ada tabel kedua yang bisa basi waktu deretnya digeser.
+   x = titik tengah, y = garis pijak, w/h = poros elips, a = kepekatan. */
+const BAYANG_KAKI = [
+  { x: 54,  y: 119, w: 68, h: 12, a: 0.34 },   // lemari arsip
+  { x: 132, y: 119, w: 56, h: 11, a: 0.30 },   // filing kabinet
+  { x: 286, y: 119, w: 74, h: 11, a: 0.26 },   // meja stempel
+  { x: 390, y: 119, w: 60, h: 12, a: 0.34 },   // rak server
+  { x: 348, y: 133, w: 20, h: 6,  a: 0.26 },   // ember bocor di bawah AC
+  { x: 29,  y: 241, w: 36, h: 9,  a: 0.26 },   // x-banner
+  { x: 95,  y: 113, w: 28, h: 8,  a: 0.26 },   // papan visi-misi (kaki X, dasar 112)
+  { x: 133, y: 275, w: 22, h: 7,  a: 0.28 },   // tiang bendera
+  { x: 33,  y: 296, w: 34, h: 10, a: 0.30 },   // pot tanaman
+  { x: 59,  y: 298, w: 22, h: 7,  a: 0.24 },   // meja buku tamu
+  { x: 400, y: 298, w: 32, h: 9,  a: 0.28 },   // kipas berdiri
+  { x: 446, y: 289, w: 68, h: 11, a: 0.24 },   // sekat pantry
+  { x: 471, y: 290, w: 26, h: 8,  a: 0.28 },   // dispenser
+  { x: 441, y: 290, w: 16, h: 6,  a: 0.26 },   // tong sampah
+];
+
+function bayangKaki() {
+  const s = bayangBulat();
+  ctx.imageSmoothingEnabled = true;      // elips lembut, bukan tangga kotak
+  for (const b of BAYANG_KAKI) {
+    ctx.globalAlpha = b.a;
+    ctx.drawImage(s, b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+  }
+  ctx.globalAlpha = 0.26;
+  for (const cx of MEJA_KERJA_X) ctx.drawImage(s, cx - 33, 343, 66, 11);
+  ctx.globalAlpha = 1;
+  ctx.imageSmoothingEnabled = false;
+}
+
+/* Bayangan benda yang MENGGANTUNG di dinding. Sengaja dua kotak pejal yang
+   digeser, bukan elips kabur: bendanya persegi dan gaya ruangan ini pixel-art,
+   jadi bayangan bertepi tajam justru yang benar. Yang bundar (jam dinding,
+   rambu larangan merokok) memakai kuas elips.
+
+   Tabel dibangun saat dipanggil pertama kali, bukan sebagai const di sini:
+   JENDELA baru dideklarasikan jauh di bawah, dan menyalin angkanya ke sini
+   berarti menaruh satu angka yang bisa basi diam-diam. */
+let bayangDindingTabel = null;
+function tabelBayangDinding() {
+  if (bayangDindingTabel) return bayangDindingTabel;
+  const J = JENDELA;
+  bayangDindingTabel = [
+    { x: 18,  y: 7,  w: 134, h: 15 },                              // papan nama dinas
+    { x: 4,   y: 4,  w: 10,  h: 8  },                              // kubah CCTV
+    { x: J.x - 8, y: J.y - 8, w: J.w + 16, h: J.h + 12 },          // ceruk jendela
+    { x: 159, y: 45, w: 18,  h: 16 },                              // monitor CRT
+    { x: 158, y: 54, w: 16,  h: 20 },                              // kalender dinding
+    { x: 210, y: 30, w: 16,  h: 10 },                              // papan nomor antre
+    { x: 336, y: 14, w: 38,  h: 13 },                              // AC split
+    { x: 376, y: 16, w: 40,  h: 30 },                              // plakat nilai
+    { x: 268, y: 6,  w: 14,  h: 16 },                              // foto pejabat kiri
+    { x: 296, y: 6,  w: 18,  h: 16 },                              // lambang garuda
+    { x: 158, y: 28, w: 20,  h: 20, bulat: true },                 // jam dinding
+    { x: 425, y: 39, w: 11,  h: 11, bulat: true },                 // rambu dilarang merokok
+  ];
+  return bayangDindingTabel;
+}
+
+function bayangDinding() {
+  ctx.imageSmoothingEnabled = true;
+  for (const b of tabelBayangDinding()) {
+    if (b.bulat) {
+      ctx.globalAlpha = 0.20;
+      ctx.drawImage(bayangBulat(), b.x - 1, b.y + 1, b.w + 6, b.h + 6);
+      continue;
+    }
+    // dua tingkat: penumbra lebar yang samar, lalu inti yang lebih pekat --
+    // arah cahayanya neon plafon, jadi jatuhnya ke kanan-bawah
+    ctx.globalAlpha = 0.09;
+    r(b.x + 1, b.y + 2, b.w + 3, b.h + 3, '#2a2f28');
+    ctx.globalAlpha = 0.13;
+    r(b.x + 2, b.y + 3, b.w, b.h, '#232821');
+  }
+  ctx.globalAlpha = 1;
+  ctx.imageSmoothingEnabled = false;
+}
+
+function drawWall() {
+  // Bidang cat, serat, jatuh cahaya, lis, plin, pilar: semuanya statis, jadi
+  // satu lapisan bahan yang ditempel sekali (lihat dindingLapis()).
+  ctx.drawImage(dindingLapis(), 0, 0, W, FLOOR_TOP);
+  bayangDinding();      // bayangan benda gantung, SEBELUM bendanya digambar
 
   // Noda plafon rembes hujan, di atas lemari arsip. Permanen begitu muncul,
   // dan melebar tiap kali hujan deras terjadi lagi — dinding ini memang
@@ -788,18 +1268,9 @@ function drawWall() {
 /* ----------------------------------------------------------------- lantai */
 function drawFloor() {
   const FH = H - FLOOR_TOP;
-  r(0, FLOOR_TOP, W, FH, P.tile);
-  for (let gy = 0; gy * 24 < FH + 24; gy++) {
-    for (let gx = 0; gx * 24 < W; gx++) {
-      const y = FLOOR_TOP + gy * 24, x = gx * 24;
-      if ((gx * 7 + gy * 13) % 5 === 0) r(x + 1, y + 1, 23, 23, P.tileD);   // ubin belel
-      if ((gx * 11 + gy * 3) % 17 === 0) {                                   // ubin retak
-        ctx.strokeStyle = P.grout; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x + 4, y + 18); ctx.lineTo(x + 14, y + 8);
-        ctx.lineTo(x + 19, y + 12); ctx.stroke();
-      }
-    }
-  }
+  // Ubin, terazo, retak prosedural, nat berkilap, gradasi, bayangan sudut,
+  // kilap poles: semuanya statis, jadi satu lapisan tempel (lantaiLapis()).
+  ctx.drawImage(lantaiLapis(), 0, FLOOR_TOP, W, FH);
   // Retakan tambahan dari event ubin-retak-nambah, gaya sama dengan yang
   // prosedural di atas tapi posisinya tersimpan — jadi permanen dan bisa
   // dihindari, bukan cuma dekorasi yang muncul ulang tiap frame di tempat baru.
@@ -811,14 +1282,6 @@ function drawFloor() {
     ctx.lineTo(x + 12 + Math.round(k.t * 5), y + 12 + Math.round(k.t * 7));
     ctx.stroke();
   }
-  for (let y = FLOOR_TOP; y < H; y += 24) r(0, y, W, 1, P.grout);          // nat
-  for (let x = 0; x < W; x += 24) r(x, FLOOR_TOP, 1, H - FLOOR_TOP, P.grout);
-  const fg = ctx.createLinearGradient(0, FLOOR_TOP, 0, H);
-  fg.addColorStop(0, 'rgba(255,250,230,.16)');
-  fg.addColorStop(1, 'rgba(60,70,60,.16)');
-  ctx.fillStyle = fg;
-  ctx.fillRect(0, FLOOR_TOP, W, FH);
-
   // Karpet merah membingkai meja rapat. RUANGAN.karpetCerah dipasang
   // karpet-rapat-digulung-dijemur: sesudah dijemur warnanya naik satu tingkat
   // dan TIDAK turun lagi — bekas yang hidup lebih lama dari eventnya, sama
@@ -850,6 +1313,7 @@ function drawFloor() {
   }
 
   gambarKusutLantai();      // ceceran yang menumpuk sepanjang hari
+  bayangKaki();             // kaki perabot menapak, bukan menempel
 
   // berkas cahaya jendela — warnanya ikut langit di luar
   const A = ambien();
@@ -1841,6 +2305,40 @@ function sisipBidik() {
   KAMERA.targetY = SISIP.y + SISIP.h / 2;
   KAMERA.targetZoom = SISIP_ZOOM;
 }
+/* Bidikan kamera ke X-banner. Kamera menjepit bidikan supaya tidak melihat
+   keluar ruangan (tickKamera), dan banner ini menempel di tepi KIRI: pada
+   zoom 4 pusatnya terjepit ke x=60, jadi bannernya duduk di sepertiga kiri
+   layar, bukan di tengah. Itu justru dipakai — papan informasinya muncul
+   rata kanan, jadi banner dan keterangannya berdampingan seperti benda
+   pameran dan plakatnya, bukan saling tutup. */
+function bannerBidik() {
+  KAMERA.targetX = XBANNER.x + XBANNER.w / 2;
+  KAMERA.targetY = XBANNER.y + XBANNER.h / 2;
+  KAMERA.targetZoom = XBANNER_ZOOM;
+}
+
+/* Klik di X-banner: menyalakan zoom, dan panel informasinya menyusul begitu
+   kameranya sampai (tickBanner). Klik kedua di banner yang sama menutup. */
+function klikBanner(cx, cy) {
+  if (cx < XBANNER.x || cx > XBANNER.x + XBANNER.w) return false;
+  if (cy < XBANNER.y || cy > XBANNER.y + XBANNER.h) return false;
+  if (BANNER.zoom) { tutupTentang(); return true; }
+  RUANG_KADIS.zoom = false;      // dua bidikan tidak boleh menyala bersamaan
+  BANNER.zoom = true;
+  BANNER.dibuka = false;
+  return true;
+}
+
+/* Panel dibuka begitu kamera BENAR-BENAR sampai, bukan sesudah jeda tetap:
+   dengan prefers-reduced-motion kameranya langsung sampai (tickKamera memakai
+   k=1), dan panel yang tetap menunggu 600 ms akan terasa macet. */
+function tickBanner() {
+  if (!BANNER.zoom || BANNER.dibuka) return;
+  if (Math.abs(KAMERA.zoom - XBANNER_ZOOM) > 0.2) return;
+  BANNER.dibuka = true;
+  bukaTentang();
+}
+
 /* Klik di dalam kotak bukaan yang TIDAK mengenai pegawai (pegawai menang
    dulu, aturan yang sudah ada di canvas click) menyalakan / mematikan zoom. */
 function klikSisip(cx, cy) {
@@ -2221,50 +2719,144 @@ function drawStiker() {
    ditutup penuh: orang yang lewat ke meja 444 tetap jalan lurus, bukan
    muter cari pintu yang tidak ada. */
 function drawPantry() {
-  const px = 414, py = 196, pw = 64, ph = 92;
+  const px = PANTRI.x, py = PANTRI.y, pw = PANTRI.w, ph = PANTRI.h;
+  const tb = PANTRI.tebal, ta = PANTRI.atas;
+  const p0 = PANTRI.pintuY, p1 = PANTRI.pintuY + PANTRI.pintuH;
 
-  // sekat: panel kayu rendah, dua sisi
-  r(px, py, pw, 7, P.wood);
-  r(px, py, pw, 1, sh(P.wood, 1.3));
-  r(px, py, 6, ph, P.wood);
-  r(px, py, 1, ph, sh(P.wood, 1.3));
+  /* ---- sekat. Dulu dua pita kayu rata satu nada: kebaca sebagai BINGKAI,
+     bukan sebagai dinding -- dan memang tidak pernah diperlakukan sebagai
+     dinding oleh kaki siapa pun (lihat PANTRI di kepala berkas). Sekarang tiap
+     panel punya pucuk yang kena lampu, muka, kaki yang masuk bayangan, dan
+     bayangan yang dijatuhkannya ke lantai pantri. */
+  r(px, py, pw, ta, P.wood);                            // panel belakang
+  r(px, py, pw, 2, sh(P.wood, 1.34));                   // pucuk, kena lampu plafon
+  r(px, py + ta - 1, pw, 1, sh(P.woodD, 0.75));         // kaki panel
+  ctx.globalAlpha = 0.26;
+  r(px + tb, py + ta, pw - tb, 3, '#1b2620');
+  ctx.globalAlpha = 0.12;
+  r(px + tb, py + ta + 3, pw - tb, 4, '#1b2620');
+  ctx.globalAlpha = 1;
+
+  const panelKiri = (y0, y1) => {                       // panel kiri, DIPOTONG pintu
+    r(px, y0, tb, y1 - y0, P.wood);
+    r(px, y0, 1, y1 - y0, sh(P.wood, 1.34));            // sisi yang menghadap ruangan
+    r(px + tb - 1, y0, 1, y1 - y0, sh(P.woodD, 0.8));   // sisi dalam, lebih gelap
+  };
+  panelKiri(py, p0);
+  panelKiri(p1, py + ph);
+  ctx.globalAlpha = 0.2;
+  r(px + tb, py + ta, 3, p0 - py - ta, '#1b2620');
+  r(px + tb, p1, 3, py + ph - p1, '#1b2620');
+  ctx.globalAlpha = 1;
+
+  /* ---- kusen pintu. Ujung potong panel di kedua sisi bukaan dibuat sedikit
+     lebih lebar dan lebih terang: itu yang membuat celah ini kebaca sebagai
+     PINTU, bukan sebagai sekat yang kebetulan kurang panjang. Bukaannya sendiri
+     bukan hiasan -- route() memaksa setiap kaki lewat sini (masukPantri/
+     keluarPantri), jadi pintu di gambar dan pintu di jalur adalah benda yang
+     sama, diambil dari angka yang sama. */
+  for (const ky of [p0 - 3, p1]) {
+    r(px - 1, ky, tb + 2, 3, sh(P.wood, 1.16));
+    r(px - 1, ky, tb + 2, 1, sh(P.wood, 1.5));
+    r(px - 1, ky + 2, tb + 2, 1, sh(P.woodD, 0.78));
+  }
+  r(px, p0, tb, p1 - p0, '#9aa2a7');                    // pelat ambang, logam kusam
+  r(px + 2, p0, 1, p1 - p0, '#c3cacd');                 // satu garis kilau saja
+  ctx.globalAlpha = 0.4;                                // kusen menjatuhkan bayangan
+  r(px, p0, tb, 2, '#141c17');                          // ke dalam bukaan: itu yang
+  r(px, p1 - 2, tb, 2, '#141c17');                      // membuat lubangnya punya dalam
+  ctx.globalAlpha = 1;
 
   // papan nama gantung, tulisan tangan -- gaya sama dengan plang/spanduk lain
   r(px + 14, py - 9, 26, 9, P.paper);
   r(px + 14, py - 9, 26, 1, '#ffffff');
+  r(px + 14, py - 1, 26, 1, sh('#d9d4c2', 0.92));
   ctx.fillStyle = '#2c3440';
   ctx.font = '6px "Courier New", monospace';
   ctx.textBaseline = 'middle';
   ctx.fillText('PANTRI', px + 17, py - 4);
 
-  // counter nempel sekat atas: wastafel + oven kecil berjajar
-  const cy = py + 7;
-  r(px + 8, cy, 52, 15, '#c9cdd1');
-  r(px + 8, cy, 52, 2, '#e4e7ea');
+  /* ---- counter. Dulu satu kotak abu rata setinggi 15 px dengan wastafel dan
+     "oven" ditempel di atasnya, tanpa bidang bawah sama sekali -- yang bikin
+     dia kebaca sebagai RAK GANTUNG, bukan sebagai meja. Sekarang dua bidang
+     yang jelas: meja kerja atas (dilihat dari atas) dan lemari bawah (dilihat
+     dari depan). Lemarinya sengaja laminasi pucat, BUKAN kayu sekat: dua
+     cokelat bertumpuk membuat orang membaca lemari itu sebagai bagian dari
+     sekat, dan counter-nya melayang lagi. */
+  const cy = py + ta;                                   // 203
+  r(px + 8, cy, 52, 10, '#c6cbcd');                     // meja, permukaan
+  r(px + 8, cy, 52, 1, '#e8ecee');                      // pucuk kena lampu plafon
+  for (let i = 0; i < 34; i++) {                        // bintik granit
+    const u = acakTetap(i * 977, 31), v = acakTetap(i * 613, 17);
+    ctx.globalAlpha = 0.26 + v * 0.3;
+    ctx.fillStyle = v > 0.55 ? '#eef1f2' : '#8d9498';
+    ctx.fillRect(px + 9 + u * 49, cy + 1 + v * 8, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+  r(px + 8, cy + 9, 52, 1, sh('#c6cbcd', 0.6));         // bibir meja, menggantung
+  r(px + 9, cy + 10, 50, 10, '#ddd6c4');                // lemari bawah, laminasi pucat
+  r(px + 9, cy + 10, 50, 1, '#f1ece0');
+  r(px + 33, cy + 11, 1, 8, '#b6ae99');                 // sambungan dua daun pintu
+  r(px + 9, cy + 11, 1, 8, '#b6ae99');
+  r(px + 58, cy + 11, 1, 8, '#b6ae99');
+  r(px + 28, cy + 14, 4, 1, '#7c838a');                 // tarikan pintu
+  r(px + 36, cy + 14, 4, 1, '#7c838a');
+  ctx.globalAlpha = 0.34;                               // kolong lemari
+  r(px + 9, cy + 20, 50, 2, '#1b2620');
+  ctx.globalAlpha = 1;
 
-  r(px + 11, cy + 1, 17, 11, '#4a5560');             // wastafel, kontur -- biar lepas dari counter
-  r(px + 12, cy + 2, 15, 9, '#f4f6f8');              // bibir, putih terang
-  r(px + 14, cy + 4, 11, 6, '#20242c');              // cekungan, gelap pekat
-  r(px + 18, py - 2, 2, 9, '#565d66');               // pipa naik
-  r(px + 15, py, 8, 2, '#565d66');                   // kepala keran
-  r(px + 16, py, 2, 1, '#a8b1ba');                   // kilau logam
-  if (Math.sin(now / 260) > 0.85) r(px + 18, cy + 6, 1, 3, '#7ec8f0');  // tetes sesekali
+  // wastafel: bak baja TERTANAM di meja -- rim terang, cekungan gelap, lubang
+  // buangan. Yang lama cuma kotak gelap yang ditempel di atas counter.
+  r(px + 11, cy + 1, 20, 8, '#9aa1a6');
+  r(px + 12, cy + 2, 18, 6, '#eef2f4');                 // bibir bak
+  r(px + 13, cy + 3, 16, 4, '#454e55');                 // cekungan
+  r(px + 13, cy + 3, 16, 1, '#2f363c');                 // sisi jauh paling gelap
+  r(px + 20, cy + 5, 2, 1, '#1b2024');                  // lubang buangan
+  r(px + 19, cy - 8, 2, 9, '#b6bec4');                  // batang keran
+  r(px + 19, cy - 8, 1, 9, '#e6ecef');                  // sisi kena lampu
+  r(px + 15, cy - 8, 6, 2, '#b6bec4');                  // leher angsa
+  r(px + 15, cy - 8, 6, 1, '#e6ecef');
+  r(px + 15, cy - 6, 1, 4, '#b6bec4');                  // moncong turun ke bak
+  r(px + 18, cy - 10, 4, 2, '#8a9298');                 // tuas
+  r(px + 18, cy - 10, 4, 1, '#c2cace');
+  if (Math.sin(now / 260) > 0.85) r(px + 15, cy - 1, 1, 4, '#7ec8f0');   // tetes sesekali
 
-  r(px + 32, cy + 1, 16, 15, '#33383e');             // oven, badan
-  r(px + 34, cy + 4, 12, 9, '#191c21');              // jendela
-  r(px + 35, cy + 5, 10, 7, '#2a4f8a');
-  r(px + 35, cy - 1, 2, 2, '#c9cdd1'); r(px + 44, cy - 1, 2, 2, '#c9cdd1'); // dial
-  r(px + 33, cy + 16, 14, 1, '#7c838a');             // pegangan pintu
+  // microwave -- bukan "oven": bentuknya memang microwave meja, dan sekarang
+  // digambar begitu (pintu berjendela jaring, gagang batang, panel tombol)
+  const mx = px + 34, my = cy - 7;
+  r(mx, my, 21, 16, '#3a4046');
+  r(mx, my, 21, 1, '#5a6168');
+  r(mx + 1, my + 2, 12, 12, '#20242a');                 // jendela
+  r(mx + 2, my + 3, 10, 10, '#2f4d78');
+  for (let i = 0; i < 5; i++) r(mx + 2, my + 3 + i * 2, 10, 1, sh('#2f4d78', 0.72));  // jaring
+  r(mx + 14, my + 2, 6, 8, '#2a2f34');                  // panel tombol
+  r(mx + 15, my + 3, 4, 1, '#7ec8f0');                  // layar kecil
+  for (let i = 0; i < 3; i++) r(mx + 15 + (i % 2) * 3, my + 5 + ((i / 2) | 0) * 2, 2, 1, '#8d9498');
+  r(mx + 13, my + 3, 1, 10, '#8d9498');                 // gagang batang
+  r(mx + 1, my + 15, 19, 1, sh('#3a4046', 0.6));
 
-  // rak piring digantung di sekat atas, sisi kanan
+  // teko listrik, di ujung kanan meja
+  r(px + 57, cy - 1, 6, 8, '#dfe3e6');
+  r(px + 57, cy - 1, 6, 1, '#ffffff');
+  r(px + 63, cy + 1, 1, 3, '#b6bcc0');                  // corong
+  r(px + 56, cy + 2, 1, 3, '#b6bcc0');                  // pegangan
+  r(px + 58, cy + 6, 4, 1, '#9aa1a6');
+  r(px + 58, cy + 1, 1, 1, '#e8453f');                  // lampu indikator
+
+  // rak piring digantung di sekat belakang, sisi kanan
   r(px + 52, py + 1, 11, 2, P.woodD);
+  r(px + 52, py + 1, 11, 1, sh(P.woodD, 1.35));
   for (let i = 0; i < 3; i++) {
     r(px + 53 + i * 3, py - 2 - i * 2, 3, 7, '#eef0ea');
     r(px + 53 + i * 3, py - 2 - i * 2, 3, 1, P.blue);
+    r(px + 55 + i * 3, py - 2 - i * 2, 1, 7, sh('#eef0ea', 0.82));
   }
 
   // kardus arsip pindahan, ditumpuk di sudut sekat -- bekas yang dulu di
   // depan pintu kadis, sekarang jadi stok pantry
+  ctx.globalAlpha = 0.22;
+  r(px + 8, py + 44, 12, 2, '#1b2620');
+  ctx.globalAlpha = 1;
   r(px + 8, py + 34, 11, 11, '#a37b4e');
   r(px + 9, py + 35, 9, 4, '#b98d5e');
   r(px + 10, py + 26, 9, 9, '#b98d5e');
@@ -2274,12 +2866,23 @@ function drawPantry() {
   // meja makan kecil, satu kaki tengah -- meja kafe, beda siluet dari
   // meja rapat/meja kerja yang semuanya berkaki empat
   const tx = px + 28, ty = py + 56;
-  r(tx - 10, ty, 20, 3, P.wood);
-  r(tx - 10, ty, 20, 1, sh(P.wood, 1.3));
-  r(tx - 2, ty + 3, 4, 9, P.woodD);
-  r(tx - 5, ty + 11, 10, 2, P.woodD);
-  r(tx - 18, ty + 4, 7, 6, P.woodD);                 // stul kiri
-  r(tx + 13, ty + 4, 7, 6, P.woodD);                 // stul kanan
+  ctx.globalAlpha = 0.22;                            // bayangan meja & stul di ubin
+  r(tx - 9, ty + 12, 18, 3, '#1b2620');
+  r(tx - 17, ty + 9, 6, 2, '#1b2620');
+  r(tx + 14, ty + 9, 6, 2, '#1b2620');
+  ctx.globalAlpha = 1;
+  r(tx - 10, ty, 20, 4, P.wood);                     // daun meja, sekarang bertebal
+  r(tx - 10, ty, 20, 1, sh(P.wood, 1.34));
+  r(tx - 10, ty + 3, 20, 1, sh(P.woodD, 0.72));      // bibir daun
+  r(tx - 2, ty + 4, 4, 8, P.woodD);                  // tiang tengah
+  r(tx - 2, ty + 4, 1, 8, sh(P.woodD, 1.3));
+  r(tx - 5, ty + 11, 10, 2, P.woodD);                // kaki bundar
+  r(tx - 5, ty + 11, 10, 1, sh(P.woodD, 1.25));
+  for (const sx of [tx - 18, tx + 13]) {             // dua stul
+    r(sx, ty + 4, 7, 5, P.woodD);
+    r(sx, ty + 4, 7, 1, sh(P.woodD, 1.35));
+    r(sx + 2, ty + 9, 3, 2, sh(P.woodD, 0.7));
+  }
 }
 
 /* Dispenser pindah ke sini dari ruang tunggu -- pojok kanan pantry, x462..480
@@ -2883,8 +3486,43 @@ function drawPlant() {
 // rotasi canvas: cukup interpolasi lebar/tinggi kotak dan posisi kain,
 // tapi rangka silang di belakangnya tetap dua garis stroke sungguhan
 // (sudutnya dihitung, bukan kotak yang diputar).
+/* X-banner. Dulu tempelan dekor: kepala biru, satu blok emas "logo
+   bundar-ish", tiga pita abu sebagai teks palsu — bentuk yang benar dari
+   jauh dan tidak berarti apa-apa dari dekat. Sekarang dia PAPAN NAMA
+   aplikasinya sendiri, dan bisa diklik: kameranya membidik banner ini lalu
+   papan informasi (siapa yang membuat, ini apa, jalannya bagaimana) terbuka.
+
+   Kotaknya dipakai bertiga — menggambar, hit-test klik, dan bidikan kamera —
+   jadi satu sumber angka, sama seperti PANTRI. Wajahnya digambar dengan teks
+   dan bintang lengkung sungguhan, bukan pita abu: di kisi 480 px itu memang
+   mustahil terbaca, tapi kanvasnya sekarang SS kali lebih rapat (lihat SS di
+   kepala berkas) dan pada bidikan zoom 4 satu piksel dunia jadi 12 piksel
+   layar — cukup untuk huruf 5 px. Fitur ini yang paling langsung memakai
+   resolusi itu, bukan cuma menikmatinya. */
+const XBANNER = { x: 16, y: 188, w: 26, h: 52 };
+const XBANNER_ZOOM = 4;
+// Keadaan papan informasi: zoom kamera menyala, dan panelnya sudah dibuka
+// (dipisah karena panel baru muncul SESUDAH kameranya sampai — lihat tickBanner).
+const BANNER = { zoom: false, dibuka: false };
+
+/* Bintang lima sudut, digambar sebagai lengkung sungguhan. Di kanvas 480 px
+   bintang sekecil ini cuma jadi gumpalan; yang membuatnya berbentuk adalah
+   supersampling di kepala berkas. Dipakai lencana banner. */
+function bintangEmas(cx, cy, jari) {
+  ctx.fillStyle = P.gold;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 ? jari * 0.44 : jari;
+    const a = -Math.PI / 2 + i * Math.PI / 5;
+    const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+    if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 function drawXBanner() {
-  const x = 16, y = 188;   // di bawah LANE_UP, supaya tidak menelan pejalan
+  const x = XBANNER.x, y = XBANNER.y;   // di bawah LANE_UP, supaya tidak menelan pejalan
   const s = RUANGAN.xbanner.sudut;                          // 0 tegak .. 1 rebah
   if (s < 0.02) {
     ctx.strokeStyle = '#7c838a'; ctx.lineWidth = 1;
@@ -2892,11 +3530,32 @@ function drawXBanner() {
     ctx.moveTo(x, y + 52); ctx.lineTo(x + 26, y);
     ctx.moveTo(x + 26, y + 52); ctx.lineTo(x, y);
     ctx.stroke();
-    r(x + 1, y + 2, 24, 46, '#f0ede2');
-    r(x + 1, y + 2, 24, 8, '#1c4e8a');
-    r(x + 5, y + 14, 16, 12, P.gold);                      // logo bundar-ish
-    r(x + 9, y + 17, 8, 6, '#f0ede2');
-    for (let i = 0; i < 3; i++) r(x + 5, y + 30 + i * 5, 16 - i * 4, 2, '#8b98a6');
+
+    r(x + 1, y + 2, 24, 46, '#f4f1e6');                    // kain banner
+    r(x + 1, y + 2, 24, 1, '#ffffff');
+    r(x + 1, y + 47, 24, 1, '#d8d2be');
+
+    r(x + 1, y + 2, 24, 9, '#1c4e8a');                     // kepala, biru Korpri
+    r(x + 1, y + 2, 24, 1, '#4a7fc0');
+    bintangEmas(x + 13, y + 6.5, 3.3);                     // lencana bintang
+
+    ctx.textBaseline = 'middle';
+    ctx.font = '5px "Courier New", monospace';
+    ctx.fillStyle = '#22304a';
+    ctx.fillText('KANTOR', x + 4, y + 15);
+    ctx.fillStyle = P.red;
+    ctx.fillText('AGENT', x + 7, y + 21);
+    r(x + 5, y + 24, 16, 1, P.gold);                       // garis kop
+
+    for (let i = 0; i < 3; i++) {                          // tiga baris keterangan
+      r(x + 5, y + 28 + i * 4, 16 - i * 4, 1, '#8b98a6');
+    }
+    r(x + 1, y + 40, 24, 8, '#1c4e8a');                    // kaki, alamat repo
+    r(x + 1, y + 41, 24, 1, P.gold);
+    ctx.font = '4px "Courier New", monospace';
+    ctx.fillStyle = '#dfe8f4';
+    ctx.fillText('fauzirpl', x + 5, y + 45);
+
     if (RUANGAN.xbanner.lipat) r(x + 1, y + 24, 24, 1, '#c9c2ae');  // lipatan permanen
     return;
   }
@@ -3918,7 +4577,7 @@ function drawAmbien() {
     const a = A.lampu * kedipNeon(i);
     if (ringan) {                                          // dari cache, cuma alphanya yang hidup
       ctx.globalAlpha = Math.min(1, a);
-      ctx.drawImage(neonLapis(i), 0, 0);
+      ctx.drawImage(neonLapis(i), 0, 0, W, H);
       ctx.globalAlpha = 1;
       return;
     }
@@ -3936,7 +4595,7 @@ function drawAmbien() {
   });
   if (ringan) {
     ctx.globalAlpha = Math.min(1, 0.06 * A.lampu * MOD.lampu);
-    ctx.drawImage(neonLapis(NEON_X.length), 0, 0);
+    ctx.drawImage(neonLapis(NEON_X.length), 0, 0, W, H);
     ctx.globalAlpha = 1;
     return;
   }
@@ -3955,8 +4614,9 @@ const neonCache = [];
 function neonLapis(i) {
   let c = neonCache[i];
   if (c) return c;
-  c = document.createElement('canvas'); c.width = W; c.height = H;
+  c = document.createElement('canvas'); c.width = W * SS; c.height = H * SS;
   const k = c.getContext('2d');
+  k.setTransform(SS, 0, 0, SS, 0, 0);
   if (i < NEON_X.length) {
     const cx = NEON_X[i];
     k.globalAlpha = 0.07; k.fillStyle = '#ffcf8a';
@@ -4209,7 +4869,85 @@ let spawnIndex = 0;
 
 /* Rute memutari meja rapat. Kalau tujuan ada di lajur seberang, lewat
    penghubung kiri atau kanan — mana yang totalnya lebih pendek. */
+/* Sekat pantri diberlakukan DI SINI, satu lapis di atas router lajur yang
+   sudah ada. Sengaja bukan pencari-jalan umum: routeDasar() di bawah adalah
+   jalur yang dipakai setiap perjalanan di ruangan ini dan sudah dikunci
+   perilakunya oleh uji, dan pantri satu-satunya rintangan yang benar-benar
+   punya dinding. Satu penjaga untuk satu rintangan lebih jujur — dan lebih
+   mudah dibaca — daripada A* yang mengubah semua jalur demi satu pojok. */
 function route(ax, ay, aLane, bx, by, bLane) {
+  const dariDalam = diPantri(ax, ay), keDalam = diPantri(bx, by);
+  if (dariDalam && keDalam) return routeDasar(ax, ay, aLane, bx, by, bLane);  // pindah di dalam
+  if (keDalam) return masukPantri(ax, ay, aLane, bx, by);
+  if (dariDalam) return keluarPantri(ax, ay, bx, by, bLane);
+  // Dua-duanya di luar, tapi jalurnya masih bisa memotong tapak pantri —
+  // yang paling sering: tujuan di LANTAI DI BAWAH sekat (y>288, x>414), yang
+  // dulu ditempuh dengan menembus sekat lalu menyeberangi ruang pantri.
+  const p = routeDasar(ax, ay, aLane, bx, by, bLane);
+  let cx = ax, cy = ay;
+  for (const t of p) {
+    if (lewatTapakPantri(cx, cy, t.x, t.y)) return memutarPantri(ax, ay, aLane, bx, by, bLane);
+    cx = t.x; cy = t.y;
+  }
+  return p;
+}
+
+// Ruas lurus memotong tapak pantri? Tapaknya dijaga UTUH di sini (sekat +
+// ruang dalamnya): yang ujungnya memang di dalam sudah ditangani di atas,
+// jadi apa pun yang tersisa dan menyentuh kotak ini pasti sedang menerobos.
+function lewatTapakPantri(x0, y0, x1, y1) {
+  return Math.max(x0, x1) > PANTRI.x && Math.min(x0, x1) < PANTRI.x1
+      && Math.max(y0, y1) > PANTRI.y && Math.min(y0, y1) < PANTRI.y1;
+}
+
+// Masuk: rute biasa sampai depan pintu, lewat kusen, baru cari titiknya di dalam.
+function masukPantri(ax, ay, aLane, bx, by) {
+  // route(), bukan routeDasar(): yang berangkat dari kantong bawah harus ikut
+  // memutar dulu sebelum sampai di depan pintu. Tidak bisa berulang tak
+  // berujung — (PANTRI_LUAR, ambang) ada di luar pantri dan di luar kantong.
+  const p = route(ax, ay, aLane, PANTRI_LUAR, PANTRI.ambang, LANE_DOWN);
+  p.push({ x: PANTRI_DALAM, y: PANTRI.ambang });
+  if (Math.abs(bx - PANTRI_DALAM) > 4) p.push({ x: bx, y: PANTRI.ambang });
+  // Tepat, bukan "kira-kira": toleransi 4 px milik routeDasar boleh untuk
+  // stasiun yang lebar, tapi di dalam pantri tujuannya sempit (meja kafe,
+  // tong, dispenser) dan meleset 2 px sudah kelihatan berdiri di tempat salah.
+  return titikTepat(p, bx, by);
+}
+
+// Menutup jalur supaya benar-benar berujung di (bx, by), tanpa titik kembar.
+function titikTepat(p, bx, by) {
+  const akhir = p[p.length - 1];
+  if (!akhir || akhir.x !== bx || akhir.y !== by) p.push({ x: bx, y: by });
+  return p;
+}
+
+// Keluar: lurus ke ambang dulu, lewat kusen, baru rute biasa dari depan pintu.
+function keluarPantri(ax, ay, bx, by, bLane) {
+  const p = [];
+  if (Math.abs(ay - PANTRI.ambang) > 4) p.push({ x: ax, y: PANTRI.ambang });
+  if (Math.abs(ax - PANTRI_DALAM) > 4) p.push({ x: PANTRI_DALAM, y: PANTRI.ambang });
+  p.push({ x: PANTRI_LUAR, y: PANTRI.ambang });
+  return p.concat(route(PANTRI_LUAR, PANTRI.ambang, LANE_DOWN, bx, by, bLane));
+}
+
+/* Memutar tapak pantri lewat lantai di bawahnya: turun/naik dulu di kolom
+   bebas perabot, baru mendatar. Tiga cabang, sesuai ujung mana yang ada di
+   kantong bawah — kalau dua-duanya di sana, jalannya tidak perlu keluar
+   kantong sama sekali. */
+function memutarPantri(ax, ay, aLane, bx, by, bLane) {
+  const dariKantong = diKantongPantri(ax, ay), keKantong = diKantongPantri(bx, by);
+  if (dariKantong && keKantong) return [{ x: bx, y: ay }, { x: bx, y: by }];
+  if (dariKantong) {
+    return [{ x: PANTRI_MEMUTAR, y: ay }]
+      .concat(routeDasar(PANTRI_MEMUTAR, ay, aLane, bx, by, bLane));
+  }
+  const yBawah = Math.max(by, PANTRI_BAWAH);
+  const p = routeDasar(ax, ay, aLane, PANTRI_MEMUTAR, yBawah, bLane);
+  p.push({ x: bx, y: yBawah });
+  return titikTepat(p, bx, by);
+}
+
+function routeDasar(ax, ay, aLane, bx, by, bLane) {
   const pts = [];
   // Sudah berdiri di lajur penghubung? Dari situ tinggal naik/turun. Memaksa
   // balik dulu ke lajur mendatar bikin pegawai mundur sampai 88px sia-sia.
@@ -5519,7 +6257,18 @@ let busEfek = null, busNotif = null, busMusik = null;
    `ingatan` di blok "pengaturan" jauh di bawah (sesudah `ingatan` ada);
    nilai bawaan 1 di sini cuma jaga-jaga kalau bus sempat dibuat sebelum
    pembacaan itu sempat jalan. */
-const VOL = { efek: 1, notif: 1, musik: 1 };
+/* `ucap` tidak punya bus Web Audio seperti tiga yang lain: klip ucapan diputar
+   lewat elemen <audio> (badannya datang dari /ucap), bukan lewat oscillator.
+   Jadi angkanya dipakai langsung sebagai `el.volume`, bukan sebagai gain bus —
+   lihat volumeBaris() yang memang membolehkan komponen tanpa bus. */
+const VOL = { efek: 1, notif: 1, musik: 1, ucap: 1 };
+
+/* Satu tempat menghitung volume klip ucapan, dipakai ketiga pemutarnya
+   (notifikasi, narasi kejadian, tombol coba). Dulu ketiganya menulis
+   `0.9 * VOL.notif` sendiri-sendiri — tiga tempat yang bisa hanyut, dan
+   faktor 0,9 yang tidak ada alasannya selain "belum ada slidernya". */
+const volUcap = () => Math.max(0, Math.min(1, VOL.ucap));
+
 
 // Satu AudioContext dipakai semua suara di halaman ini; tiga "bus" gain di
 // baliknya (efek/notifikasi/musik) supaya volume tiap komponen bisa digeser
@@ -5586,16 +6335,20 @@ const bunyiPanggil = () => bunyiMotif([659.25, 659.25], 0.16, 0.22, 0.1);       
 // Dua nada TURUN dan pendek — sesi berhenti karena galat.
 const bunyiBerhenti = () => bunyiMotif([783.99, 587.33], 0.13, 0.3, 0.09);         // G5 D5
 
-function notifSelesai(nama) {
+/* `jk` = jenis kelamin pegawai yang mengucapkannya ('L'/'P'/''). Kalimatnya
+   memang kalimat DIA — "Izin, Sri Rahayu selesai" itu Sri Rahayu yang bicara,
+   bukan narator yang melaporkannya — jadi suaranya ikut dia. '' berarti tidak
+   diketahui, dan itu wajar: suaranya kembali ke voice utama. */
+function notifSelesai(nama, jk) {
   bunyiSelesai();
-  ucapKlip(UCAP.selesai(nama));
+  ucapKlip(UCAP.selesai(nama), jk);
 }
 
 // Dipicu saat sesi minta izin atau bertanya dan menunggu jawabanmu — beda
 // dari notifSelesai (pekerjaan kelar), ini pekerjaan yang tertahan.
-function notifKonfirmasi() {
+function notifKonfirmasi(jk) {
   bunyiPanggil();
-  ucapKlip(UCAP.arahan());
+  ucapKlip(UCAP.arahan(), jk);
 }
 
 /* ---------- pengingat sesi terkatung ----------
@@ -5714,7 +6467,18 @@ const UCAP = {
    cuma cermin yang diisi muatSuara() waktu halaman dibuka. */
 let ucapNyala = false;
 
-function ucapKlip(teks) {
+/* Jenis kelamin dititipkan sebagai query, bukan dipilihkan voice-nya di sini:
+   halaman tidak tahu voice mana yang laki-laki dan mana yang perempuan, dan
+   memang tidak boleh tahu — pasangan voice itu setelan yang tinggal di server
+   (suara.json), sama seperti model dan kuncinya. Yang dikirim halaman cuma
+   fakta yang dia punya: siapa yang bicara.
+
+   Ikut jadi bagian URL, jadi cache HTTP peramban tetap bekerja per (kalimat,
+   jenis kelamin) tanpa kode cache tambahan — alasan yang sama kenapa /ucap
+   memakai GET sejak awal. */
+const paramJk = (jk) => (jk === 'L' || jk === 'P' ? '&jk=' + jk : '');
+
+function ucapKlip(teks, jk) {
   if (!ucapNyala || !teks) return;
   /* Server menjawab 204 kalau fiturnya mati, kuncinya belum dipasang, atau
      OpenRouter gagal. 204 BUKAN galat yang perlu dilaporkan: loncengnya sudah
@@ -5722,10 +6486,12 @@ function ucapKlip(teks) {
      lapisan tambahan. Makanya tidak ada satu pun cabang di sini yang menulis
      pesan ke layar. */
   try {
-    const el = new Audio('/ucap?teks=' + encodeURIComponent(teks));
-    /* Elemen <audio> tidak lewat busNotif (itu Web Audio), jadi volumenya
-       dikalikan tangan di sini supaya slider notifikasi tetap berlaku. */
-    el.volume = Math.max(0, Math.min(1, 0.9 * VOL.notif));
+    const el = new Audio('/ucap?teks=' + encodeURIComponent(teks) + paramJk(jk));
+    /* Elemen <audio> tidak lewat bus Web Audio mana pun, jadi volumenya
+       dipasang tangan di sini. Kanalnya `ucap`, BUKAN `notif`: lonceng dan
+       ucapan berbunyi di kejadian yang sama tapi orang tidak selalu mau
+       keras-pelannya sama — lonceng itu penanda, ucapan itu kalimat. */
+    el.volume = volUcap();
     el.play().catch(() => { /* 204, autoplay diblokir, atau tab ditutup */ });
   } catch { /* konstruktor Audio bisa melempar di peramban yang dikunci */ }
 }
@@ -5734,55 +6500,203 @@ function ucapKlip(teks) {
 /* Sama sekali tanpa file audio, sama seperti derau hujan/guntur di atas: chord
    jazzy pelan-pelan, beat lembut, dan desis vinyl, semua disintesis langsung.
    `musikGain` cuma jadi fader on/off supaya nyala/mati halus, bukan patah —
-   volume tiap instrumen diatur sendiri-sendiri di bawah. */
-const LOFI_KORD = [
-  [174.61, 220.00, 261.63, 329.63],   // Fmaj7  (F3 A3 C4 E4)
-  [164.81, 196.00, 246.94, 293.66],   // Em7    (E3 G3 B3 D4)
-  [146.83, 174.61, 220.00, 261.63],   // Dm7    (D3 F3 A3 C4)
-  [130.81, 164.81, 196.00, 246.94],   // Cmaj7  (C3 E3 G3 B3)
-];
-const LOFI_LANGKAH_DUR = 60 / 76 / 4;   // 76 BPM, 16 langkah per birama
+   volume tiap instrumen diatur sendiri-sendiri di bawah.
+
+   Yang dulu SATU loop tetap sekarang mengikuti ruangan. Empat birama yang sama
+   sepanjang hari bikin telinga cepat lelah, dan lebih buruk: musiknya jadi
+   bohong — beat yang sama waktu kantor sepi jam sebelas malam dan waktu enam
+   agen sedang gaduh. Sekarang gaya musiknya dipilih dari hal-hal yang MEMANG
+   sudah menentukan rupa ruangan (babak hari, hujan, kesibukan sesi), jadi
+   telinga mendengar yang sama dengan yang dilihat mata: bank akor, tempo,
+   ayunan, cutoff pad, kerapatan drum, dan tebal desis vinyl semuanya ikut.
+
+   Dibaca ULANG tiap awal birama, bukan tiap langkah: perpindahan gayanya jatuh
+   di sambungan (~10-12 detik sekali), bukan memotong di tengah ketukan.
+
+   Uji cepat tanpa menunggu jamnya tiba: `?musik=malam` (daftar namanya =
+   kunci LOFI_GAYA di bawah), digabung dengan `?jam=` dan `?hujan=` yang
+   sudah ada. */
+
+/* Nama nada -> Hz (A4 = 440). Bank akor di bawah ditulis pakai nama nada
+   supaya kebaca sebagai AKOR, bukan sebagai deretan angka desimal yang tidak
+   bisa dikoreksi siapa pun tanpa kalkulator. Nama yang tidak dikenal
+   mengembalikan 0 — sengaja, dan itu yang dijaga uji-musik.mjs: nada bisu
+   lebih gampang ketahuan daripada nada yang meleset diam-diam. */
+const LOFI_SEMITON = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
+function nadaHz(nama) {
+  const m = /^([A-G]#?)(\d)$/.exec(String(nama));
+  if (!m) return 0;
+  const midi = LOFI_SEMITON[m[1]] + (Number(m[2]) + 1) * 12;   // C4 = 60
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+const akor = (...nada) => nada.map(nadaHz);
+
+/* Bank akor. Panjangnya tidak harus empat: yang 'tegang' sengaja cuma dua
+   supaya terasa mandek — vamp yang tidak pernah sampai ke akor pulang. */
+const LOFI_BANK = {
+  // yang lama, dipertahankan apa adanya: ini "suara kantor" jam kerja
+  kantor: [akor('F3', 'A3', 'C4', 'E4'), akor('E3', 'G3', 'B3', 'D4'),
+           akor('D3', 'F3', 'A3', 'C4'), akor('C3', 'E3', 'G3', 'B3')],
+  // pagi masih punya tujuan: I - iii - IV - V, satu-satunya bank yang menekan V
+  cerah:  [akor('C3', 'E3', 'G3', 'B3'), akor('E3', 'G3', 'B3', 'D4'),
+           akor('F3', 'A3', 'C4', 'E4'), akor('G3', 'B3', 'D4', 'F4')],
+  // ii - V - I - vi, dua-lima-satu lounge buat jam istirahat & hari libur
+  manis:  [akor('D3', 'F3', 'A3', 'E4'), akor('G3', 'B3', 'D4', 'F4'),
+           akor('C3', 'E3', 'G3', 'D4'), akor('A2', 'C3', 'E3', 'G3')],
+  // senja: minor dulu, mayor belakangan — hangat tapi tidak riang
+  senja:  [akor('A2', 'C3', 'E3', 'G3'), akor('F3', 'A3', 'C4', 'E4'),
+           akor('C3', 'E3', 'G3', 'B3'), akor('E3', 'G3', 'B3', 'D4')],
+  // kantor yang tinggal beberapa orang: jaraknya lebar, tanpa nada rapat
+  sepi:   [akor('A2', 'C3', 'E3', 'B3'), akor('D3', 'F3', 'A3', 'C4'),
+           akor('F3', 'A3', 'C4', 'E4'), akor('E3', 'G3', 'B3', 'D4')],
+  // dua akor, half-diminished lalu minor: menggantung, tidak menyelesaikan
+  tegang: [akor('B2', 'D3', 'F3', 'A3'), akor('E3', 'G3', 'B3', 'D4')],
+  // hujan deras + petir: turun ke Bb, paling gelap dari semuanya
+  badai:  [akor('D3', 'F3', 'A3', 'E4'), akor('A#2', 'D3', 'F3', 'A3'),
+           akor('G2', 'A#2', 'D3', 'F3'), akor('A2', 'C3', 'E3', 'G3')],
+};
+
+/* Pola drum. Angkanya nomor langkah dalam satu birama 16 langkah.
+   `hat` = tiap berapa langkah hi-hat dipukul (0 = tidak sama sekali),
+   `bolong` = peluang satu pukulan hat dilewatkan, supaya polanya tidak
+   terdengar seperti metronom. */
+const LOFI_DRUM = {
+  penuh:  { kick: [0, 10], kickVol: 1,   snare: [4, 12], snareVol: 1,   hat: 2, hatVol: 1,   bolong: 0.08 },
+  ringan: { kick: [0, 11], kickVol: 0.8, snare: [12],    snareVol: 0.7, hat: 4, hatVol: 0.7, bolong: 0.15 },
+  sikat:  { kick: [0],     kickVol: 0.7, snare: [4, 12], snareVol: 0.5, hat: 4, hatVol: 0.5, bolong: 0.2, sikat: true },
+  sunyi:  { kick: [0],     kickVol: 0.5, snare: [],      snareVol: 0,   hat: 8, hatVol: 0.3, bolong: 0.35 },
+};
+
+/* Gaya per suasana. `bpm`/`ayun` mengatur denyut, `cut`/`pad` mengatur pad
+   (cutoff lowpass dalam Hz dan pengali volumenya), `kresek` pengali desis
+   vinyl, `bass`/`kilau` volume dua instrumen yang boleh benar-benar hilang
+   (0 = mati). Yang dijaga tetap sama untuk semua: ini LATAR — tidak ada satu
+   pun gaya yang boleh minta didengarkan. */
+const LOFI_GAYA = {
+  apel:      { bank: 'cerah',  bpm: 84, ayun: 0.10, cut: 1500, pad: 1.00, drum: 'penuh',  kresek: 0.6, bass: 0.55, kilau: 0.45 },
+  kerja:     { bank: 'kantor', bpm: 76, ayun: 0.15, cut: 950,  pad: 1.00, drum: 'penuh',  kresek: 1.0, bass: 0.60, kilau: 0.25 },
+  gaduh:     { bank: 'kantor', bpm: 88, ayun: 0.12, cut: 1250, pad: 0.95, drum: 'penuh',  kresek: 0.8, bass: 0.75, kilau: 0.30 },
+  istirahat: { bank: 'manis',  bpm: 68, ayun: 0.22, cut: 1150, pad: 1.05, drum: 'sikat',  kresek: 1.0, bass: 0.35, kilau: 0.60 },
+  pulang:    { bank: 'senja',  bpm: 72, ayun: 0.18, cut: 820,  pad: 1.05, drum: 'ringan', kresek: 1.2, bass: 0.50, kilau: 0.35 },
+  lembur:    { bank: 'sepi',   bpm: 70, ayun: 0.16, cut: 700,  pad: 1.10, drum: 'ringan', kresek: 1.5, bass: 0.45, kilau: 0.20 },
+  malam:     { bank: 'sepi',   bpm: 62, ayun: 0.24, cut: 560,  pad: 1.15, drum: 'sunyi',  kresek: 1.9, bass: 0.30, kilau: 0.30 },
+  libur:     { bank: 'manis',  bpm: 64, ayun: 0.24, cut: 780,  pad: 1.10, drum: 'sunyi',  kresek: 1.6, bass: 0.30, kilau: 0.50 },
+  hujan:     { bank: 'senja',  bpm: 66, ayun: 0.20, cut: 520,  pad: 1.20, drum: 'sikat',  kresek: 1.4, bass: 0.35, kilau: 0.30 },
+  badai:     { bank: 'badai',  bpm: 60, ayun: 0.18, cut: 430,  pad: 1.25, drum: 'sunyi',  kresek: 1.7, bass: 0.30, kilau: 0.15 },
+  tegang:    { bank: 'tegang', bpm: 80, ayun: 0.06, cut: 640,  pad: 0.90, drum: 'ringan', kresek: 1.2, bass: 0.70, kilau: 0.00 },
+};
+
+// Label manusia buat baris kecil di panel Pengaturan — supaya yang mendengar
+// "kok berubah?" bisa lihat sebabnya, bukan menebak.
+const LOFI_LABEL = {
+  apel: 'apel pagi', kerja: 'jam kerja', gaduh: 'kantor lagi ramai',
+  istirahat: 'jam istirahat', pulang: 'jelang pulang', lembur: 'lembur',
+  malam: 'kantor malam', libur: 'hari libur', hujan: 'hujan di jendela',
+  badai: 'badai', tegang: 'ada yang menunggu',
+};
+
+const MUSIK_PAKSA = new URLSearchParams(location.search).get('musik');
+
+function musikGayaNama() { return Object.keys(LOFI_GAYA); }
+function musikDrumNama() { return Object.keys(LOFI_DRUM); }
+
+/* Pemilih suasana, sengaja FUNGSI MURNI dari fakta yang dioper: tidak membaca
+   jam, cuaca, atau daftar agen sendiri. Itu yang bikin dia bisa diuji untuk
+   semua kombinasi tanpa memalsukan satu ruangan penuh (lihat uji-musik.mjs),
+   dan bikin urutan prioritasnya kebaca sebagai aturan, bukan tersebar jadi if
+   di tengah scheduler.
+
+   Urutannya = urutan mana yang paling "kedengaran" di ruangan: petir
+   mengalahkan apa pun, sesi yang macet mengalahkan cuaca, cuaca mengalahkan
+   jam dinding. */
+function musikSuasanaDari({ babak = 'kerja', hujan = 0, petir = false, sibuk = 0, tunggu = 0, gagal = 0 } = {}) {
+  if (petir) return 'badai';
+  if (gagal >= 3 || tunggu >= 2) return 'tegang';
+  if (hujan >= 0.55) return 'hujan';
+  if (babak === 'kerja' && sibuk >= 4) return 'gaduh';
+  return LOFI_GAYA[babak] ? babak : 'kerja';
+}
+
+/* nama suasana + fakta -> gaya lengkap yang siap dimainkan. Hujan tipis dan
+   kesibukan sedang TIDAK mengganti gaya (loncatan bank akor tiap ada satu agen
+   masuk bikin musiknya gelisah) — dia cuma menggeser dua-tiga angka. */
+function musikGayaDari(nama, { hujan = 0, sibuk = 0 } = {}) {
+  const dasar = LOFI_GAYA[nama] || LOFI_GAYA.kerja;
+  const g = { ...dasar, nama };
+  g.kord = LOFI_BANK[g.bank];
+  if (hujan > 0 && nama !== 'hujan' && nama !== 'badai') {
+    g.cut = Math.round(g.cut * (1 - 0.35 * hujan));    // gerimis pun menutup tone control
+    g.kresek += 0.5 * hujan;
+  }
+  g.bpm += Math.min(sibuk, 3) * 2;                     // denyut naik, gaya tetap
+  g.langkahDur = 60 / g.bpm / 4;                       // 16 langkah per birama
+  return g;
+}
+
+// Fakta ruangan buat dua fungsi di atas. Sengaja TIDAK lewat potretRuangan():
+// potret membangun beberapa array tiap panggilan, dan ini jalan tiap birama.
+function musikGayaKini() {
+  let sibuk = 0, tunggu = 0, gagal = 0;
+  for (const a of agents.values()) {
+    if (a.state === 'work') sibuk++;
+    if (a.butuh || a.macet) tunggu++;
+    gagal = Math.max(gagal, a.gagalBerturut || 0);
+  }
+  const fakta = {
+    babak: babakHari(ambien().jam),
+    hujan: CUACA.hujan, petir: CUACA.petir,
+    sibuk, tunggu, gagal,
+  };
+  const nama = MUSIK_PAKSA && LOFI_GAYA[MUSIK_PAKSA] ? MUSIK_PAKSA : musikSuasanaDari(fakta);
+  return musikGayaDari(nama, fakta);
+}
 
 let musikNyala = false;
 let musikGain = null;
 let musikKresek = null;
+let musikKresekG = null;
 let musikTimer = null;
 let musikLangkah = 0;
 let musikBirama = 0;
 let musikBerikut = 0;
+let musikGayaAktif = null;
 
-function musikKick(t) {
+function musikKick(t, vol) {
   const o = audio.createOscillator(), g = audio.createGain();
   o.type = 'sine';
   o.frequency.setValueAtTime(130, t);
   o.frequency.exponentialRampToValueAtTime(42, t + 0.1);
-  g.gain.setValueAtTime(0.22, t);
+  g.gain.setValueAtTime(0.22 * vol, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
   o.connect(g); g.connect(musikGain);
   o.start(t); o.stop(t + 0.24);
 }
 
-function musikSnare(t) {
-  const len = (audio.sampleRate * 0.15) | 0;
+// `sikat` = brush, bukan pukulan: ekornya lebih panjang dan pita frekuensinya
+// turun, jadi kedengaran disapu, bukan dipukul. Dipakai gaya jam istirahat.
+function musikSnare(t, vol, sikat) {
+  const dur = sikat ? 0.26 : 0.15;
+  const len = (audio.sampleRate * dur) | 0;
   const buf = audio.createBuffer(1, len, audio.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.7);
+  const kurva = sikat ? 1.1 : 1.7;
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, kurva);
   const src = audio.createBufferSource(); src.buffer = buf;
   const bp = audio.createBiquadFilter();
-  bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = 0.6;
-  const g = audio.createGain(); g.gain.value = 0.1;
+  bp.type = 'bandpass'; bp.frequency.value = sikat ? 900 : 1300; bp.Q.value = 0.6;
+  const g = audio.createGain(); g.gain.value = 0.1 * vol;
   src.connect(bp); bp.connect(g); g.connect(musikGain);
   src.start(t);
 }
 
-function musikHat(t, aksen) {
+function musikHat(t, aksen, vol) {
   const len = (audio.sampleRate * 0.045) | 0;
   const buf = audio.createBuffer(1, len, audio.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
   const src = audio.createBufferSource(); src.buffer = buf;
   const hp = audio.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6500;
-  const g = audio.createGain(); g.gain.value = aksen ? 0.07 : 0.035;
+  const g = audio.createGain(); g.gain.value = (aksen ? 0.07 : 0.035) * vol;
   src.connect(hp); hp.connect(g); g.connect(musikGain);
   src.start(t);
 }
@@ -5790,19 +6704,49 @@ function musikHat(t, aksen) {
 // Pad chord: triangle sedikit sumbang (detune acak) + lowpass, khas kualitas
 // rekaman lofi yang tidak steril. Durasinya melewati satu birama supaya
 // chord berikutnya masuk sebelum yang lama benar-benar habis (menyatu).
-function musikPad(t, freqs, durasi) {
+// `cut`/`vol` datang dari gaya: makin sepi/hujan, makin tertutup dan tebal.
+function musikPad(t, freqs, durasi, cut, vol) {
   freqs.forEach((f) => {
     const o = audio.createOscillator(), g = audio.createGain();
     o.type = 'triangle';
     o.frequency.value = f;
     o.detune.value = Math.random() * 12 - 6;
-    const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 950;
+    const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cut;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.045, t + durasi * 0.25);
+    g.gain.linearRampToValueAtTime(0.045 * vol, t + durasi * 0.25);
     g.gain.linearRampToValueAtTime(0.0001, t + durasi);
     o.connect(lp); lp.connect(g); g.connect(musikGain);
     o.start(t); o.stop(t + durasi + 0.05);
   });
+}
+
+// Bass: nada dasar akor, satu oktaf di bawah pad. Sinus + lowpass rapat, jadi
+// yang terdengar cuma badannya — bukan nada yang bisa diikuti telinga.
+function musikBass(t, freq, durasi, vol) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.085 * vol, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + durasi);
+  o.connect(lp); lp.connect(g); g.connect(musikGain);
+  o.start(t); o.stop(t + durasi + 0.05);
+}
+
+// Satu nada rhodes yang jatuh sesekali di tengah birama, nadanya diambil acak
+// dari akor yang sedang bunyi. Inilah yang bikin dua birama dengan gaya sama
+// tetap tidak persis sama — tanpa perlu melodi yang minta didengarkan.
+function musikKilau(t, freq, vol) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.05 * vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+  o.connect(lp); lp.connect(g); g.connect(musikGain);
+  o.start(t); o.stop(t + 1.45);
 }
 
 function musikMulaiKresek() {
@@ -5819,26 +6763,59 @@ function musikMulaiKresek() {
   src.connect(hp); hp.connect(g); g.connect(musikGain);
   src.start();
   musikKresek = src;
+  musikKresekG = g;
 }
 
-function musikLangkahBunyi(birama, langkah, t) {
-  if (langkah === 0) musikPad(t, LOFI_KORD[birama], LOFI_LANGKAH_DUR * 16 * 1.15);
-  if (langkah === 0 || langkah === 10) musikKick(t);
-  if (langkah === 4 || langkah === 12) musikSnare(t);
-  if (langkah % 2 === 0) musikHat(t, langkah % 4 === 0);
+function musikLangkahBunyi(G, birama, langkah, t) {
+  const kord = G.kord[birama % G.kord.length];
+  const D = LOFI_DRUM[G.drum] || LOFI_DRUM.penuh;
+  if (langkah === 0) musikPad(t, kord, G.langkahDur * 16 * 1.15, G.cut, G.pad);
+  if (D.kick.includes(langkah)) musikKick(t, D.kickVol);
+  if (D.snare.includes(langkah)) musikSnare(t, D.snareVol, D.sikat);
+  if (D.hat && langkah % D.hat === 0 && Math.random() > D.bolong) musikHat(t, langkah % 8 === 0, D.hatVol);
+  if (G.bass && (langkah === 0 || langkah === 6)) musikBass(t, kord[0] / 2, G.langkahDur * 5, G.bass);
+  if (G.kilau && langkah === 8 && Math.random() < G.kilau) {
+    musikKilau(t, kord[1 + ((Math.random() * (kord.length - 1)) | 0)] * 2, G.kilau);
+  }
 }
 
 // Scheduler look-ahead standar: dicek tiap 30ms, tapi jadwal ditulis lewat
 // audio.currentTime supaya waktunya presisi walau tick timer-nya meleset.
 function musikJadwal() {
   while (musikBerikut < audio.currentTime + 0.12) {
-    musikLangkahBunyi(musikBirama, musikLangkah, musikBerikut);
+    // Gaya dibaca ulang di awal birama saja: perpindahannya jatuh di sambungan
+    // (~10-12 detik sekali), tidak memotong di tengah ketukan.
+    if (musikLangkah === 0) musikPasangGaya();
+    const G = musikGayaAktif;
+    // Indonesia Raya lewat bus yang sama. Beat lofi menumpang di atasnya bukan
+    // cuma jelek, tapi salah tempat — jadi loop-nya dibiarkan jalan (biar tidak
+    // perlu start ulang) tapi tidak membunyikan apa pun sampai lagunya selesai.
+    if (!rayaSedangMain) musikLangkahBunyi(G, musikBirama, musikLangkah, musikBerikut);
     const ganjil = musikLangkah % 2 === 1;
     musikLangkah++;
-    if (musikLangkah >= 16) { musikLangkah = 0; musikBirama = (musikBirama + 1) % LOFI_KORD.length; }
-    musikBerikut += LOFI_LANGKAH_DUR * (ganjil ? 0.85 : 1.15);   // ayunan halus
+    if (musikLangkah >= 16) { musikLangkah = 0; musikBirama = (musikBirama + 1) % G.kord.length; }
+    musikBerikut += G.langkahDur * (ganjil ? 1 - G.ayun : 1 + G.ayun);   // ayunan
   }
   musikTimer = setTimeout(musikJadwal, 30);
+}
+
+/* Ganti gaya = geser angka, bukan start ulang. Desis vinyl satu-satunya node
+   yang hidup terus, jadi dia diseret pelan (2 detik) ke tebal barunya — kalau
+   dipatok langsung, pergantian suasana kedengaran seperti kaset ditekan. */
+function musikPasangGaya() {
+  const G = musikGayaKini();
+  const ganti = !musikGayaAktif || musikGayaAktif.nama !== G.nama;
+  musikGayaAktif = G;
+  if (musikKresekG) musikKresekG.gain.setTargetAtTime(0.02 * G.kresek, audio.currentTime, 2);
+  if (ganti) tampilSuasanaMusik(G.nama);
+}
+
+// Baris kecil di sebelah centang musik di panel Pengaturan. Elemennya dicari
+// tiap kali (bukan disimpan): blok ini jalan jauh sebelum panelnya dirakit.
+function tampilSuasanaMusik(nama) {
+  const el = document.getElementById('musikSuasana');
+  if (!el) return;
+  el.textContent = nama ? '· ' + (LOFI_LABEL[nama] || nama) : '';
 }
 
 function musikNyalakan() {
@@ -5851,12 +6828,14 @@ function musikNyalakan() {
   musikGain.gain.setTargetAtTime(1, audio.currentTime, 0.5);
   if (!musikKresek) musikMulaiKresek();
   musikLangkah = 0; musikBirama = 0; musikBerikut = audio.currentTime + 0.1;
+  musikGayaAktif = null;
   musikJadwal();
 }
 function musikMatikan() {
   if (musikGain) musikGain.gain.setTargetAtTime(0.0001, audio.currentTime, 0.15);
   clearTimeout(musikTimer);
-  if (musikKresek) { musikKresek.stop(); musikKresek = null; }
+  if (musikKresek) { musikKresek.stop(); musikKresek = null; musikKresekG = null; }
+  tampilSuasanaMusik('');
 }
 
 /* ---------- Indonesia Raya (lofi, terjadwal Selasa & Kamis jam 10) -------
@@ -6183,6 +7162,299 @@ function foley(nama, a) {
   const t = audio.currentTime;
   buat(foleyKeluaran(a), t);
   foleyDucking(t);
+  return true;
+}
+
+/* ---------- efek suara event acak ----------
+   FOLEY di atas memberi bunyi pada PEKERJAAN (tool call: stempel, laci arsip,
+   rak server). Kamus di bawah memberi bunyi pada KEJADIAN — event acak yang
+   muncul sendiri di ruangan. Dua-duanya lapis 0: disintesis di sini, tanpa
+   berkas audio, tanpa jaringan, dan ikut centang suara efek yang sama. Narasi
+   TTS (ucapEvent di bawah) itu lapis terpisah yang boleh mati tanpa mengubah
+   apa pun di sini — persis aturan yang dipakai lonceng notifikasi.
+
+   Kuncinya nama BENDA/gerak, bukan id event: 337 event tidak butuh 337 bunyi,
+   yang dibutuhkan cuma kosakata yang cukup untuk membedakan "ada yang jatuh"
+   dari "ada yang mengetuk pintu". Pemetaan id -> resep dihasilkan
+   selaras-suara.mjs dari kolom `suara` di event-acak.json (catatan desain
+   rapat: "blip(600,.04) tiap lembar keluar", "derit pendek tiap sapuan") dan
+   ditulis ke public/event/99-suara.js. Event boleh menimpanya sendiri lewat
+   medan `sfx` di definisinya — itu yang menang.
+
+   Resep dipanggil (keluar, t, ...arg). Dua bahan dasarnya foleyNada() dan
+   foleyDerauNada() yang sudah dipakai FOLEY, jadi amplop dan cara membangun
+   bunyinya tidak bercabang dua. */
+const EFEK = {
+  /* --- generik: langsung dari catatan `blip(f, d)` di katalog ---------- */
+  nada(k, t, f, d) { foleyNada(k, t, 'square', f || 700, f || 700, 0.045, d || 0.06); },
+  nadaTurun(k, t, f, d) { foleyNada(k, t, 'square', f || 700, (f || 700) * 0.55, 0.045, d || 0.1); },
+  nadaGanda(k, t, f, d) { EFEK.nada(k, t, f, d); EFEK.nada(k, t + (d || 0.06) + 0.06, f, d); },
+
+  /* --- benda kantor ---------------------------------------------------- */
+  // bel loket: dua nada logam berdekatan, ekornya panjang
+  bel(k, t) {
+    foleyNada(k, t, 'sine', 1046, 1046, 0.07, 0.5);
+    foleyNada(k, t + 0.008, 'sine', 1568, 1568, 0.03, 0.42);
+  },
+  // mesin absen / UPS: digital, kotak, pendek
+  bip(k, t) { foleyNada(k, t, 'square', 1200, 1200, 0.05, 0.06); },
+  // "tidak terbaca": dua nada rendah beruntun
+  bipGagal(k, t) {
+    foleyNada(k, t, 'square', 260, 260, 0.05, 0.08);
+    foleyNada(k, t + 0.13, 'square', 200, 200, 0.05, 0.1);
+  },
+  klik(k, t) { foleyDerauNada(k, t, 'bandpass', 2600, 8, 0.06, 0.02, 0.05); },
+  // tiga ketukan tumpul di kayu
+  ketuk(k, t) {
+    for (let i = 0; i < 3; i++) {
+      foleyNada(k, t + i * 0.16, 'sine', 190 - i * 8, 120, 0.09, 0.07);
+      foleyDerauNada(k, t + i * 0.16, 'lowpass', 900, 0, 0.05, 0.05, 0.1);
+    }
+  },
+  // engsel: nada kotor yang meluncur naik
+  derit(k, t) {
+    foleyNada(k, t, 'sawtooth', 420, 900, 0.02, 0.5);
+    foleyDerauNada(k, t, 'bandpass', 1800, 12, 0.02, 0.5, 0.4);
+  },
+  // dus berat mendarat
+  debum(k, t) {
+    foleyNada(k, t, 'sine', 120, 45, 0.15, 0.22);
+    foleyDerauNada(k, t, 'lowpass', 220, 0, 0.09, 0.2, 0.03);
+  },
+  // jatuh lalu terguling sekali
+  gedebuk(k, t) { EFEK.debum(k, t); foleyNada(k, t + 0.19, 'sine', 150, 90, 0.05, 0.1); },
+  // kaca/keramik: derau tinggi yang putus, lalu pecahannya berhamburan
+  pecah(k, t) {
+    foleyDerauNada(k, t, 'highpass', 3200, 0, 0.11, 0.09, 0.02);
+    for (let i = 0; i < 5; i++) {
+      foleyNada(k, t + 0.06 + Math.random() * 0.22, 'triangle',
+        2200 + Math.random() * 2600, 1800, 0.03, 0.05);
+    }
+  },
+  // lembaran dibalik
+  kertas(k, t) {
+    foleyDerauNada(k, t, 'highpass', 3000, 0, 0.05, 0.1, 0.5);
+    foleyDerauNada(k, t + 0.13, 'highpass', 2600, 0, 0.035, 0.08, 0.5);
+  },
+  sobek(k, t) { foleyDerauNada(k, t, 'bandpass', 2400, 1.2, 0.07, 0.3, 0.75); },
+  // pena di kertas, tiga goresan
+  gores(k, t) {
+    for (let i = 0; i < 3; i++) {
+      foleyDerauNada(k, t + i * 0.12, 'bandpass', 1700 + i * 200, 3, 0.035, 0.09, 0.35);
+    }
+  },
+  // tiga yang sudah punya bunyi di kamus kerja: dipakai ulang, bukan ditiru
+  stempel(k, t) { FOLEY.stempel(k, t); },
+  laci(k, t) { FOLEY.arsip(k, t); },
+  kursi(k, t) { FOLEY.kursi(k, t); },
+  // motor printer menarik kertas, lalu lembarnya keluar
+  printer(k, t) {
+    foleyNada(k, t, 'sawtooth', 300, 320, 0.02, 0.5);
+    foleyDerauNada(k, t + 0.5, 'highpass', 2600, 0, 0.05, 0.18, 0.5);
+  },
+
+  /* --- listrik & mesin ------------------------------------------------- */
+  dengung(k, t) {
+    foleyNada(k, t, 'sawtooth', 100, 100, 0.03, 0.9);
+    foleyNada(k, t, 'sine', 200, 200, 0.015, 0.9);
+  },
+  // tabung neon menyalakan diri: tik beberapa kali lalu dengung ballast
+  neon(k, t) {
+    for (let i = 0; i < 4; i++) foleyDerauNada(k, t + i * 0.09, 'highpass', 4000, 0, 0.04, 0.02, 0.05);
+    foleyNada(k, t + 0.38, 'sawtooth', 120, 120, 0.02, 0.5);
+  },
+  // listrik mati: dengung meluncur turun, lalu klik kontaktor
+  padam(k, t) {
+    foleyNada(k, t, 'sawtooth', 220, 40, 0.05, 0.55);
+    foleyDerauNada(k, t + 0.5, 'bandpass', 1800, 8, 0.05, 0.03, 0.05);
+  },
+  nyala(k, t) {
+    foleyDerauNada(k, t, 'bandpass', 1800, 8, 0.05, 0.03, 0.05);
+    foleyNada(k, t + 0.05, 'sawtooth', 50, 210, 0.045, 0.5);
+  },
+  kipas(k, t) { foleyDerauNada(k, t, 'lowpass', 700, 0, 0.05, 1.1, 0.35); },
+  getar(k, t) {
+    for (let i = 0; i < 3; i++) foleyDerauNada(k, t + i * 0.34, 'lowpass', 160, 0, 0.09, 0.24, 0.06);
+  },
+  dering(k, t) {
+    for (let d = 0; d < 2; d++) {
+      for (let i = 0; i < 9; i++) foleyNada(k, t + d * 0.6 + i * 0.03, 'triangle', 1100, 1100, 0.035, 0.028);
+    }
+  },
+  sirene(k, t) {
+    foleyNada(k, t, 'sine', 620, 880, 0.03, 0.6);
+    foleyNada(k, t + 0.62, 'sine', 880, 620, 0.03, 0.6);
+  },
+
+  /* --- air, angin, lantai ---------------------------------------------- */
+  // tetesan ke ember: tiga, nadanya naik karena embernya makin penuh
+  tetes(k, t) {
+    for (let i = 0; i < 3; i++) foleyNada(k, t + i * 0.42, 'sine', 900 + i * 120, 400, 0.055, 0.09);
+  },
+  guyur(k, t) {
+    foleyDerauNada(k, t, 'lowpass', 1400, 0, 0.07, 0.7, 0.15);
+    for (let i = 0; i < 6; i++) {
+      foleyNada(k, t + Math.random() * 0.6, 'sine', 500 + Math.random() * 700, 300, 0.02, 0.06);
+    }
+  },
+  // galon dispenser: gelembung besar naik
+  air(k, t) {
+    for (let i = 0; i < 3; i++) foleyNada(k, t + i * 0.26, 'sine', 260 + i * 60, 700, 0.05, 0.16);
+  },
+  sapu(k, t) {
+    for (let i = 0; i < 4; i++) foleyDerauNada(k, t + i * 0.34, 'bandpass', 1200, 0.8, 0.045, 0.26, 0.4);
+  },
+  langkah(k, t) {
+    for (let i = 0; i < 4; i++) {
+      foleyDerauNada(k, t + i * 0.32, 'bandpass', 900, 2, 0.045, 0.06, 0.08);
+      foleyNada(k, t + i * 0.32, 'sine', 130, 90, 0.03, 0.05);
+    }
+  },
+  pintu(k, t) { EFEK.derit(k, t); foleyNada(k, t + 0.5, 'sine', 150, 80, 0.09, 0.12); },
+  angin(k, t) { foleyDerauNada(k, t, 'lowpass', 500, 0, 0.05, 1.4, 0.45); },
+  // gemuruh rendah: gempa kecil, genset menyala, truk lewat di luar
+  gemuruh(k, t) { foleyDerauNada(k, t, 'lowpass', 130, 0, 0.1, 1.6, 0.3); },
+
+  /* --- orang & makhluk -------------------------------------------------- */
+  // tepuk tangan seruangan: 14 kali, sengaja tidak seragam jaraknya
+  tepuk(k, t) {
+    for (let i = 0; i < 14; i++) {
+      foleyDerauNada(k, t + i * 0.075 + Math.random() * 0.05, 'bandpass',
+        1400 + Math.random() * 900, 1.2, 0.05, 0.05, 0.04);
+    }
+  },
+  sorak(k, t) {
+    foleyDerauNada(k, t, 'bandpass', 700, 0.6, 0.05, 0.6, 0.5);
+    EFEK.tepuk(k, t + 0.3);
+  },
+  meong(k, t) {
+    foleyNada(k, t, 'sawtooth', 520, 760, 0.035, 0.18);
+    foleyNada(k, t + 0.18, 'sawtooth', 760, 430, 0.035, 0.35);
+  },
+  kicau(k, t) {
+    for (let i = 0; i < 3; i++) foleyNada(k, t + i * 0.14, 'sine', 2600, 3600, 0.03, 0.06);
+  },
+  // serangga: dengung yang mendekat lalu menjauh
+  lalat(k, t) {
+    foleyNada(k, t, 'sawtooth', 180, 260, 0.012, 0.7);
+    foleyNada(k, t + 0.7, 'sawtooth', 260, 170, 0.012, 0.7);
+  },
+  // sendok mengenai gelas — aba-aba sambutan
+  denting(k, t) {
+    foleyNada(k, t, 'sine', 2100, 2100, 0.05, 0.5);
+    foleyNada(k, t, 'sine', 3150, 3150, 0.02, 0.35);
+  },
+  // senar dipetik: tamu yang datangnya membawa musik
+  petik(k, t) {
+    [196, 246.94, 293.66, 392].forEach((f, i) => {
+      foleyNada(k, t + i * 0.055, 'triangle', f, f, 0.05, 0.7);
+    });
+  },
+  // rana kamera: wartawan, kreator konten, foto bersama
+  jepret(k, t) {
+    foleyDerauNada(k, t, 'bandpass', 2200, 5, 0.07, 0.03, 0.02);
+    foleyDerauNada(k, t + 0.06, 'bandpass', 1500, 5, 0.05, 0.04, 0.02);
+  },
+  plastik(k, t) {
+    for (let i = 0; i < 7; i++) foleyDerauNada(k, t + i * 0.05, 'highpass', 3600, 0, 0.03, 0.04, 0.1);
+  },
+  // besi beradu: APAR diletakkan, tangga dilipat, tiang disenggol
+  logam(k, t) {
+    foleyNada(k, t, 'triangle', 620, 590, 0.06, 0.5);
+    foleyNada(k, t + 0.004, 'triangle', 1490, 1440, 0.03, 0.4);
+  },
+
+  /* Sengaja tidak berbunyi. Bukan lubang di kamus: hujan dan petir SUDAH
+     punya suaranya sendiri di halaman ini (aturSuaraHujan, gemuruh()), dan
+     menambah bunyi kedua di atasnya bukan bikin ramai, bikin salah. */
+  sunyi() {},
+};
+
+/* Peta id -> resep, diisi public/event/99-suara.js lewat daftarSuaraEvent().
+   Berkas itu DIHASILKAN (selaras-suara.mjs), jadi peta ini boleh kosong dan
+   ruangan tetap jalan — cuma event-nya tidak berbunyi. */
+const EVENT_SUARA = Object.create(null);
+function daftarSuaraEvent(peta) { Object.assign(EVENT_SUARA, peta); }
+
+// Dua event beruntun (`lanjutan` bisa menyalakan yang berikutnya seketika)
+// tidak boleh jadi dua bunyi yang bertumpuk jadi bunyi ketiga yang aneh.
+const EFEK_JEDA_MS = 400;
+let efekTerakhir = -1e9;
+
+/* Resep untuk satu definisi event. `sfx` di definisinya menang atas peta hasil
+   generate — event yang tahu bunyinya sendiri tidak boleh dikalahkan tebakan
+   skrip. Nilainya boleh string ('derit') atau larik dengan argumen
+   (['nada', 600, 0.04]). */
+function resepEfek(def) {
+  const r = def.sfx || EVENT_SUARA[def.id];
+  if (!r) return null;
+  const arg = Array.isArray(r) ? r.slice(1) : [];
+  const buat = EFEK[Array.isArray(r) ? r[0] : r];
+  return buat ? { buat, arg } : null;
+}
+
+// Ikut centang efek suara dan AudioContext yang sudah dibuka klik, persis
+// foley(). `a` cuma untuk panning: kejadian di rak server terdengar di kanan.
+function efekEvent(def, a) {
+  if (!sound || !audio) return false;
+  const resep = resepEfek(def);
+  if (!resep) return false;
+  const kini = performance.now();
+  if (kini - efekTerakhir < EFEK_JEDA_MS) return false;
+  efekTerakhir = kini;
+  const t = audio.currentTime;
+  // Resep yang meledak tidak boleh ikut menjatuhkan event yang sedang lahir.
+  try { resep.buat(foleyKeluaran(a), t, ...resep.arg); }
+  catch (e) { console.warn('[efek]', def.id, e); return false; }
+  foleyDucking(t);
+  return true;
+}
+
+/* ---------- narasi event ----------
+   Lapis 2: kejadiannya dibacakan suara TTS. Kalimatnya tidak pernah dikarang
+   halaman — yang dikirim cuma id event, dan server yang menerjemahkannya
+   (narasiEvent di server.mjs, sumbernya kolom `nama` di event-acak.json).
+   Itu sengaja: kalimat yang hidup di dua tempat pasti hanyut, dan kalau
+   hanyut, "panaskan cache" memanaskan kalimat yang tidak pernah dipakai —
+   pelajaran yang sudah dibayar sekali oleh UCAP/suaraKalimat di atas.
+
+   Semua rupa kegagalan berujung sama seperti notifikasi: 204, halaman diam,
+   efek suaranya sudah berbunyi duluan dan memang tidak butuh jaringan. */
+const SUARA_NARASI_LINGKUP = ['semua', 'panggung', 'mati'];
+let narasiLingkup = 'semua';    // dipegang server (suara.json), halaman cuma cermin
+let narasiSibuk = false;        // satu narator; yang datang saat dia bicara dilewat
+let narasiBebasTimer = 0;
+
+function narasiBebas() {
+  narasiSibuk = false;
+  clearTimeout(narasiBebasTimer);
+  narasiBebasTimer = 0;
+}
+
+/* `a` = pemeran yang mengalami kejadiannya, kalau eventnya memang meminjam
+   orang. Kalimatnya orang pertama — "Kucingnya naik ke laptop saya" — jadi
+   suaranya ikut dia, persis seperti notifikasi ikut pegawai yang melapor.
+   Event latar yang tidak meminjam siapa pun (cicak di dinding, mendung
+   menggantung) memang tidak punya pemeran, dan itu bukan kekurangan: '' jatuh
+   ke voice utama, yang di ruangan ini pas terdengar seperti narator. */
+function ucapEvent(def, a) {
+  if (!ucapNyala || narasiLingkup === 'mati') return false;
+  if (narasiLingkup === 'panggung' && def.kelas !== 'panggung') return false;
+  /* Event latar boleh menumpuk, jadi dua narasi bisa diminta dalam detik yang
+     sama. Yang kedua DIBUANG, bukan diantrekan: narasi yang telat sepuluh
+     detik menceritakan kejadian yang sudah lewat. */
+  if (narasiSibuk) return false;
+  narasiSibuk = true;
+  /* Jaring pengaman: kalau 'ended'/'error' tidak pernah datang (tab
+     disembunyikan sebelum klipnya sempat mulai, misalnya), naratornya jangan
+     bisu selamanya. */
+  narasiBebasTimer = setTimeout(narasiBebas, 15000);
+  try {
+    const el = new Audio('/ucap?event=' + encodeURIComponent(def.id) + paramJk(jkAgen(a || {})));
+    el.volume = volUcap();
+    el.onended = el.onerror = narasiBebas;
+    el.play().catch(() => narasiBebas());   // 204, autoplay diblokir, tab ditutup
+  } catch { narasiBebas(); }
   return true;
 }
 
@@ -6556,13 +7828,16 @@ canvas.addEventListener('click', (e) => {
   // bukaan ruang kadis baru menyalakan/mematikan zoom ke bukaan itu
   if (a) { bukaKartu(a); return; }
   tutupKartu();
+  if (klikBanner(cx, cy)) return;
   klikSisip(cx, cy);
 });
 canvas.addEventListener('mousemove', (e) => {
   const [cx, cy] = titikKanvas(e);
   const diSisip = RUANG_KADIS.t > 0 && cx >= SISIP.x && cx <= SISIP.x + SISIP.w
     && cy >= SISIP.y && cy <= SISIP.y + SISIP.h;
-  canvas.style.cursor = agenDiTitik(cx, cy) || diSisip ? 'pointer' : '';
+  const diBanner = cx >= XBANNER.x && cx <= XBANNER.x + XBANNER.w
+    && cy >= XBANNER.y && cy <= XBANNER.y + XBANNER.h;
+  canvas.style.cursor = agenDiTitik(cx, cy) || diSisip || diBanner ? 'pointer' : '';
 });
 // Esc melepas zoom bukaan. Dialog lain punya handler Escape-nya sendiri dan
 // tidak terganggu: gerbang RUANG_KADIS.zoom bikin handler ini diam kalau
@@ -7141,7 +8416,7 @@ function handle(ev) {
       nowDoing.textContent = 'selesai — menunggu arahan';
       pushLog(ev, 'mark', ['selesai, menunggu arahan', '']);
       foley('kursi', a);   // bangkit dari meja, pulang ke meja kerjanya
-      if (notifOn) notifSelesai(namaPanggilan.get(a.id));
+      if (notifOn) notifSelesai(namaPanggilan.get(a.id), jkAgen(a));
       break;
     }
     /* Isi kepalanya. Cuma balon: tidak masuk log dan tidak menaikkan statistik
@@ -7181,7 +8456,7 @@ function handle(ev) {
       if (ev.butuh) {
         nowDoing.textContent = 'menunggu jawaban kamu';
         kabarMasuk(ev, a, 'tanya');
-        if (notifOn) notifKonfirmasi();
+        if (notifOn) notifKonfirmasi(jkAgen(a));
       }
       foley('panggil', a);
       break;
@@ -7201,7 +8476,7 @@ function handle(ev) {
       kabarMasuk(ev, a, 'izin');
       nowDoing.textContent = ev.paraf ? 'menunggu paraf kamu — buka kartunya' : 'menunggu izin kamu';
       foley('panggil', a);
-      if (notifOn) notifKonfirmasi();
+      if (notifOn) notifKonfirmasi(jkAgen(a));
       break;
     }
     // Jawaban paraf dari ruangan (halaman ini, halaman lain, atau waktu habis).
@@ -7754,6 +9029,38 @@ let balonPikir = ingatan.baca('balonPikir', '1') !== '0';
    BISU_MS 25 detik di server cuma menjaga kelahiran tugas, bukan ini. */
 const TERKATUNG_JENJANG_MS = [2 * 60 * 1000, 10 * 60 * 1000];
 let pengingatOn = ingatan.baca('pengingatTerkatung', '1') !== '0';
+
+/* Keramaian dipilih dari panel, bukan dipatok kode: seberapa hidup ruangan
+   yang enak ditonton itu selera, dan seleranya beda-beda per orang dan per
+   ukuran layar. `mati` menghentikan event BARU tapi membiarkan yang sudah
+   jalan selesai baik-baik — beda dari ?event=0 yang memang tidak pernah
+   menyalakan apa pun sejak halaman dimuat. */
+const KERAMAIAN = {
+  ramai:  { kali: 1, ket: 'seperti sebelumnya — sekitar 2 kejadian per menit' },
+  sedang: { kali: 2, ket: 'sekitar 1 kejadian per menit' },
+  sepi:   { kali: 4, ket: 'sekitar 1 kejadian tiap 2 menit' },
+  mati:   { kali: 0, ket: 'tidak ada event baru; yang sedang jalan tetap diselesaikan' },
+};
+let keramaian = KERAMAIAN[ingatan.baca('keramaian', 'sedang')] ? ingatan.baca('keramaian', 'sedang') : 'sedang';
+
+/* Jeda dasar antar percobaan menyalakan event, dalam detik. Hampir tiap
+   percobaan berhasil (kandidat jarang kosong), jadi angka ini praktis = jarak
+   antar kejadian. 18-45 detik berarti sekitar dua event per menit — ramai
+   sekali kalau ruangannya ditonton lama, dan itu memang keluhannya.
+
+   Yang dikalikan pengali keramaian di atas, BUKAN diganti: rentang acaknya
+   tetap terasa sama, cuma direntangkan. Mengganti angka dasarnya berarti
+   menyetel ulang rasa tiap event satu per satu.
+
+   Semuanya tinggal DI SINI, bukan di dekat mesin event, karena panel
+   Pengaturan memakainya jauh sebelum mesin event didefinisikan — dan `const`
+   yang dipakai sebelum barisnya dieksekusi itu ReferenceError, bukan
+   undefined. */
+const JEDA_MIN = 18, JEDA_MAX = 45;
+
+const EVENT_PARAM = new URLSearchParams(location.search).get('event');
+const EVENT_MATI = EVENT_PARAM === '0' || EVENT_PARAM === 'mati';
+const EVENT_PAKSA = EVENT_PARAM && !EVENT_MATI ? EVENT_PARAM.split(',') : null;
 
 const satuBaris = (t, n) => {
   const s = String(t || '').replace(/\s+/g, ' ').trim();
@@ -8802,6 +10109,86 @@ klipingBtn.onclick = () => {
 document.getElementById('klipingTutup').onclick = klipingTutupDialog;
 dlgKliping.onclick = (e) => { if (e.target === dlgKliping) klipingTutupDialog(); };
 
+/* ------------------------------------------------------ papan informasi ---
+   Dibuka dengan mengklik X-banner di ruangan (klikBanner), sesudah kameranya
+   sampai (tickBanner). Tidak ada tombolnya di bilah panggung: bannernya
+   sendiri yang jadi tombol, dan itu sebabnya wajahnya digambar ulang jadi
+   papan nama aplikasi yang benar-benar terbaca waktu dizoom.
+
+   SEMUA yang ditulis di sini fakta yang bisa dicek di repo ini, bukan
+   karangan:
+     - nama tampilan & warnanya menyalin kop panel (index.html: KANTOR<span>AGENT</span>);
+     - nama paket, deskripsi, dan syarat Node dari package.json;
+     - alamat repo dari package.json#repository;
+     - cara menjalankan disalin dari README ("Jalanin");
+     - "tanpa dependensi" dari package.json#dependencies yang memang kosong;
+     - pengembang dari git log: 45 commit pertama semuanya
+       `Fauzi <32391359+fauzirpl@users.noreply.github.com>`, satu-satunya penulis.
+
+   TIDAK ADA NOMOR VERSI di papan ini, dan itu disengaja. Halaman tidak punya
+   jalan membacanya — server tidak menerbitkannya di /kendali maupun /health —
+   jadi angka yang diketik tangan di sini pasti basi diam-diam pada rilis
+   berikutnya, dan papan "tentang" yang berbohong soal versinya lebih buruk
+   daripada papan yang tidak menyebut versi sama sekali. Kalau nanti server
+   menerbitkannya, ambil dari situ; jangan ketik angkanya di sini. */
+const TENTANG_REPO = 'https://github.com/fauzirpl/agent-room';
+const TENTANG_BARIS = [
+  ['Ini apa', 'Nonton sesi <b>Claude Code</b> kamu kerja — bukan di terminal, tapi sebagai '
+    + 'pegawai kecil di kantor dinas pixel-art. Tiap sesi jadi satu orang, jalan ke meja '
+    + 'berbeda sesuai tool yang lagi dipakai: <code>Read</code> ke lemari arsip, '
+    + '<code>Edit</code>/<code>Write</code> ke meja stempel, <code>git</code> ke PC server, '
+    + '<code>Task</code>/<code>Agent</code> ke meja rapat.'],
+  ['Paket', '<code>agent-room</code> · perintah <code>dinas</code>'],
+  ['Jalanin', '<code>npx github:fauzirpl/agent-room</code>'],
+  ['Repositori', '<a href="' + TENTANG_REPO + '" target="_blank" rel="noopener noreferrer">'
+    + TENTANG_REPO.replace('https://', '') + '</a>'],
+  ['Teknis', 'Satu server Node, <b>tanpa dependensi</b>. Butuh Node 18 ke atas. '
+    + 'Ruangannya satu kanvas 480×356 yang digambar ulang tiap frame.'],
+];
+
+const dlgTentang = document.getElementById('dlgTentang');
+const tentangBadan = document.getElementById('tentangBadan');
+
+function tentangGambar() {
+  const baris = TENTANG_BARIS.map(([label, isi]) =>
+    '<div class="tentang-baris"><dt>' + label + '</dt><dd>' + isi + '</dd></div>').join('');
+  // Baris pengembang ikut MASUK ke dalam <dl> yang sama, bukan berdiri sendiri
+  // di luarnya: <dt>/<dd> hanya sah sebagai anak <dl>, dan yang di luar itu
+  // markah rusak yang kebetulan tetap tampil.
+  tentangBadan.innerHTML =
+    '<div class="tentang-kop">'
+    + '<h2>KANTOR<span>AGENT</span></h2>'
+    + '<p>kantor dinas · live dari Claude Code</p>'
+    + '</div>'
+    + '<dl class="tentang-daftar">' + baris
+    + '<div class="tentang-baris"><dt>Pengembang</dt><dd>'
+    + '<div class="tentang-orang">'
+    + '<div class="avatar" aria-hidden="true">F</div>'
+    + '<div><b>Fauzi</b><span>github.com/fauzirpl</span></div>'
+    + '</div></dd></div>'
+    + '</dl>'
+    + '<p class="tentang-kaki">Papan ini dibuka dengan mengklik X-banner di pojok kiri '
+    + 'ruangan. Klik bannernya lagi, atau tekan Esc, untuk kembali ke tampak penuh.</p>';
+}
+
+/* Menutup papan SEKALIGUS melepas bidikannya: papan yang tertutup sementara
+   kameranya masih terkunci zoom 4 di pojok kiri membuat ruangan terasa macet,
+   dan tidak ada lagi yang kelihatan bisa diklik untuk melepaskannya. */
+function tutupTentang() {
+  dlgTentang.hidden = true;
+  BANNER.zoom = false;
+  BANNER.dibuka = false;
+  document.removeEventListener('keydown', tentangTombol);
+}
+function tentangTombol(e) { if (e.key === 'Escape') { e.preventDefault(); tutupTentang(); } }
+function bukaTentang() {
+  tentangGambar();
+  dlgTentang.hidden = false;
+  document.addEventListener('keydown', tentangTombol);
+}
+document.getElementById('tentangTutup').onclick = tutupTentang;
+dlgTentang.onclick = (e) => { if (e.target === dlgTentang) tutupTentang(); };
+
 /* ------------------------------------------------------------------ kamera */
 /* Kamera hidup, sengaja dipisah dari fit(). fit() cuma mengurus skala integer
    kanvas→CSS (itu urusan piksel layar); kamera bekerja di koordinat dunia
@@ -8878,6 +10265,7 @@ function kameraBidik() {
      dan akan menimpa bidikan klik kalau ditaruh di bawah. Penjepitan
      tickKamera tetap sahih — pusat bukaan (342,69) dengan zoom 4 memberi
      setengah bidikan 60x44,5 yang tidak menabrak batas mana pun. */
+  if (BANNER.zoom) { bannerBidik(); return; }
   if (RUANG_KADIS.zoom) { sisipBidik(); return; }
   if (K.mode === 'ikut') {
     // satu pegawai aktif → ikuti; dua atau lebih → tampak penuh, jangan
@@ -9040,6 +10428,36 @@ setSisipKadis.value = sisipSetelan();
 if (RUANG_URL || MODE_KADIS) setSisipKadis.disabled = true;
 setSisipKadis.onchange = () => { sisipSetel(setSisipKadis.value); ingatan.tulis('sisipKadis', sisipSetelan()); };
 
+/* Keramaian event acak. Boleh diingat browser — ini murni selera tampilan,
+   tidak memaksa apa pun menyala sendiri waktu halaman dibuka lagi. */
+const setKeramaian = document.getElementById('setKeramaian');
+const setKeramaianKet = document.getElementById('setKeramaianKet');
+function keramaianGambar() {
+  setKeramaian.value = keramaian;
+  const k = KERAMAIAN[keramaian] || KERAMAIAN.sedang;
+  const jarak = k.kali
+    ? Math.round(JEDA_MIN * k.kali) + '-' + Math.round(JEDA_MAX * k.kali) + ' detik antar kejadian · '
+    : '';
+  setKeramaianKet.textContent = jarak + k.ket;
+  /* ?event=… mengalahkan setelan ini: satu memaksa event tertentu, satu lagi
+     mematikan semuanya sejak halaman dimuat. Bilang apa adanya daripada
+     membiarkan orang menggeser saklar yang tidak berpengaruh. */
+  const dipaksa = EVENT_MATI || EVENT_PAKSA;
+  setKeramaian.disabled = Boolean(dipaksa);
+  if (dipaksa) setKeramaianKet.textContent = 'dikunci lewat ?event= di URL';
+}
+setKeramaian.onchange = () => {
+  keramaian = KERAMAIAN[setKeramaian.value] ? setKeramaian.value : 'sedang';
+  ingatan.tulis('keramaian', keramaian);
+  /* Jeda yang sedang berjalan ikut dipendekkan/dipanjangkan sekarang juga,
+     supaya efek gesernya langsung terasa — bukan baru mulai berlaku sesudah
+     kejadian berikutnya, yang di mode 'sepi' bisa dua menit lagi. */
+  const kali = (KERAMAIAN[keramaian] || KERAMAIAN.sedang).kali || 1;
+  jedaEvent = Math.min(jedaEvent, JEDA_MAX * kali);
+  keramaianGambar();
+};
+keramaianGambar();
+
 // Mode ringan: centangnya = pilihan manual; sebab otomatis (baterai/URL/
 // gerak dikurangi) cuma ditulis di keterangan, tidak memaksa centangnya.
 const setRingan = document.getElementById('setRingan');
@@ -9123,10 +10541,19 @@ const setUcapModelDaftar = document.getElementById('setUcapModelDaftar');
 const setUcapVoice = document.getElementById('setUcapVoice');
 const setUcapVoiceDaftar = document.getElementById('setUcapVoiceDaftar');
 const setUcapCoba = document.getElementById('setUcapCoba');
+const setUcapVoiceL = document.getElementById('setUcapVoiceL');
+const setUcapVoiceP = document.getElementById('setUcapVoiceP');
+const setUcapCobaL = document.getElementById('setUcapCobaL');
+const setUcapCobaP = document.getElementById('setUcapCobaP');
+const setUcapFormat = document.getElementById('setUcapFormat');
 const setUcapKet = document.getElementById('setUcapKet');
 const setUcapCache = document.getElementById('setUcapCache');
 const setUcapPanasi = document.getElementById('setUcapPanasi');
+const setUcapPanasiEvent = document.getElementById('setUcapPanasiEvent');
 const setUcapBersih = document.getElementById('setUcapBersih');
+const setUcapNarasi = document.getElementById('setUcapNarasi');
+const setUcapNarasiKet = document.getElementById('setUcapNarasiKet');
+const setUcapNarasiKetAsli = setUcapNarasiKet ? setUcapNarasiKet.innerHTML : '';
 
 const ukuranSingkat = (b) => (b < 1024 ? b + ' B'
   : b < 1024 * 1024 ? (b / 1024).toFixed(0) + ' KB'
@@ -9143,10 +10570,25 @@ function ucapGambar(d) {
   setUcap.checked = ucapNyala;
   if (typeof d.model === 'string') setUcapModel.value = d.model;
   if (typeof d.voice === 'string') setUcapVoice.value = d.voice;
+  if (typeof d.voiceL === 'string') setUcapVoiceL.value = d.voiceL;
+  if (typeof d.voiceP === 'string') setUcapVoiceP.value = d.voiceP;
+  if (d.format === 'mp3' || d.format === 'pcm') setUcapFormat.value = d.format;
   ucapKet(setUcapKunciKet, d.punyaKunci
     ? 'terpasang · …' + d.kunciEkor
     : 'belum ada — tanpa kunci, notifikasi memakai lonceng saja',
   d.punyaKunci ? 'ok' : '');
+  if (SUARA_NARASI_LINGKUP.includes(d.narasi)) {
+    narasiLingkup = d.narasi;
+    setUcapNarasi.value = d.narasi;
+  }
+  /* Jumlah eventnya dihitung SERVER (dari sumber event yang benar-benar
+     dikirim ke halaman), bukan dari EVENT_ACAK di sini: yang mau diberitahukan
+     itu berapa klip yang akan dibuat tombol "panaskan narasi", dan yang
+     membuatnya server. */
+  if (setUcapNarasiKet && d.narasiJumlah) {
+    setUcapNarasiKet.innerHTML = setUcapNarasiKetAsli
+      + ' ' + d.narasiJumlah + ' kejadian punya kalimatnya sendiri.';
+  }
   const c = d.cache || { jumlah: 0, byte: 0 };
   setUcapCache.textContent = c.jumlah
     ? 'cache ' + c.jumlah + ' klip · ' + ukuranSingkat(c.byte)
@@ -9218,6 +10660,12 @@ setUcap.onchange = async () => {
 setUcapModel.onchange = () => { gambarVoice(); simpanSuara({ model: setUcapModel.value }); };
 setUcapModel.oninput = gambarVoice;      // ikut waktu memilih dari datalist, sebelum blur
 setUcapVoice.onchange = () => simpanSuara({ voice: setUcapVoice.value });
+/* Dikosongkan = cabut, kembali ikut voice utama. Karena itu nilainya tetap
+   dikirim walau kosong — beda dari kolom kunci, yang '' berarti MENGHAPUS
+   kunci dan karena itu cuma dikirim kalau memang sedang diganti. */
+setUcapVoiceL.onchange = () => simpanSuara({ voiceL: setUcapVoiceL.value });
+setUcapVoiceP.onchange = () => simpanSuara({ voiceP: setUcapVoiceP.value });
+setUcapFormat.onchange = () => simpanSuara({ format: setUcapFormat.value });
 
 setUcapKunciSimpan.onclick = async () => {
   const nilai = setUcapKunci.value.trim();
@@ -9230,15 +10678,19 @@ setUcapKunciSimpan.onclick = async () => {
 /* Audisi. Sengaja lewat fetch, bukan `new Audio('/suara/coba')`: kalau
    gagal, badannya JSON berisi sebabnya — dan sebab itu yang mau kamu baca
    waktu sedang mencoba-coba model. */
-setUcapCoba.onclick = async () => {
-  setUcapCoba.disabled = true;
+/* Satu jalur audisi untuk tiga kolom. `jk` memilih kolom voice mana yang
+   diaudisi di server; kalimatnya sengaja sama untuk ketiganya, sebab yang
+   mau dibandingkan suaranya — kalimat yang beda-beda justru bikin telinga
+   membandingkan kalimat. */
+async function cobaSuara(jk, tombol) {
+  tombol.disabled = true;
   ucapKet(setUcapKet, 'membuat klip…', '');
   /* Tidak lewat panelJson(): yang ditunggu di sini byte audio, bukan JSON.
      Tapi bedanya 404-versi-lama vs galat sungguhan tetap harus terdengar
      jelas — itu justru pertanyaan pertama waktu audisi tidak bunyi. */
   try {
     let res;
-    try { res = await fetch('/suara/coba'); }
+    try { res = await fetch('/suara/coba' + (jk ? '?jk=' + jk : '')); }
     catch { ucapKet(setUcapKet, 'server tidak menjawab — apa `dinas` masih jalan?', 'err'); return; }
     if (res.status === 404) {
       ucapKet(setUcapKet, 'server masih versi lama — hentikan lalu jalankan ulang dinas', 'err');
@@ -9253,32 +10705,62 @@ setUcapCoba.onclick = async () => {
     }
     const url = URL.createObjectURL(await res.blob());
     const el = new Audio(url);
-    el.volume = Math.max(0, Math.min(1, 0.9 * VOL.notif));
+    el.volume = volUcap();
     el.onended = el.onerror = () => URL.revokeObjectURL(url);
     await el.play().catch(() => {});
-    ucapKet(setUcapKet, 'terdengar? kalau ya, tinggal centang di atas', 'ok');
+    ucapKet(setUcapKet, jk
+      ? 'terdengar? kalau cocok, biarkan; kalau tidak, ganti voice-nya'
+      : 'terdengar? kalau ya, tinggal centang di atas', 'ok');
     muatSuara();      // cache-nya barusan bertambah satu
   } finally {
-    setUcapCoba.disabled = false;
+    tombol.disabled = false;
   }
+}
+
+setUcapCoba.onclick = () => cobaSuara('', setUcapCoba);
+setUcapCobaL.onclick = () => cobaSuara('L', setUcapCobaL);
+setUcapCobaP.onclick = () => cobaSuara('P', setUcapCobaP);
+
+setUcapNarasi.onchange = () => {
+  // Dicerminkan SEKARANG, jangan menunggu jawaban server: kalau kamu baru saja
+  // mematikannya, event yang menyala sedetik kemudian tidak boleh sempat bicara.
+  narasiLingkup = setUcapNarasi.value;
+  /* Tanpa `ket`: setUcapNarasiKet itu <p class="pengaturan-nota"> yang isinya
+     keterangan tetap, dan ucapKet() akan menimpanya dengan 'tersimpan' plus
+     mengganti kelasnya. Konfirmasinya datang dari ucapGambar() yang menggambar
+     ulang keterangan itu dari jawaban server. */
+  simpanSuara({ narasi: setUcapNarasi.value });
 };
 
-setUcapPanasi.onclick = async () => {
-  setUcapPanasi.disabled = true;
-  ucapKet(setUcapKet, 'membuat klip untuk seluruh daftar nama… ini bisa lama', '');
+/* Dua tombol, satu jalur. Bedanya cuma `lingkup` dan panjang antreannya:
+   daftar nama itu belasan klip dan selesai sekali tekan, narasi event ratusan
+   dan hampir pasti kena batas 120 detik di server — makanya kalimat
+   penutupnya boleh menyuruh menekan lagi, dan tidak dianggap gagal. */
+async function panasiCache(lingkup, tombol, sedang) {
+  tombol.disabled = true;
+  ucapKet(setUcapKet, sedang, '');
   try {
-    const r = await panelJson('/suara/panasi', { method: 'POST' });
+    const r = await panelJson('/suara/panasi', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lingkup }),
+    });
     if (r.galat) { ucapKet(setUcapKet, r.galat, 'err'); return; }
     const d = r.d;
     if (!d.ok) { ucapKet(setUcapKet, d.pesan || 'gagal', 'err'); return; }
     const ringkas = d.dibuat + ' klip baru, ' + d.sudah + ' sudah ada'
-      + (d.gagal ? ', ' + d.gagal + ' gagal' : '');
+      + (d.gagal ? ', ' + d.gagal + ' gagal' : '')
+      + (d.total ? ' (dari ' + d.total + ')' : '');
     ucapKet(setUcapKet, ringkas + (d.pesan ? ' — ' + d.pesan : ''), d.gagal ? 'err' : 'ok');
     muatSuara();     // jumlah & ukuran cache-nya berubah
   } finally {
-    setUcapPanasi.disabled = false;
+    tombol.disabled = false;
   }
-};
+}
+
+setUcapPanasi.onclick = () => panasiCache('nama', setUcapPanasi,
+  'membuat klip untuk seluruh daftar nama… ini bisa lama');
+setUcapPanasiEvent.onclick = () => panasiCache('event', setUcapPanasiEvent,
+  'membuat klip narasi untuk seluruh kejadian… ratusan klip, siap-siap menekan lagi');
 
 setUcapBersih.onclick = async () => {
   const r = await panelJson('/suara/cache', { method: 'DELETE' });
@@ -9504,6 +10986,9 @@ volumeBaris('notif', 'volNotif', document.getElementById('volNotif'),
   document.getElementById('volNotifNilai'), () => busNotif);
 volumeBaris('musik', 'volMusik', document.getElementById('volMusik'),
   document.getElementById('volMusikNilai'), () => busMusik);
+// tanpa bus: nilainya dibaca volUcap() saat klip diputar, bukan dipasang ke gain
+volumeBaris('ucap', 'volUcap', document.getElementById('volUcap'),
+  document.getElementById('volUcapNilai'), () => null);
 
 function settingGambarInfo() {
   const baris = [
@@ -9965,11 +11450,9 @@ if (params.get('demo') === '1') {
 
    Definisi eventnya sendiri ada di public/event-acak.js, bukan di sini. */
 
-const EVENT_PARAM = new URLSearchParams(location.search).get('event');
-const EVENT_MATI = EVENT_PARAM === '0' || EVENT_PARAM === 'mati';
-const EVENT_PAKSA = EVENT_PARAM && !EVENT_MATI ? EVENT_PARAM.split(',') : null;
+// EVENT_PARAM/EVENT_MATI/EVENT_PAKSA dan JEDA_MIN/JEDA_MAX: lihat blok
+// "tempo event acak" di dekat setelan yang diingat browser, jauh di atas.
 
-const JEDA_MIN = 18, JEDA_MAX = 45;   // detik antar percobaan menyalakan event
 
 const EVENT_ACAK = [];
 const eventById = new Map();
@@ -10439,6 +11922,18 @@ function nyalakanEvent(def) {
   // sungguhan). Fire-and-forget, gagal = diam — ruangan tidak boleh terganggu
   // gara-gara pelaporan suasana.
   if (def.kelas === 'panggung' && !EVENT_PAKSA) laporAmbien(def.id);
+  /* Bunyi kejadiannya. Dua lapis yang sengaja tidak saling menunggu: efeknya
+     disintesis di sini juga (instan, tanpa jaringan), narasinya menyusul kalau
+     dan waktu klipnya siap. Diserikan berarti "gelas pecah" terdengar tiga
+     detik sesudah gelasnya pecah — sama persis alasan lonceng notifikasi tidak
+     boleh menunggu /ucap. Keduanya sesudah mulai(), supaya efeknya bisa ikut
+     posisi pemeran yang barusan dipinjam.
+
+     EVENT_PAKSA (?event=<id>) TIDAK dikecualikan di sini, beda dari
+     laporAmbien di atas: arsip kliping memang tidak boleh dikotori uji coba,
+     tapi menguji sebuah event tanpa bisa mendengar bunyinya itu percuma. */
+  efekEvent(def, E.aktor[0]);
+  ucapEvent(def, E.aktor[0]);
   return true;
 }
 
@@ -10626,7 +12121,12 @@ function tickEvent(dt) {
     return;
   }
 
-  jedaEvent = JEDA_MIN + Math.random() * (JEDA_MAX - JEDA_MIN);
+  const kali = (KERAMAIAN[keramaian] || KERAMAIAN.sedang).kali;
+  /* Jadwalnya tetap dihitung walau keramaiannya 'mati' (pakai pengali 1),
+     supaya menyalakannya lagi dari panel tidak menunggu sisa jeda panjang
+     yang sempat terpasang sebelum dimatikan. */
+  jedaEvent = (JEDA_MIN + Math.random() * (JEDA_MAX - JEDA_MIN)) * (kali || 1);
+  if (!kali) return;                    // 'mati': tidak ada yang dinyalakan
   const calon = EVENT_ACAK.filter((d) =>
     now > (cooldownSampai.get(d.id) || 0) && !bentrok(d) && (!d.syarat || d.syarat(S)));
   const pilihan = calon.length ? pilihBerbobot(calon) : null;   // null: semua bobot 0 di babak ini
@@ -10986,6 +12486,7 @@ function frame(ts) {
   tickEvent(dt);        // sebelum update: MOD dipasang di sini, dibaca di bawah
   tickKamera(dt);       // sebelum update pegawai: balon DOM-nya dihitung lewat keLayar()
   tickSisip(dt);        // bukaan ruang kadis: gorden + peralihan alpha masuk/keluar
+  tickBanner();         // papan informasi menyusul begitu bidikan banner sampai
   // prefers-reduced-motion: kipas plafon dibekukan (animasi non-esensial);
   // kedip neon & langkah pegawai tetap — itu isi ruangannya, bukan hiasan
   if (!geraKurang.matches) putarKipas += dt * 11 * MOD.kipas;
@@ -11006,7 +12507,7 @@ function frame(ts) {
   ctx.save();
   // Kamera: sesudah skala integer fit() (yang itu CSS, bukan ctx), sebelum
   // segala gambar. tx/ty sudah bulat, zoom bulat di luar masa easing.
-  ctx.setTransform(KAMERA.zoom, 0, 0, KAMERA.zoom, KAMERA.tx, KAMERA.ty);
+  ctx.setTransform(KAMERA.zoom * SS, 0, 0, KAMERA.zoom * SS, KAMERA.tx * SS, KAMERA.ty * SS);
   if (MOD.getar) ctx.translate(0, Math.round(Math.sin(now / 40) * MOD.getar));
 
   drawWall();
@@ -11068,8 +12569,10 @@ function frame(ts) {
 
   // vignette milik layar, bukan ruangan: waktu kamera membidik pojok, yang
   // gelap tetap tepi bidikan — bukan pojok ruangan yang sedang dilihat
-  if (KAMERA.zoom !== 1) ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (ringan) ctx.drawImage(vignetteLapis(MOD.vignette), 0, 0);   // dari cache; digambar ulang cuma saat alphanya berubah
+  if (KAMERA.zoom !== 1) ctx.setTransform(SS, 0, 0, SS, 0, 0);
+  // ukuran tujuan ditulis eksplisit: cache-nya seukuran kanvas (W*SS piksel),
+  // yang di bawah transform SS harus dipetakan balik ke W x H satuan dunia
+  if (ringan) ctx.drawImage(vignetteLapis(MOD.vignette), 0, 0, W, H);   // dari cache; digambar ulang cuma saat alphanya berubah
   else {
     const g = ctx.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
     g.addColorStop(0, 'rgba(0,0,0,0)');
@@ -11091,8 +12594,9 @@ let vignetteCache = null, vignetteKunci = '';
 function vignetteLapis(alpha) {
   const kunci = alpha.toFixed(3);
   if (vignetteCache && vignetteKunci === kunci) return vignetteCache;
-  if (!vignetteCache) { vignetteCache = document.createElement('canvas'); vignetteCache.width = W; vignetteCache.height = H; }
+  if (!vignetteCache) { vignetteCache = document.createElement('canvas'); vignetteCache.width = W * SS; vignetteCache.height = H * SS; }
   const k = vignetteCache.getContext('2d');
+  k.setTransform(SS, 0, 0, SS, 0, 0);
   k.clearRect(0, 0, W, H);
   const g = k.createRadialGradient(W / 2, 165, 70, W / 2, 165, 370);
   g.addColorStop(0, 'rgba(0,0,0,0)');

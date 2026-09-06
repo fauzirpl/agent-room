@@ -106,3 +106,17 @@ Dokumen ini dipecah per tema ke folder `docs/` (bagian panjangnya sudah 1.800 ba
 ### [Isi repositori](docs/06-isi-repo.md)
 
 - [Isi](docs/06-isi-repo.md#isi)
+
+### [Suara ucap & nama pegawai](docs/07-suara-nama.md)
+
+- [Kenapa berlapis](docs/07-suara-nama.md#kenapa-berlapis)
+- [Lapis 2: OpenRouter](docs/07-suara-nama.md#lapis-2-openrouter)
+- [Daftar nama pegawai](docs/07-suara-nama.md#daftar-nama-pegawai)
+
+### [Suara & narasi tiap event](docs/08-suara-event.md)
+
+- [Dua lapis yang tidak saling menunggu](docs/08-suara-event.md#dua-lapis-yang-tidak-saling-menunggu)
+- [Lapis 0: kosakata, bukan 337 bunyi](docs/08-suara-event.md#lapis-0-kosakata-bukan-337-bunyi)
+  - [Petanya dihasilkan, bukan ditulis tangan](docs/08-suara-event.md#petanya-dihasilkan-bukan-ditulis-tangan)
+- [Lapis 2: narasi, dan kenapa halaman cuma mengirim id](docs/08-suara-event.md#lapis-2-narasi-dan-kenapa-halaman-cuma-mengirim-id)
+  - [Lingkup](docs/08-suara-event.md#lingkup)

@@ -59,7 +59,13 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   tumpukan dokumen, kursi serong, lembaran tercecer — pagi berikutnya bersih
   lagi. Coba `?kusut=1`
 - Notifikasi suara pas sesi selesai, plus musik lofi kantor opsional —
-  semua bunyi disintesis langsung, nol file audio eksternal
+  semua bunyi disintesis langsung, nol file audio eksternal. Musiknya ikut
+  suasana: apel pagi lebih cerah, jam istirahat jadi lounge, hujan menutup
+  padnya, malam nyaris cuma desis vinyl, dan kalau ada sesi yang macet
+  akornya menggantung. Coba `?musik=malam`
+- Tiap kejadian punya bunyinya sendiri: kucing mengeong, dus ambruk, pintu
+  berderit, tepuk tangan waktu syukuran. Opsional, kejadiannya juga
+  **dibacakan** suara TTS kalau kunci OpenRouter sudah dipasang di panel ⚙️
 - Opsional: tugaskan pekerjaan baru dan telusuri folder langsung dari halaman
 
 ### Tanya kantornya dari sesi lain
@@ -139,7 +145,9 @@ removes it, `--coba` only shows what would be run).
   fried snacks to the meeting table) — counted automatically by `node uji-katalog.mjs`
 - Real weather in the window, synced to actual conditions, plus a day/night cycle
 - A sound notification when a session finishes, and optional lofi office
-  music — all synthesized on the fly, zero external audio files
+  music — all synthesized on the fly, zero external audio files. The music
+  follows the room’s mood: brighter at morning roll call, lounge at lunch,
+  muffled when it rains, nearly just vinyl hiss at night
 - Optional: assign new tasks and browse folders straight from the page
 
 ### Ask the office from another session

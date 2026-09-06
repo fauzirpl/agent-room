@@ -2,6 +2,9 @@
 
 > Bagian dari [DESIGN.md](../DESIGN.md). Status: **selesai** — langkah 1-7,
 > termasuk `uji-suara.mjs` yang ikut `npm test`.
+>
+> Lanjutannya: [08-suara-event.md](08-suara-event.md) memakai pipa yang sama
+> (`/ucap`, cache, panel ⚙️) untuk membunyikan dan membacakan **event acak**.
 
 Dua hal yang dirancang bareng karena saling bergantung: notifikasi yang
 **diucapkan** (bukan TTS bawaan browser lagi) dan **daftar nama** yang boleh
@@ -75,8 +78,22 @@ Content-Type: application/json
 -> 200, content-type: audio/mpeg, badan = mp3
 ```
 
-`response_format` **harus** diisi `mp3`; bawaannya `pcm`, yang tidak bisa
-dipakai `new Audio()` langsung.
+> **Ralat, dari kejadian sungguhan.** Kalimat di bawah ini dulu berbunyi
+> "`response_format` **harus** diisi `mp3`". Alasannya benar — pcm mentah
+> memang tidak bisa dipakai `new Audio()` — tapi kesimpulannya salah:
+> **ada model yang tidak menerima mp3 sama sekali.** Gemini TTS membalas
+> `400 Gemini TTS only supports response_format="pcm". Got "mp3".`, dan
+> selama kalimat itu jadi tetapan di kode, seluruh fitur suara mati begitu
+> modelnya dipindah ke sana. Sekarang formatnya setelan, dan jalan keluarnya
+> memasang kepala WAV — lihat [08-suara-event.md → Format klip](08-suara-event.md#format-klip-mp3-atau-pcm-yang-dibungkus-wav).
+>
+> Pelajarannya sama dengan bawaan `openai/gpt-4o-mini-tts` di bawah: **jangan
+> pernah menuliskan kemampuan penyedia sebagai tetapan di kode.** Yang tahu
+> cuma penyedianya, dan cara bertanya yang benar adalah mencoba lalu membaca
+> penolakannya.
+
+`response_format` diisi `mp3` **kalau modelnya menerima**; bawaan endpointnya
+sendiri `pcm`, yang tidak bisa dipakai `new Audio()` langsung tanpa kepala.
 
 Daftar model TTS-nya bisa diambil sendiri untuk mengisi dropdown:
 

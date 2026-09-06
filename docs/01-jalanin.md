@@ -241,6 +241,7 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_SUARA_DIR` | `suara/` | folder cache klip suara ucap |
 | `AGENT_ROOM_SUARA_URL` | OpenRouter `/audio/speech` | alamat penyedia TTS; diarahkan ke penyedia palsu oleh `uji-suara.mjs` supaya uji tidak pernah keluar jaringan |
 | `AGENT_ROOM_SUARA_MODEL_URL` | OpenRouter `/models` | alamat daftar model TTS untuk datalist di panel ⚙️ |
+| `AGENT_ROOM_SUARA_HZ` | `24000` | laju cuplik yang diasumsikan waktu format `pcm` dibungkus jadi WAV |
 
 ### Gerbang: penjaga Host & kunci event
 

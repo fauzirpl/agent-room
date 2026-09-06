@@ -317,6 +317,12 @@ function buatSandbox() {
     Map, Set, Array, Object, Promise, JSON, RegExp, Symbol, Error, TypeError, RangeError,
     Math, Number, String, Boolean, Uint8ClampedArray, Float32Array, Int32Array,
     isNaN, isFinite, parseInt, parseFloat,
+    /* Tanpa dua ini, `encodeURIComponent(x)` di dalam vm jatuh ke dummy dan
+       diam-diam mengembalikan dummy — bukan galat, cuma string yang salah.
+       Ketahuannya waktu uji narasi event membaca URL yang dirakit room.js dan
+       mendapat "function () { [native code] }". Kelas bug yang sama persis
+       dengan Map/Set di catatan di atas. */
+    encodeURIComponent, decodeURIComponent,
     URLSearchParams,                    // dipakai parse location.search (EVENT_PAKSA dkk.)
     performance,
     Date: buatDatePalsu(),              // beku ke Rabu 15 Apr 2026, jam ikut S.jam — lihat setJamPalsu()

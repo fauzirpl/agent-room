@@ -8,6 +8,59 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Musik lofi kantor ikut suasana ruangan.** Yang dulu satu loop tetap
+  sepanjang hari sekarang punya sebelas gaya (`LOFI_GAYA` di `room.js`), dipilih
+  dari hal-hal yang memang sudah menentukan rupa ruangan: babak hari, hujan/
+  petir, dan kesibukan sesi. Tiap gaya bawa bank akornya sendiri plus tempo,
+  ayunan swing, cutoff pad, pola drum, dan tebal desis vinyl — apel pagi paling
+  cerah, jam istirahat jadi lounge dengan snare disapu, lembur berjarak lebar,
+  malam nyaris cuma pad + desis, hujan menutup padnya, dan sesi yang macet
+  dapat vamp dua akor yang tidak pernah menyelesaikan. Dua instrumen baru (bass
+  dan satu nada rhodes yang jatuh acak) bikin dua birama bergaya sama pun tidak
+  persis sama. Gayanya dibaca ulang tiap awal birama, jadi pindahnya jatuh di
+  sambungan; nama suasananya ditulis kecil di panel ⚙️. Uji cepat:
+  `?musik=malam`. Penjaganya `uji-musik.mjs` — termasuk akor yang bisu gara-gara
+  nama nada salah ketik, dan babak hari baru yang lupa didaftarkan gayanya.
+
+- **Suara ucap ikut jenis kelamin pegawainya.** Notifikasi maupun narasi
+  kejadian sama-sama kalimat orang itu sendiri, jadi voice-nya ikut dia.
+  Halaman cuma menitipkan `&jk=L`/`&jk=P`; pasangan voice-nya setelan server
+  (`voiceL`/`voiceP` di `suara.json` v3). **Bawaannya kosong** — tidak ada
+  tabel "voice ini laki-laki" di kode, sebab tabel itu tidak ada di sumber mana
+  pun yang bisa dicek: OpenRouter cuma mengirim nama voice, dan dokumen Google
+  cuma menyebut sifatnya (“Bright”, “Gravelly”, “Soft”). Panel menyediakan dua
+  kolom + tombol ▶ coba di tiap kolom; pasangannya kamu tentukan pakai telinga.
+  Yang di-hash voice efektif, jadi selama kolomnya kosong tidak ada satu pun
+  klip lama yang basi.
+
+### Diperbaiki
+
+- **`response_format` tidak lagi dipaku ke `mp3`.** Gemini TTS menolaknya
+  mentah-mentah (`400 … only supports response_format="pcm"`), dan selama
+  format itu jadi tetapan di kode, seluruh fitur suara mati begitu modelnya
+  dipindah ke sana. Sekarang formatnya setelan yang **mengoreksi diri sendiri
+  sekali lalu diingat**, dan pcm-nya dibungkus kepala WAV (24 kHz, 16-bit,
+  mono — angkanya dari contoh `wave_file()` di dokumen Google) supaya tetap
+  bisa dimainkan `<audio>`. Masih nol dependensi.
+
+- **Suara & narasi tiap event acak.** 337 kejadian yang selama ini bisu kini
+  berbunyi. Dua lapis yang tidak saling menunggu: efek suara Web Audio
+  (kamus `EFEK`, 46 resep, disintesis di halaman — tanpa jaringan, tanpa
+  kunci, ikut centang 🔊) dan narasi TTS lewat `/ucap?event=<id>`. Narasinya
+  **satu kalimat sudut pandang orang pertama dari orang yang mengalami
+  kejadiannya** — "Cicaknya jatuh ke tumpukan berkas saya, astaghfirullah",
+  bukan judul "Cicak jatuh ke tumpukan berkas": 337 kalimat ditulis tangan di
+  `narasi-event.json` yang baru. Halaman tidak pernah mengarang kalimatnya:
+  yang dikirim cuma id event, dan `narasiEvent()` di server yang mengejanya —
+  jatuh ke kolom `balon`, lalu `nama`, untuk event yang barisnya belum
+  ditulis. Lingkupnya bisa diatur dari panel ⚙️
+  (tiap kejadian / kejadian besar saja / mati) dan seluruh narasi bisa
+  dipra-generate lewat tombol "panaskan narasi". Rancangannya di
+  [docs/08-suara-event.md](docs/08-suara-event.md).
+- `selaras-suara.mjs`: menerjemahkan kolom `suara` di `event-acak.json`
+  (catatan desain hasil rapat, mis. "derit pendek tiap sapuan") jadi
+  `public/event/99-suara.js`. `--periksa` ikut `npm test`, jadi gelombang
+  event berikutnya tidak bisa lahir bisu tanpa ketahuan.
 - **Jenis kelamin pegawai.** Aksesori kepala tidak lagi murni ikut jabatan:
   pegawai perempuan selalu digambar berjilbab (warnanya tetap ikut jabatan),
   laki-laki tidak pernah — jadi "Budi" di kursi auditor tidak lagi berjilbab
@@ -116,7 +169,6 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   dari kode (daftar hook, tabel tool MCP, nama metrik, daftar harness), klien
   MCP palsu untuk `mcp-room.mjs`, dan putar ulang satu hari kerja sungguhan
   ke sisi **server**, bukan cuma ke halaman.
-
 
 ### Dihapus
 

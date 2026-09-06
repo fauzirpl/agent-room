@@ -273,6 +273,73 @@ bukan ruangan. Parameter bukaan ini `?ruang=`, bukan `?kadis=`. Di mode HP
 bukaan tidak pernah ada, jadi pilihan setelannya sengaja dimatikan alih-alih
 pura-pura bisa dipilih.
 
+## Pantri, dan sekat yang akhirnya jadi dinding
+
+Pantri menempati pojok kanan-depan (`x414..478`, `y196..288`) di balik sekat
+kayu rendah: satu panel di belakang, satu panel di sisi kiri. Tapaknya sudah
+lama begitu dan **tidak digeser** — puluhan event menaruh orang di koordinat di
+dalamnya, dan `sortY` prop-nya dikunci golden z-order.
+
+Yang berubah: sekat itu dulu **cuma gambar**. `route()` tidak punya pengertian
+rintangan sama sekali, jadi setiap kaki yang menuju pantri menembus kayunya di
+lajur bawah `y=252`. Diukur dengan memanggil `route()` yang asli untuk lima
+titik asal × dua belas tujuan pantri yang benar-benar dipakai event: **60 dari
+60 jalur menembus**. Penulis event sudah menghindarinya satu per satu dengan
+tangan — di `public/event/` masih ada komentar "berhenti sebelum sekat pantry
+(x414)", "berakhir di x=404, aman dari sekat kiri pantry", "x=452 tidak bisa:
+pantry menempati x414..478". Beban itu ada di orang, dan orang berikutnya pasti
+lupa.
+
+Sekarang pantri punya **pintu** (`y256..280` di panel kiri) dan router yang
+memakainya. `PANTRI` di kepala `room.js` adalah satu-satunya sumber angkanya:
+`drawPantry()` menggambar sekat dan kusen dari situ, dan `route()` menghindar
+dari situ juga — pintu yang digeser di gambar ikut menggeser jalur kakinya.
+Tiga cabang menutup semua arah:
+
+- **masuk** (`masukPantri`) — rute biasa sampai depan pintu (`x=404`), lewat
+  kusen, baru cari titiknya di dalam;
+- **keluar** (`keluarPantri`) — cermin dari itu;
+- **memutar** (`memutarPantri`) — untuk tujuan di lantai **bawah** sekat
+  (`y>288`, `x>414`), yang dulu ditempuh dengan menembus sekat lalu
+  menyeberangi ruang pantri. Kolom memutarnya `x=380`, bukan `x=404` seperti
+  pintunya: turun di 404 berarti menginjak kaki kipas berdiri (`x390..410`).
+
+Sisi **depan** pantri sengaja dibiarkan terbuka, bukan lupa dipagari: dalam
+proyeksi miring ini pagar depan akan menutupi isi pantri sendiri, dan pantri
+ini barang tontonan — harus bisa dilihat ke dalamnya. Itu tidak membuat
+pintunya mubazir. Semua lalu lintas ke pantri datang dari lajur bawah
+(`y=252`), yang berada di **atas** tepi depan pantri (`y=288`), jadi pintu kiri
+memang selalu jalan masuk terdekat; tidak ada yang pernah melewati sisi
+terbukanya lalu memutar. Yang lewat di bawahnya cuma jalur `memutarPantri`,
+dan mereka memang bukan sedang menuju pantri.
+
+Ambang pintunya `y=272`, dan itu **bukan** titik tengah bukaan (268). Angkanya
+harus lebih besar dari `sortY` prop pantri (270), kalau tidak orang yang sedang
+berdiri di ambang digambar di belakang sekatnya sendiri dan terbaca tertelan.
+`uji-pantri.mjs` mengunci ketiganya: tidak ada ruas jalur yang menembus kayu,
+pintunya benar-benar dilewati (dinding yang menyegel semua jalan juga akan
+lolos pemeriksaan "tidak menembus"), dan ambangnya di depan `sortY`. Tujuan
+yang disapunya **dipindai** dari `goToXY()` literal di `public/event/*.js`,
+jadi event baru yang menaruh orang di pantri otomatis ikut teruji.
+
+Rupanya ikut dibenahi bersama sekatnya. Sebelumnya dua pita kayu satu nada plus
+satu kotak abu setinggi 15 px — kebaca sebagai bingkai dengan perabot di
+dalamnya, bukan sebagai ruangan. Sekarang: tiap panel punya pucuk yang kena
+lampu, muka, kaki yang masuk bayangan, dan bayangan yang dijatuhkannya ke
+lantai; counter dipecah jadi meja granit (dilihat dari atas) dan lemari bawah
+berlaminasi pucat (dilihat dari depan) — sengaja **bukan** kayu, karena dua
+cokelat bertumpuk membuat lemarinya terbaca sebagai bagian dari sekat dan
+counter-nya melayang lagi; wastafelnya bak tertanam dengan rim terang dan
+lubang buangan, bukan kotak gelap yang ditempel; dan yang dulu disebut "oven"
+digambar sebagai apa yang bentuknya memang: microwave meja.
+
+Lantai di dalam pantri dibuat keramik 12 px, beda dari terazo 24 px sisa
+ruangan, dan digambar di **lapisan lantai** — bukan di `drawPantry()`. Prop
+pantri ber-`sortY` 270, jadi lantai yang ikut digambar di sana akan menimpa
+siapa pun yang berdiri di `y<270`. Orang mengenali batas sebuah ruangan dari
+lantainya sebelum dari sekatnya, dan itu yang paling murah membuat pantri
+terbaca sebagai ruang lain alih-alih sebagai perabot yang berkumpul di pojok.
+
 ## Peserta rapat
 
 Subagent punya hook sendiri: `SubagentStart` menandai satu agen masuk,
@@ -967,12 +1034,144 @@ ikut mewarisi `flex: 1` (melebar sepenuh layar) serta `text-align: center` dari
 kotak panel. Fokus keyboard (`:focus-visible`) dan `prefers-reduced-motion`
 ditangani global, jadi tidak perlu diulang per elemen.
 
+### Resolusi HD: kisi 480×356, piksel di baliknya sebanyak layar
+
+Ruangan ini digambar di kisi **480×356 piksel dunia**, dan itu tidak pernah
+berubah: semua koordinat di `room.js`, semua tabel stasiun, semua golden uji,
+dan kamera bekerja di angka yang sama seperti hari pertama. Yang dulu ikut
+terkunci di 480×356 adalah **kanvasnya** — dan itu masalahnya.
+
+Kanvas 480 px yang direntangkan ke layar 1.100 px diperbesar peramban dengan
+`image-rendering: pixelated`. Kalau perbesarannya bukan bilangan bulat — dan di
+layar biasa memang tidak; skala tampil 1,81 dikali `devicePixelRatio` 1,25
+menghasilkan 2,26 — satu piksel dunia jatuh jadi **dua** baris layar di satu
+tempat dan **tiga** di tempat lain. Itu yang kebaca sebagai garis tepi belang
+dan huruf yang lumer: bukan pixel-art yang tajam, melainkan pixel-art yang
+diperbesar asal.
+
+`SS` (supersampling, dipasang `pasangSS()` dari `fit()`) memisahkan keduanya.
+Kanvasnya dibikin `SS` kali lebih besar dan `ctx` diskalakan `SS` kali, jadi
+satu piksel dunia = kotak `SS`×`SS` piksel kanvas. Akibatnya dua-duanya benar
+sekaligus:
+
+- **Yang kotak tetap kotak.** `r()`/`fillRect` berkoordinat bulat jatuh persis
+  di batas kotak `SS`×`SS`. Tidak ada satu pun sprite yang jadi kabur.
+- **Yang bukan kotak akhirnya punya piksel.** Teks papan nama, layar, dan
+  plakat; lengkung jam dinding dan rambu; gradasi lantai; pendar lampu; foto
+  pejabat yang miring — semuanya digambar di resolusi layar, bukan di 480 px
+  lalu diperbesar.
+
+`SS` diambil dari `Math.ceil(skala × devicePixelRatio)` dan dibatasi 3, jadi
+kanvasnya tidak pernah lebih kasar daripada layarnya dan tidak pernah membakar
+9 kali piksel tanpa perlu. `?hd=1..4` memaksa angkanya, `?hd=0` menguncinya di
+1 (kisi apa adanya, buat mesin lemah atau buat membandingkan). Diukur di
+mesin penulisnya, satu frame berharga sama saja di `SS` 1, 2, maupun 3 (~4,5
+ms): yang mahal di ruangan ini geometri dan logikanya, bukan jumlah pikselnya.
+
+Satu pengecualian: **overlay tetap memakai `pixelated`**, tidak pernah
+penyaringan halus. Penyaringan halus bekerja dengan mencampur piksel
+bertetangga, dan di `?overlay=chroma` tetangga tiap sprite adalah hijau
+`#00ff00` — campurannya jadi piksel setengah hijau yang tidak bisa dibuang
+chroma key dan menyisakan rumbai hijau di sekeliling pegawai. `SS` tetap
+menaikkan resolusi teks dan lengkungnya; cuma penskalaan akhirnya yang dijaga
+tidak membaurkan warna.
+
+### Bahan dinding & lantai
+
+Menaikkan jumlah piksel saja tidak membuat ruangan terbaca "HD" — dinding dan
+lantainya dulu bidang warna rata (dua pita cat di atas, satu kisi ubin di
+bawah), dan begitu pikselnya bertambah justru **kerataan** itu yang paling
+kelihatan. Yang kurang bahannya, bukan resolusinya. Tiga lapisan menambalnya:
+
+- **`dindingLapis()`** — serat cat rol (bintik setipis satu piksel kanvas, dua
+  arah: yang cuma gelap kebaca sebagai kotor, yang dua arah kebaca sebagai
+  permukaan yang dicat), jatuh cahaya dari plafon ke kaki dinding (yang memberi
+  dinding *arah*; sebelumnya krem 0..70 benar-benar satu nilai), lis pemisah
+  tiga tingkat dengan bayangan yang jatuh ke wainscot, pilar yang punya sisi
+  terang jadi terbaca sebagai pilaster bukan goresan, dan sudut dinding-lantai
+  yang digelapkan.
+- **`lantaiLapis()`** — terazo (serpih agregat sebesar satu piksel kanvas, jadi
+  butirnya baru benar-benar ada begitu `SS` > 1), nada tua-muda per ubin seperti
+  ubin yang dipasang dari beberapa dus, nat dengan sisi gelap dan bibir terang
+  supaya ubinnya terbaca menonjol, dan kilap poles sejajar deret jendela. Retak
+  ubinnya juga diperbaiki: dulu satu bentuk yang sama persis di tiap ubin
+  terpilih — di kisi 480 px itu lolos, di resolusi tinggi stensil berulang itu
+  langsung kebaca sebagai tanda panah — sekarang tiap ubin dapat patahannya
+  sendiri dari `acakTetap()`.
+- **`bayangKaki()` & `bayangDinding()`** — bayangan tempel di kaki perabot dan
+  di balik benda yang menggantung. Ini penambah kedalaman termurah yang ada:
+  tanpa dia tiap benda kebaca *ditempel* ke lantai/dinding, bukan *berdiri* di
+  atasnya. Tabelnya ditulis tangan karena `PROPS` tidak menyimpan lebar maupun
+  garis pijak; meja rapat tidak ikut (`drawRapat` sudah punya bayangannya
+  sendiri) dan meja kerja dibaca dari `MEJA_KERJA_X` supaya tidak ada tabel
+  kedua yang bisa basi.
+
+Dua yang pertama **statis** — tidak menyentuh `now`, `RUANGAN`, maupun `MOD` —
+jadi digambar sekali ke kanvas offscreen dan sesudahnya cuma satu `drawImage`
+per frame. Tanpa itu ribuan `fillRect` serat dan terazo akan diulang 60 kali
+sedetik demi gambar yang sama persis. Bintiknya pakai `acakTetap()`, bukan
+`Math.random()`: lantai yang butir terazonya pindah tiap muat ulang bukan
+lantai, itu kedipan. Cache-nya dibuang tiap `SS` berganti, karena isinya
+digambar dalam piksel kanvas, bukan piksel dunia.
+
+### X-banner: papan informasi aplikasi
+
+X-banner di pojok kiri ruangan (`x16..42`, `y188..240`) dulu tempelan dekor —
+kepala biru, satu blok emas berkomentar "logo bundar-ish", tiga pita abu
+sebagai teks palsu. Bentuknya benar dari jauh dan tidak berarti apa-apa dari
+dekat. Sekarang dia **papan nama aplikasinya sendiri, dan bisa diklik**: kamera
+membidiknya dengan zoom 4, lalu papan "Tentang kantor ini" terbuka.
+
+Wajahnya digambar dengan teks dan bintang lengkung sungguhan, bukan pita abu.
+Di kisi 480 px itu memang mustahil terbaca — yang membuatnya mungkin adalah
+supersampling (lihat **Resolusi HD** di atas): pada bidikan zoom 4 satu piksel
+dunia jadi 12 piksel layar, cukup untuk huruf 5 px dan bintang lima sudut yang
+benar-benar bersudut. Fitur ini yang paling langsung **memakai** resolusi itu,
+bukan cuma menikmatinya.
+
+Tiga hal yang ditata bersama, bukan sendiri-sendiri:
+
+- **Satu sumber angka.** `XBANNER` dipakai bertiga — menggambar, hit-test klik,
+  dan bidikan kamera — sama seperti `PANTRI`. Menggeser bannernya menggeser
+  ketiganya sekaligus.
+- **Panel menyusul kamera, bukan jam.** `tickBanner()` membuka papan begitu
+  `KAMERA.zoom` benar-benar sampai, bukan sesudah jeda tetap: dengan
+  `prefers-reduced-motion` kameranya langsung sampai, dan panel yang tetap
+  menunggu 600 ms akan terasa macet.
+- **Papannya rata kanan, latarnya terang.** Penjepitan kamera (`tickKamera`)
+  melarang bidikan melihat keluar ruangan, jadi banner yang menempel di tepi
+  kiri terjepit ke sepertiga kiri layar — bukan ke tengah. Itu dipakai: papan
+  informasinya berdiri di sisi seberang dengan tirai yang jauh lebih terang
+  dari dialog lain, jadi banner dan keterangannya berdampingan seperti benda
+  pameran dan plakatnya. Tirai gelap penuh layar akan membuang zoom yang baru
+  saja dilakukan. Di bawah 900 px papan kembali ke tengah, karena di situ
+  memang tidak ada ruang untuk berdampingan.
+
+Menutupnya (tombol ✕, Esc, klik di luar papan, atau klik bannernya lagi)
+**sekaligus melepas bidikannya** — papan yang tertutup sementara kameranya
+masih terkunci zoom 4 di pojok kiri membuat ruangan terasa macet, dan tidak ada
+lagi yang kelihatan bisa diklik untuk melepaskannya.
+
+Isinya fakta yang bisa dicek di repo, bukan karangan: nama paket, deskripsi,
+dan syarat Node dari `package.json`; alamat repo dari `package.json#repository`;
+cara menjalankan disalin dari README; "tanpa dependensi" dari `dependencies`
+yang memang kosong; dan pengembang dari `git log` — 45 commit pertama semuanya
+atas nama yang sama. **Tidak ada nomor versi di papan ini, dan itu disengaja:**
+halaman tidak punya jalan membacanya (server tidak menerbitkannya di `/kendali`
+maupun `/health`), jadi angka yang diketik tangan pasti basi diam-diam pada
+rilis berikutnya — dan papan "tentang" yang berbohong soal versinya lebih buruk
+daripada papan yang tidak menyebut versi sama sekali. Sisanya dijaga
+`selaras-dokumen.mjs` sebagai pasangan kelima (kode vs manifes): alamat repo,
+nama paket, perintah `npx github:…`, syarat Node, dan klaim dependensi semuanya
+diadu ke `package.json` tiap `npm test`.
+
 ### Kamera
 
-Kanvasnya tetap 480×356 dan `fit()` tetap cuma memilih skala integer ke CSS;
-kameranya (`KAMERA` di room.js) hidup di koordinat dunia dan dipasang di
-`frame()` lewat `setTransform` sebelum segala gambar, jadi lantai, props,
-pegawai, dan partikel tidak tahu ada kamera. Zoom bidikannya cuma 1 atau 2 —
+Kisi dunianya tetap 480×356 dan `fit()` cuma mengurus piksel layar (skala CSS
+plus `SS` di atas); kameranya (`KAMERA` di room.js) hidup di koordinat dunia
+dan dipasang di `frame()` lewat `setTransform` — dikalikan `SS` di situ juga —
+sebelum segala gambar, jadi lantai, props, pegawai, dan partikel tidak tahu ada
+kamera maupun ada supersampling. Zoom bidikannya cuma 1 atau 2 —
 bulat — karena satu piksel dunia harus tetap jadi kotak piksel layar yang
 utuh; zoom 1,4 bikin garis tepi sprite belang walau smoothing sudah mati.
 Nilai pecahan cuma lewat sebentar selagi easing (±600 ms), geserannya pun

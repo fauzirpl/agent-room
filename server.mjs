@@ -1448,13 +1448,19 @@ function konteksPakai(sesi, d) {
      3. penulisnya (riwayatCatat/riwayatLebur) otomatis memakai angka baru.
    Berkas lama tidak pernah ditulis ulang hanya demi versi; migrasi hidup
    di memori sampai barisnya kebetulan ditulis ulang (pemadatan).           */
-const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 3, suara: 1 };
+const SKEMA = { token: 1, agenda: 1, bukuInduk: 1, formasi: 1, nama: 3, suara: 3 };
 const versiSkema = (o) => (Number.isFinite(Number(o.v)) ? Number(o.v) : 0);
 function migrasiToken(o) { o.v = SKEMA.token; return o; }
 function migrasiAgenda(o) { o.v = SKEMA.agenda; return o; }
 function migrasiBukuInduk(o) { o.v = SKEMA.bukuInduk; return o; }
 function migrasiFormasi(o) { o.v = SKEMA.formasi; return o; }
 function migrasiNama(o) { o.v = SKEMA.nama; return o; }
+/* v1 -> v2 menambah `narasi`; v2 -> v3 menambah `voiceL`/`voiceP` dan
+   `format`. Semuanya cuma penambahan: berkas lama yang tidak punya medan itu
+   jatuh ke bawaan lewat suaraMuat(), dan bawaannya sengaja dipilih supaya
+   berkas lama berperilaku persis seperti dulu. Jadi tidak ada yang perlu
+   diterjemahkan di sini — naik versinya saja supaya berkasnya jujur soal
+   umurnya. */
 function migrasiSuara(o) { o.v = SKEMA.suara; return o; }
 
 const BERKAS_RIWAYAT_TOKEN = process.env.AGENT_ROOM_TOKEN_LOG
@@ -4243,6 +4249,11 @@ const SUARA_TEKS_MAKS = 200;                // kalimat notifikasi itu pendek; in
 const SUARA_KLIP_MAKS = 4 * 1024 * 1024;    // satu klip wajar < 100 KB; ini pagar kalau model salah
 const SUARA_TIMEOUT_MS = 20000;
 const SUARA_PANASI_MAKS = 64;               // batas satu kali "panaskan cache"
+/* Narasi event jauh lebih banyak daripada nama pegawai (337 event vs belasan
+   nama), jadi pagunya sendiri. Bukan pagu biaya — klipnya cuma dibuat sekali
+   seumur cache — melainkan pagar supaya satu permintaan tidak pernah mencoba
+   membuat lebih banyak daripada yang benar-benar ada di katalog. */
+const SUARA_PANASI_EVENT_MAKS = 400;
 
 /* Bawaan dipilih dari daftar TTS OpenRouter yang sungguhan, bukan dikira-kira:
    Gemini Flash TTS satu-satunya yang nama voice-nya netral bahasa (Zephyr,
@@ -4260,7 +4271,112 @@ const suara = {
   model: 'google/gemini-3.1-flash-tts-preview',
   voice: 'Zephyr',
   kecepatan: 1,
+  /* Lingkup narasi event: 'semua' | 'panggung' | 'mati'. Bawaannya 'semua'
+     karena itu yang diminta waktu fitur ini dipesan — tiap kejadian
+     dibacakan. Yang merasa terlalu cerewet tinggal turun ke 'panggung'
+     (cuma kejadian besar yang eksklusif, 68 dari 337) tanpa mematikan
+     ucapan notifikasi. Ini TIDAK menyentuh efek suaranya: efek itu lapis 0,
+     tidak butuh kunci, dan ikut centang efek suara di halaman. */
+  narasi: 'semua',
+  /* Suara per jenis kelamin. '' = ikut `voice` di atas, dan itu BAWAANNYA:
+     tanpa dua kolom ini diisi, fitur ini tidak mengubah apa pun — termasuk
+     tidak mengubah satu pun hash klip yang sudah terlanjur dibuat.
+
+     Kenapa tidak ada tabel bawaan "voice ini laki-laki, voice itu perempuan":
+     karena tabel itu tidak ada di sumber mana pun yang bisa dicek. OpenRouter
+     mengirim `supported_voices` sebagai daftar nama telanjang, dan dokumen
+     Google sendiri cuma menyebut SIFAT tiap voice ("Bright", "Gravelly",
+     "Soft"), tidak pernah jenis kelaminnya. Menuliskannya di sini berarti
+     mengarang fakta lalu memakainya seolah-olah data — persis kesalahan yang
+     sudah dibayar sekali oleh bawaan `openai/gpt-4o-mini-tts` (lihat
+     docs/07-suara-nama.md). Jadi yang disediakan alatnya: dua kolom, satu
+     datalist berisi voice sungguhan milik model yang sedang dipilih, dan
+     tombol audisi di tiap kolom. Pasangannya kamu putuskan pakai telinga,
+     sekali, lalu tersimpan. */
+  voiceL: '',
+  voiceP: '',
+  // 'mp3' | 'pcm' — lihat blok format klip di bawah; dikoreksi sendiri
+  // sekali kalau modelnya menolak mp3, lalu diingat.
+  format: 'mp3',
 };
+const SUARA_NARASI_LINGKUP = new Set(['semua', 'panggung', 'mati']);
+
+/* SATU-SATUNYA tempat yang memutuskan voice mana yang dipakai, dan sekaligus
+   satu-satunya tempat yang menyaring `jk`. Nilai selain 'L'/'P' — kosong,
+   ngawur, atau apa pun yang diketik orang di query string — jatuh ke voice
+   utama tanpa cabang tambahan. Dulu ada `jkSah()` yang membersihkannya lebih
+   dulu di rute; itu dicabut karena tidak pernah mengubah satu pun hasil yang
+   bisa diamati: dua penjaga untuk satu hal cuma bikin salah satunya tidak
+   pernah teruji.
+
+   'tidak diketahui' itu keadaan yang wajar, bukan darurat: tamu event, sprite
+   tanpa nama, dan nama yang tidak tertebak memang tidak punya jenis kelamin di
+   sistem ini. */
+const suaraVoice = (jk) => (jk === 'L' && suara.voiceL) || (jk === 'P' && suara.voiceP) || suara.voice;
+
+/* --- format klip: mp3, atau pcm yang dibungkus WAV ------------------------
+   Rancangan awal fitur ini menulis `response_format: 'mp3'` sebagai TETAPAN,
+   dengan alasan yang benar: pcm mentah tidak bisa dimainkan `new Audio()`.
+   Yang salah kesimpulannya — ternyata ada model yang tidak menerima mp3 sama
+   sekali. Gemini TTS membalas 400 "Gemini TTS only supports
+   response_format=pcm". Jadi jawabannya bukan memaksa mp3, melainkan menerima
+   pcm lalu MEMASANG KEPALANYA: PCM + 44 byte kepala RIFF = WAV, dan WAV
+   dimainkan `<audio>` di semua peramban. Tetap nol dependensi.
+
+   Catatan sejarah supaya tidak terulang: jangan pernah menuliskan kemampuan
+   penyedia sebagai tetapan di kode. Yang tahu cuma penyedianya, dan cara
+   bertanya yang benar adalah mencoba lalu membaca penolakannya. */
+const SUARA_FORMAT_SAH = new Set(['mp3', 'pcm']);
+const SUARA_PCM_SAJA = /response_format\s*=?\s*"?pcm/i;
+const SUARA_PCM_HZ = Number(process.env.AGENT_ROOM_SUARA_HZ) || 24000;
+const suaraEkstensi = () => (suara.format === 'pcm' ? 'wav' : 'mp3');
+const SUARA_JENIS = { mp3: 'audio/mpeg', wav: 'audio/wav' };
+/* Cache boleh memuat dua ekstensi sekaligus: ganti model bisa mengganti
+   format, dan klip lama sengaja dibiarkan sampai kamu menekan kosongkan. */
+const SUARA_KLIP_RX = /\.(mp3|wav)$/;
+
+// `audio/L16;rate=24000` -> 24000. Tanpa keterangan: 24000, laju Gemini TTS.
+function lajuDariJenis(jenis) {
+  const m = /rate=(\d{4,6})/.exec(String(jenis || ''));
+  const hz = m ? Number(m[1]) : 0;
+  return hz >= 8000 && hz <= 48000 ? hz : SUARA_PCM_HZ;
+}
+
+/* PCM 16-bit mono little-endian -> WAV. Kepalanya 44 byte tetap; angka yang
+   berubah cuma laju dan panjang datanya. Kalau penyedianya ternyata sudah
+   mengirim WAV utuh (ada yang begitu), dibiarkan apa adanya. */
+/* PCM sungguhan hampir pasti memuat byte 0x00 (diam) dan byte >0x7F (puncak
+   gelombang), jadi badan yang SELURUHNYA huruf base64 itu bukan audio — itu
+   audio yang belum didekode. Google API sendiri mengembalikan PCM-nya sebagai
+   base64, dan tidak ada jaminan setiap perantara sudah membukanya. Kalau ini
+   tidak dijaga, yang terjadi bukan galat melainkan klip berisi DERAU: 44 byte
+   kepala WAV yang benar di atas teks ASCII. */
+const RX_BASE64 = /^[A-Za-z0-9+/=\s]+$/;
+function bukaBase64(buf) {
+  if (buf.length < 64 || !RX_BASE64.test(buf.toString('latin1'))) return buf;
+  const keluar = Buffer.from(buf.toString('latin1'), 'base64');
+  return keluar.length ? keluar : buf;
+}
+
+function bungkusWav(pcm, hz) {
+  pcm = bukaBase64(pcm);
+  if (pcm.length >= 12 && pcm.toString('latin1', 0, 4) === 'RIFF') return pcm;
+  const kepala = Buffer.alloc(44);
+  kepala.write('RIFF', 0);
+  kepala.writeUInt32LE(36 + pcm.length, 4);
+  kepala.write('WAVE', 8);
+  kepala.write('fmt ', 12);
+  kepala.writeUInt32LE(16, 16);            // panjang blok fmt
+  kepala.writeUInt16LE(1, 20);             // 1 = PCM tanpa kompresi
+  kepala.writeUInt16LE(1, 22);             // mono
+  kepala.writeUInt32LE(hz, 24);
+  kepala.writeUInt32LE(hz * 2, 28);        // byte per detik = hz x kanal x 2
+  kepala.writeUInt16LE(2, 32);             // byte per cuplikan (mono, 16-bit)
+  kepala.writeUInt16LE(16, 34);            // kedalaman bit
+  kepala.write('data', 36);
+  kepala.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([kepala, pcm]);
+}
 let suaraKunci = '';
 /* Dedupe in-flight: tiga sesi selesai berbarengan dengan nama sama tidak boleh
    jadi tiga panggilan berbayar. Kuncinya hash, jadi dua kalimat berbeda tetap
@@ -4272,12 +4388,18 @@ const suaraSiap = () => Boolean(suara.aktif && suaraKunci && suara.model);
 /* Model/voice/format/kecepatan ikut di-hash: ganti voice = hash beda = klip
    lama tidak pernah kepakai lagi, tanpa perlu invalidasi manual. Berkas
    lamanya sengaja dibiarkan — bolak-balik ganti voice jadi gratis. */
-function suaraHash(teks) {
+/* Yang ikut di-hash voice EFEKTIF, bukan `jk`-nya. Bedanya menentukan dua hal
+   sekaligus: selama voiceL/voiceP masih kosong, ketiga jenis kelamin
+   menghasilkan hash yang sama persis seperti sebelum fitur ini ada — cache
+   lama tetap terpakai, dan "panaskan narasi" tidak mendadak jadi tiga kali
+   lipat. Begitu kamu isi salah satunya, yang berbeda otomatis dapat klip
+   sendiri, tanpa invalidasi manual. */
+function suaraHash(teks, jk) {
   return crypto.createHash('sha256')
-    .update([teks, suara.model, suara.voice, 'mp3', suara.kecepatan].join('\0'))
+    .update([teks, suara.model, suaraVoice(jk), suara.format, suara.kecepatan].join('\0'))
     .digest('hex').slice(0, 16);
 }
-const suaraBerkas = (hash) => path.join(DIR_SUARA, hash + '.mp3');
+const suaraBerkas = (hash) => path.join(DIR_SUARA, hash + '.' + suaraEkstensi());
 
 function suaraMuat() {
   try {
@@ -4313,6 +4435,10 @@ function suaraMuat() {
   if (typeof o.voice === 'string') suara.voice = clip(o.voice.trim(), 60);
   const k = Number(o.kecepatan);
   if (Number.isFinite(k) && k >= 0.25 && k <= 4) suara.kecepatan = k;
+  if (SUARA_NARASI_LINGKUP.has(o.narasi)) suara.narasi = o.narasi;
+  if (typeof o.voiceL === 'string') suara.voiceL = clip(o.voiceL.trim(), 60);
+  if (typeof o.voiceP === 'string') suara.voiceP = clip(o.voiceP.trim(), 60);
+  if (SUARA_FORMAT_SAH.has(o.format)) suara.format = o.format;
   // Nilai kuncinya TIDAK dicetak — yang dicatat cuma ada/tidaknya.
   console.log('[agent-room] suara ucap: ' + (suara.aktif ? 'nyala' : 'mati')
     + ', model ' + suara.model + (suaraKunci ? ', kunci terpasang' : ', tanpa kunci'));
@@ -4321,7 +4447,8 @@ function suaraMuat() {
 function suaraTulis() {
   const isi = JSON.stringify({
     v: SKEMA.suara, aktif: suara.aktif, model: suara.model,
-    voice: suara.voice, kecepatan: suara.kecepatan,
+    voice: suara.voice, kecepatan: suara.kecepatan, narasi: suara.narasi,
+    voiceL: suara.voiceL, voiceP: suara.voiceP, format: suara.format,
   }, null, 2) + '\n';
   const tmp = BERKAS_SUARA + '.tmp';
   try {
@@ -4358,7 +4485,7 @@ function suaraIsiCache() {
   let nama = [];
   try { nama = fs.readdirSync(DIR_SUARA); } catch { return { jumlah: 0, byte: 0 }; }
   for (const n of nama) {
-    if (!n.endsWith('.mp3')) continue;
+    if (!SUARA_KLIP_RX.test(n)) continue;
     try { byte += fs.statSync(path.join(DIR_SUARA, n)).size; jumlah++; }
     catch { /* terhapus di tengah jalan: tidak usah dihitung */ }
   }
@@ -4370,7 +4497,7 @@ function suaraKosongkan() {
   let nama = [];
   try { nama = fs.readdirSync(DIR_SUARA); } catch { return 0; }
   for (const n of nama) {
-    if (!n.endsWith('.mp3')) continue;
+    if (!SUARA_KLIP_RX.test(n)) continue;
     try { fs.unlinkSync(path.join(DIR_SUARA, n)); dibuang++; } catch { /* biarkan */ }
   }
   return dibuang;
@@ -4378,7 +4505,7 @@ function suaraKosongkan() {
 
 /* Panggilan sungguhan ke OpenRouter. Melempar kalau gagal — pemanggilnya yang
    memutuskan itu jadi 204 (jalur /ucap) atau pesan di panel (jalur coba). */
-async function suaraGenerate(teks) {
+async function suaraGenerate(teks, jk) {
   const putus = AbortSignal.timeout
     ? AbortSignal.timeout(SUARA_TIMEOUT_MS)
     : undefined;
@@ -4393,9 +4520,8 @@ async function suaraGenerate(teks) {
     body: JSON.stringify({
       model: suara.model,
       input: teks,
-      voice: suara.voice || undefined,
-      // WAJIB: bawaannya pcm, yang tidak bisa dimainkan <audio> apa adanya
-      response_format: 'mp3',
+      voice: suaraVoice(jk) || undefined,
+      response_format: suara.format,
       speed: suara.kecepatan !== 1 ? suara.kecepatan : undefined,
     }),
     signal: putus,
@@ -4407,18 +4533,50 @@ async function suaraGenerate(teks) {
       const j = JSON.parse(await res.text());
       ket = j?.error?.message || j?.message || '';
     } catch { /* bukan JSON: cukup kodenya */ }
-    throw new Error('OpenRouter ' + res.status + (ket ? ': ' + clip(ket, 200) : ''));
+    const err = new Error('OpenRouter ' + res.status + (ket ? ': ' + clip(ket, 200) : ''));
+    /* Ditandai, bukan langsung ditangani di sini: yang tahu cara mengulang
+       permintaannya suaraAmbil() — hash berkasnya ikut memuat format, jadi
+       percobaan kedua harus menghitung ulang jalur berkasnya. Lihat
+       SUARA_PCM_SAJA. */
+    if (res.status === 400 && SUARA_PCM_SAJA.test(ket)) err.pcmSaja = true;
+    throw err;
   }
   const buf = Buffer.from(await res.arrayBuffer());
   if (!buf.length) throw new Error('OpenRouter membalas klip kosong');
   if (buf.length > SUARA_KLIP_MAKS) throw new Error('klip terlalu besar (' + buf.length + ' byte)');
+  /* PCM mentah tidak bisa dimainkan <audio> apa adanya — yang kurang cuma
+     kepalanya. Laju cuplikannya dibaca dari content-type kalau penyedianya
+     menyebutkan (`audio/L16;rate=24000`), kalau tidak jatuh ke 24000: itu
+     yang dipakai Gemini TTS, dan angkanya dari contoh `wave_file()` di
+     dokumen Google sendiri (rate=24000, sample_width=2, channels=1), bukan
+     dari ingatan. */
+  if (suara.format === 'pcm') return bungkusWav(buf, lajuDariJenis(res.headers.get('content-type')));
   return buf;
 }
 
 /* Jalur utama: cache -> in-flight -> generate. Selalu mengembalikan Buffer
-   atau melempar; tidak pernah mengembalikan null diam-diam. */
-async function suaraAmbil(teks) {
-  const hash = suaraHash(teks);
+   atau melempar; tidak pernah mengembalikan null diam-diam.
+
+   Pembungkusnya di bawah menangani satu hal yang cuma ketahuan dari penyedia
+   sungguhan: sebagian model TIDAK menerima mp3 sama sekali. Gemini TTS
+   menolaknya dengan 400 "only supports response_format=pcm". Karena itu
+   format bukan lagi tetapan, melainkan setelan yang bisa dikoreksi sendiri
+   satu kali lalu diingat — dan diingat itu penting, sebab tanpa itu tiap klip
+   pertama sesudah server hidup selalu terbuang satu permintaan gagal. */
+async function suaraAmbil(teks, jk) {
+  try { return await suaraAmbilSekali(teks, jk); }
+  catch (err) {
+    if (!err.pcmSaja || suara.format === 'pcm') throw err;
+    suara.format = 'pcm';
+    suaraTulis();
+    console.log('[agent-room] suara: ' + suara.model
+      + ' menolak mp3, format dipindah ke pcm (dibungkus WAV) dan diingat');
+    return suaraAmbilSekali(teks, jk);
+  }
+}
+
+async function suaraAmbilSekali(teks, jk) {
+  const hash = suaraHash(teks, jk);
   const berkas = suaraBerkas(hash);
   try { return fs.readFileSync(berkas); } catch { /* belum ada: lanjut generate */ }
 
@@ -4426,7 +4584,7 @@ async function suaraAmbil(teks) {
   if (jalan) return jalan;
 
   const tugas = (async () => {
-    const buf = await suaraGenerate(teks);
+    const buf = await suaraGenerate(teks, jk);
     try {
       fs.mkdirSync(DIR_SUARA, { recursive: true });
       // .tmp lalu rename: jangan sampai ada yang menyajikan mp3 setengah tulis
@@ -4456,10 +4614,211 @@ const suaraKalimat = {
 /* Semua kalimat yang mungkin dipakai roster sekarang — dipakai "panaskan
    cache" dan cuma itu. Nama manual yang belum pernah muncul memang tidak
    ikut; itu yang tersisa jadi generate saat runtime. */
-function suaraDaftarKalimat() {
-  const keluar = [suaraKalimat.arahan()];
-  for (const e of daftarNama().slice(0, SUARA_PANASI_MAKS)) keluar.push(suaraKalimat.selesai(e.nama));
+/* Yang dipanaskan pasangan {teks, jk}, bukan teks saja: sejak suara ikut jenis
+   kelamin, kalimat yang sama bisa jadi dua klip berbeda. Dedupe-nya lewat HASH
+   EFEKTIF, dan itu yang bikin daftarnya tidak membengkak percuma: selama
+   voiceL/voiceP masih kosong, ketiganya menghasilkan hash yang sama dan
+   daftarnya kembali sepanjang dulu. */
+function panasiUnik(pasangan) {
+  const keluar = [];
+  const sudah = new Set();
+  for (const p of pasangan) {
+    if (!p.teks) continue;
+    const h = suaraHash(p.teks, p.jk);
+    if (sudah.has(h)) continue;
+    sudah.add(h);
+    keluar.push(p);
+  }
   return keluar;
+}
+
+function suaraDaftarKalimat() {
+  /* "Izin, mohon arahan" tidak membawa nama, jadi siapa pun bisa
+     mengucapkannya — ketiga kemungkinan jenis kelaminnya ikut dipanaskan.
+     Kalimat "selesai" sebaliknya: namanya ada, jadi jenis kelaminnya pasti. */
+  const keluar = ['', 'L', 'P'].map((jk) => ({ teks: suaraKalimat.arahan(), jk }));
+  for (const e of daftarNama().slice(0, SUARA_PANASI_MAKS)) {
+    keluar.push({ teks: suaraKalimat.selesai(e.nama), jk: jkDari(e.nama) });
+  }
+  return panasiUnik(keluar);
+}
+
+/* ------------------------------------------------------- narasi event ----
+   Tiap event acak yang menyala dibacakan satu kalimat pendek. Kalimatnya
+   TIDAK pernah dikarang halaman: halaman cuma mengirim id event
+   (`/ucap?event=<id>`) dan blok ini yang menerjemahkannya. Sengaja begitu —
+   UCAP/suaraKalimat di atas sudah membuktikan bahwa kalimat yang hidup di dua
+   tempat pasti hanyut, dan waktu hanyut, "panaskan cache" memanaskan kalimat
+   yang tidak pernah dipakai tanpa satu pun galat muncul. Dengan id, cuma ada
+   satu tempat yang mengeja.
+
+   Kalimatnya SUDUT PANDANG ORANG PERTAMA — orang yang mengalami kejadiannya,
+   bukan papan nama kejadiannya. "Cicak jatuh ke tumpukan berkas" itu judul
+   yang dibacakan; "Cicaknya jatuh ke tumpukan berkas saya, astaghfirullah"
+   itu pegawai yang sedang duduk di sana. Bedanya menentukan seluruh rasa
+   fiturnya: yang pertama terdengar seperti pengumuman stasiun, yang kedua
+   seperti ruangan yang berpenghuni.
+
+   Tiga jenjang, berhenti di yang pertama berisi:
+
+   1. narasi-event.json — 337 kalimat yang ditulis tangan, satu per event.
+      Ini yang dipakai sehari-hari.
+   2. Kolom `balon` di event-acak.json — kalimat balon ucap dari katalog
+      rancangan. Sudah orang pertama juga (memang dialog), jadi ia jaring
+      pengaman yang tepat untuk event baru yang barisnya belum ditulis.
+      Bentuknya perlu dibersihkan: sebagian menulis dua pembicara
+      (`arsiparis: "…" / pegawai: "…"`), sebagian cuma penggalan (`...`,
+      `!`) yang tidak bisa berdiri sendiri.
+   3. Kolom `nama`, atau idnya sendiri. Orang ketiga dan kaku, tapi lebih
+      baik daripada kejadian yang bisu. Kapitalnya dirapikan: katalog campur
+      Title Case dan sentence case, jadi kata yang HURUF BESAR SEMUA (APAR,
+      BPK, UTP) dibiarkan dan sisanya diturunkan.
+
+   Dua berkas itu dibaca SEKALI. Keduanya berkas rancangan yang berubah kalau
+   ada gelombang event baru — yaitu saat servernya memang dijalankan ulang. */
+const BERKAS_KATALOG_EVENT = process.env.AGENT_ROOM_KATALOG
+  || path.join(__dirname, 'event-acak.json');
+const BERKAS_NARASI = process.env.AGENT_ROOM_NARASI
+  || path.join(__dirname, 'narasi-event.json');
+const NARASI_ID_SAH = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const NARASI_MAKS = 110;
+// Cuma dipakai jalur cadangan (id -> kalimat), tempat kapitalnya sudah hilang.
+const NARASI_AKRONIM = new Set(['ac', 'apar', 'atk', 'bpk', 'cctv', 'hp', 'ktp',
+  'lan', 'nip', 'pc', 'pdf', 'pns', 'skp', 'sop', 'sppd', 'tv', 'ups', 'usb',
+  'utp', 'wa', 'wc', 'wifi']);
+
+let narasiTulis = null;                     // id -> kalimat orang pertama
+let narasiPeta = null;                      // id -> nama dari katalog
+let narasiBalon = null;                     // id -> balon dari katalog
+
+/* Kalimat tulisan tangan. Berkasnya boleh tidak ada — yang terjadi cuma
+   narasi turun ke jenjang berikutnya, bukan ruangan yang bisu. */
+function narasiBerkas() {
+  if (narasiTulis) return narasiTulis;
+  narasiTulis = new Map();
+  let o = null;
+  try { o = JSON.parse(fs.readFileSync(BERKAS_NARASI, 'utf8')); }
+  catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] narasi: ' + path.basename(BERKAS_NARASI)
+        + ' tidak terbaca (' + err.message + '), kalimat jatuh ke katalog event');
+    }
+    return narasiTulis;
+  }
+  const isi = o && typeof o.narasi === 'object' && o.narasi ? o.narasi : {};
+  for (const [id, teks] of Object.entries(isi)) {
+    if (typeof teks === 'string' && teks.trim()) narasiTulis.set(id, teks.trim());
+  }
+  return narasiTulis;
+}
+
+/* Balon katalog -> satu kalimat yang bisa berdiri sendiri, atau '' kalau
+   tidak bisa. Yang dibuang: penanda pembicara di depan (`arsiparis: "…"`),
+   giliran kedua sesudah ` / `, tanda kutip, dan penggalan yang isinya cuma
+   titik/tanda seru — dibacakan keras-keras, `...` bukan kalimat. */
+function narasiDariBalon(balon) {
+  let t = String(balon || '').split(' / ')[0].split(' → ')[0].trim();
+  t = t.replace(/^[a-zA-Z][a-zA-Z\s-]{0,24}:\s*/, '');   // "pegawai: ", "auditor: "
+  t = t.replace(/^["'“”]+|["'“”]+$/g, '').trim();
+  t = t.replace(/^[^\p{L}]+/u, '').trim();               // "...zzz" -> "zzz", "🇮🇩" -> ""
+  /* Dua kata dan sepuluh huruf: pagar minimum supaya yang lolos benar-benar
+     kalimat. Balon boleh sekadar bunyi — `...zzz`, `hatsyi!`, `aduh!`, `-` —
+     dan bunyi yang dibacakan narator terdengar seperti klip yang rusak, bukan
+     seperti orang. Yang begitu lebih baik turun ke nama kejadiannya. */
+  if (t.length < 10 || t.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length < 2) return '';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function narasiKatalog() {
+  if (narasiPeta) return narasiPeta;
+  narasiPeta = new Map();
+  let o = null;
+  try { o = JSON.parse(fs.readFileSync(BERKAS_KATALOG_EVENT, 'utf8')); }
+  catch (err) {
+    // Bukan galat fatal: tanpa katalog, semua kalimat jatuh ke id-nya sendiri.
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] narasi: ' + path.basename(BERKAS_KATALOG_EVENT)
+        + ' tidak terbaca (' + err.message + '), kalimat diambil dari id event');
+    }
+    return narasiPeta;
+  }
+  narasiBalon = new Map();
+  for (const e of (o && Array.isArray(o.events) ? o.events : [])) {
+    if (!e || typeof e.id !== 'string') continue;
+    if (typeof e.nama === 'string') narasiPeta.set(e.id, e.nama);
+    if (typeof e.balon === 'string') {
+      const b = narasiDariBalon(e.balon);
+      if (b) narasiBalon.set(e.id, b);
+    }
+  }
+  return narasiPeta;
+}
+
+// "Cicak Jatuh ke Tumpukan Berkas" -> "Cicak jatuh ke tumpukan berkas";
+// "APAR diperiksa petugas" tetap utuh.
+function narasiDariNama(nama) {
+  const kata = String(nama).trim().split(/\s+/).map((w) =>
+    (w.length > 1 && w === w.toUpperCase() && /[A-Z]/.test(w) ? w : w.toLowerCase()));
+  const t = kata.join(' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+// 'kabel-lan-lepas' -> 'Kabel LAN lepas'
+function narasiDariId(id) {
+  const t = String(id).split('-')
+    .map((w) => (NARASI_AKRONIM.has(w) ? w.toUpperCase() : w)).join(' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/* Kalimat untuk satu id, atau '' kalau idnya tidak berbentuk id event. Id
+   yang TIDAK dikenal katalog tetap dilayani (event gelombang terakhir belum
+   punya barisnya di sana) — yang ditolak cuma yang bentuknya bukan id, supaya
+   query string tidak bisa jadi pintu mengirim kalimat karangan sendiri ke
+   penyedia berbayar. */
+function narasiEvent(id) {
+  const bersih = String(id || '').trim();
+  if (!bersih || bersih.length > 60 || !NARASI_ID_SAH.test(bersih)) return '';
+  const tulisan = narasiBerkas().get(bersih);
+  if (tulisan) return clip(tulisan, NARASI_MAKS);
+  narasiKatalog();                                  // sekalian mengisi narasiBalon
+  const balon = narasiBalon && narasiBalon.get(bersih);
+  if (balon) return clip(balon, NARASI_MAKS);
+  const nama = narasiKatalog().get(bersih);
+  return clip(nama ? narasiDariNama(nama) : narasiDariId(bersih), NARASI_MAKS);
+}
+
+/* Id event yang BENAR-BENAR terdaftar — dibaca dari sumber yang dikirim ke
+   halaman, bukan dari katalog rancangan: katalog memuat 373 id termasuk yang
+   ditolak dan yang belum ditulis, dan memanaskan klip untuk kejadian yang
+   tidak akan pernah menyala itu uang yang dibuang. Regexnya sama persis
+   dengan yang dipakai uji-katalog.mjs, yang menyilangkannya dengan registri
+   sungguhan tiap kali `npm test` jalan — jadi kalau bentuk penulisan id
+   berubah, itu ketahuan di sana, bukan diam-diam di sini. */
+function narasiDaftarId() {
+  const keluar = [];
+  const sudah = new Set();
+  try {
+    for (const m of bacaEventAcak().matchAll(/^\s{2}id: '([^']+)'/gm)) {
+      if (!sudah.has(m[1])) { sudah.add(m[1]); keluar.push(m[1]); }
+    }
+  } catch (err) {
+    console.warn('[agent-room] narasi: daftar event tidak terbaca (' + err.message + ')');
+  }
+  return keluar;
+}
+
+// Semua kalimat narasi yang mungkin dipakai — untuk "panaskan narasi".
+/* Siapa yang mengalami sebuah event tidak bisa ditebak dari sini — pemerannya
+   diundi ulang tiap kali eventnya menyala. Jadi ketiga kemungkinannya
+   dipanaskan, lalu panasiUnik() membuang yang hash-nya kembar. Selama kolom
+   voice laki-laki/perempuan masih kosong, "ketiganya" itu satu klip. */
+function narasiDaftarKalimat() {
+  const keluar = [];
+  for (const id of narasiDaftarId().slice(0, SUARA_PANASI_EVENT_MAKS)) {
+    const t = narasiEvent(id);
+    if (t) for (const jk of ['', 'L', 'P']) keluar.push({ teks: t, jk });
+  }
+  return panasiUnik(keluar);
 }
 
 suaraMuat();
@@ -5821,19 +6180,33 @@ const server = http.createServer(async (req, res) => {
      jawaban. */
   if (url.pathname === '/ucap' && req.method === 'GET') {
     if (!asalSah(req)) { res.writeHead(403).end(); return; }
-    const teks = clip((url.searchParams.get('teks') || '').replace(/\s+/g, ' ').trim(), SUARA_TEKS_MAKS);
+    /* Dua cara memanggil rute yang sama:
+       - `?teks=` — kalimat notifikasi, dikarang halaman (UCAP di room.js).
+       - `?event=` — id event acak; SERVER yang mengejanya jadi kalimat.
+       Yang kedua sengaja tidak menerima kalimat: kalau halaman boleh
+       mengirim teks bebas untuk event, kalimatnya hidup di dua tempat lagi
+       dan "panaskan narasi" kembali memanaskan yang tidak pernah dipakai. */
+    const idEvent = url.searchParams.get('event');
+    const teks = idEvent !== null
+      ? (suara.narasi === 'mati' ? '' : narasiEvent(idEvent))
+      : clip((url.searchParams.get('teks') || '').replace(/\s+/g, ' ').trim(), SUARA_TEKS_MAKS);
+    /* `jk` = jenis kelamin orang yang mengucapkannya, dikirim halaman. Nilai
+       lain (termasuk kosong dan ngawur) berarti "tidak diketahui" dan jatuh ke
+       voice utama — bukan galat. Halaman memang tidak selalu tahu: tamu event
+       dan nama yang tidak tertebak sah-sah saja tanpa jenis kelamin. */
+    const jk = url.searchParams.get('jk') || '';
     if (!teks || !suaraSiap()) { res.writeHead(204).end(); return; }
     try {
-      const buf = await suaraAmbil(teks);
+      const buf = await suaraAmbil(teks, jk);
       /* Sengaja no-cache + ETag, BUKAN immutable: URL-nya cuma memuat teks,
          jadi klip yang sama bisa berganti isi kalau model/voice-nya kamu
          ubah. Revalidasi ke localhost harganya sepersekian milidetik dan
          balasannya 304 tanpa badan — jauh lebih murah daripada memutar suara
          lama dengan voice yang sudah kamu ganti. */
-      const etag = '"' + suaraHash(teks) + '"';
+      const etag = '"' + suaraHash(teks, jk) + '"';
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, { etag }).end(); return; }
       res.writeHead(200, {
-        'content-type': 'audio/mpeg',
+        'content-type': SUARA_JENIS[suaraEkstensi()],
         'content-length': buf.length,
         etag,
         'cache-control': 'private, no-cache',
@@ -5854,6 +6227,8 @@ const server = http.createServer(async (req, res) => {
     // terakhir, supaya kamu bisa memastikan yang terpasang kunci yang mana.
     res.end(JSON.stringify({
       aktif: suara.aktif, model: suara.model, voice: suara.voice, kecepatan: suara.kecepatan,
+      narasi: suara.narasi, narasiJumlah: narasiDaftarId().length,
+      voiceL: suara.voiceL, voiceP: suara.voiceP, format: suara.format,
       punyaKunci: Boolean(suaraKunci),
       kunciEkor: suaraKunci ? suaraKunci.slice(-4) : '',
       siap: suaraSiap(),
@@ -5885,6 +6260,14 @@ const server = http.createServer(async (req, res) => {
     if (typeof p.voice === 'string') suara.voice = clip(p.voice.trim(), 60);
     const k = Number(p.kecepatan);
     if (Number.isFinite(k) && k >= 0.25 && k <= 4) suara.kecepatan = k;
+    if (SUARA_NARASI_LINGKUP.has(p.narasi)) suara.narasi = p.narasi;
+    /* '' diterima dan berarti "cabut, ikut voice utama lagi" — beda dari
+       `kunci` yang '' berarti menghapus sesuatu yang berbahaya kalau salah. */
+    if (typeof p.voiceL === 'string') suara.voiceL = clip(p.voiceL.trim(), 60);
+    if (typeof p.voiceP === 'string') suara.voiceP = clip(p.voiceP.trim(), 60);
+    /* Format boleh dipaksa dari panel, misalnya buat mengembalikannya ke mp3
+       sesudah ganti model. Yang salah akan dikoreksi sendiri lagi. */
+    if (SUARA_FORMAT_SAH.has(p.format)) suara.format = p.format;
     /* Menyalakan tanpa kunci itu setelan yang tidak bisa jalan; lebih baik
        ditolak halus di sini daripada diam-diam 204 tiap notifikasi. */
     if (suara.aktif && !suaraKunci) suara.aktif = false;
@@ -5893,6 +6276,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       ok: true, aktif: suara.aktif, siap: suaraSiap(),
+      model: suara.model, voice: suara.voice, kecepatan: suara.kecepatan,
+      narasi: suara.narasi, narasiJumlah: narasiDaftarId().length,
+      voiceL: suara.voiceL, voiceP: suara.voiceP, format: suara.format,
+      cache: suaraIsiCache(),
       punyaKunci: Boolean(suaraKunci), kunciEkor: suaraKunci ? suaraKunci.slice(-4) : '',
       pesan: pesanKunci ? 'kunci dipakai, tapi gagal ditulis ke berkas: ' + pesanKunci
         : galat ? 'setelan dipakai, tapi gagal ditulis ke berkas: ' + galat : '',
@@ -5946,10 +6333,15 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: false, pesan: 'pasang kunci OpenRouter dulu' }));
       return;
     }
+    /* `?jk=` mengaudisi kolom voice laki-laki/perempuan, bukan voice utama.
+       Kalimatnya sengaja SAMA untuk ketiganya: yang mau dibandingkan
+       suaranya, dan kalimat yang beda-beda justru bikin telinga membandingkan
+       kalimat. Klipnya tetap masuk cache — audisi tidak terbuang. */
+    const jk = url.searchParams.get('jk') || '';
     try {
-      const buf = await suaraAmbil(suaraKalimat.selesai('Sri Rahayu'));
+      const buf = await suaraAmbil(suaraKalimat.selesai('Sri Rahayu'), jk);
       res.writeHead(200, {
-        'content-type': 'audio/mpeg', 'content-length': buf.length,
+        'content-type': SUARA_JENIS[suaraEkstensi()], 'content-length': buf.length,
         'cache-control': 'private, no-cache',
       });
       res.end(buf);
@@ -5970,18 +6362,44 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: false, pesan: 'pasang kunci OpenRouter dulu' }));
       return;
     }
+    /* `lingkup`: 'nama' (bawaan, kalimat notifikasi per pegawai) atau 'event'
+       (narasi seluruh event acak yang terdaftar). Dipisah karena jumlahnya
+       beda jauh — belasan lawan ratusan — dan orang yang cuma mau notifikasi
+       bersuara tidak boleh terpaksa menunggu 337 klip. Badan kosong tetap
+       berarti 'nama', supaya panggilan lama tidak berubah artinya. */
+    let lingkup = 'nama';
+    try { lingkup = JSON.parse((await readBody(req)).teks || '{}').lingkup || 'nama'; }
+    catch { lingkup = 'nama'; }
+    const daftar = lingkup === 'event' ? narasiDaftarKalimat() : suaraDaftarKalimat();
+
     const mulai = Date.now();
     let dibuat = 0, sudah = 0, gagal = 0, pesan = '';
-    for (const teks of suaraDaftarKalimat()) {
+    let beruntun = 0;
+    for (const { teks, jk } of daftar) {
       if (Date.now() - mulai > 120000) { pesan = 'berhenti di tengah karena kelamaan; tekan lagi untuk melanjutkan'; break; }
       let ada = false;
-      try { fs.accessSync(suaraBerkas(suaraHash(teks))); ada = true; } catch { ada = false; }
+      try { fs.accessSync(suaraBerkas(suaraHash(teks, jk))); ada = true; } catch { ada = false; }
       if (ada) { sudah++; continue; }
-      try { await suaraAmbil(teks); dibuat++; }
-      catch (err) { gagal++; if (!pesan) pesan = clip(err.message, 200); }
+      try { await suaraAmbil(teks, jk); dibuat++; beruntun = 0; }
+      catch (err) {
+        gagal++;
+        if (!pesan) pesan = clip(err.message, 200);
+        /* Kunci salah atau OpenRouter tumbang bikin SEMUANYA gagal. Dengan 337
+           narasi, menghabiskannya sampai baris terakhir berarti 337 permintaan
+           yang sudah pasti gagal — lama, dan pada penyedia yang menghitung
+           permintaan gagal, mahal. Lima kali berturut-turut sudah cukup jadi
+           jawaban. */
+        if (++beruntun >= 5) {
+          pesan = clip(pesan, 160) + ' — berhenti setelah 5 kegagalan berturut-turut';
+          break;
+        }
+      }
     }
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, dibuat, sudah, gagal, pesan, cache: suaraIsiCache() }));
+    res.end(JSON.stringify({
+      ok: true, lingkup, total: daftar.length, dibuat, sudah, gagal, pesan,
+      cache: suaraIsiCache(),
+    }));
     return;
   }
 

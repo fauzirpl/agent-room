@@ -35,6 +35,7 @@
     "uji-loket.mjs",
     "uji-honorer.mjs",
     "uji-sop.mjs",
+    "uji-pantri.mjs",
     "sop.contoh.json",
     "uji-kuota.mjs",
     "loket.contoh.json",
@@ -43,12 +44,14 @@
     "uji-skp.mjs",
     "uji-skp.golden.json",
     "selaras-katalog.mjs",
+    "selaras-suara.mjs",
     "uji-sisip.mjs",
     "uji-sisip.golden.json",
     "uji-seragam.mjs",
     "uji-pagu.mjs",
     "uji-pegawai.mjs",
     "uji-suara.mjs",
+    "uji-musik.mjs",
     "pagu.contoh.json",
     "buat-fixture.mjs",
     "uji-ulang.mjs",
@@ -58,14 +61,15 @@
     "DESIGN.md",
     "docs/",
     "EVENT-ACAK.md",
-    "event-acak.json"
+    "event-acak.json",
+    "narasi-event.json"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node dinas.mjs",
-    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-jk.mjs && node uji-jaringan.mjs && node uji-mcp.mjs && node uji-telaah.mjs && node uji-paraf.mjs && node uji-peserta.mjs && node uji-skp.mjs && node uji-izin.mjs && node uji-kendali.mjs && node uji-loket.mjs && node uji-honorer.mjs && node uji-sop.mjs && node uji-kuota.mjs && node uji-serah.mjs && node selaras-dokumen.mjs --periksa && node uji-ulang.mjs && node uji-ulang-server.mjs"
+    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node selaras-suara.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-musik.mjs && node uji-jk.mjs && node uji-jaringan.mjs && node uji-mcp.mjs && node uji-telaah.mjs && node uji-paraf.mjs && node uji-peserta.mjs && node uji-skp.mjs && node uji-izin.mjs && node uji-kendali.mjs && node uji-loket.mjs && node uji-honorer.mjs && node uji-sop.mjs && node uji-kuota.mjs && node uji-serah.mjs && node uji-pantri.mjs && node selaras-dokumen.mjs --periksa && node uji-ulang.mjs && node uji-ulang-server.mjs"
   },
   "repository": {
     "type": "git",

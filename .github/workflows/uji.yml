@@ -81,6 +81,10 @@ jobs:
       - name: Uji suara ucap & daftar nama
         run: node uji-suara.mjs
 
+      # Musik lofi ikut suasana: tiap babak hari punya gayanya, tidak ada akor
+      # yang bisu karena nama nada salah ketik, dan musiknya tetap latar.
+      - name: Uji musik lofi kantor
+        run: node uji-musik.mjs
 
       # Gerbang nol-jaringan. Membuktikan dua janji sekaligus: nota dinas keluar
       # cuma membawa metadata (prompt tidak pernah ikut), dan tiap harness yang
@@ -154,6 +158,11 @@ jobs:
       # di berkas agenda KEMARIN dengan sengaja.
       - name: Uji serah terima
         run: node uji-serah.mjs
+
+      # Sekat pantri: dinding yang selama ini cuma gambar, sampai route()
+      # diajari menghindarinya. Jalur dihitung route() yang asli.
+      - name: Uji sekat pantri
+        run: node uji-pantri.mjs
 
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.

@@ -216,7 +216,7 @@ posisi tombol berbeda:
 | 💬 buka kabar otomatis | kembaran dari centang **buka sendiri** di kaki modal kabar — dua-duanya setelan yang sama, cuma dua tempat |
 | 🔊 efek suara | foley per stasiun tiap event (stempel, laci arsip, kipas server, kursi rapat, ketikan) nyala/mati |
 | 🔔 notifikasi tugas selesai | lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
-| 🎧 musik lofi kantor | chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio |
+| 🎧 musik lofi kantor | chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio — gayanya ikut suasana ruangan |
 
 Dua yang pertama diingat peramban (`localStorage`), dan halaman tetap jalan
 kalau peramban memang tidak mengizinkannya. Tiga setelan suara (efek suara,
@@ -235,6 +235,39 @@ hujan/guntur, lonceng notifikasi + `ucapSuara`, beat/chord musik lofi,
 termasuk Indonesia Raya) disambungkan ke bus yang sesuai alih-alih langsung
 ke `audio.destination` — supaya volumenya bisa digeser sendiri-sendiri tanpa
 mengubah campuran/attack tiap bunyi satu per satu.
+
+Musik lofinya **bukan satu loop yang sama sepanjang hari**. Empat birama yang
+diulang terus bikin telinga cepat lelah, dan lebih buruk: musiknya jadi bohong
+— beat yang sama waktu kantor sepi jam sebelas malam dan waktu enam agen
+sedang gaduh. Sebelas **gaya** (`LOFI_GAYA` di `room.js`) dipilih dari hal-hal
+yang memang sudah menentukan rupa ruangan, dan tiap gaya punya bank akor,
+tempo, ayunan swing, cutoff pad, pola drum, serta tebal desis vinyl
+sendiri-sendiri:
+
+| Suasana | Kapan | Kedengarannya |
+|---|---|---|
+| apel pagi | jam 7–7.45 | paling cerah & cepat (84 bpm), progresi I–iii–IV–V |
+| jam kerja | jam kerja biasa | loop kantor yang lama, 76 bpm |
+| kantor lagi ramai | ≥ 4 agen sedang bekerja | 88 bpm, bass lebih tebal, pad lebih terbuka |
+| jam istirahat | jam makan | lounge ii–V–I, snare disapu (brush), rhodes lebih sering |
+| jelang pulang | jam 16–17 | senja: minor dulu, mayor belakangan |
+| lembur | jam 17–22 | akor berjarak lebar, drum tinggal separuh |
+| kantor malam | jam 22–6 | 62 bpm, tanpa snare, desis vinyl paling tebal |
+| hari libur | Sabtu/Minggu & libur nasional | paling kosong, hampir tanpa drum |
+| hujan di jendela | hujan ≥ 0,55 | pad ditutup rapat, tempo turun |
+| badai | petir | satu-satunya yang pindah ke Bb — paling gelap |
+| ada yang menunggu | ≥ 3 tool call gagal beruntun, atau ≥ 2 sesi menunggu kamu | vamp dua akor half-diminished yang tidak pernah menyelesaikan |
+
+Urutan menangnya: petir mengalahkan apa pun, sesi yang macet mengalahkan
+cuaca, cuaca mengalahkan jam dinding. Hujan tipis dan kesibukan sedang **tidak**
+mengganti gaya — loncatan bank akor tiap ada satu agen masuk bikin musiknya
+gelisah; keduanya cuma menggeser cutoff, tebal desis, dan tempo (maksimal +6
+bpm). Gayanya dibaca ulang tiap **awal birama**, jadi perpindahannya jatuh di
+sambungan, bukan memotong di tengah ketukan, dan nama suasana yang sedang
+dipakai ditulis kecil di sebelah centangnya di panel ⚙️. Uji cepat tanpa
+menunggu jamnya tiba: `?musik=malam`, digabung dengan `?jam=` dan `?hujan=`.
+Selama Indonesia Raya diputar (Selasa & Kamis jam 10) beat lofinya diam —
+loop-nya tetap jalan, cuma tidak membunyikan apa pun sampai lagunya selesai.
 
 Efek suara tool call bukan lagi satu blip seragam, tapi **foley per stasiun**
 (`foley()` + kamus `FOLEY` di `room.js`): stempel yang thud lalu klik pegas

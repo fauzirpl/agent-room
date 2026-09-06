@@ -134,6 +134,19 @@
     <div class="kbr-badan" id="klipingBadan"></div>
   </div>
 </div>
+<!-- Papan informasi aplikasi. Dibukanya BUKAN dari tombol bilah panggung tapi
+     dengan mengklik X-banner di dalam ruangan (klikBanner di room.js): kamera
+     membidik bannernya dulu, papan ini menyusul begitu bidikannya sampai.
+     Isinya dibangun room.js (tentangGambar) supaya faktanya satu tempat. -->
+<div class="dlg-latar tentang-latar" id="dlgTentang" hidden>
+  <div class="dlg tentang" role="dialog" aria-modal="true" aria-labelledby="tentangJudul">
+    <header class="dlg-kepala">
+      <b id="tentangJudul">Tentang kantor ini</b>
+      <button type="button" id="tentangTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="tentang-badan" id="tentangBadan"></div>
+  </div>
+</div>
 <!-- Meja disposisi: tumpukan kabar yang bisa dicari/disaring/disematkan/disalin.
      Berdiri sendiri dari modal kabar (dlgKabar): cuma membaca larik `kabar`. -->
 <div class="dlg-latar" id="dlgMeja" hidden>
@@ -189,6 +202,16 @@
           </select>
         </label>
         <label class="pengaturan-baris">
+          <span>🎲 keramaian event acak</span>
+          <select id="setKeramaian" aria-label="keramaian event acak">
+            <option value="ramai">ramai</option>
+            <option value="sedang">sedang</option>
+            <option value="sepi">sepi</option>
+            <option value="mati">mati</option>
+          </select>
+        </label>
+        <p class="pengaturan-nota" id="setKeramaianKet"></p>
+        <label class="pengaturan-baris">
           <span>🔋 mode ringan</span>
           <input type="checkbox" id="setRingan">
         </label>
@@ -220,7 +243,7 @@
         </div>
         <div class="pengaturan-audio">
           <label class="pengaturan-baris">
-            <span>🎧 musik lofi kantor</span>
+            <span>🎧 musik lofi kantor <em class="musik-suasana" id="musikSuasana"></em></span>
             <input type="checkbox" id="setMusik">
           </label>
           <div class="pengaturan-vol">
@@ -236,15 +259,42 @@
       </div>
       <div class="pengaturan-grup">
         <h3>Suara ucap</h3>
-        <label class="pengaturan-baris">
-          <span>🗣️ ucapkan notifikasi</span>
-          <input type="checkbox" id="setUcap">
-        </label>
+        <div class="pengaturan-audio">
+          <label class="pengaturan-baris">
+            <span>🗣️ ucapkan notifikasi</span>
+            <input type="checkbox" id="setUcap">
+          </label>
+          <div class="pengaturan-vol">
+            <input type="range" id="volUcap" min="0" max="1" step="0.01" value="1" aria-label="volume suara ucap">
+            <span class="pengaturan-vol-nilai" id="volUcapNilai">100%</span>
+          </div>
+        </div>
         <p class="pengaturan-nota">
           Tanpa ini, notifikasi tetap berbunyi — cuma lonceng saja: tiga nada
           naik untuk tugas selesai, dua nada datar untuk yang menunggu
           jawabanmu, dua nada turun untuk yang berhenti. Loncengnya tidak
           pernah butuh jaringan.
+        </p>
+        <p class="pengaturan-nota">
+          Slider di atas mengatur <b>semua klip yang diucapkan</b> — notifikasi,
+          narasi kejadian, dan tombol coba — terpisah dari lonceng notifikasi
+          yang punya slidernya sendiri di atas. Dulu ucapan menumpang volume
+          lonceng, jadi mengecilkan yang satu ikut mengecilkan yang lain.
+        </p>
+        <label class="pengaturan-baris">
+          <span>🎙️ narasi kejadian</span>
+          <select id="setUcapNarasi" aria-label="lingkup narasi event acak">
+            <option value="semua">tiap kejadian</option>
+            <option value="panggung">kejadian besar saja</option>
+            <option value="mati">mati</option>
+          </select>
+        </label>
+        <p class="pengaturan-nota" id="setUcapNarasiKet">
+          Kejadian di ruangan dibacakan sekali waktu mulai, satu kalimat dari
+          sudut pandang orang yang mengalaminya — <i>“Kucingnya naik ke laptop
+          saya, sabar ya, Pak Kucing.”</i> <b>Efek suaranya terpisah dan tidak
+          butuh ini</b>: itu ikut centang 🔊 di atas, disintesis di halaman,
+          tanpa jaringan dan tanpa kunci.
         </p>
         <div class="suara-atur">
           <label class="suara-baris">
@@ -270,11 +320,48 @@
             <datalist id="setUcapVoiceDaftar"></datalist>
             <button type="button" id="setUcapCoba">▶ coba</button>
           </label>
+          <label class="suara-baris">
+            <span>voice ♂ laki-laki</span>
+            <input type="text" id="setUcapVoiceL" list="setUcapVoiceDaftar"
+                   placeholder="kosong = ikut voice di atas" spellcheck="false">
+            <button type="button" id="setUcapCobaL">▶ coba</button>
+          </label>
+          <label class="suara-baris">
+            <span>voice ♀ perempuan</span>
+            <input type="text" id="setUcapVoiceP" list="setUcapVoiceDaftar"
+                   placeholder="kosong = ikut voice di atas" spellcheck="false">
+            <button type="button" id="setUcapCobaP">▶ coba</button>
+          </label>
           <div class="pengaturan-izin-ket" id="setUcapKet"></div>
+          <p class="pengaturan-nota">
+            Suara ikut jenis kelamin pegawai yang bicara — notifikasi maupun
+            narasi kejadian. Penyedia <b>tidak pernah memberi tahu voice mana
+            yang laki-laki dan mana yang perempuan</b>: daftarnya cuma nama,
+            dan dokumen Google pun cuma menyebut sifatnya (“Bright”,
+            “Gravelly”, “Soft”). Jadi pasangannya kamu tentukan pakai telinga —
+            tekan ▶ coba di tiap baris, sekali, lalu tersimpan. Dikosongkan =
+            semua orang memakai voice di atas, persis seperti sebelumnya.
+          </p>
+
+          <label class="suara-baris">
+            <span>format klip</span>
+            <select id="setUcapFormat" aria-label="format klip audio">
+              <option value="mp3">mp3</option>
+              <option value="pcm">pcm → dibungkus WAV</option>
+            </select>
+          </label>
+          <p class="pengaturan-nota">
+            Biarkan di <code>mp3</code>. Kalau modelnya menolak — Gemini TTS
+            membalas <i>“only supports response_format=pcm”</i> — server
+            memindahkannya sendiri ke <code>pcm</code> sekali, memasang kepala
+            WAV supaya tetap bisa diputar, lalu mengingatnya. Kolom ini cuma
+            perlu kamu sentuh untuk mengembalikannya sesudah ganti model.
+          </p>
 
           <div class="suara-baris suara-baris-cache">
             <span id="setUcapCache">cache —</span>
-            <button type="button" id="setUcapPanasi">panaskan cache</button>
+            <button type="button" id="setUcapPanasi">panaskan nama</button>
+            <button type="button" id="setUcapPanasiEvent">panaskan narasi</button>
             <button type="button" id="setUcapBersih">kosongkan</button>
           </div>
         </div>
