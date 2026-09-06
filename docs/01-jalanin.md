@@ -214,6 +214,7 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 |---|---|---|
 | `AGENT_ROOM_PORT` | `4517` | ganti port (install ulang hook setelah diubah) |
 | `AGENT_ROOM_HOST` | `127.0.0.1` | alamat bind |
+| `AGENT_ROOM_SOP` | `sop.json` di folder repo | juknis paraf per proyek: daftar larangan yang ditegakkan di loket paraf sesi lahiran halaman. Berkas tidak ada = fitur diam total. Contohnya `sop.contoh.json`; lihat [docs/05](05-kendali-web.md#juknis-paraf-sopjson) |
 | `AGENT_ROOM_CLAUDE` | hasil `where claude` | tunjuk biner claude tertentu, kalau PATH menemukan instalasi yang salah. Kalau nilainya berakhiran `.mjs`/`.cjs`/`.js`, anaknya dijalankan sebagai `node <skrip>` — **seam untuk uji** (dipakai `uji-kendali.mjs` lewat `claude-palsu.mjs`), dan kantor mengatakannya keras-keras di konsol waktu dipakai. Bukan kuasa baru: env ini memang sudah menjalankan executable sembarang |
 | `AGENT_ROOM_TOKEN_LOG` | `token-riwayat.jsonl` | tempat riwayat token lintas sesi ditulis (lihat **Riwayat lintas sesi**) |
 | `AGENT_ROOM_KLIPING_LOG` | `kliping-mingguan.jsonl` | tempat arsip kliping mingguan ditulis (lihat **Arsip kliping mingguan**); checkpoint minggu berjalan ikut ke folder yang sama |

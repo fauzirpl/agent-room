@@ -929,6 +929,13 @@ function normalize(raw, asal = 'claude') {
   if (kind === 'izin-minta') {
     const t = telaahRisiko(tool, raw.tool_input);
     if (t.tingkat !== 'rendah') ev.risiko = t;
+    /* Juknis untuk sesi TERMINAL: catatan saja, tidak pernah menahan apa pun.
+       Sesi terminal menjawab izinnya sendiri di terminal, dan kantor ini tidak
+       punya — dan tidak boleh punya — cara mencampurinya. Yang bisa kita
+       lakukan cuma memberi tahu bahwa permintaan itu menabrak juknis proyek.
+       `nota bukan rem`, dan di sinilah kalimat itu diuji. */
+    const sJuknis = sopPutuskan(raw.cwd, tool, ev.label, t.tingkat);
+    if (sJuknis) ev.sop = { putusan: sJuknis.putusan, aturan: sJuknis.aturan };
   }
   /* Instansi luar minta keterangan. Yang jadi LABEL cuma nama server MCP-nya
      — itu metadata, dan itu yang boleh ikut ke buku agenda. Pertanyaannya
@@ -2124,6 +2131,10 @@ function agendaBaris(ev) {
   if (ev.mesin) b.mesin = ev.mesin;
   // satu kata enum dari daftar putih; sekelas `mesin`, bukan isi kerja
   if (ev.asal) b.asal = ev.asal;
+  /* Putusan dan NOMOR aturannya saja. Polanya tidak pernah ikut ke disk:
+     regex juknis bisa memuat nama berkas rahasia proyek, dan buku agenda
+     dibaca ulang oleh siapa pun yang memegang berkasnya. */
+  if (ev.sop) b.sop = { putusan: ev.sop.putusan, aturan: ev.sop.aturan };
   if (ev.jenis) b.jenis = ev.jenis;
   if (ev.agen) b.agen = ev.agen;
   if (ev.agenId) b.agenId = ev.agenId;
@@ -4410,6 +4421,157 @@ function lahirkanAntrean() {
    bisa MENJAWAB hanya pemegang token halaman (gerbang yang sama dengan
    /perintah). Hanya di memori: server mati, permintaan yang menggantung ikut
    hangus, dan CLI-nya menerima deny. */
+/* ------------------------------------------------------ juknis paraf (sop) ---
+   Satu berkas milik PEMILIK, di luar repo, yang menuliskan sekali apa yang
+   tidak boleh disentuh agen di sebuah proyek: "di sini .env bukan urusan agen,
+   titik". Ditegakkan mesin untuk tiap sesi yang DILAHIRKAN KANTOR INI, dan
+   dicatat tiap kali dipakai.
+
+   SATU PAGAR YANG MEMBUAT SELURUH FITUR INI TIDAK BISA JADI KELONGGARAN:
+   **v1 cuma bisa MENOLAK.** Tidak ada `putusan: "paraf"`, tidak ada paraf
+   otomatis, tidak ada aturan yang bisa melewati manusia. Juknis hanya bisa
+   menambah penolakan, tidak pernah mengurangi pertanyaan — jadi gerbang
+   manusia yang sudah ada tidak mungkin melemah karenanya. Kalau suatu hari
+   paraf otomatis benar-benar diinginkan, itu keputusan sendiri dengan
+   restunya sendiri, bukan nilai baru di enum yang sudah ada.
+
+   DAN IA TIDAK MENYENTUH SESI TERMINAL. Yang bisa ditolak juknis cuma
+   permintaan yang datang lewat `/izin/tanya`, dan rute itu menuntut kunci
+   per-tugas yang cuma hidup di env proses anak yang kita lahirkan sendiri.
+   Sesi terminal cuma DIBERI CATATAN `ev.sop` — nota, bukan rem, persis
+   seperti seluruh sisa kantor ini. Tidak ada satu pun jalur dari `POST /event`
+   yang bisa menahan siapa pun; `uji-sop.mjs` yang menagihnya lewat lint.
+
+   Preseden penolakan otomatisnya sudah lama ada dan tidak pernah dianggap
+   rem: timer 15 menit di bawah memanggil `jawabIzin(izin,'tolak','tidak ada
+   paraf','waktu habis')`. Juknis cuma menambah satu sumber lagi ke daftar
+   yang sama — dan sumbernya selalu disebut (`sumber:'sop'`), jadi tiap
+   penolakan otomatis bisa dibedakan dari keputusanmu sendiri di buku register.
+
+   Bentuknya meniru `pagu.json` apa adanya: berkas tidak ada = fitur diam
+   total tanpa sepatah kata, berkas rusak = tepat satu peringatan lalu mati,
+   `sop.contoh.json` ikut repo untuk dibaca manusia, `sop.json` di .gitignore.
+*/
+const BERKAS_SOP = process.env.AGENT_ROOM_SOP || path.join(__dirname, 'sop.json');
+const SOP_V = 1;                            // bentuk sop.json yang dikenal proses ini
+const SOP_POLA_MAX = 200;                   // regex yang lebih panjang dari ini bukan aturan lagi
+const SOP_RISIKO = ['rendah', 'sedang', 'tinggi'];
+let sop = null;                             // null = tidak ada juknis sama sekali
+
+/* Satu aturan dianggap sah kalau: putusannya 'tolak' (satu-satunya yang ada),
+   dan ia menyebut SETIDAKNYA SATU syarat. Aturan tanpa syarat cocok dengan
+   segalanya dan akan menolak seluruh permintaan izin proyek itu — itu bukan
+   juknis, itu memutus telepon. Yang tidak sah dilewati dengan satu baris
+   peringatan, bukan mematikan seluruh berkas: satu aturan salah ketik tidak
+   boleh membuang aturan lain yang benar. */
+function sopAturanSah(a, ket) {
+  if (!a || typeof a !== 'object') { console.warn('[agent-room] sop: ' + ket + ' bukan objek — dilewati'); return null; }
+  if (a.putusan !== 'tolak') {
+    console.warn('[agent-room] sop: ' + ket + ' berputusan ' + JSON.stringify(a.putusan)
+      + ' — v' + SOP_V + ' hanya mengenal "tolak" (paraf otomatis sengaja tidak ada). Dilewati.');
+    return null;
+  }
+  const tool = typeof a.tool === 'string' && a.tool.trim() ? a.tool.trim() : '';
+  const risiko = typeof a.risiko === 'string' && SOP_RISIKO.includes(a.risiko) ? a.risiko : '';
+  let pola = null;
+  if (typeof a.pola === 'string' && a.pola.trim()) {
+    if (a.pola.length > SOP_POLA_MAX) {
+      console.warn('[agent-room] sop: ' + ket + ' polanya lebih dari ' + SOP_POLA_MAX + ' karakter — dilewati');
+      return null;
+    }
+    try { pola = new RegExp(a.pola, 'i'); }
+    catch (err) { console.warn('[agent-room] sop: ' + ket + ' polanya bukan regex sah (' + err.message + ') — dilewati'); return null; }
+  }
+  if (!tool && !pola && !risiko) {
+    console.warn('[agent-room] sop: ' + ket + ' tidak menyebut tool, pola, maupun risiko — '
+      + 'aturan yang cocok dengan segalanya akan menolak SEMUA izin proyek itu. Dilewati.');
+    return null;
+  }
+  return { tool, pola, risiko, pesan: clip(a.pesan || 'ditolak juknis proyek', 200) };
+}
+
+function sopMuat() {
+  let mentah = null;
+  try { mentah = fs.readFileSync(BERKAS_SOP, 'utf8'); }
+  catch (err) {
+    // ENOENT itu keadaan normal, bukan kekurangan: diam total.
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] sop: ' + path.basename(BERKAS_SOP) + ' tidak terbaca ('
+        + err.code + ') — juknis paraf tidak aktif');
+    }
+    sop = null;
+    return;
+  }
+  let o = null;
+  try { o = JSON.parse(mentah); } catch { o = null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) {
+    console.warn('[agent-room] sop: isi ' + path.basename(BERKAS_SOP)
+      + ' bukan objek JSON yang bisa dibaca — juknis paraf tidak aktif');
+    sop = null;
+    return;
+  }
+  const v = Number(o.v);
+  if (Number.isFinite(v) && v > SOP_V) {
+    console.warn('[agent-room] sop: ' + path.basename(BERKAS_SOP) + ' ber-v' + v
+      + ', lebih baru dari yang dikenal proses ini (v' + SOP_V + ') — juknis paraf tidak aktif');
+    sop = null;
+    return;
+  }
+  const proyek = new Map();
+  const sumber = o.proyek && typeof o.proyek === 'object' ? o.proyek : {};
+  for (const [nama, isi] of Object.entries(sumber)) {
+    if (!isi || typeof isi !== 'object') continue;
+    const aturan = [];
+    const mentahAturan = Array.isArray(isi.aturan) ? isi.aturan : [];
+    mentahAturan.forEach((a, i) => {
+      const sah = sopAturanSah(a, 'proyek "' + nama + '" aturan #' + (i + 1));
+      // indeksnya tetap indeks ASLI di berkas: itu yang ditulis ke buku agenda
+      // dan dibaca orang waktu mencocokkan dengan sop.json miliknya
+      if (sah) aturan.push({ ...sah, indeks: i + 1 });
+    });
+    const modeDilarang = Array.isArray(isi.modeDilarang)
+      ? isi.modeDilarang.filter((m) => typeof m === 'string' && m).map((m) => m.trim()) : [];
+    proyek.set(nama, { aturan, parafWajib: isi.parafWajib === true, modeDilarang });
+  }
+  if (!proyek.size) { sop = null; return; }
+  sop = { proyek };
+  const jml = [...proyek.values()].reduce((n, p) => n + p.aturan.length, 0);
+  console.log('[agent-room] juknis paraf aktif: ' + proyek.size + ' proyek, ' + jml + ' aturan '
+    + '(hanya bisa MENOLAK — paraf otomatis sengaja tidak ada)');
+}
+
+const sopProyek = (cwd) => (sop ? sop.proyek.get(baseName(cwd)) || null : null);
+
+/* Aturan PERTAMA yang cocok yang berlaku. Mengembalikan null kalau tidak ada
+   juknis, tidak ada aturan yang cocok, atau proyeknya tidak disebut — dan
+   null berarti "seperti sebelum fitur ini ada". */
+function sopPutuskan(cwd, tool, ringkasan, risiko) {
+  const p = sopProyek(cwd);
+  if (!p || !p.aturan.length) return null;
+  const teks = String(ringkasan || '');
+  const tingkat = SOP_RISIKO.indexOf(String(risiko || 'rendah'));
+  for (const a of p.aturan) {
+    if (a.tool && a.tool !== tool) continue;
+    if (a.pola && !a.pola.test(teks)) continue;
+    // `risiko` di aturan itu BATAS BAWAH: "tinggi" cocok dengan tinggi saja,
+    // "sedang" cocok dengan sedang dan tinggi
+    if (a.risiko && tingkat < SOP_RISIKO.indexOf(a.risiko)) continue;
+    return { putusan: 'tolak', aturan: a.indeks, pesan: a.pesan };
+  }
+  return null;
+}
+
+/* Mode izin yang BENAR-BENAR dipakai anak, dihitung satu tempat supaya
+   pemeriksa dan pemakainya tidak mungkin hanyut. Ini juga menutup lubang yang
+   nyata: memeriksa FIELD `mode` membiarkan body tanpa `mode` lahir
+   bypassPermissions, karena bawaannya memang itu. */
+const modeEfektif = (t) => (t.paraf && !t.mode ? 'default' : (t.mode || 'bypassPermissions'));
+
+/* Dimuat DI SINI, bukan di sebelah paguMuat(): seluruh tetapan juknis lahir
+   ribuan baris di bawah blok pagu, dan memanggilnya lebih awal berarti
+   ReferenceError yang mematikan server sebelum ia sempat mendengarkan. */
+sopMuat();
+
 const IZIN_TUNGGU_MS = 15 * 60 * 1000;      // tanpa paraf selama ini -> ditolak
 const IZIN_POLL_MS = 25 * 1000;             // satu long-poll ditahan paling lama segini
 const izinTunggu = new Map();               // id 12-hex -> { id, tugas, sesi, tool, ringkasan, sejak, jawab, penunggu:Set<res>, timer }
@@ -4512,7 +4674,8 @@ function lahirkanTugas(t) {
     // stream-json, bukan json: yang dibaca bukan cuma hasil akhirnya, tapi
     // jalannya sesi — dan `-p` mensyaratkan --verbose untuk bentuk ini.
     '--output-format', 'stream-json', '--verbose',
-    '--permission-mode', t.mode || 'bypassPermissions',
+    // satu sumber untuk mode efektif; lihat modeEfektif() di blok juknis
+    '--permission-mode', modeEfektif(t),
     '--add-dir', kerja,
   ];
   if (model) args.push('--model', model);
@@ -4533,10 +4696,11 @@ function lahirkanTugas(t) {
     } } };
     args.push('--permission-prompt-tool', 'mcp__agent-room-izin__izin',
               '--mcp-config', JSON.stringify(mcp));
-    // --permission-mode di atas sudah terpasang; 'default' yang dipakai kalau
-    // pemanggil tidak memaksa mode lain, supaya izin benar-benar ditanyakan.
-    const iMode = args.indexOf('--permission-mode');
-    if (iMode >= 0 && !t.mode) args[iMode + 1] = 'default';
+    /* --permission-mode sudah benar sejak dirakit: modeEfektif() yang
+       memutuskan 'default' untuk tugas ber-paraf tanpa mode paksaan, supaya
+       izinnya benar-benar ditanyakan. Dulu nilainya ditimpa DI SINI, dan itu
+       yang membuat pemeriksa juknis gampang salah tempat: yang diperiksa
+       field `mode`, padahal yang berlaku hasil akhirnya. */
   }
 
   let anak;
@@ -5114,6 +5278,10 @@ const server = http.createServer(async (req, res) => {
       antrean: antrean.map(ringkasAntre),
       antreMaks: ANTRE_MAKS,
       maksJalan: MAKS_JALAN,
+      /* Juknis paraf: cuma NAMA PROYEK yang punya aturan, tidak pernah
+         aturannya. Halaman perlu tahu bahwa ada juknis yang berlaku;
+         isinya urusan berkas milik pemilik, bukan urusan halaman. */
+      sop: sop ? { aktif: true, proyek: [...sop.proyek.keys()] } : { aktif: false, proyek: [] },
     }));
     return;
   }
@@ -5680,6 +5848,26 @@ const server = http.createServer(async (req, res) => {
       sifat, sejak: Date.now(),
     };
 
+    /* Juknis proyek, dua rem yang berlaku pada ANAK KANTOR INI SENDIRI —
+       sekelas MAKS_JALAN, bukan rem atas pekerjaan orang.
+
+       `parafWajib` dipakai LEBIH DULU, karena ia mengubah mode efektif: tugas
+       ber-paraf tanpa mode paksaan lahir dengan `default`, bukan
+       `bypassPermissions`. Urutan terbalik akan memeriksa mode yang bukan mode
+       yang akhirnya dipakai. */
+    const juknis = sopProyek(kerja);
+    if (juknis && juknis.parafWajib) tugas.paraf = true;
+    if (juknis && juknis.modeDilarang.length) {
+      /* Yang diperiksa MODE EFEKTIF, bukan field `mode` di body. Memeriksa
+         field-nya membiarkan body TANPA `mode` lahir bypassPermissions —
+         justru mode yang paling mungkin dilarang. */
+      const efektif = modeEfektif(tugas);
+      if (juknis.modeDilarang.includes(efektif)) {
+        return tolak(400, 'juknis proyek melarang mode "' + efektif + '"'
+          + (tugas.mode ? '' : ' (mode bawaan waktu tidak disebutkan)'));
+      }
+    }
+
     if (jalan.size >= MAKS_JALAN) {
       if (antrean.length >= ANTRE_MAKS) {
         return tolak(429, 'loket disposisi penuh — ' + ANTRE_MAKS + ' tugas sudah antre');
@@ -5773,15 +5961,25 @@ const server = http.createServer(async (req, res) => {
     /* Jam tunggunya diambil dari `izin.sejak` yang sudah ada, bukan dibuat
        baru: satu permintaan paraf harus punya SATU sumber waktu, kalau tidak
        kartu dan register bisa menyebut dua angka untuk kejadian yang sama. */
+    /* Juknis proyek. Kalau sebuah aturan cocok, permintaannya ditolak DI SINI
+       dan pegawainya TIDAK pernah berdiri mengangkat map — tidak ada yang
+       ditunggu, jadi tidak ada pose menunggu. Eventnya tetap terbit supaya
+       kartu dan buku register melihat bahwa permintaannya memang pernah ada;
+       yang berbeda cuma tidak adanya `butuh` dan adanya `sop`. */
+    const putusanSop = sopPutuskan(rec.cwd, tool, ringkasan, risiko.tingkat);
     const keadaan = { sebab: 'izin', alasan: ringkasan, label: ringkasan, sejak: izin.sejak };
-    butuhManusia.set(sesi, keadaan);
+    if (!putusanSop) butuhManusia.set(sesi, keadaan);
     const ev = {
       id: ++seq, ts: izin.sejak, kind: 'izin-minta', session: sesi,
       nama: namaSesi.get(sesi) || rec.nama, cwd: baseName(rec.cwd),
       ...(rec.cwd ? { cabang: cabangGit(rec.cwd) } : {}),
       tool, label: ringkasan, ok: true, sebab: 'izin', alasan: ringkasan,
       ...(izin.panggilan ? { panggilan: izin.panggilan } : {}),
-      paraf: { id: izin.id, tool }, butuh: keadaan,
+      /* `paraf` cuma dipasang kalau memang ADA yang bisa diparaf. Menaruh
+         tombol pada permintaan yang sudah ditolak juknis berarti menawarkan
+         keputusan yang tidak berlaku. */
+      ...(putusanSop ? { sop: { putusan: putusanSop.putusan, aturan: putusanSop.aturan } }
+        : { paraf: { id: izin.id, tool }, butuh: keadaan }),
       ...(izin.risiko && izin.risiko.tingkat !== 'rendah' ? { risiko: izin.risiko } : {}),
       ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
       ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
@@ -5789,6 +5987,17 @@ const server = http.createServer(async (req, res) => {
     tandaiHidup(sesi);       // proses MCP-nya sudah bicara: sesinya jelas hidup
     publish(ev);
     laporKeluar(ev);
+    if (putusanSop) {
+      /* Dijawab SESUDAH eventnya terbit: `jawabIzin()` menerbitkan
+         `izin-jawab` yang merujuk permintaan ini, dan urutan terbalik akan
+         membuat jawaban mendahului pertanyaannya di buku agenda maupun di
+         `?ulang=`. Sumbernya 'sop', jadi di buku register penolakan mesin
+         tidak pernah tertukar dengan keputusanmu sendiri. */
+      jawabIzin(izin, 'tolak', putusanSop.pesan, 'sop');
+      console.log('[agent-room] izin ' + izin.id + ' DITOLAK JUKNIS (aturan #' + putusanSop.aturan
+        + '): ' + tool + ' (sesi ' + sesi + ')');
+      return balas(200, { ok: true, id: izin.id });
+    }
     console.log('[agent-room] izin ' + izin.id + ' diajukan: ' + tool + ' (sesi ' + sesi + ')');
     return balas(200, { ok: true, id: izin.id });
   }

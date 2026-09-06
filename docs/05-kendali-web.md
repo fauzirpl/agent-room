@@ -409,6 +409,56 @@ konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
 | `ruangan_skp` | `GET /skp` | papan SKP: nilai mutu 0–100 per proyek & per sesi dalam satu rentang, beserta indikator yang membentuknya (rasio gagal bersih, bolak-balik, tertahan, gagal beruntun, rapat yatim) dan **bobot serta titik jenuh** yang dipakai menghitungnya. `dari`, `sampai`, `proyek` (saringan nama folder, dilakukan di sisi tool — `/skp` sendiri tidak punya parameter itu). Angka saja: tidak ada label maupun isi kerja |
 | `ruangan_kesehatan` | `GET /health` | server hidup atau tidak |
 
+### Juknis paraf (`sop.json`)
+
+Satu berkas milik kamu, di luar repo, yang menuliskan **sekali** apa yang tidak
+boleh disentuh agen di sebuah proyek. Salin `sop.contoh.json` jadi `sop.json`
+(atau tunjuk berkas lain lewat `AGENT_ROOM_SOP`). Tidak ada berkasnya = fitur
+ini diam total, persis seperti `pagu.json`.
+
+```json
+{ "v": 1, "proyek": { "<nama-folder>": {
+  "parafWajib": true,
+  "modeDilarang": ["bypassPermissions"],
+  "aturan": [
+    { "putusan": "tolak", "tool": "Bash", "pola": "\\.env", "pesan": "juknis: .env bukan urusan agen" },
+    { "putusan": "tolak", "risiko": "tinggi", "pesan": "juknis: risiko tinggi tidak dijalankan di sini" }
+  ] } } }
+```
+
+**Juknis v1 hanya bisa MENOLAK.** Tidak ada `putusan: "paraf"`, tidak ada paraf
+otomatis, tidak ada aturan yang bisa melewati manusia. Ia cuma bisa menambah
+penolakan, tidak pernah mengurangi pertanyaan — jadi gerbang manusia yang sudah
+ada tidak mungkin melemah karenanya. Kalau paraf otomatis suatu hari benar-benar
+diinginkan, itu keputusan tersendiri, bukan nilai baru di enum yang sudah ada.
+
+Aturan dicocokkan berurutan; yang **pertama cocok** yang berlaku. Syaratnya
+boleh `tool` (nama persis), `pola` (regex ke ringkasan ≤300 karakter, bukan ke
+input utuh), dan `risiko` (batas bawah: `sedang` juga cocok dengan `tinggi`).
+Aturan tanpa satu pun syarat **ditolak waktu dimuat** — itu bukan juknis,
+itu memutus telepon. Aturan yang salah ketik dilewati dengan satu peringatan;
+aturan lain yang benar tetap berlaku.
+
+Yang ditegakkan, dan di mana:
+
+| | sesi lahiran halaman | sesi terminal |
+|---|---|---|
+| aturan `tolak` | **ditolak otomatis** di `/izin/tanya`, `izin-jawab` ber-`sumber: "sop"`, pegawainya tidak pernah berdiri menunggu | **catatan saja** (`ev.sop`) — tidak ada yang ditahan |
+| `parafWajib` | `/perintah` memaksa `paraf: true` | tidak berlaku |
+| `modeDilarang` | `/perintah` menolak 400 pada **mode efektif** | tidak berlaku |
+
+Bedanya bukan kelalaian. Yang bisa ditolak juknis cuma permintaan yang lewat
+`/izin/tanya`, dan rute itu menuntut kunci per-tugas yang hanya hidup di env
+proses anak yang kantor ini lahirkan sendiri. Sesi terminal menjawab izinnya
+di terminal, dan kantor ini tidak punya — tidak boleh punya — cara mencampuri.
+**Nota bukan rem**, dan di sinilah kalimat itu diuji.
+
+`modeDilarang` diperiksa pada **mode efektif**, bukan pada field `mode` di body:
+body tanpa `mode` lahir `bypassPermissions` (atau `default` kalau ber-paraf),
+jadi memeriksa field-nya justru membiarkan lewat mode yang paling mungkin
+dilarang. Buku agenda menyalin `putusan` + **nomor** aturannya saja — polanya
+tidak pernah ikut ke disk, karena regex juknis bisa memuat nama berkas rahasia.
+
 Servernya stdio JSON-RPC polos tanpa dependency (`initialize`, `tools/list`,
 `tools/call`, `ping`; notifikasi diabaikan), log hanya ke stderr karena stdout
 adalah kanal protokolnya. Tiap tool cuma satu GET ke server ruangan yang sudah

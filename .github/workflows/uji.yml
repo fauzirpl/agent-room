@@ -139,6 +139,11 @@ jobs:
       - name: Uji pegawai honorer
         run: node uji-honorer.mjs
 
+      # Juknis paraf: satu-satunya hal yang bisa menolak otomatis di gerbang
+      # manusia, jadi pagarnya diuji lebih galak daripada fiturnya.
+      - name: Uji juknis paraf
+        run: node uji-sop.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

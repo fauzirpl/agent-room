@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "proyek": {
+    "agent-room": {
+      "parafWajib": true,
+      "modeDilarang": ["bypassPermissions"],
+      "aturan": [
+        {
+          "putusan": "tolak",
+          "pola": "\\.env|\\.agent-room-suara-kunci|credentials",
+          "pesan": "juknis: berkas rahasia bukan urusan agen"
+        },
+        {
+          "putusan": "tolak",
+          "tool": "Bash",
+          "pola": "rm\\s+-rf\\s+/",
+          "pesan": "juknis: jangan pernah menyapu dari akar"
+        },
+        {
+          "putusan": "tolak",
+          "risiko": "tinggi",
+          "pesan": "juknis: yang bertingkat risiko tinggi tidak dijalankan di proyek ini"
+        }
+      ]
+    }
+  }
+}

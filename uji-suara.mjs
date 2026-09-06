@@ -149,6 +149,7 @@ async function coba(dir, port, palsu, tambahan) {
       AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
       AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
       AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
+      AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
       // inilah yang menjamin uji ini tidak pernah menyentuh openrouter.ai
       AGENT_ROOM_SUARA_URL: palsu.suaraUrl,
       AGENT_ROOM_SUARA_MODEL_URL: palsu.modelUrl,

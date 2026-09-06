@@ -78,6 +78,7 @@ const ENV_DATA = (dir) => ({
   AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
   AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
   AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
+  AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
 });
 
 let portBerikut = 4620;

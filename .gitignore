@@ -22,6 +22,11 @@ buku-induk.json.tmp
 pagu.json
 pagu.json.tmp
 
+# juknis paraf per proyek: kebijakan lokal pemilik, bukan kode
+# (sop.contoh.json justru IKUT di-commit; itu contoh untuk dibaca manusia)
+sop.json
+sop.json.tmp
+
 # formasi pegawai tetap: nama & jabatan penghuni kursi per folder, data lokal
 formasi.json
 formasi.json.tmp

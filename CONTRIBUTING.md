@@ -40,6 +40,7 @@ node uji-izin.mjs               # loket paraf: mcp-izin.mjs sungguhan, gerbang k
 node uji-kendali.mjs            # loop kendali: pemeran claude-palsu, stream-json, rapat ber-agenId, paraf ujung-ke-ujung
 node uji-loket.mjs              # loket disposisi: antrean penuh, SEGERA, batal, hentikan, tugas-bisu (~26 dtk)
 node uji-honorer.mjs            # pegawai honorer: hook Gemini CLI, alias event/tool, transkrip vendor lain tidak dibaca
+node uji-sop.mjs                # juknis paraf: hanya bisa menolak, sesi terminal cuma dicatat, tanpa berkas nol jejak
 node uji-ulang-server.mjs       # hari sungguhan diputar ke server.mjs; --sampai 300 untuk iterasi cepat
 node telaah.mjs Bash "rm -rf x" # coba satu perintah dengan tangan
 node --check server.mjs && node --check dinas.mjs

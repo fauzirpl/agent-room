@@ -226,6 +226,14 @@ const ENV_DATA = (dir) => ({
   AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
   AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
   AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
+  AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
+  /* Ini satu-satunya yang cuma DIBACA server (katalog rancangan event, sumber
+     kalimat narasi). Tetap disandbox-kan: berkasnya boleh tidak ada — narasi
+     jatuh ke id event dan servernya tetap menyala — dan uji yang mau menguji
+     jalur katalog jadi harus menaruh fixture-nya sendiri, bukan menumpang
+     event-acak.json milik repo yang isinya berubah tiap gelombang event. */
+  AGENT_ROOM_KATALOG: path.join(dir, 'event-acak.json'),
+  AGENT_ROOM_NARASI: path.join(dir, 'narasi-event.json'),
 });
 
 /* Jam mesin yang bisa digeser DARI LUAR proses server, tanpa menyentuh satu
