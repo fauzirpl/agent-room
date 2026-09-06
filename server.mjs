@@ -3312,7 +3312,7 @@ function skpHitung(dari, sampai) {
       if (s.tahanSejak && o.ts > s.tahanSejak) { s.lamaTertahan += o.ts - s.tahanSejak; s.tahanSejak = 0; }
       if (o.kind === 'pre' && o.tool && skpLabelLayak(o)) {
         s.bolakBalikDari++;
-        const sidik = o.tool + ' ' + o.label;
+        const sidik = o.tool + '\u0000' + o.label;
         if (s.ulangRing.includes(sidik)) s.bolakBalik++;
         s.ulangRing.push(sidik);
         if (s.ulangRing.length > SKP_JENDELA_ULANG) s.ulangRing.shift();
