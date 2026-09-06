@@ -3252,6 +3252,158 @@ function formasiMuat() {
 namaMuat();
 formasiMuat();
 
+/* --------------------------------------------------------- serah terima ---
+   Catatan pergantian shift. Buku agenda sudah menyimpan jejak lintas sesi per
+   proyek, tapi sampai sekarang tidak ada yang menjahitnya: sesi yang baru
+   masuk di folder yang sama tidak bisa bertanya "tadi pagi rekan seproyek
+   menyentuh berkas apa, apa yang gagal, ada yang masih menunggu paraf?".
+   `ruangan_agenda_cari` cuma memberi baris mentah, dan membaca 300 baris
+   agenda bukan jawaban — itu memindahkan pekerjaan, bukan menyelesaikannya.
+
+   SELURUHNYA DETERMINISTIK. Tidak ada LLM di sini, dan itu keputusan sadar:
+   yang benar-benar dibutuhkan orang dari "fitur AI" di kantor ini adalah
+   INGATAN LINTAS SESI, dan ingatan itu sudah ada di disk — tinggal
+   dirangkum. Kalau suatu hari narasi berbahasa manusia memang diinginkan, ia
+   menempel DI ATAS struktur ini sebagai medan tambahan, bukan menggantikannya.
+
+   Yang keluar dari sini sekelas `/agenda` yang sudah lama terbuka tanpa
+   token: nama basename berkas, nama subperintah git, angka. Tidak ada isi
+   perintah, tidak ada pikiran, tidak ada kalimat agen. Waktu `AGENT_ROOM_ISI`
+   mati, label memang tidak ada di agenda — `disunting` jadi kosong dan
+   sisanya tetap jalan. */
+const SERAH_JAM_BAWAAN = 8;                 // jendela "shift" yang wajar
+const SERAH_JAM_MAKS = 24;
+const SERAH_BERKAS_MAKS = 20;               // nama berkas per sesi; sisanya dihitung
+const SERAH_SESI_MAKS = 12;
+/* Subperintah git dari label Bash. Halaman punya `segmenGit()` yang jauh
+   lebih pintar; server tidak, dan tidak perlu — yang dicari cuma kata
+   pertama sesudah `git`/`gh`, itu sudah cukup menjawab "tadi ada yang
+   commit/push/rebase?".
+
+   Penjaga di depan cuma satu: `git` tidak boleh menempel pada kata lain
+   (`mygit`, `x-gh`). SENGAJA tidak menuntut awal baris atau tanda `;&|` di
+   depannya — pemilik repo ini mengawali hampir tiap perintah git dengan
+   `rtk`, dan substitusi `$(git …)` juga lazim; menuntutnya membuang 65 dari
+   158 label git di satu hari sungguhan. `gitk` tetap tidak lolos, bukan
+   karena penjaga depan melainkan karena `\s+` sesudahnya.
+
+   Ini pembaca LABEL, bukan pengurai shell: kata `git commit` di dalam `echo`
+   pun terbaca. Itu diterima — salahnya menambah satu nama ke daftar, bukan
+   menyembunyikan yang benar-benar dikerjakan. */
+const SERAH_GIT_RX = /(?<![\w-])(?:git|gh)\s+([a-z][a-z-]{1,20})/g;
+const SERAH_TOOL_SUNTING = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const SERAH_TOOL_BARIS = new Set(['Bash', 'PowerShell']);   // keduanya berlabel perintahnya
+
+function serahTerima(proyek, jamMundur) {
+  const jam = Math.min(SERAH_JAM_MAKS, Math.max(1, Number(jamMundur) || SERAH_JAM_BAWAAN));
+  const kini = Date.now();
+  const batas = kini - jam * 3600 * 1000;
+  /* Hari ini DAN kemarin: jendela delapan jam yang dimulai jam 02.00 melewati
+     tengah malam, dan berkas agenda dipecah per tanggal lokal. Yang di luar
+     `batas` disaring lagi lewat ts, jadi membaca satu hari lebih tidak
+     menambah apa pun selain benar. */
+  const hariIni = tanggalLokal(kini);
+  const kemarin = tanggalLokal(batas);
+  const tanggal = kemarin === hariIni ? [hariIni] : [kemarin, hariIni];
+
+  const sesi = new Map();
+  const ambil = (id) => {
+    let s = sesi.get(id);
+    if (!s) sesi.set(id, s = { sesi: id, nama: '', cabang: '', model: '', mulai: 0, selesai: 0,
+                               toolCall: 0, gagal: 0, dibaca: 0, ditolak: 0,
+                               sunting: new Set(), git: new Set(), rencana: [], akhir: '' });
+    return s;
+  };
+  for (const tgl of tanggal) {
+    for (const o of agendaBacaHari(tgl)) {
+      if (!o.session || o.cwd !== proyek || o.ts < batas) continue;
+      const s = ambil(o.session);
+      if (!s.mulai || o.ts < s.mulai) s.mulai = o.ts;
+      if (o.ts > s.selesai) { s.selesai = o.ts; s.akhir = o.kind; }
+      if (o.nama) s.nama = o.nama;
+      if (o.cabang) s.cabang = o.cabang;
+      if (o.model) s.model = o.model;
+      if (o.kind === 'izin-tolak') s.ditolak++;
+      if (o.kind === 'pre' && o.tool) {
+        s.toolCall++;
+        if (o.tool === 'Read') s.dibaca++;
+        // label Edit/Write SUDAH basename (describe() memakai baseName), jadi
+        // yang masuk ke sini tidak pernah jalur lengkap
+        if (SERAH_TOOL_SUNTING.has(o.tool) && o.label) s.sunting.add(o.label);
+        if (SERAH_TOOL_BARIS.has(o.tool) && o.label) {
+          SERAH_GIT_RX.lastIndex = 0;
+          for (let m = SERAH_GIT_RX.exec(o.label); m; m = SERAH_GIT_RX.exec(o.label)) {
+            /* Kata yang mentok di ujung label yang DIPOTONG clip() bukan nama
+               subperintah, ia potongannya: `rtk git dif…` melahirkan `dif`, dan
+               `dif` lalu berdiri sejajar dengan `diff` di daftar seolah dua
+               perintah yang berbeda. Pelajaran yang sama dengan bolak-balik
+               di papan SKP — label terpotong tidak boleh dibaca sebagai isi. */
+            if (o.label[m.index + m[0].length] === '…') continue;
+            s.git.add(m[1]);
+          }
+        }
+        if (o.tool === 'ExitPlanMode' && o.label && s.rencana.length < 3) s.rencana.push(clip(o.label, 90));
+      }
+      if (o.kind === 'post' && o.ok === false) s.gagal++;
+    }
+  }
+
+  const penuh = [...sesi.values()].map((s) => {
+    const hidup = sesiHidup.has(s.sesi);
+    const butuh = hidup ? butuhManusia.get(s.sesi) : null;
+    const macet = hidup ? macetSesi.get(s.sesi) : null;
+    return {
+      sesi: s.sesi, nama: s.nama, cabang: s.cabang, model: s.model,
+      mulai: s.mulai, selesai: s.selesai, hidup,
+      toolCall: s.toolCall, gagal: s.gagal, dibaca: s.dibaca, ditolak: s.ditolak,
+      disunting: [...s.sunting].slice(0, SERAH_BERKAS_MAKS),
+      disuntingLain: Math.max(0, s.sunting.size - SERAH_BERKAS_MAKS),
+      git: [...s.git].sort(),
+      rencana: s.rencana,
+      akhir: s.akhir,
+      /* Sebab dan SEJAK KAPAN — itu yang menentukan apa kamu boleh menyentuh
+         folder yang sama. Teks `alasan`/`galat`-nya tidak ikut: buku agenda
+         sudah memuatnya utuh buat yang mau menggali, dan ringkasan serah
+         terima bukan tempatnya. */
+      tertahan: butuh ? { sebab: butuh.sebab || 'izin', sejak: butuh.sejak || 0 }
+        : macet ? { sebab: 'macet', sejak: macet.sejak || 0 } : null,
+    };
+  });
+
+  /* Urut dari yang paling baru — TAPI yang benar-benar mengerjakan sesuatu
+     didahulukan. Sesi yang di dalam jendela ini cuma menyisakan `session-end`
+     tidak salah dicatat (ia memang ada), tapi ia tidak menjawab apa pun, dan
+     di buku agenda sungguhan jumlahnya cukup untuk menggusur sesi yang
+     menyunting lima puluh berkas keluar dari dua belas baris yang muat. */
+  const bekerja = (s) => (s.toolCall || s.gagal || s.ditolak ? 1 : 0);
+  penuh.sort((a, b) => bekerja(b) - bekerja(a) || b.selesai - a.selesai);
+
+  /* Daftarnya dipotong, RINGKASANNYA TIDAK. Menjumlah dari daftar yang sudah
+     dipotong akan membuat kalimat pembukanya berbohong persis di hari tersibuk:
+     tiga belas sesi menyentuh folder ini, yang ketiga belas tertahan, dan
+     ringkasannya bilang nol. */
+  const daftar = penuh.slice(0, SERAH_SESI_MAKS);
+  const semuaBerkas = new Set();
+  for (const s of sesi.values()) for (const f of s.sunting) semuaBerkas.add(f);
+  const semuaGit = new Set();
+  for (const s of sesi.values()) for (const g of s.git) semuaGit.add(g);
+  return {
+    proyek, jam,
+    sejak: batas, sampai: kini,
+    sesi: daftar,
+    sesiLain: penuh.length - daftar.length,
+    ringkas: {
+      sesi: penuh.length,
+      hidup: penuh.filter((s) => s.hidup).length,
+      toolCall: penuh.reduce((n, s) => n + s.toolCall, 0),
+      gagal: penuh.reduce((n, s) => n + s.gagal, 0),
+      berkas: semuaBerkas.size,
+      git: [...semuaGit].sort(),
+      tertahan: penuh.filter((s) => s.tertahan).length,
+    },
+  };
+}
+
 /* ------------------------------------------------------------ papan SKP ---
    Kinerja per PROYEK dan per SESI dalam satu rentang tanggal, dihitung saat
    diminta dari tiga sumber yang sudah ada — bukan tabel baru yang harus
@@ -6359,6 +6511,23 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
     res.end(JSON.stringify({ dari, sampai, jumlah: baris.length, baris }));
+    return;
+  }
+
+  /* Catatan serah terima satu proyek. Sekelas `/agenda` di atas: tanpa
+     token, dan isinya justru IRISAN dari apa yang sudah dilayani `/agenda`
+     — tidak ada medan baru yang keluar dari sini. Bedanya cuma ia sudah
+     dijahit per sesi, jadi yang bertanya tidak perlu menarik 300 baris lalu
+     merangkumnya sendiri. */
+  if (url.pathname === '/serah-terima') {
+    const proyek = (url.searchParams.get('proyek') || '').trim();
+    if (!proyek) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ galat: 'proyek wajib diisi (nama folder, bukan jalur lengkap)' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify(serahTerima(baseName(proyek), url.searchParams.get('jam'))));
     return;
   }
 

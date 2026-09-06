@@ -149,6 +149,12 @@ jobs:
       - name: Uji kuota loket
         run: node uji-kuota.mjs
 
+      # Catatan serah terima per proyek. Yang paling gampang hanyut di sini
+      # jendela jam yang melintasi tengah malam — uji-nya menaruh satu sesi
+      # di berkas agenda KEMARIN dengan sengaja.
+      - name: Uji serah terima
+        run: node uji-serah.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

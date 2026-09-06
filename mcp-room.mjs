@@ -286,6 +286,54 @@ const TOOLS = [
     },
   },
   {
+    name: 'ruangan_serah_terima',
+    description: 'Catatan serah terima satu proyek: sesi mana saja yang menyentuh folder itu beberapa jam '
+      + 'terakhir, berkas apa yang disunting, berapa tool yang gagal, subperintah git apa yang dipakai, '
+      + 'dan siapa yang masih tertahan. Dibaca dari buku agenda — sepenuhnya deterministik, nol jaringan '
+      + 'keluar. Bacalah SEBELUM mulai bekerja di folder yang dipakai bersama. '
+      + '/ Shift handover for one project: who touched it, which files, what failed, who is still stuck.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        proyek: { type: 'string', description: 'nama folder proyek; jalur lengkap juga diterima (diambil nama akhirnya)' },
+        jam: { type: 'number', description: 'jendela mundur dalam jam, 1–24, bawaan 8' },
+      },
+      required: ['proyek'],
+      additionalProperties: false,
+    },
+    async jalankan(p = {}) {
+      const q = new URLSearchParams({ proyek: String(p.proyek || '') });
+      if (p.jam != null) q.set('jam', String(p.jam));
+      const r = await ambil('/serah-terima?' + q.toString());
+      const k = r.ringkas;
+      /* Kalimatnya dirangkai di sini, bukan di server: server memberi ANGKA,
+         klien memutuskan bagaimana membacakannya. Tidak ada LLM — yang
+         dibutuhkan sesi yang baru masuk bukan prosa, melainkan tahu apakah
+         ada orang lain di folder ini dan apakah ada yang menggantung. */
+      let ringkas;
+      if (!k.sesi) {
+        ringkas = `Tidak ada sesi yang menyentuh ${r.proyek} dalam ${r.jam} jam terakhir.`;
+      } else {
+        const bagian = [];
+        if (k.berkas) bagian.push(`${k.berkas} berkas disunting`);
+        if (k.toolCall) bagian.push(`${rb(k.toolCall)} tool call`);
+        if (k.gagal) bagian.push(`${k.gagal} gagal`);
+        if (k.git.length) bagian.push('git ' + k.git.slice(0, 5).join('/'));
+        ringkas = `${k.sesi} sesi menyentuh ${r.proyek} dalam ${r.jam} jam terakhir`
+          + (bagian.length ? ': ' + bagian.join(', ') : '')
+          + '. ' + (k.hidup ? `${k.hidup} masih hidup` : 'Semuanya sudah selesai')
+          + (k.tertahan ? `, ${k.tertahan} tertahan` : '') + '.';
+        const nunggu = (r.sesi || []).filter((x) => x.tertahan);
+        if (nunggu.length) {
+          ringkas += ' Tertahan: ' + nunggu.slice(0, 3).map((x) =>
+            `${x.nama || x.sesi} (${x.tertahan.sebab}${x.tertahan.sejak ? ', ' + lama(Date.now() - x.tertahan.sejak) : ''})`
+          ).join(', ') + '.';
+        }
+      }
+      return { ringkas, data: r };
+    },
+  },
+  {
     name: 'ruangan_kesehatan',
     description: 'Server ruangan hidup atau tidak: jumlah event, penonton, port. / Health of the room server.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },

@@ -178,6 +178,64 @@ mengalihkannya ke permission tool — jadi untuk sesi halaman kartunya menulis
 (lihat atas), jadi `paraf:true` untuk sekarang hanya bisa dikirim lewat body
 `/perintah` langsung.
 
+### Catatan serah terima (`/serah-terima`)
+
+`GET /serah-terima?proyek=<folder>&jam=<1..24>` menjawab satu pertanyaan yang
+sampai sekarang tidak ada jalannya: **"sebelum saya mulai di folder ini, apa
+yang sudah terjadi di sini?"** Buku agenda sudah menyimpan jawabannya sejak
+lama, tapi tersebar di ratusan baris; `ruangan_agenda_cari` memberi baris
+mentahnya, dan membaca 300 baris bukan jawaban — itu memindahkan pekerjaan.
+
+Per sesi yang menyentuh folder itu: berkas yang disunting (nama akhir saja,
+dari `Edit`/`Write`/`MultiEdit`/`NotebookEdit`), subperintah git yang dipakai
+(dari label `Bash`/`PowerShell`), berapa tool call, berapa yang gagal, berapa
+berkas dibaca, paraf yang ditolak, rencana yang diajukan, dan — kalau sesinya
+masih hidup — apakah ia sedang tertahan beserta **sejak kapan**. Di atasnya
+satu ringkasan proyek.
+
+Tanpa token, sekelas `/agenda`: isinya justru IRISAN dari apa yang sudah
+dilayani `/agenda` sejak lama, cuma sudah dijahit. Yang **tidak** ikut lewat
+pintu ini: teks bebas milik keadaan tertahan. `butuhManusia` menyimpan label
+perintah yang sedang menunggu paraf; yang keluar cuma `sebab` dan `sejak`.
+`uji-serah.mjs` menjaganya dengan sentinel **berkontrol positif** — ujinya
+membuktikan lebih dulu bahwa perintah itu memang masih ada di `/agenda`,
+supaya tidak-adanya di sini berarti sesuatu.
+
+Tiga hal yang gampang salah dan sudah dikunci uji:
+
+- **Jendelanya memotong dari `ts`, bukan dari nama berkas hari.** Berkas
+  agenda dipecah per tanggal lokal, jadi jendela delapan jam yang dimulai jam
+  dua pagi melintasi tengah malam — dan itu persis jam yang paling penting,
+  waktu shift pagi membaca kerja shift malam. Servernya membuka hari ini DAN
+  kemarin, lalu menyaring lagi lewat `ts`.
+- **Daftarnya dipotong di 12 sesi dan 20 nama berkas per sesi, ringkasannya
+  TIDAK.** Menjumlah dari daftar yang sudah dipotong akan membuat kalimat
+  pembukanya berbohong persis di hari tersibuk. Yang terpotong dihitung di
+  `sesiLain` dan `disuntingLain`.
+- **Urutannya terbaru-dulu, tapi yang bekerja didahulukan.** Sesi yang di
+  dalam jendela itu cuma menyisakan `session-end` tidak salah dicatat — ia
+  memang ada — tapi barisnya nol isi, dan di buku agenda sungguhan jumlahnya
+  cukup untuk menggusur sesi yang menyunting lima puluh berkas keluar dari
+  dua belas baris yang muat. Jadi yang punya tool call, gagal, atau paraf
+  ditolak naik lebih dulu; di antara yang setara, tetap yang paling baru.
+- **Subperintah git dibaca dari LABEL, bukan dari shell.** `git`/`gh` cukup
+  tidak menempel pada kata lain — `rtk git diff` dan `$(git rev-parse …)`
+  terbaca, `mygit` dan `gitk` tidak. Kata yang mentok di ujung label yang
+  dipotong `clip()` dibuang: `rtk git dif…` melahirkan `dif`, dan `dif`
+  berdiri sejajar dengan `diff` seolah dua perintah berbeda. Sebaliknya,
+  `git commit` yang cuma disebut di dalam `echo` ikut terbaca — itu diterima,
+  karena salahnya menambah satu nama, bukan menyembunyikan yang dikerjakan.
+- **`AGENT_ROOM_ISI=off` menghapus nama, bukan angka.** Tanpa label, buku
+  agenda memang tidak punya nama berkas; `disunting` dan `git` jadi kosong,
+  sedangkan jumlah tool call, gagal, dan bacaan tetap benar.
+
+Sengaja **tanpa LLM**, dan itu bukan penundaan melainkan jawabannya: yang
+sebenarnya dibutuhkan sesi yang baru masuk bukan prosa, melainkan ingatan
+lintas sesi — dan ingatan itu sudah ada di disk, tinggal dirangkum. Gratis,
+tanpa jaringan, tanpa kunci, dan jawabannya sama tiap kali ditanya. Kalau
+suatu hari narasi berbahasa manusia memang diinginkan, ia menempel DI ATAS
+struktur ini sebagai medan tambahan, bukan menggantikannya.
+
 ### Model yang dipakai
 
 Dropdown kedua di formulir tugas menentukan `--model` sesi yang dilahirkan
@@ -407,6 +465,7 @@ konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
 | `ruangan_agenda_cari` | `GET /agenda` | cari buku agenda: `q`, `proyek`, `sesi`, `kind`, `dari`, `sampai`, `limit` |
 | `ruangan_pohon_delegasi` | `GET /ruangan` | siapa mendelegasikan ke siapa saat ini: sesi induk beserta subagent yang masih hidup di bawahnya, berapa lama, berapa tool, dan mana yang sudah lama diam. Induk ber-`kind: stop` yang masih punya peserta disebut **menunggu peserta**, bukan menganggur |
 | `ruangan_skp` | `GET /skp` | papan SKP: nilai mutu 0–100 per proyek & per sesi dalam satu rentang, beserta indikator yang membentuknya (rasio gagal bersih, bolak-balik, tertahan, gagal beruntun, rapat yatim) dan **bobot serta titik jenuh** yang dipakai menghitungnya. `dari`, `sampai`, `proyek` (saringan nama folder, dilakukan di sisi tool — `/skp` sendiri tidak punya parameter itu). Angka saja: tidak ada label maupun isi kerja |
+| `ruangan_serah_terima` | `GET /serah-terima` | catatan serah terima satu proyek: sesi yang menyentuh folder itu beberapa jam terakhir, berkas yang disunting, subperintah git, tool yang gagal, dan siapa yang masih tertahan. `proyek` (wajib — jalur lengkap juga diterima, diambil nama akhirnya), `jam` (1–24, bawaan 8). Kalimat ringkasnya dirakit di sisi tool; server cuma memberi angka |
 | `ruangan_kesehatan` | `GET /health` | server hidup atau tidak |
 
 ### Kuota loket per proyek (`loket.json`)

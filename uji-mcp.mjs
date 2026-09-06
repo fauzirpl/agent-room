@@ -48,7 +48,7 @@ const TAMPIL = process.argv.includes('--tampil');
    `text/plain; version=0.0.4`, sedangkan `ambil()` di mcp-room berakhir dengan
    `r.json()`. Tool yang memanggilnya akan melempar SyntaxError lalu mendarat
    di cabang "Kantor tidak bisa dihubungi" — menuduh kantor mati padahal hidup. */
-const RUTE_BOLEH = new Set(['/ruangan', '/token-riwayat', '/agenda', '/health', '/skp']);
+const RUTE_BOLEH = new Set(['/ruangan', '/token-riwayat', '/agenda', '/health', '/skp', '/serah-terima']);
 
 const warna = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 const c = (n) => (s) => (warna ? '\x1b[' + n + 'm' + s + '\x1b[0m' : s);
@@ -304,14 +304,29 @@ async function kasus2(cli) {
   return tools;
 }
 
+/* Argumen minimum untuk tool yang PUNYA parameter wajib. Selama semua tool
+   berparameter opsional, kasus 3 bisa memanggil apa saja tanpa argumen; tool
+   pertama yang mewajibkan sesuatu (`ruangan_serah_terima` butuh `proyek`)
+   mematahkan asumsi itu. Yang menjaganya bukan kebiasaan: kasus 3 MERAH kalau
+   ada `required` tanpa baris di sini — tanpa itu tool baru cuma akan `isError`
+   dengan pesan yang menyesatkan ("Kantor menolak permintaan"), dan orang akan
+   menyangka servernya yang salah. */
+const ARG_WAJIB = { ruangan_serah_terima: { proyek: 'proyek-mcp' } };
+
 /* ================================================================ kasus 3 ===
    Bentuk balasan tiap tool: kalimat, "\n", JSON. Dijalankan untuk SEMUA tool
    yang dilaporkan tools/list, jadi tool baru ikut terjaga tanpa menyunting
-   berkas ini. */
+   berkas ini — kecuali kalau tool itu punya parameter wajib (lihat ARG_WAJIB). */
 async function kasus3(cli, tools) {
   console.log(tebal('\nKasus 3 — tiap tool: satu kalimat, lalu JSON'));
   for (const t of tools) {
-    const hasil = await cli.panggil(t.name);
+    const wajib = ((t.inputSchema || {}).required) || [];
+    if (wajib.length && !ARG_WAJIB[t.name]) {
+      tolak(t.name + ' punya parameter wajib tapi tidak ada di ARG_WAJIB',
+        'wajib: ' + wajib.join(', ') + '. Tambahkan barisnya di uji-mcp.mjs pada commit yang sama.');
+      continue;
+    }
+    const hasil = await cli.panggil(t.name, ARG_WAJIB[t.name]);
     if (hasil.isError) { tolak(t.name + ' tidak boleh isError di kantor yang sehat', belah(hasil).kalimat); continue; }
     const b = belah(hasil);
     const rapi = b.adaPisah && b.sah && b.kalimat.length > 0 && !b.kalimat.includes('{');
@@ -416,6 +431,56 @@ async function kasus4(cli) {
   const saring = belah(await cli.panggil('ruangan_skp', { proyek: 'proyek-yang-tidak-ada' }));
   sama('  saringan proyek yang tidak cocok mengosongkan daftar', ((saring.data || {}).proyek || []).length, 0);
   benar('    dan mengatakannya, bukan diam', /Tidak ada yang tercatat/.test(saring.kalimat), saring.kalimat);
+
+  /* Serah terima. Yang dijaga di sini KONTRAKnya, bukan angkanya — semantik
+     tiap sumbu (berkas disunting, subperintah git, gagal, ISI_MATI) diuji
+     uji-serah.mjs yang menulis buku agendanya sendiri. Tiga hal cuma bisa
+     dijaga dari sisi klien: parameter wajib yang ditolak dengan sopan, jalur
+     lengkap yang diterima sebagai nama folder, dan kalimat ringkasnya yang
+     dirakit di MCP (server cuma memberi angka). */
+  const serah = belah(await cli.panggil('ruangan_serah_terima', { proyek: 'proyek-mcp' }));
+  const dSerah = serah.data || {};
+  sama('serah terima menyebut proyek yang diminta', dSerah.proyek, 'proyek-mcp');
+  sama('  jendela bawaannya 8 jam', dSerah.jam, 8);
+  benar('  rentang waktunya ikut keluar', dSerah.sejak > 0 && dSerah.sampai > dSerah.sejak,
+    JSON.stringify({ sejak: dSerah.sejak, sampai: dSerah.sampai }));
+  sama('  tiga sesi yang disemai terbaca', (dSerah.sesi || []).length, 3);
+  sama('    ketiganya masih hidup', (dSerah.ringkas || {}).hidup, 3);
+  sama('    dua di antaranya tertahan', (dSerah.ringkas || {}).tertahan, 2);
+  const KUNCI_SERAH = ['sesi', 'nama', 'cabang', 'model', 'mulai', 'selesai', 'hidup',
+    'toolCall', 'gagal', 'dibaca', 'ditolak', 'disunting', 'git', 'rencana', 'akhir', 'tertahan'];
+  const kurangSerah = (dSerah.sesi || []).length
+    ? KUNCI_SERAH.filter((k) => !(k in dSerah.sesi[0])) : KUNCI_SERAH;
+  benar('  tiap sesi membawa kunci yang dijanjikan', kurangSerah.length === 0,
+    'kunci hilang: ' + kurangSerah.join(', '));
+  benar('  daftarnya urut dari yang paling baru',
+    (dSerah.sesi || []).every((x, i, a) => i === 0 || a[i - 1].selesai >= x.selesai),
+    JSON.stringify((dSerah.sesi || []).map((x) => x.selesai)));
+  benar('  kalimatnya menyebut proyek, jendela, dan siapa yang tertahan',
+    /proyek-mcp/.test(serah.kalimat) && /8 jam/.test(serah.kalimat) && /[Tt]ertahan/.test(serah.kalimat),
+    serah.kalimat);
+  /* Isi kerja tidak lewat pintu ini. `disunting` dan `rencana` memang berasal
+     dari label — sekelas yang sudah lama dilayani /agenda — tapi teks bebas
+     milik keadaan tertahan TIDAK: `butuhManusia` menyimpan label perintahnya,
+     dan sesi izin yang disemai memegang `rm -rf build` persis untuk ini. */
+  const teksSerah = JSON.stringify(serah.data);
+  benar('  perintah yang sedang menunggu paraf tidak ikut keluar',
+    !/rm -rf build/.test(teksSerah) && !/"alasan"|"galat"/.test(teksSerah), teksSerah.slice(0, 200));
+
+  /* Jalur lengkap diterima: pemanggilnya biasanya cuma punya `cwd`. */
+  const lewatJalur = belah(await cli.panggil('ruangan_serah_terima', { proyek: '/tmp/proyek-mcp', jam: 3 }));
+  sama('jalur lengkap diambil nama akhirnya', (lewatJalur.data || {}).proyek, 'proyek-mcp');
+  sama('  jendela yang diminta dipakai', (lewatJalur.data || {}).jam, 3);
+  const kelewat = belah(await cli.panggil('ruangan_serah_terima', { proyek: 'proyek-mcp', jam: 999 }));
+  sama('  jendela di luar batas dijepit ke 24 jam, bukan ditolak', (kelewat.data || {}).jam, 24);
+  const kosong = belah(await cli.panggil('ruangan_serah_terima', { proyek: 'folder-yang-tidak-ada' }));
+  sama('proyek yang tidak dikenal menjawab kosong, bukan galat', ((kosong.data || {}).sesi || []).length, 0);
+  benar('  dan mengatakannya, bukan diam', /Tidak ada sesi/.test(kosong.kalimat), kosong.kalimat);
+
+  const tanpaProyek = await cli.panggil('ruangan_serah_terima', {});
+  benar('proyek yang tidak diisi ditolak sebagai permintaan, bukan sebagai kantor mati',
+    tanpaProyek.isError === true && /menolak permintaan/.test(belah(tanpaProyek).kalimat),
+    belah(tanpaProyek).kalimat);
 
   /* Pohon delegasi. Ini sekaligus bukti ujung-ke-ujung bahwa `agent_id` pada
      `pre` benar-benar dibaca server: tanpa itu `toolN` peserta tidak akan

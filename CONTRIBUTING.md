@@ -42,6 +42,7 @@ node uji-loket.mjs              # loket disposisi: antrean penuh, SEGERA, batal,
 node uji-honorer.mjs            # pegawai honorer: hook Gemini CLI, alias event/tool, transkrip vendor lain tidak dibaca
 node uji-sop.mjs                # juknis paraf: hanya bisa menolak, sesi terminal cuma dicatat, tanpa berkas nol jejak
 node uji-kuota.mjs              # kuota loket per proyek, pemilih non-FIFO, dan loop yang wajib keluar (bukan membeku)
+node uji-serah.mjs              # serah terima per proyek: sumbu tidak tercampur, jendela jam lintas tengah malam, ringkasan tidak ikut terpotong
 node uji-ulang-server.mjs       # hari sungguhan diputar ke server.mjs; --sampai 300 untuk iterasi cepat
 node telaah.mjs Bash "rm -rf x" # coba satu perintah dengan tangan
 node --check server.mjs && node --check dinas.mjs
