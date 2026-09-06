@@ -33,6 +33,10 @@ node dinas.mjs --pasang -g   # pasang hook (sekali saja) lalu buka kantor
 ini. Kalau ada sesi Claude Code yang lagi jalan, restart dulu — hook baru
 kebaca waktu sesi mulai. Setelah itu, buka <http://127.0.0.1:4517>.
 
+Mau mencabutnya lagi? `node dinas.mjs --lepas` (tambahkan `-g` kalau tadi
+dipasang global) menghapus hook-nya dari `settings.json` Claude Code dan
+tidak membuka kantor.
+
 Belum mau pasang hook? `node dinas.mjs` lalu buka
 `http://127.0.0.1:4517/?demo=1` — ruangannya jalan sendiri pakai event acak,
 tanpa perlu sesi Claude Code sungguhan.
@@ -52,7 +56,7 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   berkas apa yang disunting, apa yang gagal, siapa yang masih menunggu
   paraf. Dirangkum dari buku agenda yang memang sudah ada: tanpa model
   bahasa, tanpa jaringan keluar
-- 272 event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat) —
+- 337 event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat) —
   angka dihitung otomatis: `node uji-katalog.mjs`
 - Cuaca sungguhan di jendela + siklus siang–malam
 - Ruangan mengusut sepanjang hari: pagi meja rapi, menjelang pulang penuh
@@ -85,6 +89,22 @@ jadi sesi yang baru masuk tidak menabrak kerja rekan seproyeknya. Isinya
 dijahit dari buku agenda yang sudah lama ditulis kantor ini, jadi jawabannya
 sama tiap kali ditanya dan tidak butuh kunci apa pun. Rinciannya di
 [docs/05](docs/05-kendali-web.md#catatan-serah-terima-serah-terima).
+
+### Apa yang keluar dari mesinmu
+
+Satu saja, dan itu **menyala bawaan**: hujan di ruangan mengikuti hujan
+sungguhan, jadi server menebak lokasimu dari IP publik lewat `get.geojs.io`
+lalu mengambil ramalannya dari `open-meteo.com`. Dua-duanya tanpa kunci API
+dan hasilnya di-cache sepuluh menit. Matikan total dengan
+`AGENT_ROOM_CUACA=off`, atau lewati tebakan IP-nya dengan
+`AGENT_ROOM_CUACA=-6.2,106.8`.
+
+Selain itu tidak ada. Suara TTS memang lewat OpenRouter, tapi **mati bawaan**
+dan tidak pernah jalan sebelum kamu memasang kuncimu sendiri di panel ⚙️.
+Isi transkrip tidak pernah dikirim ke mana pun — yang ke disk cuma metadata
+(nama tool, nama berkas, angka), dan `AGENT_ROOM_ISI=off` mematikan bahkan
+itu. `npm test` dijaga tidak punya jalur keluar sama sekali oleh
+`uji-jaringan.mjs`.
 
 Tanpa dependency — cuma butuh Node dan `curl`. Alasan di balik tiap
 keputusan desain (kenapa `curl` bukan Node, kenapa hujan bukan event acak,
@@ -122,6 +142,10 @@ project on this machine, not just this folder. If a Claude Code session is
 already running, restart it — hooks are only read when a session starts.
 Then open <http://127.0.0.1:4517>.
 
+Want it gone again? `node dinas.mjs --lepas` (add `-g` if you installed it
+globally) removes the hooks from Claude Code's `settings.json` without
+opening the office.
+
 Not ready to install a hook yet? Run `node dinas.mjs` and open
 `http://127.0.0.1:4517/?demo=1` — the room animates on its own with random
 events, no real Claude Code session required.
@@ -141,7 +165,7 @@ removes it, `--coba` only shows what would be run).
   hours — which files were edited, what failed, who is still waiting on a
   human. Stitched from the activity log the office already keeps: no language
   model, no outbound network
-- 272 random ambient events (a cat wanders in, the UPS beeps, someone brings
+- 337 random ambient events (a cat wanders in, the UPS beeps, someone brings
   fried snacks to the meeting table) — counted automatically by `node uji-katalog.mjs`
 - Real weather in the window, synced to actual conditions, plus a day/night cycle
 - A sound notification when a session finishes, and optional lofi office
@@ -168,9 +192,27 @@ kept all along, so the answer is the same every time you ask and needs no API
 key. Details in [docs/05](docs/05-kendali-web.md#catatan-serah-terima-serah-terima)
 (Indonesian).
 
+### What leaves your machine
+
+One thing, and it is **on by default**: rain in the room follows real rain,
+so the server guesses your location from your public IP via `get.geojs.io`
+and fetches the forecast from `open-meteo.com`. Both are key-free and the
+result is cached for ten minutes. Turn it off entirely with
+`AGENT_ROOM_CUACA=off`, or skip the IP guess with
+`AGENT_ROOM_CUACA=-6.2,106.8`.
+
+Nothing else. The TTS voices do go through OpenRouter, but they are **off by
+default** and never run until you paste your own key into the ⚙️ panel.
+Transcript content is never sent anywhere — only metadata reaches disk (tool
+names, file names, numbers), and `AGENT_ROOM_ISI=off` stops even that.
+`uji-jaringan.mjs` proves `npm test` has no outbound path at all.
+
 Zero dependencies — just Node and `curl`. The reasoning behind every design
 choice (why `curl` instead of Node, why rain isn't a random event, why shell
 commands split across two desks, etc.) lives in **[DESIGN.md](DESIGN.md)**
 (Indonesian only, for now). The design catalog of all 373 random events is in
-**[EVENT-ACAK.md](EVENT-ACAK.md)** (267 of them are implemented — scoreboard:
-`node uji-katalog.mjs`).
+**[EVENT-ACAK.md](EVENT-ACAK.md)** (306 of them are implemented; 337 events
+are wired up in total, the rest being a *famous guests* wave added outside the
+catalog — scoreboard: `node uji-katalog.mjs`).
+
+MIT licensed — see [LICENSE](LICENSE).

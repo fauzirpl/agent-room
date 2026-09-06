@@ -7,6 +7,7 @@
     "dinas": "dinas.mjs"
   },
   "files": [
+    "LICENSE",
     "dinas.mjs",
     "dinas.cmd",
     "dinas.sh",
@@ -71,6 +72,8 @@
     "start": "node dinas.mjs",
     "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node selaras-suara.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-musik.mjs && node uji-jk.mjs && node uji-jaringan.mjs && node uji-mcp.mjs && node uji-telaah.mjs && node uji-paraf.mjs && node uji-peserta.mjs && node uji-skp.mjs && node uji-izin.mjs && node uji-kendali.mjs && node uji-loket.mjs && node uji-honorer.mjs && node uji-sop.mjs && node uji-kuota.mjs && node uji-serah.mjs && node uji-pantri.mjs && node selaras-dokumen.mjs --periksa && node uji-ulang.mjs && node uji-ulang-server.mjs"
   },
+  "license": "MIT",
+  "author": "Fauzi (https://github.com/fauzirpl)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/fauzirpl/agent-room.git"
