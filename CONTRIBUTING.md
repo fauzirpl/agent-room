@@ -33,6 +33,7 @@ node uji-jaringan.mjs           # gerbang nol-jaringan: nota cuma metadata, tiap
 node uji-mcp.mjs                # kontrak mcp-room.mjs lewat klien MCP palsu; --tampil untuk melihat tiap permintaan yang keluar
 node selaras-dokumen.mjs        # laporan hanyut dokumen vs kode; --periksa untuk menggagalkan
 node uji-telaah.mjs             # lembar telaah risiko: tiap pola, privasi tanda, pagar positif palsu
+node uji-ulang-server.mjs       # hari sungguhan diputar ke server.mjs; --sampai 300 untuk iterasi cepat
 node telaah.mjs Bash "rm -rf x" # coba satu perintah dengan tangan
 node --check server.mjs && node --check dinas.mjs
 ```

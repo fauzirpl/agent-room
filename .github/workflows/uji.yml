@@ -117,6 +117,13 @@ jobs:
       - name: Uji putar ulang hari sungguhan (fixture buku agenda)
         run: node uji-ulang.mjs
 
+      # Hari yang sama, tapi diputar ke SISI SERVER: 3.154 payload hook dibangun
+      # ulang dari fixture dan dikirim ke POST /event, lalu diperiksa dari luar
+      # lewat /stream, /buku-induk, /ruangan, /health, dan /stream?ulang=.
+      # Nol perubahan server.mjs — harness luar murni.
+      - name: Uji putar ulang hari sungguhan ke sisi server
+        run: node uji-ulang-server.mjs
+
       # Papan skor, bukan gerbang: selalu exit 0. Angka "berapa event sudah jadi
       # kode" dibaca dari sini, bukan ditulis tangan di README/DESIGN.
       - name: Papan skor katalog event (event-acak.json vs public/event/*.js)
