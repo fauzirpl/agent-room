@@ -7219,6 +7219,20 @@ function handle(ev) {
       foley('gagal', a);
       break;
     }
+    /* Instansi luar minta keterangan: server MCP berhenti di tengah tool call
+       dan menunggu jawaban. Pose butuh-manusia sudah dipasang server lewat
+       `ev.butuh`, jadi di sini cukup kalimat dan barisnya di log — plus kotak
+       kabar, karena pertanyaannya memang perlu dibaca. */
+    case 'elicit': {
+      a.say('<b>' + esc(ev.label || 'server MCP') + '</b> minta keterangan');
+      if (ev.tanya) kabarMasuk(ev, a, 'tanya');
+      pushLog(ev, 'mark', ['minta keterangan', ev.label || '']);
+      break;
+    }
+    case 'elicit-jawab': {
+      pushLog(ev, 'mark', ['keterangan diberikan', ev.label || '']);
+      break;
+    }
     case 'compact': {
       a.say('merapikan catatan (<b>' + esc(ev.label || '') + '</b>)', 'say');
       pushLog(ev, 'mark', ['merapikan catatan', ev.label || '']);

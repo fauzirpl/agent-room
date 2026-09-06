@@ -503,6 +503,32 @@ agent_room_sesi_tertahan{jenis="macet"} 0
 agent_room_token_total{jenis="input"} 30300
 ```
 
+### Daftar hadir: mengukur dulu, membangun belakangan
+
+`GET /health` membawa satu blok `absen`. Claude Code menulis satu berkas per
+proses di `~/.claude/sessions/<pid>.json` berisi `sessionId`, `pid`, `cwd`, dan
+`entrypoint`. Kalau berkas itu bisa dipercaya, ia menjawab pertanyaan yang hari
+ini tidak punya jawaban: **sesi mana yang sudah mati tanpa sempat mengirim
+`SessionEnd`**.
+
+| Angka | Arti |
+|---|---|
+| `terbaca` | berkas sesi yang berhasil diurai |
+| `cocok` | sesi hidup di kantor ini yang punya berkasnya |
+| `yatim` | sesi hidup yang **tidak** punya berkas sama sekali |
+| `mati` | sesi hidup yang berkasnya ada tapi pid-nya sudah tidak jalan |
+
+Yang ada di sini **cuma penghitung**. Tidak ada sesi yang dihapus, tidak ada
+yang diklasifikasi, dan tidak ada satu pun perilaku yang berubah karenanya —
+`mati` yang tinggi pun tidak menyapu apa pun. Itu disengaja: membangun sapuan
+di atas sinyal yang belum diukur persis kesalahan yang membuat beberapa usulan
+rapat gugur. Amati angkanya dulu; kalau `cocok` ternyata jauh lebih kecil dari
+jumlah sesi hidup, berkas itu memang tidak layak dijadikan sumber kebenaran.
+
+Pengecekan pid memakai `process.kill(pid, 0)`, yang **tidak mengirim sinyal apa
+pun** — ia cuma menanya "boleh saya kirim?" dan melempar kalau prosesnya sudah
+tidak ada. Tidak ada proses yang terganggu karenanya.
+
 ### Rem SSE
 
 `publish()` dulu menulis ke semua klien tanpa melihat nilai balik

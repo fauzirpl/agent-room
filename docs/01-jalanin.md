@@ -148,7 +148,7 @@ hanya server yang berjalan di mesin itu yang memungutnya.
 
 ### Event yang dipasang
 
-Dokumentasi hook Claude Code mencantumkan 33 event. Yang dipasang 15 — yang
+Dokumentasi hook Claude Code mencantumkan 33 event. Yang dipasang 17 — yang
 sisanya tidak punya apa pun untuk digambar di ruangan.
 
 | Event | Yang terjadi di ruangan |
@@ -168,6 +168,8 @@ sisanya tidak punya apa pun untuk digambar di ruangan.
 | `SessionEnd` | pulang, rapatnya dibubarkan paksa |
 | `PreCompact` | "merapikan catatan" |
 | `PostCompact` | "catatan sudah rapi" |
+| `Elicitation` | **server MCP minta keterangan di tengah tool call**: pegawainya berdiri mengangkat map disposisi dengan nama instansi yang bertanya |
+| `ElicitationResult` | keterangannya sudah diberikan; posenya dicabut |
 
 Lima yang pertama dipasang dengan `matcher: "*"` karena matcher-nya menyaring
 **nama tool**. Sisanya dipasang tanpa `matcher` sama sekali — untuk Claude Code,

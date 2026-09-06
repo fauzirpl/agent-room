@@ -40,6 +40,12 @@ const PLAIN_EVENTS = [
   'SubagentStart', 'SubagentStop', 'Notification',
   'SessionStart', 'SessionEnd',
   'PreCompact', 'PostCompact',
+  /* Server MCP yang meminta keterangan di tengah tool call. Yang bergerak
+     karenanya: pegawainya berdiri mengangkat map disposisi menghadap kamera,
+     dengan nama instansi yang bertanya — pose butuh-manusia yang sudah ada.
+     Nama keduanya dibuktikan dari literal berkutip di binari 2.1.260, bukan
+     dari ingatan. */
+  'Elicitation', 'ElicitationResult',
 ];
 
 // curl ~42ms vs node ~153ms per panggilan, dan hook ini jalan tiap tool call.

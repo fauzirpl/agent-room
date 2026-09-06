@@ -177,6 +177,28 @@ async function utama() {
     sama('  tanpa tingkat risiko', (jinak || {}).risiko, undefined);
     sama('  tanpa nama pola', (jinak || {}).tanda, undefined);
 
+    /* ------------------------------------------------------------ kasus 3b */
+    console.log(tebal('\nKasus 3b — instansi luar minta keterangan'));
+    const TANYA = 'PERTANYAAN-RAHASIA-JANGAN-KE-DISK';
+    await hook(k, 'Elicitation', 'sesi-elicit', {
+      mcp_server_name: 'supabase', message: 'Pilih project: ' + TANYA, elicitationId: 'e1',
+    });
+    await tidur(250);
+    const ru1 = await (await fetch(k.alamat + '/ruangan')).json();
+    const se = (ru1.sesi || []).find((x) => x.sesi.startsWith('sesi-elicit'));
+    benar('elicitation menyalakan keadaan butuh manusia', Boolean(se && se.butuh), JSON.stringify(se));
+    sama('  sebabnya tanya', ((se || {}).butuh || {}).sebab, 'tanya');
+    const el = barisAgenda(dir).find((x) => x.kind === 'elicit');
+    sama('  labelnya nama instansinya, bukan pertanyaannya', (el || {}).label, 'supabase');
+    benar('  pertanyaannya TIDAK pernah sampai ke disk',
+      !JSON.stringify(barisAgenda(dir)).includes(TANYA),
+      'isi pertanyaan bocor ke buku agenda lewat hook elicitation');
+    await hook(k, 'ElicitationResult', 'sesi-elicit', { mcp_server_name: 'supabase', elicitationId: 'e1' });
+    await tidur(250);
+    const ru2 = await (await fetch(k.alamat + '/ruangan')).json();
+    const se2 = (ru2.sesi || []).find((x) => x.sesi.startsWith('sesi-elicit'));
+    benar('  jawabannya mencabut keadaan tertahan', !((se2 || {}).butuh), JSON.stringify(se2 && se2.butuh));
+
     /* ------------------------------------------------------------ kasus 4 */
     console.log(tebal('\nKasus 4 — buku register dibaca ulang dari agenda'));
     const reg = await (await fetch(k.alamat + '/paraf')).json();

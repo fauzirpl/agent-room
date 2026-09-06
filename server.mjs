@@ -417,6 +417,8 @@ const EVENT_ALIAS = {
   Notification: 'notify',
   SessionStart: 'session-start',
   SessionEnd: 'session-end',
+  Elicitation: 'elicit',
+  ElicitationResult: 'elicit-jawab',
   PreCompact: 'compact',
   PostCompact: 'compact-selesai',
 };
@@ -809,6 +811,16 @@ function normalize(raw) {
     const t = telaahRisiko(tool, raw.tool_input);
     if (t.tingkat !== 'rendah') ev.risiko = t;
   }
+  /* Instansi luar minta keterangan. Yang jadi LABEL cuma nama server MCP-nya
+     — itu metadata, dan itu yang boleh ikut ke buku agenda. Pertanyaannya
+     sendiri isi kerja, jadi ia lewat `ev.tanya` yang memang tidak pernah
+     disalin `agendaBaris()`, sama seperti AskUserQuestion. */
+  if (kind === 'elicit') {
+    ev.label = clip(raw.mcp_server_name || 'server MCP', 60);
+    const pesan = clip(raw.message || '', 240);
+    if (pesan && !ISI_MATI) ev.tanya = { jenis: 'tanya', daftar: [{ tanya: pesan, opsi: [] }] };
+  }
+  if (kind === 'elicit-jawab') ev.label = clip(raw.mcp_server_name || 'server MCP', 60);
   if (kind === 'izin-tolak') ev.alasan = clip(raw.reason || '', 120);
   if (kind === 'pre' && TOOL_TANYA.has(tool)) ev.tanya = ringkasTanya(tool, raw.tool_input);
   if (kind === 'compact' || kind === 'compact-selesai') {
@@ -822,6 +834,7 @@ function normalize(raw) {
      jalan lagi. Jadi event APA PUN dari sesi yang sama membatalkannya. */
   const sebab = kind === 'izin-minta' ? 'izin'
     : kind === 'izin-tolak' ? 'tolak'
+    : kind === 'elicit' ? 'tanya'
     : kind === 'notify' && NOTIFY_BUTUH.has(String(raw.notification_type || '')) ? 'tanya'
     : kind === 'pre' && TOOL_TANYA.has(tool) ? 'tanya'
     : '';
@@ -907,6 +920,61 @@ function catatPesertaHidup(ev) {
 }
 
 /* Potret ruangan untuk GET /ruangan: metadata saja, sekelas /health. */
+/* ---------------------------------------------------- daftar hadir (ukur) ---
+ * Claude Code menulis satu berkas per proses di `~/.claude/sessions/<pid>.json`
+ * berisi `sessionId`, `pid`, `cwd`, `entrypoint`, dan seterusnya. Kalau berkas
+ * itu bisa dipercaya, ia menjawab pertanyaan yang hari ini tidak punya jawaban:
+ * sesi mana yang sudah MATI tanpa sempat mengirim `SessionEnd`.
+ *
+ * Tapi "kalau bisa dipercaya" itu belum diukur, dan membangun sapuan di atas
+ * sinyal yang belum diukur persis kesalahan yang membuat beberapa usulan rapat
+ * ini gugur. Jadi yang ada di sini CUMA PENGHITUNG — tidak ada sesi yang
+ * dihapus, tidak ada yang diklasifikasi, tidak ada yang berubah karenanya.
+ * Angkanya muncul di `/health` supaya bisa diamati sebulan lebih dulu.
+ *
+ *   terbaca  berkas sesi yang berhasil diurai
+ *   cocok    sesi hidup di kantor ini yang punya berkasnya
+ *   yatim    sesi hidup yang TIDAK punya berkas sama sekali
+ *   mati     sesi hidup yang berkasnya ada tapi pid-nya sudah tidak jalan
+ */
+let absenCache = { pada: 0, n: -1, nilai: null };
+function absenHitung() {
+  const kini = Date.now();
+  /* Cache-nya ikut JUMLAH SESI HIDUP, bukan cuma waktu: tanpa itu pembacaan
+     pertama (yang selalu terjadi saat server baru menyala dan kantor masih
+     kosong) membekukan angka nol selama setengah menit — persis di jendela
+     waktu ketika sesi pertama masuk dan orang membuka /health untuk melihatnya. */
+  if (absenCache.nilai && absenCache.n === sesiHidup.size && kini - absenCache.pada < 30000) {
+    return absenCache.nilai;
+  }
+  const hasil = { terbaca: 0, cocok: 0, yatim: 0, mati: 0, ada: false };
+  try {
+    const dir = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'sessions');
+    const berkas = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
+    hasil.ada = true;
+    const perSesi = new Map();
+    for (const f of berkas.slice(0, 500)) {
+      try {
+        const o = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        if (!o || !o.sessionId) continue;
+        hasil.terbaca++;
+        perSesi.set(String(o.sessionId).slice(0, 12), o);
+      } catch { /* berkas setengah tulis atau bukan JSON: dilewati */ }
+    }
+    for (const id of sesiHidup.keys()) {
+      const o = perSesi.get(id);
+      if (!o) { hasil.yatim++; continue; }
+      hasil.cocok++;
+      /* `process.kill(pid, 0)` tidak mengirim sinyal apa pun — ia cuma menanya
+         "boleh saya kirim?", dan melempar ESRCH kalau prosesnya sudah tidak
+         ada. Tidak ada proses yang terganggu karenanya. */
+      try { process.kill(Number(o.pid), 0); } catch { hasil.mati++; }
+    }
+  } catch { /* foldernya tidak ada: bukan galat, cuma tidak bisa diukur */ }
+  absenCache = { pada: kini, n: sesiHidup.size, nilai: hasil };
+  return hasil;
+}
+
 function potretRuangan() {
   const kini = Date.now();
   const sesi = [];
@@ -5497,6 +5565,7 @@ const server = http.createServer(async (req, res) => {
       ok: true, events: seq, viewers: clients.size, pemutarUlang, port: PORT,
       sseDibuang: sseDibuangTotal, sseDilebur: sseDileburTotal, sseDiputus, tunda: tundaHitung(),
       memoriMB: Math.round(process.memoryUsage().rss / 1048576),
+      absen: absenHitung(),
     }));
     return;
   }

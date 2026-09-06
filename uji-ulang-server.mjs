@@ -494,6 +494,14 @@ async function utama() {
       sehat.memoriMB < 300, sehat.memoriMB + ' MB');
   }
 
+  /* Daftar hadir: PENGHITUNG saja, tidak ada yang berubah karenanya. Yang
+     diuji cuma bentuknya masuk akal — sesi sintetis di sini memang tidak
+     punya berkas di ~/.claude/sessions, jadi semuanya harus jatuh ke yatim. */
+  const absen = sehat.absen || {};
+  benar('/health membawa penghitung daftar hadir', typeof absen.terbaca === 'number', JSON.stringify(absen));
+  benar('  sesi sintetis dihitung yatim, bukan cocok', absen.cocok === 0, JSON.stringify(absen));
+  benar('  tidak ada yang divonis mati', absen.mati === 0, JSON.stringify(absen));
+
   const berakhir = new Set(kirim.filter((b) => b.kind === 'session-end').map((b) => b.session));
   const semuaSesi = new Set(kirim.map((b) => b.session).filter(Boolean));
   const harapHidup = [...semuaSesi].filter((s) => !berakhir.has(s)).length;
