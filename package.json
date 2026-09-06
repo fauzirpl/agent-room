@@ -31,6 +31,8 @@
     "uji-paraf.mjs",
     "uji-peserta.mjs",
     "uji-izin.mjs",
+    "uji-kendali.mjs",
+    "claude-palsu.mjs",
     "uji-skp.mjs",
     "uji-skp.golden.json",
     "selaras-katalog.mjs",
@@ -56,7 +58,7 @@
   },
   "scripts": {
     "start": "node dinas.mjs",
-    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-jk.mjs && node uji-jaringan.mjs && node uji-mcp.mjs && node uji-telaah.mjs && node uji-paraf.mjs && node uji-peserta.mjs && node uji-skp.mjs && node uji-izin.mjs && node selaras-dokumen.mjs --periksa && node uji-ulang.mjs && node uji-ulang-server.mjs"
+    "test": "node uji-event.mjs --semua && node uji-zorder.mjs && node uji-sisip.mjs && node uji-seragam.mjs && node uji-tenggat.mjs && node uji-arah.mjs && node uji-katalog.mjs && node selaras-katalog.mjs --periksa && node uji-pagu.mjs && node uji-pegawai.mjs && node uji-suara.mjs && node uji-jk.mjs && node uji-jaringan.mjs && node uji-mcp.mjs && node uji-telaah.mjs && node uji-paraf.mjs && node uji-peserta.mjs && node uji-skp.mjs && node uji-izin.mjs && node uji-kendali.mjs && node selaras-dokumen.mjs --periksa && node uji-ulang.mjs && node uji-ulang-server.mjs"
   },
   "repository": {
     "type": "git",

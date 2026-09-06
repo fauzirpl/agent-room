@@ -11,22 +11,14 @@
  * ---------------------------------------------------------------------------
  * YANG TIDAK DIUJI DI SINI, DAN KENAPA — dibaca dulu sebelum percaya hijaunya.
  *
- * Separuh jalurnya masih telanjang: `POST /perintah` → `lahirkanTugas()` →
- * `spawn(claude)` → stream-json → `serapStream()` → `subagent-start/stop`.
- * Untuk mengujinya, penunjuk `AGENT_ROOM_CLAUDE` harus bisa diarahkan ke
- * skrip pemeran, dan hari ini TIDAK BISA — dua-duanya sudah dicoba, bukan
- * diduga:
+ * Separuh jalur yang lain — `POST /perintah` → spawn → stream-json →
+ * `serapStream()` → `subagent-start/stop` — dijaga `uji-kendali.mjs`, yang
+ * memakai pemeran `claude-palsu.mjs` lewat seam `CLAUDE_SKRIP` di server.mjs.
  *
- *   spawn('x.cmd', args, { shell: false })   melempar EINVAL di Node 22/Windows
- *   AGENT_ROOM_CLAUDE = node.exe             `bad option: --session-id`
- *
- * `server.mjs` memanggil `spawn(CLAUDE, args, { shell:false })` — CLAUDE
- * dipakai LANGSUNG sebagai executable, dan semua `.mjs` di indeks git bermode
- * 100644. Jadi separuh itu butuh satu seam di kode produksi (kalau penunjuknya
- * berakhiran .mjs/.js, jalankan `process.execPath <skrip> ...args`), dan seam
- * itu keputusan pemilik repo, bukan keputusan berkas uji. Selama belum ada,
- * yang dijaga di sini cuma yang benar-benar bisa dijaga — dan itu tetap
- * banyak, karena loket parafnya sendiri sebuah proses yang berdiri sendiri.
+ * Berkas INI sengaja tidak memakai pemeran sama sekali: `mcp-izin.mjs` diadu
+ * dengan loket TIRUAN supaya tiap rupa kegagalan loket — 404, gangguan
+ * sesaat, habis waktu, loket mati, loket tanpa kunci — bisa DISURUH terjadi.
+ * Lewat kantor sungguhan tidak satu pun dari itu bisa dipesan.
  *
  * ---------------------------------------------------------------------------
  * Yang dijaga:
@@ -539,7 +531,7 @@ async function jalan() {
 jalan().then(() => {
   tutupSemuaKantor();
   console.log();
-  catatan('separuh jalur (POST /perintah → spawn claude → stream-json) BELUM diuji — lihat kepala berkas');
+  catatan('separuh jalur yang lain (POST /perintah → stream-json) dijaga uji-kendali.mjs');
   if (gagal) { console.log(merah(tebal('GAGAL ' + gagal + ' dari ' + periksa + ' pemeriksaan'))); process.exit(1); }
   console.log(hijau(tebal('LULUS ' + periksa + ' pemeriksaan')));
 }).catch((err) => {

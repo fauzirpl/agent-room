@@ -308,6 +308,25 @@ function versiClaude(exe) {
 }
 const CLAUDE = IZIN ? cariClaude() : null;
 
+/* Seam UNTUK UJI. `spawn()` di bawah memakai CLAUDE langsung sebagai
+   executable, jadi penunjuk yang berupa skrip tidak akan pernah jalan: di
+   Windows `.cmd`/`.mjs` melempar EINVAL sejak perbaikan CVE-2024-27980, dan
+   di CI Linux semua `.mjs` di indeks git bermode 100644 (tanpa bit eksekusi).
+   Akibatnya seluruh loop kendali — POST /perintah → stream-json →
+   subagent-start/stop → tugas-selesai — mustahil diuji tanpa biner claude
+   sungguhan, dan `npm test` memang tidak boleh punya satu pun.
+
+   Kalau penunjuknya berakhiran .mjs/.cjs/.js, anaknya dijalankan sebagai
+   `node <skrip> ...args`. Ini TIDAK menambah kuasa apa pun: AGENT_ROOM_CLAUDE
+   hari ini sudah menjalankan executable sembarang, dan yang berubah cuma
+   boleh-tidaknya penunjuk itu berupa skrip. Yang dipakai tetap shell:false,
+   jadi prompt dari halaman tetap tidak bisa jadi perintah shell.
+
+   Dan ia BERSUARA waktu dipakai — pola yang sama dengan
+   AGENT_ROOM_BUKU_INDUK_UJI: kantor yang sedang memakai pemeran, bukan agen
+   sungguhan, tidak boleh diam soal itu. */
+const CLAUDE_SKRIP = /\.(mjs|cjs|js)$/i.test(CLAUDE || '');
+
 const asalSah = (req) => {
   const o = req.headers.origin;
   if (!o) return true;                      // curl/hook: tidak berasal dari halaman
@@ -4288,6 +4307,25 @@ function lahirkanAntrean() {
 const IZIN_TUNGGU_MS = 15 * 60 * 1000;      // tanpa paraf selama ini -> ditolak
 const IZIN_POLL_MS = 25 * 1000;             // satu long-poll ditahan paling lama segini
 const izinTunggu = new Map();               // id 12-hex -> { id, tugas, sesi, tool, ringkasan, sejak, jawab, penunggu:Set<res>, timer }
+/* Jawaban yang SUDAH diputuskan, disimpan sebentar sesudah permintaannya
+   dicabut dari `izinTunggu`.
+
+   Kenapa perlu: `mcp-izin.mjs` bertanya lewat `/izin/tanya` lalu baru mulai
+   long-poll `/izin/tunggu`. Di antara dua langkah itu ada celah, dan kalau
+   jawabannya masuk TEPAT di celah itu, rekamannya sudah dihapus waktu poll
+   pertama tiba — pollnya dijawab 404, dan mcp-izin menerjemahkan 404 jadi
+   TOLAK. Artinya kamu menekan Paraf dan agennya tetap ditolak, diam-diam,
+   tanpa jejak yang bisa dilacak. Celahnya sempit (beberapa milidetik) dan
+   manusia praktis tidak bisa memenanginya, tapi apa pun yang menjawab
+   otomatis bisa — `uji-kendali.mjs` memenanginya di percobaan pertama.
+
+   Cabang `if (p.jawab)` di /izin/tunggu memang sudah dirancang untuk
+   keadaan ini; yang membuatnya jadi kode mati adalah penghapusan yang
+   terlalu cepat. Peta kecil ini yang menghidupkannya kembali, TANPA
+   menahan permintaannya di `izinTunggu` — supaya kartu di halaman tetap
+   hilang begitu diparaf. */
+const IZIN_JAWAB_SIMPAN_MS = 60 * 1000;
+const izinJawaban = new Map();              // id -> { tugas, jawab, kedaluwarsa }
 const BERKAS_MCP_IZIN = path.join(__dirname, 'mcp-izin.mjs');
 
 const kunciCocok = (a, b) => {
@@ -4307,6 +4345,9 @@ function jawabIzin(p, keputusan, pesan, sumber) {
   clearTimeout(p.timer);
   p.jawab = { keputusan, pesan: clip(pesan || '', 200) };
   izinTunggu.delete(p.id);
+  // …tapi jawabannya disimpan sebentar untuk poll yang datang terlambat
+  izinJawaban.set(p.id, { tugas: p.tugas, jawab: p.jawab, kedaluwarsa: Date.now() + IZIN_JAWAB_SIMPAN_MS });
+  for (const [id, j] of izinJawaban) if (j.kedaluwarsa <= Date.now()) izinJawaban.delete(id);
   const badan = JSON.stringify({ ok: true, ...p.jawab });
   for (const res of p.penunggu) {
     try { res.writeHead(200, { 'content-type': 'application/json' }); res.end(badan); } catch { /* sudah putus */ }
@@ -4398,7 +4439,10 @@ function lahirkanTugas(t) {
     // bisa dibaca proses lain di mesin yang sama, isi env-nya tidak.
     const lingkungan = { ...process.env };
     if (kunciIzin) lingkungan.AGENT_ROOM_KUNCI_IZIN = kunciIzin;
-    anak = spawn(CLAUDE, args, {
+    // Skrip pemeran dijalankan lewat node; biner sungguhan tetap langsung.
+    // Lihat CLAUDE_SKRIP — seam untuk uji, bukan kuasa baru.
+    anak = spawn(CLAUDE_SKRIP ? process.execPath : CLAUDE,
+                 CLAUDE_SKRIP ? [CLAUDE, ...args] : args, {
       cwd: kerja, shell: false, windowsHide: true, env: lingkungan,
       // stdin ditutup sejak awal. Kalau dibiarkan berupa pipa yang tidak
       // pernah diisi, CLI menunggunya dulu ("no stdin data received in 3s")
@@ -5640,8 +5684,16 @@ const server = http.createServer(async (req, res) => {
     if (!rec || !rec.paraf || !kunciCocok(url.searchParams.get('kunci'), rec.kunciIzin)) {
       return balas(403, { ok: false, pesan: 'kunci izin tidak cocok' });
     }
-    const p = izinTunggu.get(url.searchParams.get('id') || '');
-    if (!p || p.tugas !== tugas) return balas(404, { ok: false, pesan: 'permintaan izin tidak ada' });
+    const idIzin = url.searchParams.get('id') || '';
+    const p = izinTunggu.get(idIzin);
+    if (!p || p.tugas !== tugas) {
+      /* Sudah dijawab tepat sebelum poll pertama tiba? Jawabannya masih ada.
+         404 di sini berarti TOLAK di sisi mcp-izin, jadi keliru sedikit saja
+         di tempat ini membalikkan keputusan yang sudah kamu ambil. */
+      const j = izinJawaban.get(idIzin);
+      if (j && j.tugas === tugas && j.kedaluwarsa > Date.now()) return balas(200, { ok: true, ...j.jawab });
+      return balas(404, { ok: false, pesan: 'permintaan izin tidak ada' });
+    }
     if (p.jawab) return balas(200, { ok: true, ...p.jawab });
     // Ditahan sampai dijawab atau IZIN_POLL_MS lewat — yang kedua menjawab
     // {tunggu:true} supaya klien mengulang, bukan menggantung tanpa batas.
@@ -5891,8 +5943,15 @@ server.listen(PORT, HOST, () => {
   if (IZIN) {
     if (CLAUDE) {
       console.log(`[agent-room] kendali web AKTIF — halaman boleh melahirkan sesi`);
-      console.log(`[agent-room] memakai ${CLAUDE} (${versiClaude(CLAUDE)})`);
-      console.log('[agent-room] biner lain bisa ditunjuk lewat AGENT_ROOM_CLAUDE');
+      if (CLAUDE_SKRIP) {
+        // Kantor yang sedang memakai PEMERAN tidak boleh diam soal itu.
+        console.log(`[agent-room] memakai SKRIP ${CLAUDE} lewat ${process.execPath}`);
+        console.log('[agent-room] AGENT_ROOM_CLAUDE menunjuk skrip, bukan biner claude — ini jalur UJI,'
+          + ' tidak ada agen sungguhan yang lahir dari sini');
+      } else {
+        console.log(`[agent-room] memakai ${CLAUDE} (${versiClaude(CLAUDE)})`);
+        console.log('[agent-room] biner lain bisa ditunjuk lewat AGENT_ROOM_CLAUDE');
+      }
     } else {
       console.log('[agent-room] kendali web diminta, tapi biner claude tidak ketemu di PATH');
     }

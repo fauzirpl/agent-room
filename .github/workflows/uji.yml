@@ -124,6 +124,11 @@ jobs:
       - name: Uji loket paraf
         run: node uji-izin.mjs
 
+      # Loop kendali ujung ke ujung dengan pemeran claude-palsu.mjs:
+      # stream-json, rapat ber-agenId, dan paraf yang benar-benar sampai.
+      - name: Uji loop kendali web
+        run: node uji-kendali.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event
