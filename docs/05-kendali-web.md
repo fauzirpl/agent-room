@@ -441,6 +441,7 @@ tidak ada hitungan baru:
 | `agent_room_sse_dibuang_total`, `agent_room_sse_dilebur_total`, `agent_room_sse_diputus_total` | counter | rem SSE (di bawah) |
 | `agent_room_tunda_berkas`, `agent_room_tunda_diserap_total` | gauge/counter | kotak surat hook offline |
 | `agent_room_uptime_seconds` | gauge | `process.uptime()` |
+| `agent_room_pagu_proyek_serapan_rasio`, `agent_room_pagu_proyek_terlampaui` | gauge | dua deret berlabel `proyek="…"` dari pagu anggaran token; **hanya terbit** kalau `AGENT_ROOM_METRICS_PROYEK=1` dan `pagu.json` ada (20 proyek teratas menurut rasio) |
 
 `jenis` token ada empat: `input`, `output`, `cache_tulis`, `cache_baca`. Nama
 proyek **tidak** jadi label secara bawaan — kardinalitas di sisi pengumpul,

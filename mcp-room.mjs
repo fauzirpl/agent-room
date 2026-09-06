@@ -213,6 +213,13 @@ async function tangani(msg) {
   const adaId = id !== undefined && id !== null;
   if (typeof method !== 'string') { if (adaId) galat(id, -32600, 'permintaan tidak sah'); return; }
   if (method.startsWith('notifications/')) return;         // termasuk notifications/initialized
+  /* Tanpa `id` sebuah pesan adalah NOTIFIKASI menurut JSON-RPC 2.0, dan
+     notifikasi tidak boleh dijawab. Dulu keempat cabang di bawah memanggil
+     jawab(id, …) tanpa memeriksa ini, jadi `{"jsonrpc":"2.0","method":"ping"}`
+     menghasilkan `{"jsonrpc":"2.0","result":{}}` — respons tanpa `id`, tidak
+     sah, dan klien yang ketat berhak memutus sesi karenanya. Dijaga
+     `uji-mcp.mjs`. */
+  if (!adaId) return;
   switch (method) {
     case 'initialize':
       jawab(id, {

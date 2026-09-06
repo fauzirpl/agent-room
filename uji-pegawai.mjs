@@ -137,7 +137,11 @@ async function coba(dir, port, tambahan = {}) {
       AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
       AGENT_ROOM_KUNCI: '',
       AGENT_ROOM_LAPOR: '',
-      AGENT_ROOM_CUACA: '',
+      /* 'off', bukan ''. Kosong berarti "tebak dari IP" — server tetap boleh
+         menghubungi geojs.io dan open-meteo.com begitu ada yang membuka
+         /cuaca. Hari ini tidak ada kasus di sini yang membukanya, jadi ini
+         menutup pintu sebelum ada yang memutarnya. Dijaga `uji-jaringan.mjs`. */
+      AGENT_ROOM_CUACA: 'off',
       AGENT_ROOM_PEGAWAI_TETAP: '',
       ...tambahan,
     },

@@ -29,6 +29,11 @@ node uji-sisip.mjs              # bukaan ruang kadis vs golden: sapuan piksel, b
 node uji-seragam.mjs            # seragam kantor cabang: jarak warna rompi vs semua baju harian
 node uji-pagu.mjs               # pagu anggaran token: ambang, pagar minggu dua arah, metrik
 node uji-pegawai.mjs            # formasi pegawai tetap: kursi, sapuan basi, ambient tidak menyentuh
+node uji-jaringan.mjs           # gerbang nol-jaringan: nota cuma metadata, tiap harness menutup jalur keluar; --tampil untuk melihat notanya
+node uji-mcp.mjs                # kontrak mcp-room.mjs lewat klien MCP palsu; --tampil untuk melihat tiap permintaan yang keluar
+node selaras-dokumen.mjs        # laporan hanyut dokumen vs kode; --periksa untuk menggagalkan
+node uji-telaah.mjs             # lembar telaah risiko: tiap pola, privasi tanda, pagar positif palsu
+node telaah.mjs Bash "rm -rf x" # coba satu perintah dengan tangan
 node --check server.mjs && node --check dinas.mjs
 ```
 
@@ -105,6 +110,48 @@ sudah terdaftar di `public/event/*.js`, yang belum (per kategori), dan id yang
 terdaftar tapi tidak ada di katalog. Angka "berapa event sudah jadi kode" di
 README/DESIGN diambil dari sini. CI (`.github/workflows/uji.yml`) menjalankan
 ketiganya plus smoke test `/health` di tiap push.
+
+## Jalur keluar: satu daftar, satu penutup
+
+`npm test` tidak boleh menyentuh jaringan, dan itu sekarang dijaga mesin, bukan
+kebiasaan. Dua aturan yang mengikuti:
+
+1. **Menambah jalur keluar baru di `server.mjs`** (penyedia, webhook, API apa
+   pun) berarti menambah nama env-nya ke `ENV_JALUR_KELUAR` di
+   [`penyedia-palsu.mjs`](penyedia-palsu.mjs). Kalau tidak, gerbangnya tidak
+   menjaganya dan tidak ada yang tahu.
+2. **Harness baru yang melahirkan `server.mjs` sambil mewarisi `process.env`**
+   wajib menutup jalur keluarnya: `envTanpaJalurKeluar()` dari berkas yang sama,
+   atau menyapu sendiri semua env `AGENT_ROOM_*`. `uji-jaringan.mjs` kasus 4
+   menolak yang lupa, lengkap dengan cara memperbaikinya.
+
+Satu jebakan yang sudah pernah memakan korban: `AGENT_ROOM_CUACA: ''` **bukan**
+mematikan cuaca — kosong berarti "tebak dari IP", dan server tetap boleh
+menghubungi geojs.io serta open-meteo.com. Yang mematikan cuma `'off'`.
+
+## Dokumen adalah kontrak, bukan pelengkap
+
+Daftar di dokumentasi ini dibaca **agen**, bukan cuma manusia: yang memasang hook
+membaca tabel "Event yang dipasang", yang memasang MCP membaca tabel tool, yang
+memantau membaca tabel metrik. Karena itu empat permukaan dijaga mesin lewat
+`node selaras-dokumen.mjs --periksa` di `npm test`:
+
+| Kalau kamu menambah | Tambahkan juga barisnya di |
+|---|---|
+| hook di `install.mjs` | tabel **Event yang dipasang** di `docs/01-jalanin.md` (angka "Yang dipasang N" ikut dihitung dari daftarnya) |
+| harness `uji-*.mjs` / `selaras-*.mjs` | `scripts.test` di `package.json`, langkah di `.github/workflows/uji.yml`, dan tabel di `docs/06-isi-repo.md` |
+| env `AGENT_ROOM_*` | dokumen mana pun di `docs/` |
+| metrik `agent_room_*` | tabel metrik di `docs/05-kendali-web.md` |
+
+Skrip itu **tidak pernah menulis apa pun**: katalog boleh dibangkitkan mesin,
+prosa tidak. Kalau sebuah hanyut memang disengaja, daftarkan di `PENGECUALIAN`
+beserta alasannya — daftar kosong itu tujuannya, dan tiap baris di sana adalah
+utang yang punya nama.
+
+Satu lagi untuk MCP: **tool baru di `mcp-room.mjs` menambah barisnya di
+`uji-mcp.mjs` pada commit yang sama.** Kalau tool itu perlu rute yang belum ada
+di `RUTE_BOLEH`, pelebarannya harus terlihat di diff — itu yang menjaga aturan
+"MCP tetap hanya-baca" tetap berupa fakta mesin, bukan niat baik.
 
 ## Gaya commit
 

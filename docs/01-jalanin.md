@@ -148,7 +148,7 @@ hanya server yang berjalan di mesin itu yang memungutnya.
 
 ### Event yang dipasang
 
-Dokumentasi hook Claude Code mencantumkan 33 event. Yang dipasang 16 — yang
+Dokumentasi hook Claude Code mencantumkan 33 event. Yang dipasang 15 — yang
 sisanya tidak punya apa pun untuk digambar di ruangan.
 
 | Event | Yang terjadi di ruangan |
@@ -200,6 +200,12 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_HOST_IZIN` | *(kosong)* | nama Host tambahan yang diterima penjaga Host, dipisah koma (nama mesin di LAN, nama tunnel) |
 | `AGENT_ROOM_TUNDA_DIR` | `~/.agent-room/tunda` | kotak surat hook offline: dibaca `hook.mjs --tunda` (penulis), server (pemungut), dan `dinas --periksa` (lihat **Kotak surat hook offline**) |
 | `AGENT_ROOM_METRICS_PROYEK` | *(kosong)* | `1` menambahkan label `proyek` pada metrik token di `/metrics` (lihat **Pemantauan**) |
+| `AGENT_ROOM_NAMA` | `nama.json` | tempat daftar nama pegawai pilihanmu disimpan (lihat [Suara ucap & daftar nama](07-suara-nama.md)) |
+| `AGENT_ROOM_SUARA` | `suara.json` | tempat setelan suara ucap disimpan (aktif, model, voice, format) |
+| `AGENT_ROOM_SUARA_KUNCI` | `.agent-room-suara-kunci` | tempat kunci OpenRouter disimpan, mode `0600`; nilainya tidak pernah dicetak ke konsol |
+| `AGENT_ROOM_SUARA_DIR` | `suara/` | folder cache klip suara ucap |
+| `AGENT_ROOM_SUARA_URL` | OpenRouter `/audio/speech` | alamat penyedia TTS; diarahkan ke penyedia palsu oleh `uji-suara.mjs` supaya uji tidak pernah keluar jaringan |
+| `AGENT_ROOM_SUARA_MODEL_URL` | OpenRouter `/models` | alamat daftar model TTS untuk datalist di panel ⚙️ |
 
 ### Gerbang: penjaga Host & kunci event
 

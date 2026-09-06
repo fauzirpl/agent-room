@@ -60,6 +60,60 @@ jobs:
       - name: Uji formasi pegawai tetap
         run: node uji-pegawai.mjs
 
+      # Tenggat bergerak: pola `pada(E, E.umur + N, fn)` yang callback-nya tidak
+      # pernah jalan, plus akibat yang dijanjikan event benar-benar terjadi.
+      - name: Uji tenggat event
+        run: node uji-tenggat.mjs
+
+      # Arah hadap: event tidak boleh menulis `hadap` ke orang yang bukan
+      # pemerannya — harus lewat menoleh()/mendongak().
+      - name: Uji arah hadap penonton
+        run: node uji-arah.mjs
+
+      # Jenis kelamin pegawai: tebakan nama, timpaan manusia yang bertahan, dan
+      # aturan kepala di sprite (laki-laki tidak berjilbab, dan sebaliknya).
+      - name: Uji jenis kelamin pegawai
+        run: node uji-jk.mjs
+
+      # Suara ucap: semua rupa kegagalan berujung 204, klip tidak pernah dibayar
+      # dua kali, kunci tidak pernah keluar server. Memakai OpenRouter palsu di
+      # localhost — tidak pernah keluar jaringan, tidak pernah butuh kunci.
+      - name: Uji suara ucap & daftar nama
+        run: node uji-suara.mjs
+
+
+      # Gerbang nol-jaringan. Membuktikan dua janji sekaligus: nota dinas keluar
+      # cuma membawa metadata (prompt tidak pernah ikut), dan tiap harness yang
+      # mewarisi env pemanggil sudah menutup jalur keluarnya. Punya kontrol
+      # positif, jadi hijaunya berarti sesuatu.
+      - name: Uji kontrak nol-jaringan
+        run: node uji-jaringan.mjs
+
+      # Kontrak mcp-room.mjs lewat klien MCP palsu: bentuk balasan tool,
+      # isError yang benar (kantor menolak != kantor mati), stdout yang wajib
+      # murni JSON-RPC, dan penegakan "MCP tetap hanya-baca" lewat proksi
+      # pencatat — tiap permintaan yang keluar harus GET ke rute daftar putih.
+      - name: Uji kontrak MCP (klien palsu)
+        run: node uji-mcp.mjs
+
+      # Lembar telaah staf: tiap pola risiko punya contoh yang harus kena DAN
+      # contoh serupa yang harus lolos, `tanda` tidak pernah membawa potongan
+      # perintah, dan modulnya diam waktu diimpor (mcp-izin.mjs memakainya,
+      # dan stdout proses itu kanal protokol).
+      - name: Uji lembar telaah risiko
+        run: node uji-telaah.mjs
+
+      # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
+      # registri sungguhan di public/event/*.js.
+      - name: Periksa keselarasan katalog event
+        run: node selaras-katalog.mjs --periksa
+
+      # Permukaan protokol yang dibaca AGEN — daftar hook, berkas uji, env,
+      # nama metrik — tidak boleh hanyut dari dokumentasinya. Tidak pernah
+      # menulis apa pun; cuma menggagalkan.
+      - name: Periksa keselarasan dokumen vs kode
+        run: node selaras-dokumen.mjs --periksa
+
       - name: Uji putar ulang hari sungguhan (fixture buku agenda)
         run: node uji-ulang.mjs
 

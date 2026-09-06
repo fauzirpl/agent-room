@@ -88,6 +88,11 @@ async function buka(dir) {
       ...process.env, ...ENV_DATA(dir),
       AGENT_ROOM_PORT: String(port),
       AGENT_ROOM_ISI: 'off', AGENT_ROOM_CUACA: 'off',
+      /* Wajib dikosongkan, bukan sekadar tidak diisi: env pemanggil ikut
+         diwariskan, jadi mesin yang kebetulan memasang AGENT_ROOM_LAPOR akan
+         membuat `npm test` benar-benar mem-POST ke webhook sungguhan.
+         Dijaga `uji-jaringan.mjs` kasus 4. */
+      AGENT_ROOM_LAPOR: '', AGENT_ROOM_LAPOR_SELESAI: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
