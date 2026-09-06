@@ -108,6 +108,12 @@ jobs:
       - name: Uji loket paraf & buku register
         run: node uji-paraf.mjs
 
+      # Transkrip peserta rapat: isi subagent (pikiran, kalimat, token) sampai
+      # ke pemiliknya, dua bentuk jalur berkas, dan yang paling penting —
+      # baris yang sama di dua berkas TIDAK dihitung dua kali.
+      - name: Uji transkrip peserta rapat
+        run: node uji-peserta.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

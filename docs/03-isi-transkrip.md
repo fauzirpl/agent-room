@@ -73,10 +73,37 @@ Waktu itu terjadi yang muncul tiga titik berkedip plus jumlah tokennya: "dia
 memang sedang mikir, isinya tidak dibagi" lebih jujur daripada balon kosong,
 dan jauh lebih jujur daripada mengarang isi.
 
-Pikiran dari **subagent** (`isSidechain`) sengaja dilewati. Tidak ada apa pun
-di barisnya yang bisa dipakai memastikan dia peserta rapat yang mana, dan
-menempelkan pikiran ke orang yang salah lebih buruk daripada tidak
-menampilkannya.
+Pikiran dari **subagent** (`isSidechain`) sengaja dilewati **di berkas induk**.
+Tidak ada apa pun di barisnya di sana yang bisa dipakai memastikan dia peserta
+rapat yang mana, dan menempelkan pikiran ke orang yang salah lebih buruk
+daripada tidak menampilkannya.
+
+Alasan itu tidak berubah — yang berubah tempatnya. Subagent menulis
+transkripnya **sendiri** di berkas terpisah, dan di sana pemiliknya pasti:
+
+```
+<dir transkrip>/<session_id>/subagents/agent-<agent_id>.jsonl
+<dir transkrip>/<session_id>/subagents/workflows/wf_<run>/agent-<agent_id>.jsonl
+```
+
+Server memasang pemantau sendiri untuk tiap berkas itu waktu `SubagentStart`
+tiba, dengan kunci `sesi|agenId`. Karena pemantaunya memang dipasang untuk satu
+`agent_id`, baris sidechain di sana **diterima** — dan gerbang yang sama
+(`rec.agenId === o.agentId`) sekaligus yang membuat satu baris tidak pernah
+terhitung dua kali kalau versi Claude Code tertentu menulisnya ke dua berkas.
+
+`SubagentStart` tidak membawa jalur berkasnya, jadi jalur itu direkonstruksi;
+kalau berkasnya belum lahir, dicoba ulang beberapa kali dengan jeda pendek.
+Token peserta dijumlahkan terpisah dari induknya (kunci peta `sesi|agenId`)
+supaya kartu induk tidak menampilkan token yang tidak pernah dipakainya, tapi
+tetap **ikut** ke riwayat token, pagu, dan papan SKP — token yang dipakai
+subagent adalah token yang benar-benar terpakai. Barisnya memakai model dari
+baris peserta itu sendiri, bukan model sesi induk, dan ditandai `peserta: true`
+sebagai field opsional (`SKEMA.token` tidak naik).
+
+Batas pemantau bersamaan naik jadi 40, dan waktu penuh yang dilepas adalah
+**peserta** yang paling lama diam lebih dulu — bukan sesi induk. Tanpa urutan
+itu satu sesi ber-sepuluh subagent bisa mengusir pemantau induknya sendiri.
 
 ### Kalimatnya jadi kotak kabar
 

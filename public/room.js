@@ -5359,6 +5359,19 @@ function bukaRapat(ev) {
  * Yang TIDAK dipindahkan ke peserta: keadaan tingkat SESI. `butuh`/`macet`,
  * kamera, proyek, dan cabang tetap milik induk, karena permintaan izin dari
  * subagent memang naik ke sesi induknya. */
+/* Pemilik ISI (pikiran, kalimat, token) sebuah event.
+ *
+ * Bedanya dengan `pelakuUntuk()`: yang ini tidak pernah MEMBUKA kursi baru.
+ * Isi datang dari pemantau transkrip yang jalannya sendiri, dan kalau
+ * pesertanya kebetulan sudah bubar — atau meja memang penuh waktu dia datang —
+ * lebih baik kalimatnya keluar dari mulut induknya daripada hilang sama
+ * sekali. Membuka kursi di sini akan melahirkan peserta hantu yang tidak
+ * pernah punya pasangan `SubagentStop`. */
+function pelakuIsi(ev, induk) {
+  if (!ev.agenId) return induk;
+  return peserta.find((p) => !p.keluar && p.agenId === ev.agenId) || induk;
+}
+
 function pelakuUntuk(ev, induk) {
   if (!ev.agenId || (ev.kind !== 'pre' && ev.kind !== 'post')) return induk;
   const ada = peserta.find((p) => !p.keluar && p.agenId === ev.agenId);
@@ -7135,14 +7148,18 @@ function handle(ev) {
        apa pun. Berpikir memang bukan pekerjaan yang bisa dihitung, dan log
        kegiatan akan tenggelam kalau tiap tarikan napas ikut dicatat. */
     case 'pikir': {
-      a.berpikir(ev);
+      // pikiran peserta rapat naik di atas kepala PESERTANYA, bukan induknya
+      pelakuIsi(ev, a).berpikir(ev);
       break;
     }
     /* Bukan pekerjaan, jadi bukan log — sama seperti pikir. Cuma pembaruan
        diam yang disimpan di orangnya; kartu yang membacanya kalau dibuka. */
     case 'token': {
-      a.token = ev.token;
-      tambahTokenTotal(ev.session, ev.token);
+      /* Token peserta menempel di pesertanya. Totalnya tetap dijumlah per
+         SESI — itu memang angka sesi, dan server sudah memisahkan petanya
+         lewat kunci sesi|agenId, jadi tidak ada yang dihitung dua kali. */
+      pelakuIsi(ev, a).token = ev.token;
+      tambahTokenTotal(ev.session + (ev.agenId ? '|' + ev.agenId : ''), ev.token);
       break;
     }
     /* Kalimat yang benar-benar dia tulis untuk kamu. Yang menutup giliran
@@ -7150,9 +7167,10 @@ function handle(ev) {
        sisanya kalimat pengantar sebelum tool berikutnya — cukup lewat sebagai
        balon lalu menumpuk di kotak kabar. */
     case 'ucap': {
-      a.say(esc(satuBaris(ev.teks, UCAP_MAX)), 'say');
-      kabarMasuk(ev, a, ev.akhir ? 'hasil' : 'lapor');
-      if (ev.akhir) a.legaSampai = now + 2000;   // hasil sudah di tangan kamu: wajahnya lega
+      const pi = pelakuIsi(ev, a);
+      pi.say(esc(satuBaris(ev.teks, UCAP_MAX)), 'say');
+      kabarMasuk(ev, pi, ev.akhir ? 'hasil' : 'lapor');
+      if (ev.akhir) pi.legaSampai = now + 2000;   // hasil sudah di tangan kamu: wajahnya lega
       pushLog(ev, 'mark',
         [ev.akhir ? 'menyampaikan hasil' : 'melapor', satuBaris(ev.teks, 120)]);
       break;

@@ -1122,7 +1122,10 @@ function sseKuras(res) {
 function sseAntre(res, k, ev) {
   // token kumulatif per sesi: yang lama di antrean sudah usang, ganti saja
   if (ev.kind === 'token') {
-    const i = k.antre.findIndex((e) => e.kind === 'token' && e.session === ev.session);
+    /* Kuncinya sesi + agen: tanpa agenId, token peserta dan token induk saling
+       menimpa waktu antre, dan gejalanya cuma muncul pada klien lambat. */
+    const i = k.antre.findIndex((e) => e.kind === 'token' && e.session === ev.session
+      && (e.agenId || '') === (ev.agenId || ''));
     if (i >= 0) { k.antre[i] = ev; sseDileburTotal++; return; }
   }
   k.antre.push(ev);
@@ -1189,7 +1192,7 @@ function publish(ev) {
 
 const PIKIR_MAX = 520;                    // teks yang muat di balon pikiran
 const UCAP_MAX = 4000;                    // teks yang dibaca orang di modal
-const TRANSKRIP_MAX = 24;                 // berkas yang dipantau bersamaan
+const TRANSKRIP_MAX = 40;                 // berkas yang dipantau bersamaan (induk + peserta)
 const TRANSKRIP_JEDA = 350;               // ms antar cek ukuran berkas
 const TRANSKRIP_SEPI = 30 * 60 * 1000;    // sesi sesenyap ini dilepas pemantaunya
 const BARIS_MAX = 256 * 1024;             // baris lebih panjang dari ini tidak diurai
@@ -1229,6 +1232,35 @@ function jalurTranskrip(raw) {
   if (!sesi || !cwd) return '';
   const dasar = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
   return path.join(dasar, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'), sesi + '.jsonl');
+}
+
+/* Transkrip PESERTA RAPAT. Subagent menulis transkripnya sendiri, terpisah dari
+ * berkas induk, di salah satu dari dua tempat — keduanya diperiksa ada di mesin
+ * ini, bukan ditebak dari dokumentasi:
+ *
+ *   <dir transkrip>/<session_id penuh>/subagents/agent-<agent_id>.jsonl
+ *   <dir transkrip>/<session_id penuh>/subagents/workflows/wf_<run>/agent-<agent_id>.jsonl
+ *
+ * `SubagentStart` TIDAK membawa jalurnya, jadi ia direkonstruksi. Yang kedua
+ * butuh satu `readdir` karena nama folder run-nya tidak bisa ditebak.
+ */
+function jalurTranskripPeserta(raw, agenId) {
+  const induk = jalurTranskrip(raw);
+  const sesiPenuh = String(raw.session_id || '');
+  if (!induk || !sesiPenuh || !agenId) return '';
+  const akar = path.join(path.dirname(induk), sesiPenuh, 'subagents');
+  const langsung = path.join(akar, 'agent-' + agenId + '.jsonl');
+  try { fs.accessSync(langsung); return langsung; } catch { /* coba folder workflow */ }
+  try {
+    const wf = path.join(akar, 'workflows');
+    for (const d of fs.readdirSync(wf)) {
+      const p = path.join(wf, d, 'agent-' + agenId + '.jsonl');
+      try { fs.accessSync(p); return p; } catch { /* bukan di run ini */ }
+    }
+  } catch { /* belum ada folder workflows */ }
+  /* Belum lahir. Jalur langsung tetap dikembalikan: `pantauTranskrip()` memakai
+     `fs.watchFile`, yang memang boleh dipasang pada berkas yang belum ada. */
+  return langsung;
 }
 
 /* Token, bukan biaya. Transkrip TIDAK punya `costUSD` — cuma angka mentah
@@ -1342,10 +1374,18 @@ function riwayatTambah(ts, proyek, d) {
    tidak boleh menahan pemrosesan hook. Satu baris JSON jauh di bawah ukuran
    yang bikin write() terpecah, jadi append bersamaan dari beberapa sesi tetap
    aman tanpa perlu antrean sendiri. */
-function riwayatCatat(ts, proyek, model, d) {
+/* `peserta` sengaja argumen TERSENDIRI, bukan diselipkan ke dalam `d`: objek itu
+   diteruskan apa adanya ke `riwayatTambah()` dan `paguPeriksa()`, dan disebar
+   dengan `...d` waktu di-JSON. Menyelipkannya di sana akan menaruh field yang
+   bukan angka token ke dalam agregat, dan pagu ikut menghitungnya. Di baris
+   riwayat ia field OPSIONAL, jadi `SKEMA.token` tidak perlu naik. */
+function riwayatCatat(ts, proyek, model, d, peserta = false) {
   if (!d.input && !d.output && !d.cacheTulis && !d.cacheBaca) return;
   riwayatTambah(ts, proyek, d);
-  const baris = JSON.stringify({ v: SKEMA.token, ts, proyek, model: model || undefined, ...d });
+  const baris = JSON.stringify({
+    v: SKEMA.token, ts, proyek, model: model || undefined,
+    ...(peserta ? { peserta: true } : {}), ...d,
+  });
   fs.appendFile(BERKAS_RIWAYAT_TOKEN, baris + '\n', (err) => {
     if (err) console.warn('[agent-room] gagal menulis riwayat token: ' + err.message);
   });
@@ -3245,7 +3285,7 @@ function isiAgen(msg) {
   return keluar;
 }
 
-function pantauTranskrip(sesi, jalur) {
+function pantauTranskrip(sesi, jalur, opsi = {}) {
   if (!jalur || ISI_MATI) return;
   const ada = transkrip.get(sesi);
   if (ada) {
@@ -3254,18 +3294,32 @@ function pantauTranskrip(sesi, jalur) {
     lepasTranskrip(sesi);                 // sesinya pindah berkas (resume/fork)
   }
   if (transkrip.size >= TRANSKRIP_MAX) {
-    // yang paling lama tidak bersuara yang dilepas, bukan yang paling dulu masuk
+    /* Yang dilepas: peserta yang paling lama diam LEBIH DULU, baru sesi induk.
+       Tanpa urutan itu satu sesi ber-sepuluh subagent bisa mengusir pemantau
+       induknya sendiri, dan yang hilang justru balon pikiran yang paling
+       sering dilihat orang. */
     let tua = '';
     for (const [k, v] of transkrip) {
+      if (!v.agenId) continue;
       if (!tua || v.sentuh < transkrip.get(tua).sentuh) tua = k;
+    }
+    if (!tua) {
+      for (const [k, v] of transkrip) {
+        if (!tua || v.sentuh < transkrip.get(tua).sentuh) tua = k;
+      }
     }
     if (tua) lepasTranskrip(tua);
   }
+  /* Berkas peserta dibaca dari AWAL: ia lahir sebelum hook `SubagentStart`
+     sempat sampai, dan baris pertamanya cuma prompt penugasan. Berkas induk
+     tetap dari ekor — sesi yang sudah panjang tidak boleh membanjiri ruangan
+     dengan pikiran satu jam lalu. */
   let awal = 0;
-  try { awal = fs.statSync(jalur).size; } catch { awal = 0; }   // belum ada: mulai dari 0
+  if (!opsi.agenId) { try { awal = fs.statSync(jalur).size; } catch { awal = 0; } }
   const rec = {
     file: jalur, offset: awal, sisa: Buffer.alloc(0),
     sibuk: false, sentuh: Date.now(), lihat: new Set(),
+    sesi: opsi.sesi || sesi, agenId: opsi.agenId || '', agen: opsi.agen || '',
   };
   rec.pantau = () => { bacaSusulan(sesi, rec); };
   try {
@@ -3339,7 +3393,15 @@ function cernaPotongan(sesi, rec, buf) {
 }
 
 function serapTranskrip(sesi, rec, o) {
-  if (!o || o.type !== 'assistant' || o.isSidechain) return;
+  if (!o || o.type !== 'assistant') return;
+  /* Baris sidechain milik SUBAGENT. Di berkas induk ia tetap dilewati —
+     tidak ada apa pun di barisnya yang bisa dipakai memastikan dia peserta
+     yang mana, dan menempelkan pikiran ke orang yang salah lebih buruk
+     daripada tidak menampilkannya. Di berkas PESERTA sebaliknya: pemantaunya
+     memang dipasang untuk satu agenId, jadi pemiliknya pasti. Gerbang ini
+     sekaligus yang membuat baris tidak pernah terhitung dua kali walau versi
+     CLI tertentu menulisnya ke dua berkas. */
+  if (o.isSidechain && !(rec.agenId && o.agentId === rec.agenId)) return;
   const uuid = typeof o.uuid === 'string' ? o.uuid : '';
   if (uuid) {
     // sesudah resume atau pemadatan, baris lama bisa ditulis ulang apa adanya
@@ -3350,7 +3412,9 @@ function serapTranskrip(sesi, rec, o) {
   if (o.message?.is_api_error_message) return;        // galat API punya jalurnya sendiri
   rec.sentuh = Date.now();
   const ts = Date.parse(o.timestamp);
-  const dasar = () => dasarSesi(sesi, o.cwd, Number.isFinite(ts) ? ts : 0);
+  const nyata = rec.sesi || sesi;
+  const tempel = rec.agenId ? { agenId: rec.agenId, ...(rec.agen ? { agen: rec.agen } : {}) } : {};
+  const dasar = () => ({ ...dasarSesi(nyata, o.cwd, Number.isFinite(ts) ? ts : 0), ...tempel });
   for (const b of isiAgen(o.message)) publish({ ...dasar(), ...b });
 
   /* Dijumlahkan dari SETIAP baris asisten yang punya usage, dedup uuid di atas
@@ -3366,9 +3430,14 @@ function serapTranskrip(sesi, rec, o) {
       cacheTulis: Number(u.cache_creation_input_tokens) || 0,
       cacheBaca: Number(u.cache_read_input_tokens) || 0,
     };
-    const t = tokenSesi.get(sesi) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
+    /* Token peserta dijumlahkan TERPISAH dari induknya — kunci petanya
+       'sesi|agenId'. Kalau digabung, kartu induk akan menampilkan token yang
+       tidak pernah dipakainya sendiri, persis kontaminasi yang sudah
+       dibereskan untuk hitungan tool call. */
+    const kunciTok = rec.agenId ? nyata + '|' + rec.agenId : nyata;
+    const t = tokenSesi.get(kunciTok) || { input: 0, output: 0, cacheTulis: 0, cacheBaca: 0 };
     t.input += d.input; t.output += d.output; t.cacheTulis += d.cacheTulis; t.cacheBaca += d.cacheBaca;
-    tokenSesi.set(sesi, t);
+    tokenSesi.set(kunciTok, t);
     /* Seberapa penuh jendela konteksnya SEKARANG. Angkanya bukan jumlah
        kumulatif seperti `t`, melainkan ukuran prompt permintaan TERAKHIR:
        masuk + cache dibaca + cache ditulis pada baris asisten ini. Itulah yang
@@ -3377,9 +3446,14 @@ function serapTranskrip(sesi, rec, o) {
        Sesi terminal tidak pernah memberitahu ini dengan cara lain — pemilik
        baru tahu waktu balon "merapikan catatan" muncul, dan sesudah itu agen
        sering lupa arahan awal. */
-    const konteks = konteksPakai(sesi, d);
+    const konteks = konteksPakai(kunciTok, d);
     publish({ ...dasar(), kind: 'token', token: { ...t, ...konteks } });
-    riwayatCatat(Number.isFinite(ts) ? ts : Date.now(), baseName(o.cwd || ''), modelSesi.get(sesi), d);
+    /* Riwayat token TETAP dicatat untuk peserta: token yang dipakai subagent
+       adalah token yang benar-benar terpakai, dan pagu maupun papan SKP harus
+       menghitungnya. Modelnya diambil dari BARIS ITU SENDIRI — subagent bisa
+       jalan di model yang berbeda dari induknya. */
+    const modelBaris = rec.agenId ? (o.message && o.message.model) || '' : modelSesi.get(nyata);
+    riwayatCatat(Number.isFinite(ts) ? ts : Date.now(), baseName(o.cwd || ''), modelBaris, d, Boolean(rec.agenId));
   }
 }
 
@@ -4350,7 +4424,33 @@ function terimaEvent(raw, opsi = {}) {
     // sesudah publish, supaya event pamitnya masih membawa nama orangnya
     pegawaiLepas(ev.session);
     setTimeout(() => lepasTranskrip(ev.session), 3000).unref?.();
-  } else if (!opsi.tunda) pantauTranskrip(ev.session, jalurTranskrip(raw));
+    // pemantau peserta ikut disapu: kuncinya berprefiks sesi induk
+    for (const k of [...transkrip.keys()]) {
+      if (k.startsWith(ev.session + '|')) setTimeout(() => lepasTranskrip(k), 3000).unref?.();
+    }
+  } else if (!opsi.tunda) {
+    pantauTranskrip(ev.session, jalurTranskrip(raw));
+    /* Peserta rapat menulis transkripnya sendiri di berkas terpisah, dan
+       `SubagentStart` tidak membawa jalurnya — jadi ia direkonstruksi. Berkasnya
+       bisa belum lahir waktu hook ini tiba, jadi dicoba ulang beberapa kali
+       dengan jeda pendek; `fs.watchFile` sendiri toleran terhadap berkas yang
+       belum ada, yang belum toleran cuma pencarian folder run workflow-nya. */
+    if (ev.kind === 'subagent-start' && ev.agenId) {
+      const kunci = ev.session + '|' + ev.agenId;
+      const coba = (sisa) => {
+        if (transkrip.has(kunci)) return;
+        const jalur = jalurTranskripPeserta(raw, ev.agenId);
+        if (jalur) pantauTranskrip(kunci, jalur, { sesi: ev.session, agenId: ev.agenId, agen: ev.agen || '' });
+        if (!transkrip.has(kunci) && sisa > 0) setTimeout(() => coba(sisa - 1), 700).unref?.();
+      };
+      coba(3);
+    }
+    if (ev.kind === 'subagent-stop' && ev.agenId) {
+      // kalimat penutupnya sering mendarat sesudah hook, seperti sesi induk
+      const kunci = ev.session + '|' + ev.agenId;
+      setTimeout(() => lepasTranskrip(kunci), 3000).unref?.();
+    }
+  }
   return ev;
 }
 
