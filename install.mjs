@@ -21,10 +21,6 @@ const global_ = args.includes('--global') || args.includes('-g');
 const remove = args.includes('--remove') || args.includes('--uninstall');
 const forceNode = args.includes('--node');
 
-const target = global_
-  ? path.join(os.homedir(), '.claude', 'settings.json')
-  : path.join(process.cwd(), '.claude', 'settings.json');
-
 // Events yang matcher-nya menyaring NAMA TOOL. Dipasang dengan matcher '*'.
 const TOOL_EVENTS = [
   'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
@@ -47,6 +43,79 @@ const PLAIN_EVENTS = [
      dari ingatan. */
   'Elicitation', 'ElicitationResult',
 ];
+
+/* Daftar hook Gemini. Nama-namanya dibaca dari `HookEventName` di
+   `dist/src/hooks/types.d.ts` paket terpasang, dan tiap nama di sini WAJIB
+   punya padanan kind di server — `selaras-dokumen.mjs` yang menagihnya.
+   BeforeModel/AfterModel/BeforeToolSelection sengaja tidak ada: ketiganya
+   menyala di dalam satu giliran yang sama dan tidak menggerakkan apa pun di
+   ruangan. Hook yang tidak membuat sesuatu bergerak tidak dipasang. */
+const GEMINI_TOOL_EVENTS = ['BeforeTool', 'AfterTool'];
+const GEMINI_PLAIN_EVENTS = [
+  'BeforeAgent', 'AfterAgent', 'SessionStart', 'SessionEnd',
+  'Notification', 'PreCompress',
+];
+
+/* ————— pegawai honorer: vendor selain Claude Code —————
+   `--untuk gemini` memasang hook yang SAMA ke Gemini CLI. Bisa karena payload
+   hook-nya ternyata sama persis bentuknya (session_id, transcript_path, cwd,
+   hook_event_name + tool_name/tool_input/tool_response) — dibuktikan dari
+   `dist/src/hooks/types.d.ts` paket `@google/gemini-cli` yang terpasang, bukan
+   dari dokumen di internet. Yang beda cuma empat hal, dan keempatnya di sini:
+
+     1. berkasnya `~/.gemini/settings.json`, bukan `~/.claude/settings.json`;
+     2. hooknya masih EKSPERIMEN dan harus dinyalakan dua saklar —
+        `tools.enableHooks` dan `hooks.enabled`; tanpa keduanya hooknya diam;
+     3. `timeout` dihitung MILIDETIK, bukan detik. Menyalin angka 5 dari
+        profil Claude berarti 5 milidetik, dan setiap hook mati sebelum curl
+        sempat menyambung;
+     4. stdout hook dibaca sebagai JSON kalau exit 0; yang gagal diurai
+        diperlakukan sebagai `systemMessage` yang muncul ke pemakainya. Jadi
+        perintahnya ditutup `; echo {}` — sekalian memaksa exit 0, karena
+        exit 2 di Gemini berarti MEMBLOKIR tool-nya. Nota bukan rem.
+
+   Codex CLI dan Cursor tidak ada di sini; alasannya di komentar ASAL_SAH
+   server.mjs. */
+const VENDOR = {
+  claude: {
+    nama: 'Claude Code',
+    berkas: '.claude/settings.json',
+    toolEvents: TOOL_EVENTS,
+    plainEvents: PLAIN_EVENTS,
+    timeout: 5,                 // DETIK
+    nyalakan: null,
+  },
+  gemini: {
+    nama: 'Gemini CLI',
+    berkas: '.gemini/settings.json',
+    toolEvents: GEMINI_TOOL_EVENTS,
+    plainEvents: GEMINI_PLAIN_EVENTS,
+    timeout: 5000,              // MILIDETIK
+    nyalakan: (s) => {
+      s.tools = (s.tools && typeof s.tools === 'object') ? s.tools : {};
+      s.tools.enableHooks = true;
+    },
+  },
+};
+
+const iUntuk = args.indexOf('--untuk');
+const ASAL = iUntuk >= 0 ? String(args[iUntuk + 1] || '').trim().toLowerCase() : 'claude';
+if (!VENDOR[ASAL]) {
+  console.error('\n  ✗ --untuk tidak dikenal: ' + (args[iUntuk + 1] || '(kosong)')
+    + '\n    yang ada: ' + Object.keys(VENDOR).join(', ') + '\n');
+  process.exit(1);
+}
+const V = VENDOR[ASAL];
+
+const target = global_
+  ? path.join(os.homedir(), ...V.berkas.split('/'))
+  : path.join(process.cwd(), ...V.berkas.split('/'));
+/* Larik yang benar-benar DIPASANG diambil dari profil vendor. `TOOL_EVENTS`
+   dan `PLAIN_EVENTS` di atas tetap ada sebagai literal karena keduanya
+   permukaan protokol Claude yang dijaga `selaras-dokumen.mjs` — gerbang itu
+   membaca sumbernya sebagai teks, bukan menjalankannya. */
+const TOOLS = V.toolEvents;
+const PLAIN = V.plainEvents;
 
 // curl ~42ms vs node ~153ms per panggilan, dan hook ini jalan tiap tool call.
 // `|| exit 0` supaya sesi tidak kena warning waktu server ruangan lagi mati.
@@ -84,8 +153,13 @@ if (KUNCI && !/^[A-Za-z0-9_.\-]{8,128}$/.test(KUNCI)) {
   process.exit(1);
 }
 
-export function bentukPerintah({ curl = useCurl, url = URL_KANTOR, kunci = KUNCI, mesin = MESIN, port = PORT, hook = HOOK } = {}) {
-  if (!curl) return `node "${hook}"`;
+export function bentukPerintah({ curl = useCurl, url = URL_KANTOR, kunci = KUNCI, mesin = MESIN, port = PORT, hook = HOOK, asal = ASAL } = {}) {
+  /* Vendor selain Claude menutup perintahnya dengan `; echo {}`: stdout hook
+     Gemini dibaca sebagai JSON, dan yang gagal diurai muncul ke pemakainya
+     sebagai systemMessage. Sekalian memaksa exit 0 — exit 2 di sana berarti
+     MEMBLOKIR tool-nya, dan kantor ini tidak pernah jadi rem. */
+  const tutup = asal !== 'claude' ? '; echo {}' : '';
+  if (!curl) return `node "${hook}"` + (asal !== 'claude' ? ` --asal ${asal}` : '') + tutup;
   const tujuan = (url || `http://127.0.0.1:${port}`) + '/event';
   // header x-agent-room sekaligus jadi penanda supaya isOurs() bisa mengenali
   // dan melepas hook ini lagi nanti.
@@ -101,15 +175,19 @@ export function bentukPerintah({ curl = useCurl, url = URL_KANTOR, kunci = KUNCI
     `-H "x-agent-room: 1" -H "Expect:"` +
     (mesin ? ` -H "x-agent-room-mesin: ${mesin}"` : '') +
     (kunci ? ` -H "x-agent-room-kunci: ${kunci}"` : '') +
-    ` -T - ${tujuan} || node "${hook}" --tunda`;
+    (asal !== 'claude' ? ` -H "x-agent-room-asal: ${asal}"` : '') +
+    ` -T - ${tujuan} || node "${hook}" --tunda`
+    + (asal !== 'claude' ? ` --asal ${asal}` : '') + tutup;
 }
 
 const command = bentukPerintah();
-const entry = { type: 'command', command, timeout: 5 };
+// satuan `timeout` beda per vendor: Claude detik, Gemini milidetik
+const entry = { type: 'command', command, timeout: V.timeout };
 
 // --coba: cetak yang akan ditulis, jangan sentuh settings — ini jalur uji.
 if (args.includes('--coba')) {
   console.log(`\n  --coba: tidak menulis apa pun`);
+  console.log(`  untuk     ${V.nama}`);
   console.log(`  target    ${target}`);
   console.log(`  transport ${useCurl ? 'curl' : 'node hook.mjs'}`);
   console.log(`  kantor    ${URL_KANTOR || 'http://127.0.0.1:' + PORT + ' (lokal)'}`);
@@ -146,17 +224,26 @@ for (const name of Object.keys(hooks)) {
 }
 
 if (!remove) {
-  for (const name of TOOL_EVENTS) {
+  for (const name of TOOLS) {
     hooks[name] = hooks[name] || [];
     hooks[name].push({ matcher: '*', hooks: [entry] });
   }
-  for (const name of PLAIN_EVENTS) {
+  for (const name of PLAIN) {
     hooks[name] = hooks[name] || [];
     hooks[name].push({ hooks: [entry] });
   }
+  /* Saklar yang cuma dipunyai vendor tertentu. Hooks Gemini masih eksperimen:
+     tanpa `tools.enableHooks` DAN `hooks.enabled` seluruh blok hook diam, dan
+     installer yang menulis hook lalu membiarkan sesi tetap sunyi lebih buruk
+     daripada installer yang tidak melakukan apa-apa. */
+  if (V.nyalakan) V.nyalakan(settings);
+  if (ASAL === 'gemini') hooks.enabled = true;
 }
 
-if (Object.keys(hooks).length) settings.hooks = hooks;
+/* `hooks.enabled` bukan nama event — kalau yang tersisa cuma dia, berarti
+   tidak ada hook sama sekali dan seluruh bloknya dibuang. */
+const adaEvent = Object.keys(hooks).some((k) => Array.isArray(hooks[k]) && hooks[k].length);
+if (adaEvent) settings.hooks = hooks;
 else delete settings.hooks;
 
 const dir = path.dirname(target);
@@ -177,7 +264,8 @@ if (fs.existsSync(target)) {
 }
 fs.writeFileSync(target, JSON.stringify(settings, null, 2) + '\n', 'utf8');
 
-const scope = global_ ? 'GLOBAL (semua project)' : `project ${process.cwd()}`;
+const scope = (global_ ? 'GLOBAL (semua project)' : `project ${process.cwd()}`)
+  + (ASAL !== 'claude' ? ` — ${V.nama}` : '');
 if (remove) {
   console.log(`\n  ✓ hooks agent-room dilepas dari ${scope}`);
   console.log(`    ${target}\n`);
@@ -188,5 +276,5 @@ if (remove) {
   if (URL_KANTOR) console.log(`    kantor pusat: ${URL_KANTOR}  (event dari mesin ini dikirim ke sana)`);
   if (KUNCI) console.log(`    kunci event: terpasang di perintah hook`);
   else if (URL_KANTOR) console.log(`    kunci event: TIDAK ADA — kantor pusat yang memakai AGENT_ROOM_KUNCI akan menolak`);
-  console.log(`\n  Restart sesi Claude Code supaya hooks kebaca, lalu buka ${URL_KANTOR || 'http://127.0.0.1:' + PORT}\n`);
+  console.log(`\n  Restart sesi ${V.nama} supaya hooks kebaca, lalu buka ${URL_KANTOR || 'http://127.0.0.1:' + PORT}\n`);
 }

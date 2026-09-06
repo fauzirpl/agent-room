@@ -103,6 +103,36 @@ aman dijalankan berulang, dan tidak menghapus hook lain yang sudah ada.
 `--coba` cuma mencetak perintah hook yang akan ditanam (berikut header mesin,
 kunci, dan alamat kantor pusat kalau env-nya ada) tanpa menyentuh berkas apa pun.
 
+### Pegawai honorer: agen selain Claude Code
+
+`--untuk gemini` memasang hook yang sama ke **Gemini CLI**, dan sesinya muncul
+di ruangan yang sama, buku agenda yang sama, dan pagu token yang sama:
+
+```bash
+node agent-room/install.mjs --untuk gemini --global
+```
+
+Bisa karena payload hook Gemini ternyata sama persis bentuknya dengan milik
+Claude Code — `session_id`, `transcript_path`, `cwd`, `hook_event_name`, plus
+`tool_name`/`tool_input`/`tool_response`. Yang berbeda cuma nama eventnya
+(`BeforeTool` bukan `PreToolUse`), nama toolnya (`run_shell_command` bukan
+`Bash`), dan tiga rincian pemasangan: berkasnya `~/.gemini/settings.json`,
+hooknya masih eksperimen sehingga `tools.enableHooks` + `hooks.enabled` ikut
+dinyalakan, dan `timeout`-nya dihitung **milidetik**.
+
+Yang perlu kamu tahu soal honorer:
+
+- **tidak punya balon pikiran maupun kalimat.** Transkrip vendor lain sengaja
+  tidak pernah dibaca — medannya bernama sama, isinya format lain, dan menebak
+  isi berkas orang bukan harga yang pantas dibayar untuk balon teks;
+- **tetap dihitung penuh** di tool call, gagal, buku agenda, papan SKP, dan
+  pagu token per proyek;
+- asalnya terbaca di `GET /ruangan` dan lewat tool MCP `ruangan_sesi_aktif`.
+
+Codex CLI dan Cursor belum dibuka. Codex tidak terpasang di mesin ini jadi
+kontraknya tidak bisa dibuktikan; payload Cursor membawa `user_email` dan isi
+`edits`, sementara kotak surat tunda menyimpan payload mentah sampai 24 jam.
+
 **Restart sesi Claude Code setelah install** — hook dibaca waktu sesi mulai.
 
 ### Kotak surat hook offline

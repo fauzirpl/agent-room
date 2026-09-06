@@ -25,9 +25,10 @@ const TUNDA_DIR = process.env.AGENT_ROOM_TUNDA_DIR || path.join(os.homedir(), '.
 const TUNDA_MAKS_BERKAS = 500;
 const TUNDA_MAKS_BYTE = 20 * 1024 * 1024;
 const TUNDA_UMUR_MS = 24 * 3600 * 1000;
-const TUNDA_RX = /^(\d{13})-[a-z0-9]{1,12}\.json$/;
+// Bagian asal opsional; lihat komentar kembarannya di server.mjs.
+const TUNDA_RX = /^(\d{13})-[a-z0-9]{1,12}(?:-([a-z]{1,12}))?\.json$/;
 
-function tulisTunda(body, dir = TUNDA_DIR) {
+function tulisTunda(body, dir = TUNDA_DIR, asal = '') {
   const kini = Date.now();
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   // yang ada dulu: buang yang kedaluwarsa, lalu sisakan tempat untuk yang baru
@@ -50,7 +51,12 @@ function tulisTunda(body, dir = TUNDA_DIR) {
     total -= tua.ukuran;
   }
   if (body.length > TUNDA_MAKS_BYTE) return null;   // satu payload sebesar itu tidak layak ditunda
-  const nama = kini + '-' + Math.random().toString(36).slice(2, 8) + '.json';
+  /* Asal ikut ke NAMA berkas, bukan ke isinya: isinya payload MENTAH milik
+     vendor dan tidak boleh disunting sedikit pun — server harus melihat
+     persis apa yang dikirim. Nama berkas satu-satunya tempat yang kita
+     miliki sendiri. */
+  const nama = kini + '-' + Math.random().toString(36).slice(2, 8)
+    + (asal && asal !== 'claude' ? '-' + asal : '') + '.json';
   const jalur = path.join(dir, nama);
   // .tmp lalu rename: server yang kebetulan memungut di tengah tulis tidak
   // pernah melihat berkas setengah jadi
@@ -76,7 +82,11 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (c) => { input += c; });
 process.stdin.on('error', bail);
 const TUNDA_SAJA = process.argv.includes('--tunda');
-const tunda = (body) => { try { tulisTunda(body); } catch { /* disk penuh / tanpa izin: diam */ } };
+/* `--asal <vendor>`: dipasang installer untuk hook non-Claude. Tanpa ini,
+   event yang tertunda diserap sebagai event Claude berjam-jam kemudian. */
+const iAsal = process.argv.indexOf('--asal');
+const ASAL = iAsal >= 0 ? String(process.argv[iAsal + 1] || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) : '';
+const tunda = (body) => { try { tulisTunda(body, TUNDA_DIR, ASAL); } catch { /* disk penuh / tanpa izin: diam */ } };
 
 process.stdin.on('end', () => {
   const body = Buffer.from(input || '{}', 'utf8');
@@ -91,6 +101,7 @@ process.stdin.on('end', () => {
         'content-type': 'application/json', 'content-length': body.length,
         // sama seperti jalur curl: nama mesin selalu, kunci hanya kalau env-nya ada
         'x-agent-room-mesin': os.hostname().replace(/[^\w.-]/g, '').slice(0, 32),
+        ...(ASAL && ASAL !== 'claude' ? { 'x-agent-room-asal': ASAL } : {}),
         ...(process.env.AGENT_ROOM_KUNCI ? { 'x-agent-room-kunci': process.env.AGENT_ROOM_KUNCI.trim() } : {}),
       },
     },

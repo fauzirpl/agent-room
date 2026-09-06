@@ -91,8 +91,8 @@ const TOOLS = [
   },
   {
     name: 'ruangan_sesi_aktif',
-    description: 'Daftar sesi Claude Code yang hidup di kantor: id, proyek, cabang git, mesin, tool terakhir, '
-      + 'sejak kapan. / Live sessions with project, branch, machine, last tool, and uptime.',
+    description: 'Daftar sesi agen yang hidup di kantor: id, proyek, cabang git, mesin, asal (vendor), '
+      + 'tool terakhir, sejak kapan. / Live agent sessions with project, branch, machine, vendor, last tool, uptime.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     async jalankan() {
       const r = await ambil('/ruangan');
@@ -110,15 +110,22 @@ const TOOLS = [
            yang sebentar lagi kehilangan ingatan — sebelum kompaksi terjadi. */
         konteks: s.konteks ? { pakai: s.konteks.pakai, jendela: s.konteks.jendela, persen: Math.round(s.konteks.rasio * 100) } : null,
         proyek: s.proyek, cabang: s.cabang, mesin: s.mesin,
+        /* Vendor agennya. 'claude' untuk yang bawaan; agen lain perlu tahu ini
+           karena pegawai honorer TIDAK punya balon pikiran maupun kalimat —
+           transkripnya sengaja tidak dibaca. Diamnya bukan tanda ia berhenti. */
+        asal: s.asal || 'claude',
         toolTerakhir: s.tool, kind: s.kind,
         sejak: new Date(s.sejak).toISOString(), lamaHidup: lama(kini - s.sejak),
         terakhir: lama(kini - s.terakhir) + ' lalu',
         keadaan: s.butuh ? 'butuh-manusia' : s.macet ? 'macet' : (s.kind === 'stop' ? 'menganggur' : 'bekerja'),
       }));
       const proyek = [...new Set(sesi.map((s) => s.proyek).filter(Boolean))];
+      // vendor disebut hanya kalau memang ada yang bukan bawaan
+      const honorer = sesi.filter((s) => s.asal !== 'claude').length;
       const ringkas = sesi.length === 0 ? 'Kantor sepi: tidak ada sesi yang hidup.'
-        : `${sesi.length} sesi hidup di ${proyek.length} proyek (${proyek.slice(0, 5).join(', ')}${proyek.length > 5 ? ', …' : ''}); `
-          + `${r.viewers || 0} halaman menonton.`;
+        : `${sesi.length} sesi hidup di ${proyek.length} proyek (${proyek.slice(0, 5).join(', ')}${proyek.length > 5 ? ', …' : ''})`
+          + (honorer ? `, ${honorer} di antaranya bukan Claude` : '')
+          + `; ${r.viewers || 0} halaman menonton.`;
       return { ringkas, data: { sesi, jalan: r.jalan, viewers: r.viewers, mesin: r.mesin } };
     },
   },

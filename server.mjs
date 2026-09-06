@@ -442,6 +442,92 @@ const EVENT_ALIAS = {
   PostCompact: 'compact-selesai',
 };
 
+/* ------------------------------------------------------- pegawai honorer ---
+   Kantor ini lahir sebagai kantor Claude Code, dan sampai sekarang cuma itu
+   yang bisa masuk. Padahal loketnya — `POST /event` dengan payload hook —
+   tidak ada yang khusus Claude di dalamnya.
+
+   Yang dibuka DI SINI cuma satu vendor: **Gemini CLI**. Bukan karena yang lain
+   tidak menarik, tapi karena cuma ini yang bisa DIBUKTIKAN di mesin ini.
+   Diperiksa langsung ke paket terpasang `@google/gemini-cli` 0.26.0:
+
+     dist/src/hooks/types.d.ts  ->  interface HookInput {
+                                      session_id, transcript_path, cwd,
+                                      hook_event_name, timestamp }
+                                    BeforeToolInput  += tool_name, tool_input
+                                    AfterToolInput   += tool_response
+                                    BeforeAgentInput += prompt
+                                    NotificationInput+= message
+
+   Itu bentuk yang SAMA PERSIS dengan payload hook Claude Code, medan demi
+   medan. Jadi yang benar-benar dibutuhkan cuma tabel nama — bukan jalur
+   normalisasi kedua.
+
+   Codex CLI dan Cursor sengaja TIDAK diambil, dan dua-duanya punya alasannya
+   sendiri. Codex: tidak terpasang di mesin ini (`~/.codex` tidak ada, biner
+   tidak ada di PATH), jadi kontraknya cuma bisa disalin dari dokumen — persis
+   cara U-25 dan U-04 gugur di rapat. Cursor: payload-nya membawa `user_email`
+   dan isi `edits`, dan kotak surat tunda menyimpan payload MENTAH sampai 24
+   jam; membukanya berarti memindahkan alamat surel dan potongan berkas ke
+   disk. Itu yang membuat pleno menunda usulan ini, dan itu belum berubah. */
+const ASAL_SAH = new Set(['claude', 'gemini']);
+
+/* Nama event Gemini -> kind yang sudah ada. Tiga di antaranya (Notification,
+   SessionStart, SessionEnd) bernama sama dengan milik Claude dan artinya juga
+   sama, jadi tidak perlu disebut ulang — tabel ini hanya menimpa yang beda. */
+const EVENT_ALIAS_ASAL = {
+  gemini: {
+    BeforeTool: 'pre',
+    AfterTool: 'post',
+    BeforeAgent: 'prompt',        // sesudah prompt dikirim, sebelum agen berpikir
+    AfterAgent: 'stop',           // giliran agennya habis
+    PreCompress: 'compact',
+    /* BeforeModel, AfterModel, dan BeforeToolSelection SENGAJA tidak
+       dipetakan. Ketiganya menyala di dalam satu giliran yang sama —
+       memetakannya berarti satu pegawai berdiri-duduk beberapa kali untuk
+       satu pekerjaan, dan ruangannya jadi berkedip tanpa menambah keterangan
+       apa pun. Yang tidak dikenal jatuh ke kind mentahnya seperti biasa. */
+  },
+};
+
+/* Nama tool Gemini -> nama tool Claude yang sudah dikenal `stationFor()`,
+   `kegiatan()`, dan `describe()`. Tanpa ini tiap panggilan Gemini jatuh ke
+   meja "berpikir" dan labelnya kosong — pegawainya terlihat hadir tapi tidak
+   pernah mengerjakan apa-apa. Nama-nama ini dibaca dari dokumen hook yang
+   ikut terpasang (`dist/docs/hooks/index.md`, contoh matcher
+   `"write_file|replace"`) dan dari daftar tool bawaannya. */
+const TOOL_ALIAS_ASAL = {
+  gemini: {
+    run_shell_command: 'Bash',        // command
+    read_file: 'Read',                // file_path
+    write_file: 'Write',              // file_path
+    replace: 'Edit',                  // file_path
+    search_file_content: 'Grep',      // pattern
+    glob: 'Glob',                     // pattern
+    google_web_search: 'WebSearch',   // query
+  },
+};
+/* Yang SENGAJA tidak ada di tabel itu: `list_directory`, `read_many_files`,
+   `web_fetch`, `save_memory`. Bukan kelupaan — `describe()` membaca nama
+   MEDAN, bukan nama tool, dan keempatnya menamai medannya berbeda
+   (`dir_path`, `include`, `prompt`). Memetakannya tetap menaruh orangnya di
+   meja yang benar, tapi labelnya jadi KOSONG; dibiarkan lewat apa adanya,
+   cabang `default` describe() mengambil string pertama dari input dan
+   labelnya justru terbaca. Meja yang benar dengan kartu kosong lebih buruk
+   daripada meja umum dengan kartu yang berisi. Tiap baris di atas sudah
+   dicocokkan medan-per-medan ke dist/src/tools/*.d.ts paket terpasang. */
+
+/* Asal payload, dari header yang ditulis installer. Bentuknya sengaja sama
+   dengan `mesinDari()`: satu header, dibersihkan, dan yang tidak ada di
+   daftar putih diperlakukan sebagai 'claude' — sama seperti sebelum fitur ini
+   ada. Header, bukan tebakan dari isi payload: tiga nama event Gemini kembar
+   dengan milik Claude, dan menebak salah di situ berarti membaca berkas
+   transkrip yang formatnya tidak kita kenal. */
+function asalDari(req) {
+  const a = String(req.headers['x-agent-room-asal'] || '').trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 12);
+  return ASAL_SAH.has(a) ? a : 'claude';
+}
+
 /* Jenis galat yang bikin giliran agen berhenti di tengah jalan. Namanya datang
    dalam bahasa Inggris dan cuma segelintir, jadi diterjemahkan di sini supaya
    panel tidak mendadak berbahasa Inggris. Yang tidak dikenal lewat apa adanya —
@@ -711,9 +797,17 @@ function isError(resp) {
   return /^\s*(error|exception)[:\s]/i.test(s || '');
 }
 
-function normalize(raw) {
-  const kind = EVENT_ALIAS[raw.hook_event_name] || String(raw.hook_event_name || 'unknown').toLowerCase();
-  const tool = raw.tool_name || null;
+function normalize(raw, asal = 'claude') {
+  /* Tabel vendor MENIMPA tabel bawaan, bukan menggantinya: nama yang sama
+     artinya tetap sama (Notification, SessionStart, SessionEnd), jadi cukup
+     yang beda saja yang disebut. */
+  const peta = asal !== 'claude' && EVENT_ALIAS_ASAL[asal]
+    ? { ...EVENT_ALIAS, ...EVENT_ALIAS_ASAL[asal] } : EVENT_ALIAS;
+  const kind = peta[raw.hook_event_name] || String(raw.hook_event_name || 'unknown').toLowerCase();
+  // Nama tool diterjemahkan ke padanan yang sudah dikenal stationFor()/
+  // describe(); yang tidak ada di tabel lewat apa adanya, seperti tool MCP.
+  const tolAsal = asal !== 'claude' ? (TOOL_ALIAS_ASAL[asal] || {}) : {};
+  const tool = raw.tool_name ? (tolAsal[raw.tool_name] || raw.tool_name) : null;
   // Kegagalan datang lewat event sendiri sekarang, tapi isError() tetap dipakai:
   // versi Claude Code lama masih mengirim PostToolUse berisi respons galat.
   const gagalTool = raw.hook_event_name === 'PostToolUseFailure';
@@ -729,6 +823,12 @@ function normalize(raw) {
     label: tool ? describe(tool, raw.tool_input) : '',
     ok: kind === 'post' ? !gagalTool && !isError(raw.tool_response) : true,
   };
+  /* Asal ikut cuma kalau BUKAN claude. Sesi Claude adalah bawaan kantor ini,
+     dan menandainya di tiap event berarti menggemukkan ring, buku agenda, dan
+     tiap baris SSE dengan kata yang sama berulang-ulang tanpa menambah
+     keterangan apa pun. Yang tidak bertanda berarti claude — itu aturan yang
+     sama dengan `mesin`. */
+  if (asal !== 'claude') ev.asal = asal;
   // Id panggilan tool: pre dan post-nya membawa nilai yang sama. Ini yang bikin
   // pasangan pre→post bisa dicocokkan persis, bukan ditebak lewat (sesi, tool).
   if (raw.tool_use_id) ev.panggilan = clip(raw.tool_use_id, 64);
@@ -894,6 +994,9 @@ function catatSesiHidup(ev) {
   if (ev.cwd) s.cwd = ev.cwd;
   if (ev.cabang !== undefined) s.cabang = ev.cabang || '';
   if (ev.mesin) s.mesin = ev.mesin;
+  // asal menempel di SESI, bukan di tiap event: yang dikirim honorer cuma
+  // sebagian eventnya, dan orangnya tidak berganti vendor di tengah jalan
+  if (ev.asal) s.asal = ev.asal;
   if (ev.tool) { s.tool = ev.tool; s.toolTs = ev.ts; }
   if (ev.putar) { s.putar = ev.putar; s.putarTs = ev.ts; }
   const mode = modeSesi.get(ev.session);
@@ -1038,6 +1141,7 @@ function potretRuangan() {
       proyek: s.cwd || '',
       cabang: s.cabang || '',
       mesin: s.mesin || '',
+      asal: s.asal || 'claude',
       tool: s.tool || '',
       toolTs: s.toolTs || null,
       kind: s.kind || '',
@@ -2018,6 +2122,8 @@ function agendaBaris(ev) {
   if (ev.nama) b.nama = ev.nama;
   if (ev.peran) b.peran = ev.peran;
   if (ev.mesin) b.mesin = ev.mesin;
+  // satu kata enum dari daftar putih; sekelas `mesin`, bukan isi kerja
+  if (ev.asal) b.asal = ev.asal;
   if (ev.jenis) b.jenis = ev.jenis;
   if (ev.agen) b.agen = ev.agen;
   if (ev.agenId) b.agenId = ev.agenId;
@@ -4605,7 +4711,7 @@ function lahirkanTugas(t) {
    (tunda) mengembalikan waktu asli event supaya agenda/buku induk mencatat
    kapan kejadiannya, bukan kapan servernya nyala lagi. */
 function terimaEvent(raw, opsi = {}) {
-  const ev = normalize(raw);
+  const ev = normalize(raw, opsi.asal || 'claude');
   if (opsi.mesin) ev.mesin = opsi.mesin;
   if (opsi.tunda) {
     ev.tunda = true;
@@ -4669,7 +4775,14 @@ function terimaEvent(raw, opsi = {}) {
     for (const k of [...transkrip.keys()]) {
       if (k.startsWith(ev.session + '|')) setTimeout(() => lepasTranskrip(k), 3000).unref?.();
     }
-  } else if (!opsi.tunda) {
+  } else if (!opsi.tunda && !ev.asal) {
+    /* Transkrip HANYA dibaca untuk sesi Claude, dan `!ev.asal` itulah
+       pagarnya. Payload vendor lain membawa `transcript_path` juga — Gemini
+       punya medan bernama persis sama — tapi ISI berkasnya format lain, dan
+       membacanya berarti mengurai berkas yang bentuknya tidak kita kenal lalu
+       menerbitkan potongannya sebagai kalimat pegawai. Pegawai honorer memang
+       tidak berbalon pikir; itu harga yang dibayar, dan itu jauh lebih murah
+       daripada menebak isi berkas orang. */
     pantauTranskrip(ev.session, jalurTranskrip(raw));
     /* Peserta rapat menulis transkripnya sendiri di berkas terpisah, dan
        `SubagentStart` tidak membawa jalurnya — jadi ia direkonstruksi. Berkasnya
@@ -4708,7 +4821,14 @@ const TUNDA_DIR = process.env.AGENT_ROOM_TUNDA_DIR || path.join(os.homedir(), '.
 const TUNDA_JEDA_MS = 60 * 1000;
 const TUNDA_UMUR_MS = 24 * 3600 * 1000;
 const TUNDA_MAKS_BERKAS = 500;
-const TUNDA_RX = /^(\d{13})-[a-z0-9]{1,12}\.json$/;
+/* `<ts>-<acak>[-<asal>].json`. Bagian asal OPSIONAL supaya berkas yang
+   ditulis versi hook lama tetap terbaca apa adanya — dan yang tanpa asal
+   memang berarti claude. Asalnya harus ikut ke nama berkas karena kotak
+   surat ini dipungut BERJAM-JAM kemudian, waktu header permintaannya sudah
+   lama hilang; tanpa itu event Gemini yang tertunda akan diserap sebagai
+   event Claude, nama toolnya tidak diterjemahkan, dan transkrip yang
+   formatnya tidak kita kenal ikut dibaca. */
+const TUNDA_RX = /^(\d{13})-[a-z0-9]{1,12}(?:-([a-z]{1,12}))?\.json$/;
 let tundaTerserap = 0;                      // sepanjang proses; ke /metrics
 
 function tundaHitung() {
@@ -4726,7 +4846,7 @@ function tundaSerap() {
     if (!m) continue;
     const ts = Number(m[1]);
     if (kini - ts > TUNDA_UMUR_MS) { try { fs.unlinkSync(path.join(TUNDA_DIR, n)); dibuang++; } catch {} continue; }
-    berkas.push({ ts, jalur: path.join(TUNDA_DIR, n) });
+    berkas.push({ ts, jalur: path.join(TUNDA_DIR, n), asal: m[2] || 'claude' });
   }
   berkas.sort((a, b) => a.ts - b.ts);
   // lebih dari batas: yang paling tua dibuang, sisanya diserap — batas yang
@@ -4737,7 +4857,7 @@ function tundaSerap() {
     let raw = null;
     try { raw = JSON.parse(fs.readFileSync(b.jalur, 'utf8')); } catch { rusak++; }
     if (raw && typeof raw === 'object') {
-      try { terimaEvent(raw, { tunda: true, ts: b.ts }); diserap++; } catch (err) { rusak++; }
+      try { terimaEvent(raw, { tunda: true, ts: b.ts, asal: b.asal }); diserap++; } catch (err) { rusak++; }
     }
     try { fs.unlinkSync(b.jalur); } catch {}
   }
@@ -4924,7 +5044,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      terimaEvent(JSON.parse(body.teks || '{}'), { mesin });
+      terimaEvent(JSON.parse(body.teks || '{}'), { mesin, asal: asalDari(req) });
     } catch (err) {
       // payload rusak: jangan pernah bikin agent-nya ikut gagal
       console.warn('[agent-room] payload diabaikan:', err.message);

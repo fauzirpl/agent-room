@@ -134,6 +134,11 @@ jobs:
       - name: Uji loket disposisi
         run: node uji-loket.mjs
 
+      # Pegawai honorer: hook Gemini CLI masuk lewat loket yang sama, dan
+      # transkrip vendor lain tidak pernah dibaca.
+      - name: Uji pegawai honorer
+        run: node uji-honorer.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

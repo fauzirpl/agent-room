@@ -402,7 +402,7 @@ konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
 | Tool | Sumber | Isi |
 |---|---|---|
 | `ruangan_siapa_tertahan` | `GET /ruangan` | sesi yang butuh manusia / macet, dan antrean disposisi |
-| `ruangan_sesi_aktif` | `GET /ruangan` | sesi hidup: id, proyek, cabang, mesin, tool terakhir, sejak |
+| `ruangan_sesi_aktif` | `GET /ruangan` | sesi hidup: id, proyek, cabang, mesin, **asal** (vendor agennya — `claude` atau `gemini`), tool terakhir, sejak |
 | `ruangan_token_hari_ini` | `GET /token-riwayat` | total hari ini + rincian per proyek, total sepanjang masa |
 | `ruangan_agenda_cari` | `GET /agenda` | cari buku agenda: `q`, `proyek`, `sesi`, `kind`, `dari`, `sampai`, `limit` |
 | `ruangan_pohon_delegasi` | `GET /ruangan` | siapa mendelegasikan ke siapa saat ini: sesi induk beserta subagent yang masih hidup di bawahnya, berapa lama, berapa tool, dan mana yang sudah lama diam. Induk ber-`kind: stop` yang masih punya peserta disebut **menunggu peserta**, bukan menganggur |

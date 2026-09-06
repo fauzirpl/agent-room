@@ -140,6 +140,30 @@ function pasanganHook() {
 
   /* Angka di prosa diturunkan dari panjang daftar, bukan dari konstanta tulisan
      tangan — memindahkan angka manual ke kode tidak menjaga apa pun. */
+  /* Vendor honorer. Sejak `--untuk gemini` ada, install.mjs memasang daftar
+     hook KEDUA — dan daftar kedua bisa hanyut dari peta kind-nya persis seperti
+     yang pertama. Yang dibandingkan: nama yang dipasang vs `EVENT_ALIAS_ASAL`
+     ditambah `EVENT_ALIAS` bawaan, karena tabel vendor memang cuma menimpa
+     nama yang BEDA (Notification/SessionStart/SessionEnd sengaja tidak
+     disebut ulang di sana). */
+  const geminiPasang = [...larikSumber(install, 'GEMINI_TOOL_EVENTS'), ...larikSumber(install, 'GEMINI_PLAIN_EVENTS')];
+  if (geminiPasang.length) {
+    const blokAsal = server.match(/const EVENT_ALIAS_ASAL\s*=\s*\{([\s\S]*?)\n\};/);
+    const gemBlok = blokAsal ? blokAsal[1].match(/gemini:\s*\{([\s\S]*?)\n\s{2}\},/) : null;
+    const gemAlias = gemBlok ? unik([...gemBlok[1].matchAll(/^\s*([A-Za-z]+)\s*:/gm)].map((x) => x[1])) : [];
+    const dikenal = unik([...alias, ...gemAlias]);
+    const f = kurang(geminiPasang, dikenal);
+    if (f.length) {
+      hanyut('hook Gemini dipasang tapi tidak punya padanan kind di server',
+        f.join(', ') + ' — tambahkan ke EVENT_ALIAS_ASAL.gemini di server.mjs, atau jangan dipasang');
+    } else {
+      oke(`${geminiPasang.length} hook Gemini dipasang dan semuanya punya padanan kind`);
+    }
+    /* Arah sebaliknya bukan hanyut: server boleh mengenal nama yang tidak kita
+       pasang (mis. kalau vendornya menambah event dan kita belum mau ikut).
+       Yang berbahaya cuma memasang hook yang tidak dimengerti siapa pun. */
+  }
+
   const m = doc.match(/Yang dipasang (\d+)/);
   if (!m) catatan('kalimat "Yang dipasang N" tidak ditemukan di docs/01 — tidak diperiksa');
   else if (Number(m[1]) !== dipasang.length) {
