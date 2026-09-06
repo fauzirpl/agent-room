@@ -367,6 +367,7 @@ konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
 | `ruangan_sesi_aktif` | `GET /ruangan` | sesi hidup: id, proyek, cabang, mesin, tool terakhir, sejak |
 | `ruangan_token_hari_ini` | `GET /token-riwayat` | total hari ini + rincian per proyek, total sepanjang masa |
 | `ruangan_agenda_cari` | `GET /agenda` | cari buku agenda: `q`, `proyek`, `sesi`, `kind`, `dari`, `sampai`, `limit` |
+| `ruangan_pohon_delegasi` | `GET /ruangan` | siapa mendelegasikan ke siapa saat ini: sesi induk beserta subagent yang masih hidup di bawahnya, berapa lama, berapa tool, dan mana yang sudah lama diam. Induk ber-`kind: stop` yang masih punya peserta disebut **menunggu peserta**, bukan menganggur |
 | `ruangan_kesehatan` | `GET /health` | server hidup atau tidak |
 
 Servernya stdio JSON-RPC polos tanpa dependency (`initialize`, `tools/list`,
@@ -440,6 +441,7 @@ tidak ada hitungan baru:
 | `agent_room_galat_halaman` | gauge | laporan `POST /galat` yang tersimpan (maks 50) |
 | `agent_room_sse_dibuang_total`, `agent_room_sse_dilebur_total`, `agent_room_sse_diputus_total` | counter | rem SSE (di bawah) |
 | `agent_room_tunda_berkas`, `agent_room_tunda_diserap_total` | gauge/counter | kotak surat hook offline |
+| `agent_room_peserta_hidup`, `agent_room_peserta_diam` | gauge | subagent yang masih tercatat di bawah sesi induknya, dan yang di antaranya tidak terdengar lebih dari sepuluh menit. Angka kedua baru jujur sejak `agent_id` dibaca pada `pre`/`post` — sebelum itu jam terakhir peserta membeku di detik ia masuk |
 | `agent_room_uptime_seconds` | gauge | `process.uptime()` |
 | `agent_room_pagu_proyek_serapan_rasio`, `agent_room_pagu_proyek_terlampaui` | gauge | dua deret berlabel `proyek="…"` dari pagu anggaran token; **hanya terbit** kalau `AGENT_ROOM_METRICS_PROYEK=1` dan `pagu.json` ada (20 proyek teratas menurut rasio) |
 

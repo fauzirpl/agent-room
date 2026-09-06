@@ -74,6 +74,14 @@ function mesinDari(req) {
    selamanya. */
 const sesiHidup = new Map();                // sesi -> { cwd, cabang, mesin, tool, kind, sejak, terakhir }
 const SESI_HIDUP_SEPI_MS = 3 * 60 * 60 * 1000;
+// sesi -> Map<agenId, { agen, sejak, terakhir, tool, toolN, gagal }>
+const pesertaHidup = new Map();
+/* Ambang "diam" peserta. NOTA, BUKAN REM: tidak ada yang ditahan karenanya,
+   ia cuma penanda di /ruangan dan satu gauge. Angkanya baru jujur sejak
+   `agent_id` dibaca pada pre/post — sebelum itu `terakhir` membeku di detik
+   subagent-start, jadi tiap peserta yang hidup lebih dari sepuluh menit akan
+   ditandai diam padahal sedang sibuk. */
+const PESERTA_DIAM_MS = 10 * 60 * 1000;
 const RING_SIZE = 400;
 
 /* ---------------------------------------------------------- kendali web ---
@@ -623,11 +631,30 @@ function normalize(raw) {
     ev.label = clip(GALAT_STOP[jenis] || jenis, 60);
     ev.galat = clip(raw.error_details || '', 120);
   }
+  /* Identitas PELAKU event ini, berlaku untuk kind apa pun — bukan cuma
+     penanda masuk/keluar rapat.
+
+     Hook yang dipasang lewat settings ikut menyala DI DALAM subagent, dan
+     `PreToolUse`/`PostToolUse` dari sana membawa `agent_id` + `agent_type`.
+     Dulu keduanya cuma dibaca pada `subagent-start`/`subagent-stop`, jadi tiap
+     tool call milik peserta rapat kehilangan pelakunya dan ditagihkan ke sesi
+     induk: pegawai induk yang berjalan ke stasiun, dan hitungan tool call,
+     riwayat, serta gagal berturut di kartunya ikut tercemar. Buku agenda
+     terukur membuktikannya — 2.020 baris `pre` hari ini, nol yang ber-agenId,
+     padahal baris `subagent-start` dari sesi yang sama membawanya.
+
+     Gerbangnya `agent_id`, BUKAN `agent_type`. Sesi yang dijalankan dengan
+     `claude --agent` membawa `agent_type` di tingkat SESI, jadi menggerbangi
+     `agent_type` akan menandai seluruh event sesi itu sebagai kerja peserta
+     yang tidak pernah ada. `agent_id` hanya ada kalau pelakunya memang
+     subagent. */
+  if (raw.agent_id) {
+    ev.agenId = clip(raw.agent_id, 64);
+    if (raw.agent_type) ev.agen = clip(raw.agent_type, 26);
+  }
   if (kind === 'subagent-start' || kind === 'subagent-stop') {
-    // Identitas subagent yang sebenarnya — bukan `description` milik pemanggil.
-    // Ada HANYA kalau hook-nya menyala di dalam subagent, dan itu justru yang
-    // membuatnya bisa dipakai memasangkan siapa masuk dengan siapa keluar.
-    if (raw.agent_id) ev.agenId = clip(raw.agent_id, 64);
+    // Payload lama bisa membawa agent_type tanpa agent_id; jangan kehilangan
+    // namanya cuma karena pasangannya tidak ada.
     if (raw.agent_type) ev.agen = clip(raw.agent_type, 26);
     ev.label = ev.agen || '';
   }
@@ -670,7 +697,7 @@ function normalize(raw) {
 /* Isi peta sesi hidup dari event yang sudah dinormalisasi. Yang disimpan cuma
    yang boleh keluar lewat /ruangan: tidak ada label, alasan, pikir, ucap. */
 function catatSesiHidup(ev) {
-  if (ev.kind === 'session-end') { sesiHidup.delete(ev.session); return; }
+  if (ev.kind === 'session-end') { sesiHidup.delete(ev.session); pesertaHidup.delete(ev.session); return; }
   const s = sesiHidup.get(ev.session) || { sejak: ev.ts };
   s.terakhir = ev.ts;
   s.kind = ev.kind;
@@ -679,6 +706,43 @@ function catatSesiHidup(ev) {
   if (ev.mesin) s.mesin = ev.mesin;
   if (ev.tool) { s.tool = ev.tool; s.toolTs = ev.ts; }
   sesiHidup.set(ev.session, s);
+  catatPesertaHidup(ev);
+}
+
+/* Peserta rapat yang sedang hidup, DI SERVER.
+ *
+ * Sampai sekarang seluruh keadaan peserta cuma hidup di `public/room.js`, jadi
+ * ia mati begitu tab ditutup — dan agen lain yang bertanya lewat MCP dijawab
+ * `menganggur` untuk sesi induk yang sudah `stop` padahal tiga pesertanya masih
+ * bekerja di latar. Itu keadaan lazim, bukan pojok: subagent memang dijalankan
+ * di latar oleh sesi interaktif.
+ *
+ * Yang disimpan metadata saja, sekelas isi `sesiHidup`: nama jenis agennya,
+ * kapan mulai, kapan terakhir terdengar, tool terakhir, dan hitungannya. Tidak
+ * ada isi kerja, tidak ada label berkas. */
+function catatPesertaHidup(ev) {
+  if (!ev.agenId) {
+    /* Tanpa agenId tidak ada peserta yang bisa disebut. Ini juga jalan yang
+       dilalui SELURUH event sesi biasa, jadi ia harus murah. */
+    return;
+  }
+  let peta = pesertaHidup.get(ev.session);
+  if (ev.kind === 'subagent-stop') {
+    if (peta) { peta.delete(ev.agenId); if (!peta.size) pesertaHidup.delete(ev.session); }
+    return;
+  }
+  if (!peta) { peta = new Map(); pesertaHidup.set(ev.session, peta); }
+  const p = peta.get(ev.agenId) || { agen: '', sejak: ev.ts, toolN: 0, gagal: 0 };
+  if (ev.agen) p.agen = ev.agen;
+  p.terakhir = ev.ts;
+  if (ev.kind === 'pre' && ev.tool) { p.tool = ev.tool; p.toolN++; }
+  if (ev.kind === 'post' && ev.ok === false) p.gagal++;
+  peta.set(ev.agenId, p);
+  /* Peserta yatim — `subagent-start` yang tidak pernah punya pasangan `stop` —
+     memang ada (fixture hari sungguhan: 71 start lawan 29 stop). Yang menjaga
+     petanya tidak tumbuh selamanya adalah sapuan di `potretRuangan()` dan
+     penghapusan pada `session-end` induk, bukan harapan bahwa stop selalu
+     datang. */
 }
 
 /* Potret ruangan untuk GET /ruangan: metadata saja, sekelas /health. */
@@ -686,9 +750,33 @@ function potretRuangan() {
   const kini = Date.now();
   const sesi = [];
   for (const [id, s] of sesiHidup) {
-    if (kini - s.terakhir > SESI_HIDUP_SEPI_MS) { sesiHidup.delete(id); continue; }
+    if (kini - s.terakhir > SESI_HIDUP_SEPI_MS) {
+      sesiHidup.delete(id); pesertaHidup.delete(id); continue;
+    }
     const butuh = butuhManusia.get(id);
     const macet = macetSesi.get(id);
+    /* Peserta yang masih tercatat untuk sesi ini. Sapuannya di sini, bukan di
+       timer sendiri: satu-satunya yang boleh menumbuhkan peta ini adalah event
+       masuk, dan satu-satunya yang membacanya adalah potret ini. */
+    const petaP = pesertaHidup.get(id);
+    const peserta = [];
+    if (petaP) {
+      for (const [agenId, p] of petaP) {
+        if (kini - p.terakhir > SESI_HIDUP_SEPI_MS) { petaP.delete(agenId); continue; }
+        peserta.push({
+          agenId,
+          agen: p.agen || '',
+          sejak: p.sejak,
+          terakhir: p.terakhir,
+          tool: p.tool || '',
+          toolN: p.toolN,
+          gagal: p.gagal,
+          diam: kini - p.terakhir > PESERTA_DIAM_MS,
+        });
+      }
+      if (!petaP.size) pesertaHidup.delete(id);
+    }
+    peserta.sort((a, b) => b.terakhir - a.terakhir);
     sesi.push({
       sesi: id,
       nama: namaSesi.get(id) || '',
@@ -705,6 +793,10 @@ function potretRuangan() {
       terakhir: s.terakhir,
       butuh: butuh ? { sebab: butuh.sebab } : null,
       macet: macet ? { jenis: macet.jenis } : null,
+      /* Field TAMBAHAN, bukan pengganti: konsumen lama (`orang()` di
+         uji-pegawai.mjs, kartu pegawai, mcp-room) tidak berubah artinya. */
+      peserta,
+      delegasi: { hidup: peserta.length, diam: peserta.filter((p) => p.diam).length },
     });
   }
   sesi.sort((a, b) => b.terakhir - a.terakhir);
@@ -714,6 +806,11 @@ function potretRuangan() {
     mesin: os.hostname(),
     sesi,
     tertahan: sesi.filter((s) => s.butuh || s.macet).length,
+    delegasi: {
+      hidup: sesi.reduce((n, s) => n + s.delegasi.hidup, 0),
+      diam: sesi.reduce((n, s) => n + s.delegasi.diam, 0),
+      induk: sesi.filter((s) => s.delegasi.hidup > 0).length,
+    },
     antrean: { jumlah: antrean.length, nama: antrean.map((t) => t.nama || '').filter(Boolean) },
     jalan: { jumlah: jalan.size },
     viewers: clients.size,
@@ -4056,6 +4153,8 @@ function metrikTeks() {
   metrik('agent_room_events_total', 'counter', 'Event yang disiarkan lewat publish() sejak proses hidup.', [['', metrikEventTotal]]);
   metrik('agent_room_viewers', 'gauge', 'Klien SSE /stream yang sedang tersambung.', [['', clients.size]]);
   metrik('agent_room_sesi_hidup', 'gauge', 'Sesi Claude Code yang masih mengirim hook (jendela 3 jam).', [['', potret.sesi.length]]);
+  metrik('agent_room_peserta_hidup', 'gauge', 'Subagent yang masih tercatat hidup di bawah sesi induknya.', [['', potret.delegasi.hidup]]);
+  metrik('agent_room_peserta_diam', 'gauge', 'Subagent hidup yang tidak terdengar lebih dari sepuluh menit.', [['', potret.delegasi.diam]]);
   metrik('agent_room_sesi_tertahan', 'gauge', 'Sesi hidup yang tertahan: butuh manusia atau macet karena galat.',
     [['jenis="butuh"', butuh], ['jenis="macet"', macet]]);
   metrik('agent_room_antrean', 'gauge', 'Disposisi yang menunggu giliran dijalankan (kendali web).', [['', antrean.length]]);

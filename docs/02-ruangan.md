@@ -305,6 +305,60 @@ Dua hal yang dijaga rancangan ini:
   hook-nya belum dipasang ulang — kursi sementara itu yang bertahan, dengan
   nama dari `description`. Ruangannya tetap terisi, cuma namanya kurang tepat.
 
+### Peserta rapat ikut bekerja
+
+Sampai sekarang peserta rapat cuma **duduk**. Tiap tool call yang dipicu di
+dalam subagent menggerakkan **pegawai induknya** — dia yang berjalan ke lemari
+arsip mewakili tiga pesertanya sekaligus, dan hitungan tool call, riwayat,
+serta gagal berturut di kartunya ikut tercemar.
+
+Sebabnya satu baris di `normalize()`: `agent_id` dan `agent_type` cuma dibaca
+pada `subagent-start`/`subagent-stop`, padahal hook yang dipasang lewat
+`settings.json` ikut menyala **di dalam** subagent dan `PreToolUse`/
+`PostToolUse` dari sana membawa keduanya. Buku agenda mengukurnya: 2.020 baris
+`pre` dalam sehari, nol yang ber-`agenId`, padahal baris `subagent-start` dari
+sesi yang sama membawanya.
+
+Sekarang identitas pelaku dibaca untuk **kind apa pun**, dan `pelakuUntuk()` di
+[public/room.js](../public/room.js) mengarahkan `pre`/`post` ke pesertanya:
+dia yang berjalan, dia yang bicara, dia yang punya riwayat. Peserta yang
+kursinya belum sempat dibuka — urutan hook tidak dijamin — dibukakan saat itu
+juga; kalau meja memang penuh, induk yang mewakili seperti dulu.
+
+Gerbangnya **`agent_id`, bukan `agent_type`**, dan itu bukan detail: sesi yang
+dijalankan dengan `claude --agent` membawa `agent_type` di tingkat **sesi**,
+jadi menggerbangi `agent_type` akan menandai seluruh event sesi itu sebagai
+kerja peserta yang tidak pernah ada.
+
+Yang **tidak** ikut pindah ke peserta: keadaan tingkat sesi. `butuh`, `macet`,
+kamera, proyek, dan cabang tetap milik induk, karena permintaan izin dari
+subagent memang naik ke sesi induknya.
+
+Sesudah kerjanya selesai peserta **kembali ke kursinya** sendiri (`update()` di
+`class Peserta`, jeda 2 detik supaya rentetan tool call tidak membuatnya
+bolak-balik). Notulen sisa rapat sekarang dihitung dari `pernahDuduk`, bukan
+dari "sedang di kursi" — sejak peserta bisa pergi ke stasiun, dia bisa sedang
+di lemari arsip waktu rapatnya ditutup.
+
+### Pohon delegasi di server
+
+Seluruh keadaan peserta dulu hidup di halaman saja, jadi mati begitu tab
+ditutup — dan agen lain yang bertanya lewat MCP dijawab *menganggur* untuk sesi
+induk yang sudah `stop` padahal tiga pesertanya masih bekerja. Itu keadaan
+lazim, bukan pojok: subagent memang dijalankan di latar.
+
+Server sekarang menyimpan `pesertaHidup` (metadata saja: jenis agen, sejak,
+terakhir, tool terakhir, hitungan tool dan gagal), memaparkannya di
+`GET /ruangan` sebagai `sesi[].peserta[]` dan `sesi[].delegasi`, dan
+menerbitkan dua gauge di `/metrics`. Tool MCP `ruangan_pohon_delegasi`
+membacanya, dan induk ber-`kind: stop` yang masih punya peserta disebut
+**menunggu peserta**, bukan menganggur.
+
+Penanda `diam` (10 menit tanpa kabar) itu **nota, bukan rem** — tidak ada yang
+ditahan karenanya. Angkanya baru jujur sejak `agent_id` dibaca pada `pre`/
+`post`: sebelum itu jam terakhir peserta membeku di detik dia masuk, jadi tiap
+peserta yang hidup lebih dari sepuluh menit akan ditandai diam padahal sibuk.
+
 ### Kapan mereka permisi
 
 Yang gampang salah: **`PostToolUse` tidak pernah bisa dipercaya menandai

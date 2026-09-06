@@ -167,6 +167,39 @@ const TOOLS = [
     },
   },
   {
+    name: 'ruangan_pohon_delegasi',
+    description: 'Siapa mendelegasikan ke siapa saat ini: sesi induk beserta subagent yang masih '
+      + 'hidup di bawahnya, berapa lama, berapa tool, dan mana yang sudah lama diam. '
+      + '/ Live delegation tree: parent sessions and the subagents still running under them.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    async jalankan() {
+      const r = await ambil('/ruangan');
+      const kini = r.ts || Date.now();
+      const pohon = (r.sesi || []).filter((s) => (s.peserta || []).length).map((s) => ({
+        sesi: s.sesi, nama: s.nama, proyek: s.proyek, cabang: s.cabang,
+        /* Induk yang sudah `stop` tapi masih punya peserta BUKAN menganggur —
+           subagent memang dijalankan di latar. Menjawab 'menganggur' di sini
+           akan membohongi agen yang bertanya. */
+        indukKeadaan: s.kind === 'stop' ? 'menunggu peserta' : 'bekerja',
+        peserta: (s.peserta || []).map((p) => ({
+          agen: p.agen || '(tanpa nama)',
+          lamaHidup: lama(kini - p.sejak),
+          terakhir: lama(kini - p.terakhir) + ' lalu',
+          toolTerakhir: p.tool || '',
+          toolN: p.toolN, gagal: p.gagal, diam: p.diam,
+        })),
+      }));
+      const d = r.delegasi || { hidup: 0, diam: 0, induk: 0 };
+      const ringkas = d.hidup === 0
+        ? 'Tidak ada delegasi berjalan: semua sesi bekerja sendiri.'
+        : `${d.induk} sesi mendelegasikan ${d.hidup} agen`
+          + (d.diam ? `, ${d.diam} di antaranya diam >10 mnt` : '') + '. '
+          + pohon.slice(0, 3).map((s) => `${s.nama || s.sesi}${s.proyek ? ' (' + s.proyek + ')' : ''} → `
+            + s.peserta.map((p) => `${p.agen} ${p.lamaHidup}`).join(', ')).join('; ');
+      return { ringkas, data: { pohon, delegasi: d, mesin: r.mesin } };
+    },
+  },
+  {
     name: 'ruangan_kesehatan',
     description: 'Server ruangan hidup atau tidak: jumlah event, penonton, port. / Health of the room server.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },

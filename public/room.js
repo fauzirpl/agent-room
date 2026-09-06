@@ -232,6 +232,10 @@ const TOOL_STATION = {
   // perintahnya, bukan nama tool-nya. Lihat stationFor di bawah.
   WebFetch: 'web', WebSearch: 'web',
   Task: 'rapat', Agent: 'rapat', Workflow: 'rapat', TaskOutput: 'rapat', TaskStop: 'rapat',
+  // Papan tugas bersama: dibuat dan diperbarui DI meja rapat, karena itu memang
+  // urusan yang dibagi ke peserta, bukan pekerjaan yang dikerjakan sendiri di
+  // meja. Sampai sekarang keempatnya jatuh ke bawaan dan pegawainya diam.
+  TaskCreate: 'rapat', TaskUpdate: 'rapat', TaskGet: 'rapat', TaskList: 'rapat',
   Skill: 'agent', SendMessage: 'agent',
   TodoWrite: 'think', ExitPlanMode: 'think', EnterPlanMode: 'think', AskUserQuestion: 'think',
 };
@@ -5074,6 +5078,11 @@ class Peserta extends Agent {
     this.keluar = false;
     this.agenId = '';          // diisi SubagentStart; kursi sementara kosong
     this.jenis = '';           // agent_type — kunci "hadir lagi" bersama sesi induknya
+    /* Pernah benar-benar duduk di kursi rapat. Dipakai `bubar()` alih-alih
+       `station === 'rapat'`: sejak peserta ikut berjalan ke stasiun, ia bisa
+       sedang di lemari arsip waktu rapatnya ditutup, dan notulennya tetap
+       harus tercatat. */
+    this.pernahDuduk = false;
   }
 
   /* Kursi sementara diambil alih oleh agen yang sebenarnya. Namanya diganti
@@ -5112,7 +5121,7 @@ class Peserta extends Agent {
     // Notulen sisa rapat: tiap peserta yang sempat duduk meninggalkan
     // selembar catatan di sudut meja (RUANGAN.notulen, dibatasi NOTULEN_MAKS).
     // Sekalian dicatat siapa yang pernah hadir, buat salam "hadir lagi".
-    if (this.station === 'rapat') {
+    if (this.pernahDuduk) {
       RUANGAN.notulen = Math.min(NOTULEN_MAKS, RUANGAN.notulen + 1);
       if (this.jenis) catatPernahHadir(this.pemilik + '|' + this.jenis);
     }
@@ -5132,6 +5141,22 @@ class Peserta extends Agent {
   arrive() {
     if (this.keluar) { this.destroy(); return; }
     super.arrive();
+    if (this.station === 'rapat') this.pernahDuduk = true;
+  }
+
+  /* Kembali ke kursinya sesudah kerjanya di stasiun selesai.
+     Tanpa ini peserta yang sempat ke lemari arsip berdiri di sana selamanya:
+     `betah` sengaja menahan IDLE_AFTER memulangkannya, jadi tidak ada satu pun
+     jalur lain yang akan menyuruhnya duduk lagi. Jeda 2 detik supaya rentetan
+     tool call tidak membuatnya bolak-balik ke kursi di sela-selanya. */
+  update(dt) {
+    super.update(dt);
+    if (this.keluar || this.path.length) return;
+    if (this.station === 'rapat') return;
+    if (now < this.busyUntil + 2000) return;
+    this.adaTugas = true;
+    this.busyUntil = Infinity;      // duduk kembali = betah lagi, bukan menganggur
+    this.goTo('rapat');
   }
 
   destroy() {
@@ -5322,6 +5347,29 @@ function bukaRapat(ev) {
    supaya tidak ada dua kursi untuk satu agen. Kalau tidak ada (agen dilahirkan
    tanpa lewat tool `Task`, atau kursinya sudah ditempati agen lain), barulah
    kursi baru dibuka. */
+/* Siapa yang BENAR-BENAR melakukan tool call ini.
+ *
+ * Sejak server membaca `agent_id` pada `pre`/`post` (lihat `normalize()` di
+ * server.mjs), tool call yang dipicu DI DALAM subagent membawa pelakunya
+ * sendiri. Dulu semuanya jatuh ke pegawai induk: dia yang berjalan ke stasiun
+ * mewakili tiga pesertanya sekaligus, dan hitungan tool call, riwayat, serta
+ * gagal berturut di kartunya ikut tercemar — sementara peserta rapatnya duduk
+ * diam tanpa satu baris riwayat pun.
+ *
+ * Yang TIDAK dipindahkan ke peserta: keadaan tingkat SESI. `butuh`/`macet`,
+ * kamera, proyek, dan cabang tetap milik induk, karena permintaan izin dari
+ * subagent memang naik ke sesi induknya. */
+function pelakuUntuk(ev, induk) {
+  if (!ev.agenId || (ev.kind !== 'pre' && ev.kind !== 'post')) return induk;
+  const ada = peserta.find((p) => !p.keluar && p.agenId === ev.agenId);
+  if (ada) return ada;
+  /* Kursinya belum dibuka — `SubagentStart` bisa datang belakangan, atau
+     kursinya tidak kebagian meja. Dibuka sekarang supaya kerjanya tidak
+     jatuh ke induk; kalau meja memang penuh, `pesertaMasuk()` menjawab null
+     dan induk yang mewakili seperti dulu. */
+  return pesertaMasuk(ev) || induk;
+}
+
 function pesertaMasuk(ev) {
   const agenId = ev.agenId || '';
   if (agenId && peserta.some((p) => !p.keluar && p.agenId === agenId)) return null;
@@ -6936,59 +6984,64 @@ function handle(ev) {
   switch (ev.kind) {
     case 'pre': {
       const st = stationFor(ev.tool, ev.label, ev.session);
+      // Pelakunya: peserta rapat kalau event ini memang miliknya, induk kalau
+      // bukan. Yang bergerak dan yang dicatat harus orang yang sama.
+      const p = pelakuUntuk(ev, a);
       // di meja kerja, perintah shell memancarkan glyph, bukan lampu ide
-      a.fx = st === 'think' ? FX_TOOL[ev.tool] || null : null;
+      p.fx = st === 'think' ? FX_TOOL[ev.tool] || null : null;
       const [v, o] = kegiatan(ev.tool, ev.label);
-      a.busyUntil = now + 60000;
-      a.adaTugas = true;
-      a.doing = v + (o ? ' ' + o : '');
-      a.calls++;
-      a.lelahkan(STAMINA_CALL);            // tiap call menguras sedikit (kosmetik)
-      a.perStasiun[st] = (a.perStasiun[st] || 0) + 1;
-      a.riwayat.push({ ts: ev.ts, v, o, ok: true });
-      if (a.riwayat.length > 30) a.riwayat.shift();
+      p.busyUntil = now + 60000;
+      p.adaTugas = true;
+      p.doing = v + (o ? ' ' + o : '');
+      p.calls++;
+      p.lelahkan(STAMINA_CALL);            // tiap call menguras sedikit (kosmetik)
+      p.perStasiun[st] = (p.perStasiun[st] || 0) + 1;
+      p.riwayat.push({ ts: ev.ts, v, o, ok: true });
+      if (p.riwayat.length > 30) p.riwayat.shift();
       // kalau masih di jalan, biarkan jalan dulu — arrive() yang nyalakan mode kerja
-      if (a.station !== st) a.goTo(st);
-      else if (!a.path.length) a.state = 'work';
-      a.say(esc(v) + (o ? ' <b>' + esc(o) + '</b>' : ''));
+      if (p.station !== st) p.goTo(st);
+      else if (!p.path.length) p.state = 'work';
+      p.say(esc(v) + (o ? ' <b>' + esc(o) + '</b>' : ''));
       // dua tool yang menahan sesinya sampai kamu menjawab membawa isi
       // pertanyaan/rencananya sendiri — itu yang naik ke modal
       if (ev.tanya) kabarMasuk(ev, a, ev.tanya.jenis === 'rencana' ? 'rencana' : 'tanya');
       toolCount++;
       statTools.textContent = toolCount;
-      nowDoing.textContent = a.doing;
+      nowDoing.textContent = p.doing;
       pushLog(ev);
       bukaRapat(ev);
-      foley(foleyUntuk(ev.tool, st), a);
+      foley(foleyUntuk(ev.tool, st), p);
+      renderCrew();               // baris peserta ikut menampilkan kegiatannya
       break;
     }
     case 'post': {
-      a.busyUntil = now + 900;
+      const p = pelakuUntuk(ev, a);
+      p.busyUntil = now + 900;
       if (ev.peserta) tutupRapat(ev);
       // beruntun = gagal berturut-turut TANPA diselingi yang berhasil; dibaca potretRuangan()
-      if (ev.ok !== false) a.gagalBerturut = 0;
+      if (ev.ok !== false) p.gagalBerturut = 0;
       if (ev.ok === false) {
-        a.gagal++;
-        a.lelahkan(STAMINA_GAGAL);         // kegagalan lebih menguras daripada call biasa
-        a.gagalBerturut = (a.gagalBerturut || 0) + 1;
+        p.gagal++;
+        p.lelahkan(STAMINA_GAGAL);         // kegagalan lebih menguras daripada call biasa
+        p.gagalBerturut = (p.gagalBerturut || 0) + 1;
         // dipakai inspektorat-mendadak: pemicunya data nyata, bukan dadu.
         // Disimpan sebagai timestamp Date.now(), BUKAN `now` (performance.now()) —
         // dua jam yang berbeda basis, mencampurnya bikin selisihnya tidak berarti.
         RUANGAN.gagalBeruntun.push(Date.now());
         // yang barusan dicatat itulah yang gagal: ditandai, bukan ditambah baris
-        const akhir = a.riwayat[a.riwayat.length - 1];
+        const akhir = p.riwayat[p.riwayat.length - 1];
         if (akhir) akhir.ok = false;
         // objeknya ikut dipakai: 'koordinasi dengan' tanpa objek jadi menggantung
         const [v, o] = kegiatan(ev.tool, '');
         const apa = v + (o ? ' ' + o : '');
         // Ctrl+C bukan alat yang rusak: yang menghentikan kamu sendiri.
         const sebab = ev.interupsi ? 'dihentikan' : 'gagal';
-        a.say(sebab + ' <b>' + esc(apa) + '</b>', 'err');
+        p.say(sebab + ' <b>' + esc(apa) + '</b>', 'err');
         // Pesan galat dari Claude Code lebih berguna daripada nama kegiatannya —
         // itu satu-satunya keterangan kenapa. Kegiatannya sudah ada di baris atas.
         pushLog(ev, 'err', [sebab, ev.galat || apa]);
-        for (let i = 0; i < 12; i++) spawn('ink', a.x, a.y - 16);
-        foley('gagal', a);
+        for (let i = 0; i < 12; i++) spawn('ink', p.x, p.y - 16);
+        foley('gagal', p);
       }
       break;
     }

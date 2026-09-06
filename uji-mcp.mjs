@@ -363,6 +363,22 @@ async function kasus4(cli) {
 
   const sehat = belah(await cli.panggil('ruangan_kesehatan'));
   benar('ruangan_kesehatan melaporkan kantor buka', /Kantor buka/.test(sehat.kalimat), sehat.kalimat);
+
+  /* Pohon delegasi. Ini sekaligus bukti ujung-ke-ujung bahwa `agent_id` pada
+     `pre` benar-benar dibaca server: tanpa itu `toolN` peserta tidak akan
+     pernah naik dari nol. */
+  const pohon = belah(await cli.panggil('ruangan_pohon_delegasi'));
+  const daftarPohon = (pohon.data || {}).pohon || [];
+  sama('satu sesi induk punya peserta', daftarPohon.length, 1);
+  const anak = (daftarPohon[0] || {}).peserta || [];
+  sama('  pesertanya satu', anak.length, 1);
+  sama('  jenis agennya terbaca', (anak[0] || {}).agen, 'Explore');
+  benar('  tool call peserta dihitung ke pesertanya, bukan ke induk',
+    (anak[0] || {}).toolN >= 1, JSON.stringify(anak[0]));
+  benar('  induk yang sudah stop disebut menunggu peserta, bukan menganggur',
+    (daftarPohon[0] || {}).indukKeadaan === 'menunggu peserta',
+    JSON.stringify((daftarPohon[0] || {}).indukKeadaan));
+  benar('  ringkasnya menyebut delegasinya', /mendelegasikan 1 agen/.test(pohon.kalimat), pohon.kalimat);
 }
 
 /* ================================================================ kasus 5 ===
@@ -481,6 +497,17 @@ async function utama() {
     await hook(kantor, 'PermissionRequest', 'sesi-izin-bb', { tool_name: 'Bash', tool_input: { command: 'rm -rf build' } });
     await hook(kantor, 'SessionStart', 'sesi-macet-cc', { source: 'startup' });
     await hook(kantor, 'StopFailure', 'sesi-macet-cc', { error: 'api_error' });
+
+    /* Satu subagent di bawah sesi-kerja-aa, lalu satu tool call MILIK peserta
+       itu (payload membawa agent_id, persis seperti hook yang menyala di dalam
+       subagent), lalu induknya menutup gilirannya sementara pesertanya masih
+       jalan — keadaan lazim, bukan pojok. */
+    await hook(kantor, 'SubagentStart', 'sesi-kerja-aa', { agent_id: 'ag-uji-1', agent_type: 'Explore' });
+    await hook(kantor, 'PreToolUse', 'sesi-kerja-aa', {
+      agent_id: 'ag-uji-1', agent_type: 'Explore',
+      tool_name: 'Grep', tool_input: { pattern: 'telaahRisiko' },
+    });
+    await hook(kantor, 'Stop', 'sesi-kerja-aa', {});
     await tidur(150);
 
     await kasus1(cli);
