@@ -129,6 +129,11 @@ jobs:
       - name: Uji loop kendali web
         run: node uji-kendali.mjs
 
+      # Loket disposisi: antrean penuh, batal, hentikan, dan tugas yang
+      # lahir tapi tidak pernah bersuara. Menunggu ambang bisu ~26 detik.
+      - name: Uji loket disposisi
+        run: node uji-loket.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

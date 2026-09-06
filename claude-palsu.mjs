@@ -27,6 +27,8 @@
  *                        lewat kalimat agen + biaya (lihat naskahParaf)
  *   naskah:paraf-deny    sama, tapi harapannya ditolak
  *   naskah:gagal         berhenti dengan kode ≠ 0 tanpa pesan result
+ *   naskah:bisu          tidak menulis SATU BYTE pun, dan tidak pernah keluar
+ *   naskah:tahan         bicara stream-json lalu diam; slotnya tetap terpakai
  *
  * Nol dependency, nol jaringan (kecuali ke kantor di 127.0.0.1 lewat
  * mcp-izin.mjs), dan tidak pernah menyentuh biner claude sungguhan.
@@ -231,16 +233,41 @@ async function naskahGagal() {
   process.exit(3);
 }
 
+/* Dua naskah yang kerjanya justru TIDAK berbuat apa-apa, dan bedanya penting.
+   `BISU_MS` di server memisahkan "tidak ada hook" dari "tidak ada apa-apa":
+   yang pertama wajar (mode --bare, hook tidak terpasang), yang kedua berarti
+   sesinya memang tidak pernah mulai — biasanya kredensial headless. Dulu
+   keduanya dilaporkan sama, dan sesi sehat ikut kena tuduhan yang salah.
+
+   naskah:bisu  tidak menulis SATU BYTE pun -> tugas-bisu harus terbit
+   naskah:tahan menulis init lalu diam      -> tugas-bisu TIDAK boleh terbit,
+                                               dan slotnya tetap terpakai */
+function tetapHidup(alasan) {
+  log(alasan + ' — menunggu dibunuh');
+  // pegangan supaya event loop tidak habis dan prosesnya benar-benar bertahan
+  setInterval(() => {}, 1 << 30);
+}
+async function naskahBisu() { tetapHidup('naskah bisu: tidak menulis apa pun'); }
+async function naskahTahan() {
+  await init();
+  tetapHidup('naskah tahan: sudah bicara stream-json, slotnya dipegang');
+}
+
 const NASKAH = {
   'stream': naskahStream,
   'paraf-allow': naskahParaf,
   'paraf-deny': naskahParaf,
   'gagal': naskahGagal,
+  'bisu': naskahBisu,
+  'tahan': naskahTahan,
 };
+// Naskah yang memang tidak pernah selesai sendiri: dibunuh harness/tugas,
+// bukan keluar dengan kode 0 begitu fungsinya balik.
+const MENETAP = new Set(['bisu', 'tahan']);
 
 const main = NASKAH[naskah];
 if (!main) { log('naskah tidak dikenal: ' + naskah); process.exit(64); }
-main().then(() => process.exit(0)).catch((err) => {
+main().then(() => { if (!MENETAP.has(naskah)) process.exit(0); }).catch((err) => {
   log('meledak: ' + (err && err.stack || err));
   process.exit(70);
 });
