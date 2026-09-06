@@ -8421,21 +8421,46 @@ function skpRingkas(d) {
   return r;
 }
 
+/* Nilai SKP dan bolak-balik dipakai dua tabel (proyek & sesi) dengan bentuk
+   yang sama persis. `–` berarti TIDAK TERUKUR, bukan nol: sumbunya memang
+   tidak bisa dinilai di rentang ini (label dimatikan, atau tidak ada rapat
+   yang dibuka sama sekali), dan server sudah mengeluarkan bobotnya dari
+   pembagi. Ambang merahnya 60 — seperempat terbawah sesi di hari sungguhan. */
+const SKP_NILAI_RENDAH = 60;
+function skpSelNilai(x) {
+  if (x.nilai == null) return '<td class="angka" title="tidak ada sumbu yang bisa diukur di rentang ini">–</td>';
+  return '<td class="angka' + (x.nilai < SKP_NILAI_RENDAH ? ' gagal-tinggi' : '') + '"'
+    + ' title="' + esc((x.bobotDipakai || []).join(', ') || 'tidak ada sumbu terukur') + '">' + x.nilai + '</td>';
+}
+function skpSelBolak(x) {
+  if (x.bolakBalikRasio == null) {
+    return '<td class="angka" title="label tidak cukup untuk membandingkan kesamaan di rentang ini">–</td>';
+  }
+  return '<td class="angka">' + angkaID(x.bolakBalik)
+    + ' (' + x.bolakBalikRasio.toLocaleString('id-ID') + '%)</td>';
+}
+
 function skpBarisProyek(p, i) {
   const gagalKelas = p.rasioGagal >= 20 ? ' gagal-tinggi' : '';
   return '<tr>' + (i != null ? '<td class="angka">' + (i + 1) + '</td>' : '')
     + '<td class="nama" title="' + esc(p.nama) + '">' + esc(p.nama) + '</td>'
+    + skpSelNilai(p)
     + '<td class="angka">' + p.sesi + '</td>'
     + '<td class="angka">' + angkaID(p.toolCall) + '</td>'
     + '<td class="angka' + gagalKelas + '">' + p.gagal + (p.toolCall ? ' (' + p.rasioGagal.toLocaleString('id-ID') + '%)' : '') + '</td>'
+    + skpSelBolak(p)
     + '<td class="angka">' + skpDurasi(p.durasiRata) + '</td>'
     + '<td class="angka">' + angkaID(p.token.input) + ' / ' + angkaID(p.token.output) + '</td>'
     + '<td class="angka">' + jamDinasTeks(p.jamDinasRentang || 0) + '</td>'
     + '<td class="angka">' + jamDinasTeks(p.jamDinas || 0) + '</td>'
     + '<td>' + esc(p.golongan || '') + '</td></tr>';
 }
-const SKP_KEPALA_PROYEK = '<th>proyek</th><th class="angka">sesi</th><th class="angka">tool call</th>'
-  + '<th class="angka">gagal</th><th class="angka">durasi rata</th><th class="angka">token masuk / keluar</th>'
+const SKP_KEPALA_PROYEK = '<th>proyek</th><th class="angka" title="0–100, dihitung dari rasio gagal, bolak-balik,'
+  + ' tertahan, gagal beruntun, dan rapat yatim; bobotnya ikut keluar di /skp">nilai</th>'
+  + '<th class="angka">sesi</th><th class="angka">tool call</th>'
+  + '<th class="angka">gagal</th><th class="angka" title="tool + label yang sama berulang dalam tiga panggilan'
+  + ' terakhir; label terpotong dan tool MCP tidak ikut dihitung">bolak-balik</th>'
+  + '<th class="angka">durasi rata</th><th class="angka">token masuk / keluar</th>'
   + '<th class="angka">jam dinas (rentang)</th><th class="angka">jam dinas (karier)</th><th>golongan</th>';
 
 function skpBarisSesi(s, i) {
@@ -8443,13 +8468,17 @@ function skpBarisSesi(s, i) {
     + '<td class="nama">' + esc(s.sesi) + '</td>'
     + '<td>' + esc(s.proyek) + (s.cabang ? '@' + esc(s.cabang) : '') + '</td>'
     + '<td>' + esc(skpJamTgl(s.mulai)) + ' – ' + esc(skpJamTgl(s.selesai)) + '</td>'
+    + skpSelNilai(s)
     + '<td class="angka">' + angkaID(s.toolCall) + '</td>'
     + '<td class="angka' + (s.gagal ? ' gagal-tinggi' : '') + '">' + s.gagal + '</td>'
+    + skpSelBolak(s)
     + '<td class="angka">' + s.tertahan + '</td>'
     + '<td>' + (s.toolTeratas ? esc(s.toolTeratas.nama) + ' ×' + s.toolTeratas.jumlah : '–') + '</td></tr>';
 }
-const SKP_KEPALA_SESI = '<th>sesi</th><th>proyek@cabang</th><th>mulai – selesai</th><th class="angka">tool call</th>'
-  + '<th class="angka">gagal</th><th class="angka">tertahan</th><th>tool teratas</th>';
+const SKP_KEPALA_SESI = '<th>sesi</th><th>proyek@cabang</th><th>mulai – selesai</th>'
+  + '<th class="angka">nilai</th><th class="angka">tool call</th>'
+  + '<th class="angka">gagal</th><th class="angka">bolak-balik</th>'
+  + '<th class="angka">tertahan</th><th>tool teratas</th>';
 
 function skpGambar() {
   const d = skpData;
@@ -8476,12 +8505,12 @@ function skpGambar() {
   blok.push('<div class="stat-blok"><h3>per proyek (' + d.proyek.length + ')</h3><div class="skp-gulir">'
     + '<table class="skp-tabel"><thead><tr>' + SKP_KEPALA_PROYEK + '</tr></thead><tbody>'
     + (d.proyek.length ? d.proyek.map((p) => skpBarisProyek(p)).join('')
-      : '<tr class="kosong"><td colspan="9">belum ada yang tercatat di rentang ini</td></tr>')
+      : '<tr class="kosong"><td colspan="11">belum ada yang tercatat di rentang ini</td></tr>')
     + '</tbody></table></div></div>');
   blok.push('<div class="stat-blok"><h3>per sesi (' + d.sesi.length + ')</h3><div class="skp-gulir">'
     + '<table class="skp-tabel"><thead><tr>' + SKP_KEPALA_SESI + '</tr></thead><tbody>'
     + (d.sesi.length ? d.sesi.slice(0, 60).map((s) => skpBarisSesi(s)).join('')
-      : '<tr class="kosong"><td colspan="7">belum ada sesi di rentang ini</td></tr>')
+      : '<tr class="kosong"><td colspan="9">belum ada sesi di rentang ini</td></tr>')
     + '</tbody></table></div>'
     + (d.sesi.length > 60 ? '<p class="stat-ket">' + (d.sesi.length - 60) + ' sesi lain tidak ditampilkan — ada di nota cetak (maks 30) dan /skp.</p>' : '')
     + '</div>');
@@ -8605,12 +8634,12 @@ function notaMingguanHTML(d, nomor) {
     + '<h2>II. Kinerja per proyek</h2>'
     + '<table class="data"><thead><tr><th class="angka">No</th>' + SKP_KEPALA_PROYEK + '</tr></thead><tbody>'
     + (d.proyek.length ? d.proyek.map((p, i) => skpBarisProyek(p, i)).join('')
-      : '<tr class="kosong"><td colspan="10">nihil</td></tr>')
+      : '<tr class="kosong"><td colspan="12">nihil</td></tr>')
     + '</tbody></table>'
     + '<h2>III. Kinerja per sesi' + (d.sesi.length > NOTA_SESI_MAX ? ' (' + NOTA_SESI_MAX + ' dari ' + d.sesi.length + ')' : '') + '</h2>'
     + '<table class="data"><thead><tr><th class="angka">No</th>' + SKP_KEPALA_SESI + '</tr></thead><tbody>'
     + (sesiCetak.length ? sesiCetak.map((s, i) => skpBarisSesi(s, i)).join('')
-      : '<tr class="kosong"><td colspan="8">nihil</td></tr>')
+      : '<tr class="kosong"><td colspan="10">nihil</td></tr>')
     + '</tbody></table>'
     + (d.sesi.length > NOTA_SESI_MAX ? '<p><i>' + (d.sesi.length - NOTA_SESI_MAX) + ' sesi lainnya tidak dicetak; lengkapnya di /skp.</i></p>' : '')
     + '<h2>IV. Catatan</h2>'

@@ -406,6 +406,7 @@ konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
 | `ruangan_token_hari_ini` | `GET /token-riwayat` | total hari ini + rincian per proyek, total sepanjang masa |
 | `ruangan_agenda_cari` | `GET /agenda` | cari buku agenda: `q`, `proyek`, `sesi`, `kind`, `dari`, `sampai`, `limit` |
 | `ruangan_pohon_delegasi` | `GET /ruangan` | siapa mendelegasikan ke siapa saat ini: sesi induk beserta subagent yang masih hidup di bawahnya, berapa lama, berapa tool, dan mana yang sudah lama diam. Induk ber-`kind: stop` yang masih punya peserta disebut **menunggu peserta**, bukan menganggur |
+| `ruangan_skp` | `GET /skp` | papan SKP: nilai mutu 0–100 per proyek & per sesi dalam satu rentang, beserta indikator yang membentuknya (rasio gagal bersih, bolak-balik, tertahan, gagal beruntun, rapat yatim) dan **bobot serta titik jenuh** yang dipakai menghitungnya. `dari`, `sampai`, `proyek` (saringan nama folder, dilakukan di sisi tool — `/skp` sendiri tidak punya parameter itu). Angka saja: tidak ada label maupun isi kerja |
 | `ruangan_kesehatan` | `GET /health` | server hidup atau tidak |
 
 Servernya stdio JSON-RPC polos tanpa dependency (`initialize`, `tools/list`,

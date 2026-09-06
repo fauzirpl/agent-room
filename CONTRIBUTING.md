@@ -35,6 +35,7 @@ node selaras-dokumen.mjs        # laporan hanyut dokumen vs kode; --periksa untu
 node uji-telaah.mjs             # lembar telaah risiko: tiap pola, privasi tanda, pagar positif palsu
 node uji-paraf.mjs              # loket paraf: telaah risiko ke agenda & /paraf; --tampil untuk melihat barisnya
 node uji-peserta.mjs            # transkrip peserta: isi subagent ke pemiliknya, tidak dobel dihitung
+node uji-skp.mjs                # papan SKP mutu: lima sumbu perilaku, nilai 0-100, golden hari sungguhan
 node uji-ulang-server.mjs       # hari sungguhan diputar ke server.mjs; --sampai 300 untuk iterasi cepat
 node telaah.mjs Bash "rm -rf x" # coba satu perintah dengan tangan
 node --check server.mjs && node --check dinas.mjs

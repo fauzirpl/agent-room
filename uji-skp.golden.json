@@ -1,0 +1,78 @@
+{
+  "proyek": [
+    {
+      "nama": "proyek-1",
+      "sesi": 6,
+      "toolCall": 1500,
+      "gagal": 14,
+      "nilai": 69,
+      "bolakBalik": 142,
+      "bolakBalikDari": 1420,
+      "gagalBeruntunMaks": 1,
+      "rapat": 71,
+      "rapatYatim": 0,
+      "prompt": 11,
+      "toolPerPrompt": 136.4,
+      "bobotDipakai": [
+        "rasioGagal",
+        "bolakBalik",
+        "tertahan",
+        "gagalBeruntun",
+        "rapatYatim"
+      ]
+    },
+    {
+      "nama": "proyek-2",
+      "sesi": 1,
+      "toolCall": 0,
+      "gagal": 0,
+      "nilai": 100,
+      "bolakBalik": 0,
+      "bolakBalikDari": 0,
+      "gagalBeruntunMaks": 0,
+      "rapat": 0,
+      "rapatYatim": 0,
+      "prompt": 0,
+      "toolPerPrompt": null,
+      "bobotDipakai": [
+        "rasioGagal",
+        "tertahan",
+        "gagalBeruntun"
+      ]
+    },
+    {
+      "nama": "proyek-3",
+      "sesi": 1,
+      "toolCall": 0,
+      "gagal": 0,
+      "nilai": 100,
+      "bolakBalik": 0,
+      "bolakBalikDari": 0,
+      "gagalBeruntunMaks": 0,
+      "rapat": 0,
+      "rapatYatim": 0,
+      "prompt": 0,
+      "toolPerPrompt": null,
+      "bobotDipakai": [
+        "rasioGagal",
+        "tertahan",
+        "gagalBeruntun"
+      ]
+    }
+  ],
+  "sesi": 8,
+  "bobot": {
+    "rasioGagal": 30,
+    "bolakBalik": 25,
+    "tertahan": 20,
+    "gagalBeruntun": 15,
+    "rapatYatim": 10
+  },
+  "jenuh": {
+    "rasioGagal": 10,
+    "bolakBalik": 30,
+    "tertahan": 3,
+    "gagalBeruntun": 4,
+    "rapatYatim": 50
+  }
+}

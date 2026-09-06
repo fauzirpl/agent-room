@@ -214,6 +214,71 @@ const TOOLS = [
     },
   },
   {
+    name: 'ruangan_skp',
+    description: 'Papan SKP: nilai mutu 0–100 per proyek dan per sesi dalam satu rentang tanggal, '
+      + 'beserta indikator yang membentuknya (rasio gagal, bolak-balik, tertahan, gagal beruntun, '
+      + 'rapat yatim) dan bobot yang dipakai. Angka saja — tidak ada isi kerja. '
+      + '/ Quality scoreboard: 0-100 per project and session, with the behaviour indicators behind it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dari: { type: 'string', description: 'YYYY-MM-DD, bawaan 6 hari sebelum `sampai`' },
+        sampai: { type: 'string', description: 'YYYY-MM-DD, bawaan hari ini' },
+        proyek: { type: 'string', description: 'saring ke satu nama folder proyek' },
+      },
+      additionalProperties: false,
+    },
+    async jalankan(p = {}) {
+      const q = new URLSearchParams();
+      for (const k of ['dari', 'sampai']) if (p[k]) q.set(k, String(p[k]));
+      const r = await ambil('/skp' + (q.toString() ? '?' + q.toString() : ''));
+      /* Penyaringan proyek dilakukan DI SINI, bukan lewat parameter rute baru:
+         /skp memang tidak punya `proyek`, dan menambahnya cuma untuk MCP berarti
+         permukaan server baru yang harus dijaga uji sendiri. Rentangnya sudah
+         dibatasi rute, jadi yang dibuang di sini cuma baris. */
+      const saring = String(p.proyek || '').trim();
+      const proyek = saring ? (r.proyek || []).filter((x) => x.nama === saring) : (r.proyek || []);
+      const namaProyek = new Set(proyek.map((x) => x.nama));
+      const sesi = saring ? (r.sesi || []).filter((x) => namaProyek.has(x.proyek)) : (r.sesi || []);
+      const bernilai = proyek.filter((x) => x.nama && x.nilai != null);
+      const terburuk = bernilai.slice().sort((a, b) => a.nilai - b.nilai)[0];
+      const ringkas = proyek.length === 0
+        ? `Tidak ada yang tercatat ${r.rentang.dari}–${r.rentang.sampai}`
+          + (saring ? ` untuk proyek ${saring}.` : '.')
+        : `${proyek.length} proyek, ${sesi.length} sesi (${r.rentang.dari}–${r.rentang.sampai}). `
+          + (terburuk
+            ? `Nilai terendah: ${terburuk.nama} ${terburuk.nilai}/100`
+              + ` (gagal ${terburuk.rasioGagalBersih}%, bolak-balik `
+              + (terburuk.bolakBalikRasio == null ? 'tidak terukur' : terburuk.bolakBalikRasio + '%')
+              + `, beruntun ${terburuk.gagalBeruntunMaks}).`
+            : 'Belum ada sumbu yang bisa dinilai di rentang ini.');
+      return {
+        ringkas,
+        data: {
+          rentang: r.rentang,
+          bobot: r.bobot, jenuh: r.jenuh, bolakBalikDasar: r.bolakBalikDasar,
+          jendelaUlang: r.jendelaUlang, ulangMin: r.ulangMin,
+          proyek: proyek.map((x) => ({
+            nama: x.nama, nilai: x.nilai, bobotDipakai: x.bobotDipakai,
+            sesi: x.sesi, toolCall: x.toolCall,
+            rasioGagalBersih: x.rasioGagalBersih, bolakBalikRasio: x.bolakBalikRasio,
+            tertahanPer100: x.tertahanPer100, gagalBeruntunMaks: x.gagalBeruntunMaks,
+            rapatYatimRasio: x.rapatYatimRasio,
+            // keterangan tanpa bobot; server yang memutuskan, bukan tool ini
+            interupsi: x.interupsi, lamaTertahan: x.lamaTertahan, toolPerPrompt: x.toolPerPrompt,
+          })),
+          sesi: sesi.slice(0, 40).map((x) => ({
+            sesi: x.sesi, proyek: x.proyek, cabang: x.cabang, model: x.model,
+            nilai: x.nilai, bobotDipakai: x.bobotDipakai, toolCall: x.toolCall,
+            rasioGagalBersih: x.rasioGagalBersih, bolakBalikRasio: x.bolakBalikRasio,
+            tertahanPer100: x.tertahanPer100, gagalBeruntunMaks: x.gagalBeruntunMaks,
+            rapatYatimRasio: x.rapatYatimRasio,
+          })),
+        },
+      };
+    },
+  },
+  {
     name: 'ruangan_kesehatan',
     description: 'Server ruangan hidup atau tidak: jumlah event, penonton, port. / Health of the room server.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },

@@ -3127,6 +3127,127 @@ const SKP_TOOL_MAX = 8;
 const SKP_TERTAHAN = new Set(['izin-minta', 'stop-gagal']);
 const skpCache = new Map();                 // 'dari|sampai' -> { ts, hasil }
 
+/* ---------------------------------------------------- indikator perilaku ---
+   Papan SKP di atas menjumlah VOLUME: 200 tool call rapi dan 200 tool call
+   karena mengulang Edit yang sama empat puluh kali terlihat persis sama. Empat
+   angka di bawah ini menilai PERILAKUNYA, semuanya dari bidang buku agenda
+   yang sudah lama ada — tanpa hook baru, tanpa kunci, tanpa sinyal baru.
+
+   Yang DIBERI bobot cuma yang benar-benar perbuatan agennya:
+
+     rasioGagal     gagal per tool call, sesudah dikurangi Ctrl+C
+     bolakBalik     tool+label yang sama berulang dalam jendela pendek
+     tertahan       berapa kali sesi berhenti menunggu manusia
+     gagalBeruntun  rentetan gagal terpanjang tanpa diselingi berhasil
+     rapatYatim     subagent yang dibuka tapi tidak pernah ditutup
+
+   Yang TIDAK diberi bobot, tapi tetap dilaporkan sebagai keterangan:
+
+     interupsi      Ctrl+C tindakan PEMILIK, bukan alat yang rusak — kalimat
+                    itu sudah tertulis di normalisasi hook dan di room.js.
+                    Hari ini event yang sama sudah masuk hitungan `gagal`,
+                    jadi memberinya bobot berarti menghukum dua kali. Yang
+                    dilakukan di sini kebalikannya: `gagalBersih` justru
+                    DIKURANGI jumlah interupsi sebelum dipakai menilai.
+     lamaTertahan   berapa lama menunggu itu urusan JAM MANUSIANYA, bukan
+                    kelakuan agen. Di empat hari data nyata p90-nya 36 menit
+                    dan puncaknya 12 jam — itu orang tidur, bukan agen buruk.
+     toolPerPrompt  sebarannya p50 31 dan p90 243. Angka besar sama saja
+                    artinya "satu perintah dikerjakan tuntas" atau "meraba-
+                    raba"; tidak ada arah yang bisa dipertahankan, jadi
+                    disajikan mentah dan dibiarkan dibaca orang.
+
+   Titik jenuh (nilai yang membuat satu sumbu kena hukuman penuh) dipilih dengan
+   satu aturan, dan aturannya dua-duanya harus dipenuhi:
+
+     a. bisa dijelaskan dengan kalimat biasa — "satu dari sepuluh tool call
+        gagal", "empat gagal berturut-turut tanpa satu pun berhasil", "separuh
+        subagent yang dibuka tidak pernah melapor balik";
+     b. TERBUKTI bisa dicapai. Ambang yang tak pernah tersentuh sama saja
+        dengan sumbu yang tidak ada.
+
+   Syarat (b) bukan teori. Ambang gagal 20% yang dipakai warna `.gagal-tinggi`
+   di halaman ternyata tidak pernah tercapai satu kali pun: rasio gagal
+   tertinggi dari 29.496 baris agenda empat hari cuma 8,7%. Memakainya sebagai
+   titik jenuh berarti sumbu paling berat dalam rumus ini tidak pernah berbunyi.
+   Angka di bawah semuanya diadu dengan hari sungguhan itu dulu, dan yang
+   pertama saya pilih sendiri (tertahan 6 per 100) juga gugur di syarat yang
+   sama — maksimum sungguhannya 2,3. Bobot dan jenuh IKUT KELUAR di /skp supaya
+   siapa pun bisa menghitung ulang sendiri dan membantahnya.
+
+   `bolakBalik` cuma dihitung dari `pre` yang labelnya BISA dipercaya untuk
+   perbandingan kesamaan, dan itu bukan basa-basi: `clip()` menutup label yang
+   kepanjangan dengan '…', dan 6.633 dari 14.084 label memang tertutup begitu —
+   dua perintah Bash yang cuma berbagi 88 karakter pertama akan terlihat kembar
+   padahal bukan. Label tool MCP lebih parah: isinya nama servernya saja, jadi
+   1.011 panggilan cuma punya 22 label berbeda. Dua-duanya dikeluarkan. Sisanya
+   6.434 sidik jari yang jujur; kalau yang tersisa terlalu sedikit (atau
+   AGENT_ROOM_ISI=off menghapus seluruh label), sumbu ini TIDAK dinilai dan
+   bobotnya dikeluarkan dari pembagi — bukan dianggap nol. */
+const SKP_JENDELA_ULANG = 3;                // sepanjang apa "barusan" untuk bolak-balik
+const SKP_ULANG_MIN = 10;                   // di bawah ini rasio bolak-balik tidak berarti
+const SKP_BOBOT = { rasioGagal: 30, bolakBalik: 25, tertahan: 20, gagalBeruntun: 15, rapatYatim: 10 };
+/* satuan berurutan: % tool call · % panggilan yang labelnya layak dibandingkan
+   · kali per 100 tool call · rentetan · % rapat yang dibuka. Tertinggi yang
+   pernah tercatat di empat hari nyata: 8,7 · 34,5 · 2,3 · 3 · 100 */
+const SKP_JENUH = { rasioGagal: 10, bolakBalik: 30, tertahan: 3, gagalBeruntun: 4, rapatYatim: 50 };
+const skpSatuAngka = (x) => Math.round(x * 10) / 10;
+/* Label yang boleh dipakai membandingkan kesamaan: ada, tidak tertutup '…'
+   oleh clip(), dan bukan tool MCP (labelnya cuma "server · tool"). */
+const skpLabelLayak = (o) => Boolean(o.label) && !o.label.endsWith('…')
+  && !String(o.tool || '').startsWith('mcp__');
+
+/* Fungsi MURNI: lima angka masuk, satu nilai keluar. Sumbu yang nilainya null
+   berarti tidak terukur di rentang ini — bobotnya dikeluarkan dari pembagi,
+   jadi sesi bersih tetap 100 dan sumbu yang buta tidak pernah menyamar jadi
+   nilai sempurna maupun jadi hukuman. */
+function skpNilai(ukur) {
+  let bobot = 0; let denda = 0; const dipakai = [];
+  for (const k of Object.keys(SKP_BOBOT)) {
+    const v = ukur[k];
+    if (v == null || !Number.isFinite(v)) continue;
+    bobot += SKP_BOBOT[k];
+    denda += SKP_BOBOT[k] * Math.min(1, Math.max(0, v) / SKP_JENUH[k]);
+    dipakai.push(k);
+  }
+  if (!bobot) return { nilai: null, bobotDipakai: [] };
+  return { nilai: Math.round(100 - (denda / bobot) * 100), bobotDipakai: dipakai };
+}
+
+/* Bentuk blok indikator yang sama untuk sesi maupun proyek — satu rumus, dua
+   pemakai, jadi angka di baris proyek tidak pernah punya definisi sendiri. */
+function skpPerilaku(a) {
+  const gagalBersih = Math.max(0, a.gagal - a.interupsi);
+  const rasioGagalBersih = a.toolCall ? skpSatuAngka((gagalBersih / a.toolCall) * 100) : 0;
+  const bolakBalikRasio = a.bolakBalikDari >= SKP_ULANG_MIN
+    ? skpSatuAngka((a.bolakBalik / a.bolakBalikDari) * 100) : null;
+  const tertahanPer100 = a.toolCall ? skpSatuAngka((a.tertahan / a.toolCall) * 100) : 0;
+  const rapatYatimRasio = a.rapat ? skpSatuAngka((a.rapatYatim / a.rapat) * 100) : null;
+  const skor = skpNilai({ rasioGagal: rasioGagalBersih, bolakBalik: bolakBalikRasio,
+                          tertahan: tertahanPer100, gagalBeruntun: a.gagalBeruntunMaks,
+                          rapatYatim: rapatYatimRasio });
+  return {
+    nilai: skor.nilai,
+    bobotDipakai: skor.bobotDipakai,
+    gagalBersih,
+    rasioGagalBersih,
+    bolakBalik: a.bolakBalik,
+    bolakBalikDari: a.bolakBalikDari,
+    bolakBalikRasio,
+    gagalBeruntunMaks: a.gagalBeruntunMaks,
+    rapat: a.rapat,
+    rapatYatim: a.rapatYatim,
+    rapatYatimRasio,
+    tertahanPer100,
+    // keterangan tanpa bobot — alasannya di kepala blok ini
+    interupsi: a.interupsi,
+    tertahanLuas: a.tertahanLuas,
+    lamaTertahan: a.lamaTertahan,
+    prompt: a.prompt,
+    toolPerPrompt: a.prompt ? skpSatuAngka(a.toolCall / a.prompt) : null,
+  };
+}
+
 const skpHariMundur = (tanggal, n) => {
   const d = new Date(tanggal + 'T00:00:00');
   return tanggalLokal(d.getTime() - n * 24 * 3600 * 1000);
@@ -3163,7 +3284,12 @@ function skpHitung(dari, sampai) {
       p.sesi.add(o.session);
       let s = sesi.get(o.session);
       if (!s) sesi.set(o.session, s = { sesi: o.session, proyek: nama, cabang: o.cabang || '', mulai: o.ts, selesai: o.ts,
-                                        toolCall: 0, gagal: 0, tertahan: 0, tool: {}, model: '' });
+                                        toolCall: 0, gagal: 0, tertahan: 0, tool: {}, model: '',
+                                        // indikator perilaku; ulangRing/rapatBuka/tahanSejak kerja
+                                        // sementara dan dibuang sebelum ikut ke respons
+                                        interupsi: 0, prompt: 0, bolakBalik: 0, bolakBalikDari: 0, ulangRing: [],
+                                        gagalRun: 0, gagalBeruntunMaks: 0, rapat: 0, rapatYatim: 0,
+                                        rapatBuka: new Set(), tertahanLuas: 0, lamaTertahan: 0, tahanSejak: 0 });
       if (o.ts < s.mulai) s.mulai = o.ts;
       if (o.ts > s.selesai) s.selesai = o.ts;
       if (o.cabang) s.cabang = o.cabang;
@@ -3178,6 +3304,45 @@ function skpHitung(dari, sampai) {
         if (Number.isFinite(o.durasi)) { p.durasiJumlah += o.durasi; p.durasiN++; }
       }
       if (SKP_TERTAHAN.has(o.kind)) s.tertahan++;
+      /* ---- indikator perilaku, semuanya per SESI ----
+         Rentetan gagal dan ring pengulangan cuma berarti di dalam satu sesi,
+         dan di buku agenda yang urut waktu sesi-sesi saling menyela — jadi
+         angka proyek digulung dari sini SESUDAH loop, bukan dijumlah di sini. */
+      // menunggu ditutup oleh kejadian berikutnya dari sesi yang sama
+      if (s.tahanSejak && o.ts > s.tahanSejak) { s.lamaTertahan += o.ts - s.tahanSejak; s.tahanSejak = 0; }
+      if (o.kind === 'pre' && o.tool && skpLabelLayak(o)) {
+        s.bolakBalikDari++;
+        const sidik = o.tool + ' ' + o.label;
+        if (s.ulangRing.includes(sidik)) s.bolakBalik++;
+        s.ulangRing.push(sidik);
+        if (s.ulangRing.length > SKP_JENDELA_ULANG) s.ulangRing.shift();
+      }
+      if (o.kind === 'post') {
+        if (o.ok === false) {
+          if (o.interupsi) s.interupsi++;
+          s.gagalRun++;
+          if (s.gagalRun > s.gagalBeruntunMaks) s.gagalBeruntunMaks = s.gagalRun;
+        } else s.gagalRun = 0;                 // satu yang berhasil memutus rentetan
+      }
+      if (o.kind === 'prompt') s.prompt++;
+      // hitungan LUAS (kind tertahan + objek butuh/macet di kind apa pun) cuma
+      // dipakai lamaTertahan, supaya durasi dan jumlahnya selalu sepadan;
+      // `tertahan` yang diberi bobot tetap definisi lamanya, dan itu juga yang
+      // angkanya tampil di papan — yang menghukum harus bisa dibaca mata
+      if (SKP_TERTAHAN.has(o.kind)
+          || (o.butuh && typeof o.butuh === 'object') || (o.macet && typeof o.macet === 'object')) {
+        s.tertahanLuas++;
+        s.tahanSejak = o.ts;
+      }
+      /* Rapat yatim ditutup di `session-end` SAJA. `stop` terbit tiap giliran
+         selesai, bukan tiap sesi selesai: di empat hari data nyata, 49 dari 187
+         subagent yang benar-benar berpasangan melewati sedikitnya satu `stop`,
+         jadi memakai `stop` sebagai batas melaporkan 136 yatim padahal yang
+         sungguhan 35. Yang masih terbuka waktu rentang habis tidak dihitung —
+         sesinya boleh jadi memang masih jalan. */
+      if (o.kind === 'subagent-start' && o.agenId) { s.rapat++; s.rapatBuka.add(o.agenId); }
+      else if (o.kind === 'subagent-stop' && o.agenId) s.rapatBuka.delete(o.agenId);
+      else if (o.kind === 'session-end') { s.rapatYatim += s.rapatBuka.size; s.rapatBuka.clear(); }
       // jam dinas DALAM rentang: aturan yang sama dengan buku induk (celah ≤5
       // menit antar event hook), dihitung ulang dari agenda supaya angkanya
       // memang milik minggu ini, bukan seumur karier
@@ -3197,9 +3362,25 @@ function skpHitung(dari, sampai) {
       k.cacheBaca += t.cacheBaca || 0; k.cacheTulis += t.cacheTulis || 0;
     }
   }
+  /* Indikator perilaku proyek = gulungan dari sesi-sesinya. Yang dijumlah
+     dijumlah, tapi `gagalBeruntunMaks` diambil MAKS — rentetan terpanjang
+     milik satu sesi, menjumlahkannya lintas sesi tidak berarti apa-apa. */
+  const perilaku = new Map();
+  for (const s of sesi.values()) {
+    let a = perilaku.get(s.proyek);
+    if (!a) perilaku.set(s.proyek, a = { interupsi: 0, prompt: 0, bolakBalik: 0, bolakBalikDari: 0,
+                                         gagalBeruntunMaks: 0, rapat: 0, rapatYatim: 0,
+                                         tertahan: 0, tertahanLuas: 0, lamaTertahan: 0 });
+    for (const k of ['interupsi', 'prompt', 'bolakBalik', 'bolakBalikDari', 'rapat', 'rapatYatim',
+                     'tertahan', 'tertahanLuas', 'lamaTertahan']) a[k] += s[k];
+    if (s.gagalBeruntunMaks > a.gagalBeruntunMaks) a.gagalBeruntunMaks = s.gagalBeruntunMaks;
+  }
   const teratas = (tool) => Object.entries(tool).sort((a, b) => b[1] - a[1]);
   const daftarProyek = [...proyek.values()].map((p) => {
     const induk = bukuInduk.proyek[p.nama];
+    const a = perilaku.get(p.nama) || { interupsi: 0, prompt: 0, bolakBalik: 0, bolakBalikDari: 0,
+                                        gagalBeruntunMaks: 0, rapat: 0, rapatYatim: 0,
+                                        tertahan: 0, tertahanLuas: 0, lamaTertahan: 0 };
     return {
       nama: p.nama,
       sesi: p.sesi.size,
@@ -3213,19 +3394,35 @@ function skpHitung(dari, sampai) {
       jamDinas: induk ? induk.jamDinas : 0,          // seumur karier (buku induk), bukan cuma rentang ini
       golongan: induk ? induk.golongan : GOLONGAN[0].nama,
       fanOut: induk ? induk.fanOut : 0,
+      tertahan: a.tertahan,                          // baru di tingkat proyek; per sesi sudah lama ada
+      ...skpPerilaku({ ...a, toolCall: p.toolCall, gagal: p.gagal }),
     };
   }).sort((a, b) => (b.toolCall - a.toolCall) || ((b.token.input + b.token.output) - (a.token.input + a.token.output)));
   const daftarSesi = [...sesi.values()].map((s) => {
     const t = teratas(s.tool)[0];
     return { sesi: s.sesi, proyek: s.proyek, cabang: s.cabang, model: s.model, mulai: s.mulai, selesai: s.selesai,
              toolCall: s.toolCall, gagal: s.gagal, tertahan: s.tertahan,
-             toolTeratas: t ? { nama: t[0], jumlah: t[1] } : null };
+             toolTeratas: t ? { nama: t[0], jumlah: t[1] } : null,
+             // ulangRing/rapatBuka/tahanSejak sengaja TIDAK ikut: itu kerja
+             // sementara, dan rapatBuka malah sebuah Set yang JSON.stringify
+             // akan mengubah jadi {} tanpa memberi tahu siapa pun
+             ...skpPerilaku(s) };
   }).sort((a, b) => (b.toolCall - a.toolCall) || (b.selesai - a.selesai));
   const hasil = {
     rentang: { dari, sampai, hari },
     proyek: daftarProyek,
     sesi: daftarSesi,
     keterangan: 'sejak dipantau',
+    /* Rumus nilainya ikut keluar, bukan disembunyikan di kode: siapa pun yang
+       membaca /skp bisa menghitung ulang angkanya sendiri dan membantahnya.
+       `bobotDipakai` di tiap baris menyebut sumbu mana yang benar-benar
+       terukur, jadi nilai 100 karena bersih tidak pernah tertukar dengan 100
+       karena tidak ada yang bisa diukur. */
+    bobot: SKP_BOBOT,
+    jenuh: SKP_JENUH,
+    jendelaUlang: SKP_JENDELA_ULANG,
+    ulangMin: SKP_ULANG_MIN,
+    bolakBalikDasar: ISI_MATI ? 'mati' : 'tool+label',
     dihitung: Date.now(),
   };
   // satu peta kecil: rentang yang lazim cuma 7/14/30 hari, sisanya kedaluwarsa sendiri

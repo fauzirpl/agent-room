@@ -114,6 +114,11 @@ jobs:
       - name: Uji transkrip peserta rapat
         run: node uji-peserta.mjs
 
+      # Papan SKP menilai MUTU: lima sumbu perilaku dan satu nilai 0-100.
+      # Buku agendanya ditulis uji itu sendiri, plus golden hari sungguhan.
+      - name: Uji papan SKP mutu
+        run: node uji-skp.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

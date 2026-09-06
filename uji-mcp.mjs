@@ -48,7 +48,7 @@ const TAMPIL = process.argv.includes('--tampil');
    `text/plain; version=0.0.4`, sedangkan `ambil()` di mcp-room berakhir dengan
    `r.json()`. Tool yang memanggilnya akan melempar SyntaxError lalu mendarat
    di cabang "Kantor tidak bisa dihubungi" — menuduh kantor mati padahal hidup. */
-const RUTE_BOLEH = new Set(['/ruangan', '/token-riwayat', '/agenda', '/health']);
+const RUTE_BOLEH = new Set(['/ruangan', '/token-riwayat', '/agenda', '/health', '/skp']);
 
 const warna = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 const c = (n) => (s) => (warna ? '\x1b[' + n + 'm' + s + '\x1b[0m' : s);
@@ -381,6 +381,39 @@ async function kasus4(cli) {
 
   const sehat = belah(await cli.panggil('ruangan_kesehatan'));
   benar('ruangan_kesehatan melaporkan kantor buka', /Kantor buka/.test(sehat.kalimat), sehat.kalimat);
+
+  /* Papan SKP lewat MCP. Yang dijaga di sini kontrak bentuknya, bukan angkanya
+     — kebenaran nilainya urusan uji-skp.mjs, yang menulis buku agendanya
+     sendiri. Satu hal yang memang cuma bisa dijaga di sini: rumusnya IKUT
+     KELUAR. Nilai tanpa bobot yang menyertainya cuma angka yang harus
+     dipercaya, dan agen lain tidak bisa membantahnya. */
+  const skp = belah(await cli.panggil('ruangan_skp'));
+  const dSkp = skp.data || {};
+  benar('ruangan_skp membawa rentang tanggalnya', Boolean(dSkp.rentang && dSkp.rentang.dari && dSkp.rentang.sampai),
+    JSON.stringify(dSkp.rentang));
+  const SUMBU = ['rasioGagal', 'bolakBalik', 'tertahan', 'gagalBeruntun', 'rapatYatim'];
+  const kurangBobot = SUMBU.filter((k) => !Number.isFinite((dSkp.bobot || {})[k]));
+  benar('  rumusnya ikut keluar: bobot tiap sumbu', kurangBobot.length === 0, 'sumbu tanpa bobot: ' + kurangBobot.join(', '));
+  const kurangJenuh = SUMBU.filter((k) => !Number.isFinite((dSkp.jenuh || {})[k]));
+  benar('  titik jenuh tiap sumbu ikut keluar', kurangJenuh.length === 0, 'sumbu tanpa jenuh: ' + kurangJenuh.join(', '));
+  sama('  bobot berjumlah 100', Object.values(dSkp.bobot || {}).reduce((a, b) => a + b, 0), 100);
+  benar('  dasar bolak-balik disebut', ['tool+label', 'mati'].includes(dSkp.bolakBalikDasar), String(dSkp.bolakBalikDasar));
+  benar('  proyek & sesi berupa larik', Array.isArray(dSkp.proyek) && Array.isArray(dSkp.sesi),
+    typeof dSkp.proyek + '/' + typeof dSkp.sesi);
+  for (const baris of [...(dSkp.proyek || []), ...(dSkp.sesi || [])].slice(0, 8)) {
+    benar('  nilai tiap baris 0–100 atau null', baris.nilai === null || (baris.nilai >= 0 && baris.nilai <= 100),
+      JSON.stringify(baris.nilai));
+    benar('  sumbu yang dipakai disebut namanya', Array.isArray(baris.bobotDipakai)
+      && baris.bobotDipakai.every((k) => SUMBU.includes(k)), JSON.stringify(baris.bobotDipakai));
+  }
+  /* Isi kerja tidak boleh ikut lewat pintu baru ini. Sekelas sentinel di
+     uji-paraf.mjs: yang disaring bukan nama medan, tapi seluruh badan balasan. */
+  const teksSkp = JSON.stringify(skp.data);
+  benar('  tidak ada label/isi kerja yang ikut keluar',
+    !/"label"|"galat"|"alasan"|"tanya"/.test(teksSkp), teksSkp.slice(0, 160));
+  const saring = belah(await cli.panggil('ruangan_skp', { proyek: 'proyek-yang-tidak-ada' }));
+  sama('  saringan proyek yang tidak cocok mengosongkan daftar', ((saring.data || {}).proyek || []).length, 0);
+  benar('    dan mengatakannya, bukan diam', /Tidak ada yang tercatat/.test(saring.kalimat), saring.kalimat);
 
   /* Pohon delegasi. Ini sekaligus bukti ujung-ke-ujung bahwa `agent_id` pada
      `pre` benar-benar dibaca server: tanpa itu `toolN` peserta tidak akan
