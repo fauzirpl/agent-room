@@ -144,6 +144,11 @@ jobs:
       - name: Uji juknis paraf
         run: node uji-sop.mjs
 
+      # Kuota loket per proyek, dan loop pemilih yang wajib KELUAR waktu
+      # tidak ada kandidat yang lolos — kalau tidak, servernya membeku.
+      - name: Uji kuota loket
+        run: node uji-kuota.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

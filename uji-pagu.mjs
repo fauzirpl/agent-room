@@ -227,6 +227,7 @@ const ENV_DATA = (dir) => ({
   AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
   AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
   AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
+  AGENT_ROOM_LOKET: path.join(dir, 'loket.json'),
   /* Ini satu-satunya yang cuma DIBACA server (katalog rancangan event, sumber
      kalimat narasi). Tetap disandbox-kan: berkasnya boleh tidak ada — narasi
      jatuh ke id event dan servernya tetap menyala — dan uji yang mau menguji

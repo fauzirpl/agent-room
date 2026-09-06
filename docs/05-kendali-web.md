@@ -409,6 +409,45 @@ konfigurasi Claude Code milik pengguna, dan pantas diketik sendiri.
 | `ruangan_skp` | `GET /skp` | papan SKP: nilai mutu 0–100 per proyek & per sesi dalam satu rentang, beserta indikator yang membentuknya (rasio gagal bersih, bolak-balik, tertahan, gagal beruntun, rapat yatim) dan **bobot serta titik jenuh** yang dipakai menghitungnya. `dari`, `sampai`, `proyek` (saringan nama folder, dilakukan di sisi tool — `/skp` sendiri tidak punya parameter itu). Angka saja: tidak ada label maupun isi kerja |
 | `ruangan_kesehatan` | `GET /health` | server hidup atau tidak |
 
+### Kuota loket per proyek (`loket.json`)
+
+`MAKS_JALAN` menjaga **mesin**: empat proses bersamaan, titik. Yang tidak
+dijaganya: satu proyek boleh memakai keempatnya sekaligus, dan tugas proyek
+lain menunggu di belakangnya tanpa pernah dapat giliran. Salin
+`loket.contoh.json` jadi `loket.json` (atau tunjuk lewat `AGENT_ROOM_LOKET`):
+
+```json
+{ "v": 1, "maksJalanProyek": { "*": 2, "agent-room": 1 }, "maksAntreProyek": 3 }
+```
+
+`"*"` jadi bawaan untuk folder yang tidak disebut. Tanpa berkasnya, antreannya
+FIFO persis seperti sebelum fitur ini ada. Berkas yang **ada tapi tidak memberi
+batas kepada siapa pun** bersuara di konsol lalu dimatikan — diam di situ akan
+menipu: kamu menulis berkas, mengira ia berlaku, dan tidak ada yang berubah.
+
+Dua akibat yang perlu kamu tahu:
+
+- **Loket berhenti memanggil kepala-baris.** `lahirkanAntrean()` sekarang
+  memilih tugas pertama yang kuota proyeknya longgar. Itu memang gunanya — tapi
+  artinya **nomor antre berhenti jadi janji**: yang di depan bisa duduk diam
+  sementara yang di belakang lahir. Karena itu nomornya dicabut dari halaman
+  dan diganti sebabnya ("kuota proyek penuh" / "menunggu slot").
+- **`POST /perintah` membalas 202 ber-`sebab`**: `kuota-proyek` kalau jatah
+  folder itu habis, `slot-penuh` kalau mesinnya yang penuh. Sebabnya ikut ke
+  `/kendali.antrean[].tunda`, ke `/ruangan.antrean.tunda`, dan ke metrik
+  `agent_room_antrean_tunda{sebab}`.
+
+**Tidak ada jam buka/tutup di sini, dan itu keputusan.** Usulan aslinya memuat
+`jamBuka`/`jamTutup`/`hariKerja`; keduanya ditolak dengan dua alasan yang
+bisa diperiksa sendiri. Pertama, `babakHari()` di halaman sudah mendefinisikan
+jam kantor lengkap dengan libur nasional dan hari kejepit yang server tidak
+tahu — definisi kedua di sisi server tidak akan pernah sama jawabannya. Kedua,
+[docs/01](01-jalanin.md) menulis lurus-lurus bahwa pagu "tidak pernah menahan
+pegawai, menahan antrean, atau mengubah state siapa pun"; menahan antrean
+karena angka di jam dinding persis melakukan yang ketiga. Kuota per proyek
+beda kelas: ia batas **mesin** atas anak yang kantor ini lahirkan sendiri,
+sekelas `MAKS_JALAN` yang sudah lama ada.
+
 ### Juknis paraf (`sop.json`)
 
 Satu berkas milik kamu, di luar repo, yang menuliskan **sekali** apa yang tidak

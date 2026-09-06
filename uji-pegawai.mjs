@@ -137,6 +137,8 @@ async function coba(dir, port, tambahan = {}) {
       AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
 
       AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
+
+      AGENT_ROOM_LOKET: path.join(dir, 'loket.json'),
       AGENT_ROOM_KUNCI: '',
       AGENT_ROOM_LAPOR: '',
       /* 'off', bukan ''. Kosong berarti "tebak dari IP" — server tetap boleh

@@ -27,6 +27,11 @@ pagu.json.tmp
 sop.json
 sop.json.tmp
 
+# kuota loket per proyek: batas mesin lokal, bukan kode
+# (loket.contoh.json justru IKUT di-commit; itu contoh untuk dibaca manusia)
+loket.json
+loket.json.tmp
+
 # formasi pegawai tetap: nama & jabatan penghuni kursi per folder, data lokal
 formasi.json
 formasi.json.tmp

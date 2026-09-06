@@ -101,6 +101,8 @@ const ENV_DATA = (dir) => ({
   AGENT_ROOM_SUARA: path.join(dir, 'suara.json'),
   AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
   AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
+  AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
+  AGENT_ROOM_LOKET: path.join(dir, 'loket.json'),
   /* AGENT_ROOM_ISI sengaja TIDAK dimatikan: kalimat agen satu-satunya bukti
      LANGSUNG bahwa penolakan juknis benar-benar sampai ke agennya, bukan cuma
      tercatat di server. Tidak ada transkrip sungguhan yang terbaca — berkas

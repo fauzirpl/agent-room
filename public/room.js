@@ -7478,11 +7478,20 @@ function renderAntrean() {
     const row = document.createElement('div');
     row.className = 'crew-row antre' + (segera ? ' segera' : '');
     const sejak = t.sejak ? new Date(t.sejak).toLocaleTimeString('id-ID', { hour12: false }).slice(0, 8) : '';
-    row.title = 'menunggu slot kosong' + (sejak ? ' sejak ' + sejak : '')
-      + (segera ? ' · sifat SEGERA: didahulukan' : ' · sifat biasa');
+    /* NOMOR ANTREnya SENGAJA DICABUT. Loket tidak lagi memanggil kepala-baris:
+       sejak ada kuota per proyek, yang di depan bisa duduk diam sementara yang
+       di belakang lahir duluan karena proyeknya sedang kosong. Menampilkan
+       "antre #1" untuk tugas yang akan dilewati adalah janji yang tidak bisa
+       ditepati kantor ini — dan janji urutan yang meleset lebih menyesatkan
+       daripada tidak ada nomor sama sekali. Yang menggantikannya SEBAB: itu
+       yang benar-benar menjelaskan kenapa ia belum jalan. */
+    const sebab = t.tunda === 'kuota-proyek' ? 'kuota proyek penuh' : 'menunggu slot';
+    row.title = sebab + (sejak ? ' sejak ' + sejak : '')
+      + (segera ? ' · sifat SEGERA: didahulukan' : ' · sifat biasa')
+      + ' · urutan loket bukan janji: proyek yang slotnya kosong bisa lahir duluan';
     row.innerHTML =
       '<span class="chip"></span>' +
-      '<span class="who">antre #' + Number(t.posisi || 0) + '</span>' +
+      '<span class="who">' + esc(sebab) + '</span>' +
       '<span class="nama">' + esc(t.nama || 'tugas') + '</span>' +
       '<span class="what">' + esc(t.cwd || '') + ' · ' + (segera ? 'SEGERA' : 'biasa') + '</span>';
     if (kendali.izin) {
@@ -9823,8 +9832,10 @@ function kadisGambar() {
     blok('sedang bekerja', 'kerja', kerja.map((a) => baris(a, a.doing || (STATIONS[a.station] || {}).name || '')), 'kantor sepi'),
   ];
   if (santai.length) out.push(blok('di meja, tidak sedang tool call', 'santai', santai.map((a) => baris(a, a.doing || 'menunggu giliran')), ''));
-  out.push(blok('antrean disposisi', 'antre', antrean.map((t) => '<li><b>' + esc(t.nama || 'tugas') + '</b><span>#'
-    + Number(t.posisi || 0) + ' · ' + esc(t.cwd || '') + (t.sifat === 'SEGERA' ? ' · SEGERA' : '') + '</span></li>'), 'loket kosong'));
+  // nomor urutnya dicabut di sini juga; alasannya di renderAntrean()
+  out.push(blok('antrean disposisi', 'antre', antrean.map((t) => '<li><b>' + esc(t.nama || 'tugas') + '</b><span>'
+    + esc(t.tunda === 'kuota-proyek' ? 'kuota proyek' : 'menunggu slot')
+    + ' · ' + esc(t.cwd || '') + (t.sifat === 'SEGERA' ? ' · SEGERA' : '') + '</span></li>'), 'loket kosong'));
   // token hari ini dari /token-riwayat (ditulis server, lintas sesi) — angka
   // token saja, tanpa dolar: biaya di halaman ini toh "data sementara"
   let tokenHariIni = 'belum termuat';

@@ -123,6 +123,7 @@ const ENV_DATA = (dir) => ({
   AGENT_ROOM_SUARA_KUNCI: path.join(dir, '.agent-room-suara-kunci'),
   AGENT_ROOM_SUARA_DIR: path.join(dir, 'suara'),
   AGENT_ROOM_SOP: path.join(dir, 'sop.json'),
+  AGENT_ROOM_LOKET: path.join(dir, 'loket.json'),
   /* AGENT_ROOM_ISI sengaja TIDAK dimatikan di sini — beda dengan harness lain.
      Kalimat agen adalah satu-satunya jalur bukti yang masih hidup sesudah
      `tandaiHidup()` menyerahkan kendali ke hook (lihat kasus 3). Tidak ada

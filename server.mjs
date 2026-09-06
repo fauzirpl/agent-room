@@ -1177,7 +1177,12 @@ function potretRuangan() {
       diam: sesi.reduce((n, s) => n + s.delegasi.diam, 0),
       induk: sesi.filter((s) => s.delegasi.hidup > 0).length,
     },
-    antrean: { jumlah: antrean.length, nama: antrean.map((t) => t.nama || '').filter(Boolean) },
+    antrean: {
+      jumlah: antrean.length,
+      nama: antrean.map((t) => t.nama || '').filter(Boolean),
+      // berapa yang tertahan kuota proyek, bukan sekadar menunggu slot mesin
+      tunda: antrean.filter((t) => t.tunda).length,
+    },
     jalan: { jumlah: jalan.size },
     viewers: clients.size,
     kendali: IZIN,
@@ -4351,7 +4356,12 @@ function serveStatic(req, res, urlPath) {
    Ringkasan satu tugas yang antre, untuk /kendali dan event `antre`. Prompt-nya
    sengaja TIDAK ikut: yang beredar di stream cukup nama, proyek, dan sifat. */
 function ringkasAntre(t, i) {
-  return { id: t.id, nama: t.nama, cwd: baseName(t.cwd), sejak: t.sejak, sifat: t.sifat, posisi: i + 1 };
+  /* `tunda` = kenapa ia belum lahir, bukan sekadar 'belum giliran'. Sejak
+     pemilihnya bukan kepala-baris lagi, `posisi` berhenti jadi janji
+     urutan — halaman yang membacanya sudah berhenti menampilkannya
+     sebagai nomor antre. */
+  return { id: t.id, nama: t.nama, cwd: baseName(t.cwd), sejak: t.sejak, sifat: t.sifat,
+           posisi: i + 1, tunda: t.tunda || '' };
 }
 
 /* Satu event ringan tiap antrean berubah — masuk, lahir, batal — membawa
@@ -4373,6 +4383,99 @@ function siarAntre(aksi, t, posisi, pesan) {
 
 /* SEGERA menyalip semua BIASA, tapi antre di belakang SEGERA yang lebih dulu:
    loket tetap adil di antara yang sama-sama mendesak. */
+/* ------------------------------------------------- kuota loket per proyek ---
+   `MAKS_JALAN` menjaga MESIN: empat proses bersamaan, titik. Yang tidak
+   dijaganya: satu proyek boleh memakai keempatnya sekaligus, dan tugas proyek
+   lain menunggu di belakangnya tanpa pernah dapat giliran. `loket.json`
+   menambahkan batas per FOLDER PROYEK.
+
+   Ini rem, dan itu diakui — tapi rem yang sekelas `MAKS_JALAN` yang sudah ada:
+   batas mesin atas anak yang kantor ini lahirkan sendiri, bukan rem atas
+   pekerjaan orang. Yang TIDAK dikerjakan di sini, dan itu keputusan sadar:
+   **tidak ada gerbang jam.** `babakHari()` di halaman sudah mendefinisikan jam
+   kantor lengkap dengan hari kejepit dan libur nasional yang server tidak
+   tahu; menaruh `jamBuka`/`jamTutup` di sini berarti dua sumber kebenaran yang
+   jawabannya tidak akan pernah sama. Dan menahan antrean karena angka di jam
+   dinding adalah jenis rem yang berbeda — docs/01 menulisnya lurus-lurus soal
+   pagu: "tidak pernah menahan pegawai, menahan antrean, atau mengubah state
+   siapa pun".
+
+   Bentuknya meniru `pagu.json`: tidak ada berkas = fitur diam total dan
+   antreannya berperilaku persis seperti sebelum fitur ini ada. */
+const BERKAS_LOKET = process.env.AGENT_ROOM_LOKET || path.join(__dirname, 'loket.json');
+const LOKET_V = 1;
+let loket = null;                           // null = tanpa aturan; FIFO seperti dulu
+
+function loketMuat() {
+  let mentah = null;
+  try { mentah = fs.readFileSync(BERKAS_LOKET, 'utf8'); }
+  catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn('[agent-room] loket: ' + path.basename(BERKAS_LOKET) + ' tidak terbaca ('
+        + err.code + ') — kuota per proyek tidak aktif');
+    }
+    loket = null;
+    return;
+  }
+  let o = null;
+  try { o = JSON.parse(mentah); } catch { o = null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) {
+    console.warn('[agent-room] loket: isi ' + path.basename(BERKAS_LOKET)
+      + ' bukan objek JSON yang bisa dibaca — kuota per proyek tidak aktif');
+    loket = null;
+    return;
+  }
+  const v = Number(o.v);
+  if (Number.isFinite(v) && v > LOKET_V) {
+    console.warn('[agent-room] loket: ' + path.basename(BERKAS_LOKET) + ' ber-v' + v
+      + ', lebih baru dari yang dikenal proses ini (v' + LOKET_V + ') — kuota per proyek tidak aktif');
+    loket = null;
+    return;
+  }
+  const angkaSah = (x) => (Number.isInteger(x) && x >= 1 && x <= MAKS_JALAN ? x : null);
+  const kuota = new Map();
+  const sumber = o.maksJalanProyek && typeof o.maksJalanProyek === 'object' ? o.maksJalanProyek : {};
+  for (const [nama, nilai] of Object.entries(sumber)) {
+    const n = angkaSah(nilai);
+    if (n === null) {
+      console.warn('[agent-room] loket: kuota "' + nama + '" = ' + JSON.stringify(nilai)
+        + ' bukan bilangan 1–' + MAKS_JALAN + ' — dilewati');
+      continue;
+    }
+    kuota.set(nama, n);
+  }
+  const maksAntre = Number.isInteger(o.maksAntreProyek) && o.maksAntreProyek >= 1
+    ? Math.min(o.maksAntreProyek, ANTRE_MAKS) : 0;
+  if (!kuota.size && !maksAntre) {
+    /* Berkasnya ADA tapi tidak memberi batas kepada siapa pun. Diam di sini
+       akan menipu: orang menulis berkas, mengira ia berlaku, dan tidak ada
+       yang berubah. Fitur berlapis itu soal berkas yang TIDAK ADA. */
+    console.warn('[agent-room] loket: ' + path.basename(BERKAS_LOKET)
+      + ' tidak memberi kuota kepada siapa pun — kuota per proyek tidak aktif');
+    loket = null;
+    return;
+  }
+  loket = { kuota, maksAntre };
+  console.log('[agent-room] kuota loket aktif: ' + kuota.size + ' aturan proyek'
+    + (kuota.has('*') ? ' (termasuk bawaan "*")' : '')
+    + (maksAntre ? ', maks ' + maksAntre + ' antre per proyek' : '') + ' — batas mesin, tanpa gerbang jam');
+}
+
+/* Batas proses bersamaan untuk satu folder proyek. Tanpa aturan: tak terbatas
+   — yang berlaku cuma MAKS_JALAN seperti sebelum fitur ini ada. */
+function kuotaJalan(cwd) {
+  if (!loket) return Infinity;
+  const nama = baseName(cwd);
+  if (loket.kuota.has(nama)) return loket.kuota.get(nama);
+  if (loket.kuota.has('*')) return loket.kuota.get('*');
+  return Infinity;
+}
+const hitungJalanProyek = (nama) => [...jalan.values()].filter((j) => baseName(j.cwd) === nama).length;
+const hitungAntreProyek = (nama) => antrean.filter((t) => baseName(t.cwd) === nama).length;
+/* Boleh lahir SEKARANG? Cuma soal kuota proyeknya; batas mesin MAKS_JALAN
+   diperiksa terpisah oleh pemanggilnya. */
+const bolehLahir = (t) => hitungJalanProyek(baseName(t.cwd)) < kuotaJalan(t.cwd);
+
 function masukAntrean(t) {
   let i = antrean.length;
   if (t.sifat === 'SEGERA') {
@@ -4400,7 +4503,18 @@ function batalAntre(id) {
    berikutnya — persis seperti kalau dia gagal waktu dikirim langsung. */
 function lahirkanAntrean() {
   while (antrean.length && jalan.size < MAKS_JALAN) {
-    const t = antrean.shift();
+    /* Pemilih PERTAMA-YANG-LOLOS, bukan kepala-baris — itu yang membuat satu
+       proyek berhenti bisa memblokir proyek lain di belakangnya.
+
+       Dan `break` di bawah WAJIB, bukan kerapian. Loop ini dulu berbentuk
+       `while (…) { antrean.shift() … }`, yang selalu maju karena shift()
+       selalu mengambil sesuatu. Begitu shift() diganti pemilih yang boleh
+       TIDAK menemukan kandidat, `while` tanpa jalan keluar tidak pernah maju:
+       yang terjadi bukan tugas tertunda, tapi SERVERNYA MEMBEKU. */
+    for (const t of antrean) t.tunda = bolehLahir(t) ? '' : 'kuota-proyek';
+    const i = antrean.findIndex((t) => !t.tunda);
+    if (i < 0) break;
+    const [t] = antrean.splice(i, 1);
     siarAntre('lahir', t, 1);
     const hasil = lahirkanTugas(t);
     if (!hasil.ok) {
@@ -4571,6 +4685,7 @@ const modeEfektif = (t) => (t.paraf && !t.mode ? 'default' : (t.mode || 'bypassP
    ribuan baris di bawah blok pagu, dan memanggilnya lebih awal berarti
    ReferenceError yang mematikan server sebelum ia sempat mendengarkan. */
 sopMuat();
+loketMuat();
 
 const IZIN_TUNGGU_MS = 15 * 60 * 1000;      // tanpa paraf selama ini -> ditolak
 const IZIN_POLL_MS = 25 * 1000;             // satu long-poll ditahan paling lama segini
@@ -5097,6 +5212,12 @@ function metrikTeks() {
   metrik('agent_room_sesi_tertahan', 'gauge', 'Sesi hidup yang tertahan: butuh manusia atau macet karena galat.',
     [['jenis="butuh"', butuh], ['jenis="macet"', macet]]);
   metrik('agent_room_antrean', 'gauge', 'Disposisi yang menunggu giliran dijalankan (kendali web).', [['', antrean.length]]);
+  /* Kenapa mereka menunggu, bukan cuma berapa. Dua sebabnya beda artinya:
+     `slot-penuh` berarti mesinnya sibuk, `kuota-proyek` berarti satu
+     proyek sudah memakai jatahnya dan yang lain bisa jalan duluan. */
+  const tundaKuota = antrean.filter((t) => t.tunda === 'kuota-proyek').length;
+  metrik('agent_room_antrean_tunda', 'gauge', 'Disposisi yang tertahan, per sebab.',
+    [['sebab="kuota-proyek"', tundaKuota], ['sebab="slot-penuh"', antrean.length - tundaKuota]]);
   metrik('agent_room_tugas_jalan', 'gauge', 'Sesi headless yang sedang dijalankan dari halaman (kendali web).', [['', jalan.size]]);
   metrik('agent_room_token_total', 'counter', 'Token sepanjang masa dari riwayat lintas sesi.',
     token(riwayatTotal, riwayatProyek));
@@ -5282,6 +5403,12 @@ const server = http.createServer(async (req, res) => {
          aturannya. Halaman perlu tahu bahwa ada juknis yang berlaku;
          isinya urusan berkas milik pemilik, bukan urusan halaman. */
       sop: sop ? { aktif: true, proyek: [...sop.proyek.keys()] } : { aktif: false, proyek: [] },
+      /* Kuota loket per proyek. TIDAK ada `buka`/`bukaLagi` di sini dan itu
+         disengaja: kantor ini tidak punya gerbang jam, dan medan yang
+         mengisyaratkannya akan mengundang orang membuatnya. */
+      loket: loket
+        ? { aktif: true, aturan: Object.fromEntries(loket.kuota), maksAntreProyek: loket.maksAntre || null }
+        : { aktif: false, aturan: {}, maksAntreProyek: null },
     }));
     return;
   }
@@ -5868,13 +5995,27 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    if (jalan.size >= MAKS_JALAN) {
+    /* Dua alasan berbeda untuk mengantre, dan yang menanya berhak tahu yang
+       mana: mesinnya penuh (MAKS_JALAN, batas lama) atau kuota proyeknya
+       habis (loket.json). Balasannya tetap 202 seperti dulu, ditambah
+       `sebab`. */
+    const namaProyek = baseName(kerja);
+    const penuhMesin = jalan.size >= MAKS_JALAN;
+    const penuhKuota = !bolehLahir(tugas);
+    if (penuhMesin || penuhKuota) {
+      if (loket && loket.maksAntre && hitungAntreProyek(namaProyek) >= loket.maksAntre) {
+        return tolak(429, 'loket disposisi penuh — proyek ' + namaProyek + ' sudah '
+          + loket.maksAntre + ' tugas antre');
+      }
       if (antrean.length >= ANTRE_MAKS) {
         return tolak(429, 'loket disposisi penuh — ' + ANTRE_MAKS + ' tugas sudah antre');
       }
+      // sebab yang lebih spesifik menang: kuota proyek menjelaskan lebih banyak
+      tugas.tunda = penuhKuota ? 'kuota-proyek' : '';
       const posisi = masukAntrean(tugas);
       res.writeHead(202, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, antre: true, id: tugas.id, posisi }));
+      res.end(JSON.stringify({ ok: true, antre: true, id: tugas.id, posisi,
+        sebab: penuhKuota ? 'kuota-proyek' : 'slot-penuh' }));
       return;
     }
 
