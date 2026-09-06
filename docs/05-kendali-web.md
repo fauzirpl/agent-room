@@ -122,6 +122,44 @@ yang kebetulan terbuka tidak bisa memparaf apa pun. Yang naik ke halaman cuma
 **ringkasan** input tool (≤300 karakter: perintah shell, nama berkas, pola),
 bukan argumen utuhnya.
 
+**Lembar telaah staf.** Tiap permintaan izin datang dengan **tingkat risiko**
+dan **nama pola** yang memicunya — `rm -rf`, `git push --force`, `curl | sh`,
+berkas rahasia, dan seterusnya. Aturannya satu berkas, [`telaah.mjs`](../telaah.mjs),
+dan sengaja dipakai **dua proses**: `mcp-izin.mjs` dan `server.mjs`. Yang
+tertinggi di antara keduanya yang berlaku.
+
+Pembagian itu bukan kerapian: proses MCP memegang `input` **utuh**, sedangkan
+server cuma menerima ringkasan 300 karakter. Perintah panjang menyembunyikan
+bagian berbahayanya justru di ekor, jadi telaah yang dihitung dari ringkasan
+saja akan buta terhadapnya. Yang naik ke server tetap cuma **hasilnya** —
+tingkat plus nama pola, tidak pernah isi perintahnya.
+
+Di kartu paraf ia jadi satu pita, dan untuk tingkat **tinggi** tombolnya minta
+klik kedua (*Paraf, yakin?*). Gesekan itu untuk **manusia di halaman ini**: ia
+tidak menahan pegawai mana pun, tidak menunda tool apa pun, dan hilang begitu
+kartunya digambar ulang. Nota, bukan rem.
+
+Sesi terminal ikut dapat pitanya — dihitung di `normalize()` dari `tool_input`
+mentah — tapi tetap **tanpa tombol**, karena halaman ini memang tidak punya
+pegangan ke proses terminal itu.
+
+### Buku register paraf
+
+`GET /paraf?dari=&sampai=` mengembalikan keputusan izin sepanjang rentang,
+**dibaca ulang dari buku agenda** — bukan tabel baru yang harus dipelihara.
+Sekelas `/skp`: tanpa token, rentang dijaga sama, dan yang keluar cuma enum,
+angka, dan nama pola.
+
+| Kolom | Isi |
+|---|---|
+| `keputusan`, `sumber` | `paraf`/`tolak`, dan dari mana jawabannya datang |
+| `tunggu` | berapa detik permintaan itu menunggu sebelum dijawab |
+| `risiko`, `tanda` | tingkat, dan nama pola yang memicunya |
+
+Yang **tidak pernah** ada di sini: isi perintahnya. `uji-paraf.mjs` menjaganya
+dengan sentinel — kalau suatu saat potongan perintah bocor lewat pintu baru
+ini, ujinya merah sebelum siapa pun sempat melihatnya.
+
 **Batas waktu 15 menit**, dihitung di dua tempat yang saling mengunci: server
 menolak sendiri (`izin-jawab` dengan *tidak ada paraf*) kalau 15 menit tidak
 ada jawaban, dan mcp-izin berhenti mengulang poll setelah batas yang sama
@@ -441,6 +479,7 @@ tidak ada hitungan baru:
 | `agent_room_galat_halaman` | gauge | laporan `POST /galat` yang tersimpan (maks 50) |
 | `agent_room_sse_dibuang_total`, `agent_room_sse_dilebur_total`, `agent_room_sse_diputus_total` | counter | rem SSE (di bawah) |
 | `agent_room_tunda_berkas`, `agent_room_tunda_diserap_total` | gauge/counter | kotak surat hook offline |
+| `agent_room_izin_menunggu{tingkat}` | gauge | permintaan paraf yang masih menunggu dijawab, menurut tingkat risikonya. Cuma jalur paraf — label untuk tindakan yang lewat tanpa paraf sengaja tidak ada, karena perintah yang sudah diizinkan lewat `settings.json` tidak pernah memicu `PermissionRequest` dan angkanya akan berbohong |
 | `agent_room_konteks_rasio` | gauge | rasio jendela konteks TERPENUH di antara sesi hidup (`1.0` = penuh). Yang ingin dipantau orang adalah "apakah ada sesi yang hampir kehilangan ingatan", bukan rata-ratanya |
 | `agent_room_sesi_mode{mode}` | gauge | sesi hidup menurut `permission_mode`-nya. Kardinalitasnya kecil dan tetap (enum CLI), jadi aman jadi label — beda dari nama proyek. Sesi tanpa mode masuk `mode="tak-diketahui"` |
 | `agent_room_peserta_hidup`, `agent_room_peserta_diam` | gauge | subagent yang masih tercatat di bawah sesi induknya, dan yang di antaranya tidak terdengar lebih dari sepuluh menit. Angka kedua baru jujur sejak `agent_id` dibaca pada `pre`/`post` — sebelum itu jam terakhir peserta membeku di detik ia masuk |

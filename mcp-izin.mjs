@@ -23,6 +23,7 @@
 // baris nyasar di stdout sudah cukup membuat CLI menganggap servernya rusak.
 
 import readline from 'node:readline';
+import { telaahRisiko } from './telaah.mjs';
 
 const URL_SERVER = (process.env.AGENT_ROOM_URL || 'http://127.0.0.1:4517').replace(/\/+$/, '');
 const TUGAS = process.env.AGENT_ROOM_TUGAS || '';
@@ -57,6 +58,11 @@ async function tanya(tool, input, toolUseId) {
     body: JSON.stringify({
       tugas: TUGAS, kunci: KUNCI, tool_name: tool,
       ringkasan: ringkasInput(tool, input),
+      /* Telaah dihitung DI SINI, dari `input` UTUH — bukan di server dari
+         ringkasan 300 karakter. Perintah panjang menyembunyikan bagian
+         berbahayanya justru di ekor, dan yang naik ke server tetap cuma
+         hasilnya: tingkat plus nama pola, tidak pernah isi perintahnya. */
+      risiko: telaahRisiko(tool, input),
       tool_use_id: typeof toolUseId === 'string' ? toolUseId.slice(0, 64) : '',
     }),
     signal: AbortSignal.timeout(10 * 1000),

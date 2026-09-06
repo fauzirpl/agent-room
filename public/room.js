@@ -6819,6 +6819,21 @@ function perbaruiParaf(a) {
   rinci.className = 'paraf-rinci';
   rinci.textContent = (z.tool ? z.tool + ' · ' : '') + (z.ringkasan || '');
   el.appendChild(rinci);
+  /* Pita telaah staf. Yang ditampilkan NAMA POLA, bukan potongan perintah —
+     perintahnya sudah ada di baris rinci di atas. Ini bahan telaah, bukan
+     keputusan: yang memaraf tetap kamu. */
+  const tingkat = (z.risiko && z.risiko.tingkat) || 'rendah';
+  if (tingkat !== 'rendah') {
+    const pita = document.createElement('div');
+    /* Gaya inline, bukan kelas: public/style.css sedang dikerjakan sesi lain,
+       dan pita ini tidak cukup penting untuk membuka berkas panas. */
+    pita.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.4px;'
+      + 'padding:2px 6px;border-radius:3px;margin-top:3px;'
+      + (tingkat === 'tinggi' ? 'background:#7f1d1d;color:#fee2e2;' : 'background:#78350f;color:#fef3c7;');
+    pita.textContent = (tingkat === 'tinggi' ? 'risiko tinggi' : 'perlu dilihat')
+      + ((z.risiko.tanda || []).length ? ' · ' + z.risiko.tanda.join(', ') : '');
+    el.appendChild(pita);
+  }
   const pesan = document.createElement('input');
   pesan.type = 'text'; pesan.maxLength = 200; pesan.className = 'paraf-pesan';
   pesan.placeholder = 'catatan kalau ditolak (opsional)';
@@ -6831,7 +6846,14 @@ function perbaruiParaf(a) {
   bTolak.type = 'button'; bTolak.className = 'paraf-tidak'; bTolak.textContent = 'Tolak';
   bTolak.title = 'tolak; catatannya diteruskan ke agennya';
   const kunci = (mati) => { bParaf.disabled = bTolak.disabled = mati; };
-  bParaf.onclick = () => { kunci(true); jawabParaf(z.id, 'paraf', '').finally(() => kunci(false)); };
+  /* Risiko tinggi minta klik kedua. Gesekannya untuk MANUSIA di halaman ini —
+     tidak menahan pegawai mana pun, tidak menunda tool apa pun, dan hilang
+     begitu kartunya digambar ulang. NOTA, BUKAN REM. */
+  let yakin = tingkat !== 'tinggi';
+  bParaf.onclick = () => {
+    if (!yakin) { yakin = true; bParaf.textContent = 'Paraf, yakin?'; bParaf.style.background = '#7f1d1d'; bParaf.style.color = '#fee2e2'; return; }
+    kunci(true); jawabParaf(z.id, 'paraf', '').finally(() => kunci(false));
+  };
   bTolak.onclick = () => { kunci(true); jawabParaf(z.id, 'tolak', pesan.value.trim()).finally(() => kunci(false)); };
   tombol.append(bParaf, bTolak);
   el.append(pesan, tombol);

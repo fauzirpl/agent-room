@@ -103,6 +103,11 @@ jobs:
       - name: Uji lembar telaah risiko
         run: node uji-telaah.mjs
 
+      # Loket paraf: telaah risiko benar-benar sampai ke agenda dan buku
+      # register, dan isi perintahnya TIDAK ikut lewat pintu baru itu.
+      - name: Uji loket paraf & buku register
+        run: node uji-paraf.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

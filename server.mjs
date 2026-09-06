@@ -9,6 +9,10 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+/* Lembar telaah staf. Modul murni, nol efek samping, dan sengaja dipakai DUA
+   proses: server ini dan `mcp-izin.mjs` — supaya aturan risikonya tidak pernah
+   disalin dua kali lalu hanyut sendiri-sendiri. */
+import { telaahRisiko, maksTingkat } from './telaah.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.AGENT_ROOM_PORT || 4517);
@@ -796,6 +800,14 @@ function normalize(raw) {
     // namanya cuma karena pasangannya tidak ada.
     if (raw.agent_type) ev.agen = clip(raw.agent_type, 26);
     ev.label = ev.agen || '';
+  }
+  /* Telaah risiko untuk permintaan izin yang datang lewat HOOK (sesi
+     terminal). Dihitung dari tool_input MENTAH, bukan dari label yang sudah
+     dipotong. Cuma pita dan nama pola — tidak ada tombol, karena sesi
+     terminal memang tidak bisa diparaf dari halaman. */
+  if (kind === 'izin-minta') {
+    const t = telaahRisiko(tool, raw.tool_input);
+    if (t.tingkat !== 'rendah') ev.risiko = t;
   }
   if (kind === 'izin-tolak') ev.alasan = clip(raw.reason || '', 120);
   if (kind === 'pre' && TOOL_TANYA.has(tool)) ev.tanya = ringkasTanya(tool, raw.tool_input);
@@ -1866,6 +1878,16 @@ function agendaBaris(ev) {
   if (ev.model) b.model = ev.model;
   // enum dua nilai, bukan isi kerja — aman ikut ke disk seperti sebab tertahan
   if (ev.putar) b.putar = ev.putar;
+  /* Jejak keputusan paraf. Semuanya enum atau angka — TIDAK ada isi
+     perintahnya. `risiko.tanda` sengaja cuma nama pola (lihat telaah.mjs),
+     jadi ia sekelas `sebab` yang sudah lama ikut ke disk. */
+  if (ev.keputusan) b.keputusan = ev.keputusan;
+  if (ev.sumber) b.sumber = clip(ev.sumber, 24);
+  if (Number.isFinite(ev.tunggu)) b.tunggu = ev.tunggu;
+  if (ev.risiko && ev.risiko.tingkat) {
+    b.risiko = ev.risiko.tingkat;
+    if (Array.isArray(ev.risiko.tanda) && ev.risiko.tanda.length) b.tanda = ev.risiko.tanda.slice(0, 4).join(',');
+  }
   if (ev.nama) b.nama = ev.nama;
   if (ev.peran) b.peran = ev.peran;
   if (ev.mesin) b.mesin = ev.mesin;
@@ -3935,7 +3957,7 @@ const kunciCocok = (a, b) => {
 };
 
 function ringkasIzin(p) {
-  return { id: p.id, sesi: p.sesi, tool: p.tool, ringkasan: p.ringkasan, sejak: p.sejak };
+  return { id: p.id, sesi: p.sesi, tool: p.tool, ringkasan: p.ringkasan, sejak: p.sejak, risiko: p.risiko || null };
 }
 
 /* Menjawab satu permintaan: melepas semua long-poll yang menunggunya, menyiarkan
@@ -3955,6 +3977,9 @@ function jawabIzin(p, keputusan, pesan, sumber) {
     id: ++seq, ts: Date.now(), kind: 'izin-jawab', session: p.sesi,
     nama: namaSesi.get(p.sesi) || '', tool: p.tool, ok: keputusan === 'paraf',
     keputusan, sumber, paraf: { id: p.id, tool: p.tool },
+    // berapa lama permintaan ini menunggu sebelum dijawab, dalam detik
+    tunggu: Math.max(0, Math.round((Date.now() - p.sejak) / 1000)),
+    ...(p.risiko && p.risiko.tingkat !== 'rendah' ? { risiko: p.risiko } : {}),
     // keputusannya sudah ada di `keputusan`; label cuma tool + catatan penolakan
     label: clip(p.tool + (pesan ? ' — ' + pesan : ''), 120),
     ...(peranSesi.has(p.sesi) ? { peran: peranSesi.get(p.sesi) } : {}),
@@ -4363,6 +4388,16 @@ function metrikTeks() {
   /* Rasio TERTINGGI di antara sesi hidup: yang ingin dipantau orang adalah
      'apakah ADA sesi yang hampir kehilangan ingatan', bukan rata-ratanya. */
   const rasioMaks = potret.sesi.reduce((m, s) => Math.max(m, (s.konteks && s.konteks.rasio) || 0), 0);
+  /* Berapa permintaan paraf menurut tingkat risikonya. Cuma jalur paraf —
+     yang memang terhitung; label "langsung" akan berbohong karena perintah
+     yang sudah diizinkan lewat settings tidak pernah memicu PermissionRequest. */
+  const perRisiko = new Map();
+  for (const p of izinTunggu.values()) {
+    const t = (p.risiko && p.risiko.tingkat) || 'rendah';
+    perRisiko.set(t, (perRisiko.get(t) || 0) + 1);
+  }
+  metrik('agent_room_izin_menunggu', 'gauge', 'Permintaan paraf yang masih menunggu dijawab, menurut tingkat risikonya.',
+    [...perRisiko].map(([t, n]) => ['tingkat="' + t + '"', n]));
   metrik('agent_room_konteks_rasio', 'gauge', 'Rasio jendela konteks terpenuh di antara sesi hidup (1.0 = penuh).', [['', rasioMaks]]);
   metrik('agent_room_peserta_hidup', 'gauge', 'Subagent yang masih tercatat hidup di bawah sesi induknya.', [['', potret.delegasi.hidup]]);
   metrik('agent_room_peserta_diam', 'gauge', 'Subagent hidup yang tidak terdengar lebih dari sepuluh menit.', [['', potret.delegasi.diam]]);
@@ -5186,9 +5221,18 @@ const server = http.createServer(async (req, res) => {
     const sesi = String(p.tugas).slice(0, 12);
     const tool = clip(p.tool_name || '?', 64);
     const ringkasan = clip(p.ringkasan || '', 300);
+    /* Dua sumber telaah, yang paling waspada yang berlaku: proses MCP melihat
+       input UTUH, server cuma melihat ringkasan 300 karakter. Kalau proses MCP
+       versi lama tidak mengirim apa-apa, server tetap punya telaahnya sendiri. */
+    const dariMcp = p.risiko && typeof p.risiko === 'object' ? p.risiko : null;
+    const dariSini = telaahRisiko(tool, ringkasan);
+    const risiko = {
+      tingkat: maksTingkat((dariMcp && dariMcp.tingkat) || 'rendah', dariSini.tingkat),
+      tanda: [...new Set([...(Array.isArray(dariMcp && dariMcp.tanda) ? dariMcp.tanda : []), ...dariSini.tanda])].slice(0, 4),
+    };
     const izin = {
       id: crypto.randomBytes(6).toString('hex'), tugas: String(p.tugas), sesi, tool, ringkasan,
-      panggilan: clip(p.tool_use_id || '', 64), sejak: Date.now(), jawab: null,
+      panggilan: clip(p.tool_use_id || '', 64), sejak: Date.now(), jawab: null, risiko,
       penunggu: new Set(), timer: null,
     };
     izin.timer = setTimeout(() => jawabIzin(izin, 'tolak', 'tidak ada paraf', 'waktu habis'), IZIN_TUNGGU_MS);
@@ -5209,6 +5253,7 @@ const server = http.createServer(async (req, res) => {
       tool, label: ringkasan, ok: true, sebab: 'izin', alasan: ringkasan,
       ...(izin.panggilan ? { panggilan: izin.panggilan } : {}),
       paraf: { id: izin.id, tool }, butuh: keadaan,
+      ...(izin.risiko && izin.risiko.tingkat !== 'rendah' ? { risiko: izin.risiko } : {}),
       ...(peranSesi.has(sesi) ? { peran: peranSesi.get(sesi) } : {}),
       ...(modelSesi.has(sesi) ? { model: modelSesi.get(sesi) } : {}),
     };
@@ -5319,6 +5364,53 @@ const server = http.createServer(async (req, res) => {
   /* Papan SKP — tanpa token, sekelas /token-riwayat: agregat angka dan nama
      folder/cabang/tool dari agenda + riwayat token + buku induk (lihat
      skpHitung()). Bawaan 7 hari terakhir sampai hari ini. */
+  /* Buku register paraf: keputusan izin sepanjang rentang, dibaca ULANG dari
+     buku agenda — bukan tabel baru yang harus dipelihara. Sekelas `/skp`:
+     tanpa token, dan yang keluar cuma enum, angka, dan nama pola. Isi
+     perintahnya tidak pernah ikut. */
+  if (url.pathname === '/paraf') {
+    const p = url.searchParams;
+    const hariIni = tanggalLokal(Date.now());
+    const sampai = p.get('sampai') || hariIni;
+    const dari = p.get('dari') || skpHariMundur(sampai, 6);
+    if (!AGENDA_TANGGAL_RX.test(dari) || !AGENDA_TANGGAL_RX.test(sampai) || dari > sampai) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ galat: 'dari/sampai harus YYYY-MM-DD dan dari <= sampai' }));
+      return;
+    }
+    const baris = [];
+    const tally = { paraf: 0, tolak: 0, tinggi: 0, sedang: 0 };
+    /* Hari dikumpulkan mundur dari `sampai` memakai `skpHariMundur()` yang
+       sudah ada — pola yang sama dengan `skpHitung()`, jadi tidak ada helper
+       tanggal kedua yang bisa hanyut dari yang pertama. */
+    const tanggal = [];
+    for (let n = 0; n <= AGENDA_HARI + 1; n++) {
+      const t = skpHariMundur(sampai, n);
+      if (t < dari) break;
+      tanggal.push(t);
+    }
+    for (const hari of tanggal) {
+      for (const b of agendaBacaHari(hari)) {
+        if (b.kind !== 'izin-jawab' && b.kind !== 'izin-minta') continue;
+        baris.push({
+          ts: b.ts, sesi: b.session, proyek: b.cwd, nama: b.nama || '',
+          kind: b.kind, tool: b.tool || '',
+          keputusan: b.keputusan || '', sumber: b.sumber || '',
+          tunggu: Number.isFinite(b.tunggu) ? b.tunggu : null,
+          risiko: b.risiko || '', tanda: b.tanda || '',
+        });
+        if (b.keputusan === 'paraf') tally.paraf++;
+        if (b.keputusan === 'tolak') tally.tolak++;
+        if (b.risiko === 'tinggi') tally.tinggi++;
+        if (b.risiko === 'sedang') tally.sedang++;
+      }
+    }
+    baris.sort((a, b) => b.ts - a.ts);
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify({ dari, sampai, jumlah: baris.length, tally, baris: baris.slice(0, 500) }));
+    return;
+  }
+
   if (url.pathname === '/skp') {
     const p = url.searchParams;
     const hariIni = tanggalLokal(Date.now());
