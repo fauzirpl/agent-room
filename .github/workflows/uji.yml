@@ -119,6 +119,11 @@ jobs:
       - name: Uji papan SKP mutu
         run: node uji-skp.mjs
 
+      # Loket paraf: mcp-izin.mjs dijalankan sungguhan melawan loket tiruan,
+      # plus gerbang kendali web. Tidak ada biner claude yang dipakai.
+      - name: Uji loket paraf
+        run: node uji-izin.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

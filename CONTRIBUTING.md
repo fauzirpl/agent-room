@@ -36,6 +36,7 @@ node uji-telaah.mjs             # lembar telaah risiko: tiap pola, privasi tanda
 node uji-paraf.mjs              # loket paraf: telaah risiko ke agenda & /paraf; --tampil untuk melihat barisnya
 node uji-peserta.mjs            # transkrip peserta: isi subagent ke pemiliknya, tidak dobel dihitung
 node uji-skp.mjs                # papan SKP mutu: lima sumbu perilaku, nilai 0-100, golden hari sungguhan
+node uji-izin.mjs               # loket paraf: mcp-izin.mjs sungguhan, gerbang kendali web, sesi terminal tak bisa diparaf
 node uji-ulang-server.mjs       # hari sungguhan diputar ke server.mjs; --sampai 300 untuk iterasi cepat
 node telaah.mjs Bash "rm -rf x" # coba satu perintah dengan tangan
 node --check server.mjs && node --check dinas.mjs

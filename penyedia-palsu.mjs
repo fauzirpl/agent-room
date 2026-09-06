@@ -144,6 +144,80 @@ export async function penyediaSuara() {
   };
 }
 
+/* --------------------------------------------------- loket paraf tiruan ---
+ * Kantor palsu untuk `mcp-izin.mjs`: melayani `POST /izin/tanya` dan
+ * `GET /izin/tunggu` dengan bentuk yang sama seperti server sungguhan, tapi
+ * jawabannya diatur uji.
+ *
+ * Kenapa perlu kantor palsu padahal kantor sungguhan ada: loket paraf yang
+ * asli cuma menjawab kalau ada rekaman tugas di `jalan`, dan rekaman itu baru
+ * lahir waktu server men-spawn biner claude. `npm test` tidak boleh punya satu
+ * pun biner luar — jadi tanpa ini, seluruh jalur allow/deny `mcp-izin.mjs`
+ * (satu-satunya pintu paraf yang dipakai sesi lahiran halaman) tidak bisa
+ * disentuh sama sekali.
+ *
+ * Sekalian: loket ini MENCATAT apa saja yang benar-benar sampai. Itu satu-
+ * satunya cara membuktikan janji privasi yang tertulis di kepala
+ * `mcp-izin.mjs` — isi perintah tidak pernah ikut, cuma ringkasan ≤300
+ * karakter dan nama pola risiko.
+ */
+export async function loketParaf() {
+  const st = {
+    tanya: [],            // badan tiap POST /izin/tanya
+    tunggu: [],           // query tiap GET /izin/tunggu
+    lain: [],             // rute lain yang tersentuh — harus tetap kosong
+    tanyaBalas: 'ok',     // 'ok' | '403'
+    id: 'izin-palsu-01',
+    /* Antrean jawaban untuk /izin/tunggu, dikonsumsi satu per satu. Yang
+       terakhir dipakai terus sesudah antreannya habis, jadi uji cukup
+       menuliskan babak yang menarik saja. Bentuk yang dikenal:
+         { tunggu: true }                 server menahan (long-poll biasa)
+         { keputusan: 'paraf' }
+         { keputusan: 'tolak', pesan }
+         { http: 404 }                    permintaannya sudah hilang
+         { http: 500 }                    gangguan sesaat */
+    antrean: [],
+    tetap: { keputusan: 'paraf' },
+  };
+  const srv = http.createServer(async (req, res) => {
+    const u = new URL(req.url, 'http://x');
+    const json = (kode, obj) => {
+      res.writeHead(kode, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(obj));
+    };
+    if (u.pathname === '/izin/tanya' && req.method === 'POST') {
+      st.tanya.push(await badanJson(req));
+      if (st.tanyaBalas === '403') return json(403, { ok: false, pesan: 'kunci izin tidak cocok' });
+      return json(200, { ok: true, id: st.id });
+    }
+    if (u.pathname === '/izin/tunggu') {
+      st.tunggu.push(Object.fromEntries(u.searchParams));
+      const j = st.antrean.length ? st.antrean.shift() : st.tetap;
+      if (j && j.http) { res.writeHead(j.http).end(); return; }
+      return json(200, j);
+    }
+    st.lain.push(u.pathname);
+    res.writeHead(404).end();
+  });
+  const port = await dengar(srv);
+  return {
+    st,
+    url: 'http://127.0.0.1:' + port,
+    /* Menunggu permintaan ke-n benar-benar sampai. mcp-izin bicara lewat
+       proses lain, jadi uji tidak boleh menganggap ia sudah bertanya begitu
+       barisnya ditulis ke stdin-nya. */
+    async tungguTanya(n = 1, batasMs = 5000) {
+      const batas = Date.now() + batasMs;
+      while (st.tanya.length < n) {
+        if (Date.now() > batas) return false;
+        await tidur(20);
+      }
+      return true;
+    },
+    tutup: () => new Promise((r) => srv.close(r)),
+  };
+}
+
 /* ------------------------------------------------------------- env bersih ---
  * Satu tempat untuk menutup SEMUA jalur keluar sekaligus. Harness baru cukup
  * memanggil ini; yang lama boleh tetap dengan caranya sendiri selama
