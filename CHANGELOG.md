@@ -6,7 +6,67 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ## [Belum dirilis]
 
+## [0.2.0] — 2026-09-07
+
 ### Ditambahkan
+
+- **Lisensi MIT, dan penulisnya disebut di manifes.** Repo ini sebelumnya tidak
+  punya berkas lisensi sama sekali — artinya secara hukum tidak ada yang boleh
+  memakainya, betapa pun terbukanya kodenya. Sekarang ada `LICENSE` (MIT,
+  © 2026 Fauzi), dan `package.json` menyebut `license` serta `author` supaya
+  npm dan GitHub sama-sama membacanya dari satu tempat.
+
+- **Ruangan digambar di resolusi layar, bukan lagi di kisi 480 px.** Kisi
+  dunianya tetap 480×356 — semua koordinat, tabel stasiun, kamera, dan golden
+  uji tidak bergeser sedikit pun — tapi kanvas di baliknya sekarang dibikin
+  `SS` kali lebih besar dan `ctx` diskalakan `SS` kali. Yang kotak tetap kotak
+  (`fillRect` berkoordinat bulat jatuh persis di batas kotak `SS`×`SS`), yang
+  BUKAN kotak akhirnya punya piksel sungguhan: teks papan nama dan layar,
+  lengkung jam dan rambu, gradien lantai, pendar lampu, foto pejabat yang
+  miring. Sebelumnya kanvas 480 px direntangkan peramban dengan faktor pecahan
+  — di layar penulisnya skala tampil 1,81 dikali `devicePixelRatio` 1,25 =
+  2,26 — jadi satu piksel dunia jatuh jadi **dua** baris layar di satu tempat
+  dan **tiga** di tempat lain; itu yang selama ini kebaca sebagai garis tepi
+  belang dan huruf lumer. `SS` dihitung `fit()` dari skala tampil ×
+  `devicePixelRatio` dan dibatasi 3; `?hd=1..4` memaksa, `?hd=0` mengembalikan
+  kisi apa adanya. Diukur di mesin penulisnya satu frame berharga sama saja di
+  `SS` 1, 2, maupun 3 (±4,5 ms) — yang mahal di ruangan ini geometrinya, bukan
+  jumlah pikselnya. Satu pengecualian: overlay tetap memakai `pixelated`, sebab
+  penyaringan halus bekerja dengan mencampur piksel bertetangga dan di
+  `?overlay=chroma` campuran itu jadi rumbai hijau yang tidak bisa dibuang
+  chroma key.
+
+- **Dinding dan lantai punya bahan, bukan cuma warna.** Menaikkan jumlah piksel
+  saja tidak membuat ruangan terbaca lebih tajam — yang kurang bahannya. Dinding
+  dapat serat cat rol (bintik setipis satu piksel kanvas, dua arah: yang cuma
+  gelap kebaca sebagai kotor, yang dua arah kebaca sebagai permukaan yang
+  dicat), jatuh cahaya dari plafon ke kaki dinding, lis pemisah tiga tingkat,
+  dan pilar yang punya sisi terang jadi terbaca sebagai pilaster bukan goresan.
+  Lantai dapat terazo, nada tua-muda per ubin seperti ubin dari beberapa dus,
+  nat bersisi gelap dan berbibir terang, serta kilap poles sejajar jendela.
+  Retak ubinnya juga diperbaiki: dulu satu bentuk yang sama persis di tiap ubin
+  terpilih — di kisi 480 px itu lolos, di resolusi tinggi stensil berulang itu
+  langsung kebaca sebagai tanda panah — sekarang tiap ubin dapat patahannya
+  sendiri. Ditambah bayangan tempel di kaki perabot dan di balik benda gantung:
+  tanpa itu tiap benda kebaca *ditempel* ke lantai, bukan *berdiri* di atasnya.
+  Semua lapisan bahan itu statis, jadi digambar sekali ke kanvas offscreen —
+  per frame cuma satu `drawImage`, bukan ribuan `fillRect`.
+
+- **X-banner bisa diklik dan jadi papan informasi aplikasi.** Bannernya sendiri
+  yang jadi tombol: kamera membidiknya dengan zoom 4, lalu papan “Tentang kantor
+  ini” terbuka berisi nama paket, cara menjalankan, alamat repositori, syarat
+  Node, dan pengembangnya. Wajah bannernya digambar ulang jadi papan nama
+  sungguhan — bintang lima sudut, nama instansi, garis kop — yang di kisi 480 px
+  memang mustahil terbaca; ini fitur pertama yang benar-benar **memakai**
+  resolusi baru di atas, bukan cuma menikmatinya. Papan informasinya berdiri
+  rata kanan dengan tirai yang jauh lebih terang dari dialog lain: penjepitan
+  kamera menaruh banner di sepertiga kiri layar, jadi keduanya berdampingan
+  seperti benda pameran dan plakatnya alih-alih saling tutup. Menutupnya (✕,
+  Esc, klik di luar, atau klik bannernya lagi) sekaligus melepas bidikannya.
+  Isinya dijaga `selaras-dokumen.mjs` sebagai pasangan kelima — alamat repo,
+  nama paket, perintah `npx github:…`, syarat Node, dan klaim “tanpa dependensi”
+  semuanya diadu ke `package.json` tiap `npm test`, jadi papan “tentang” ini
+  tidak bisa diam-diam jadi bohong waktu reponya pindah.
 
 - **Musik lofi kantor ikut suasana ruangan.** Yang dulu satu loop tetap
   sepanjang hari sekarang punya sebelas gaya (`LOFI_GAYA` di `room.js`), dipilih
@@ -34,6 +94,24 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   klip lama yang basi.
 
 ### Diperbaiki
+
+- **Sekat pantri akhirnya jadi dinding, bukan gambar.** `drawPantry()`
+  menggambar panel kayu di `x414`/`y196` sejak lama, tapi `route()` tidak punya
+  pengertian rintangan sama sekali: diukur sebelum diperbaiki, **60 dari 60**
+  pasangan asal-tujuan menembus panel kirinya di lajur bawah `y=252`, dan
+  penulis event sudah menghindarinya satu per satu dengan tangan (“berhenti
+  sebelum sekat pantry (x414)”, “berakhir di x=404, aman dari sekat kiri
+  pantry”) — beban yang ada di orang, bukan di kode. Sekarang pantrinya punya
+  pintu (`y256..280` di panel kiri) dan router yang memakainya: `masukPantri`,
+  `keluarPantri`, dan `memutarPantri` untuk tujuan di lantai bawah sekat yang
+  dulu ditempuh dengan menyeberangi ruang pantri. `PANTRI` jadi satu-satunya
+  sumber angkanya, dipakai bersama oleh yang menggambar dan yang menghindar.
+  Rupanya ikut dibenahi: sekat bertebal dengan pucuk, muka, dan bayangan;
+  counter dipecah jadi meja granit dan lemari laminasi; wastafel jadi bak
+  tertanam; dan lantai di dalamnya keramik 12 px supaya pantri terbaca sebagai
+  ruang lain. Penjaganya `uji-pantri.mjs` — 240 jalur dari `route()` yang asli,
+  dengan tujuan yang **dipindai** dari `goToXY()` literal di `public/event/*.js`
+  sehingga event baru yang menaruh orang di pantri otomatis ikut teruji.
 
 - **`response_format` tidak lagi dipaku ke `mp3`.** Gemini TTS menolaknya
   mentah-mentah (`400 … only supports response_format="pcm"`), dan selama
@@ -232,4 +310,6 @@ Rilis pertama yang diberi nomor. Ringkasan dari riwayat commit sampai hari ini.
 - Pegawai yang parkir di depan meja rapat tidak lagi tertelan meja
   (pita depth-sort digeser ke ≥ 230).
 
+[Belum dirilis]: https://github.com/fauzirpl/agent-room/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/fauzirpl/agent-room/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fauzirpl/agent-room/releases/tag/v0.1.0
