@@ -6,6 +6,32 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ## [Belum dirilis]
 
+### Ditambahkan
+
+- **Lagu kantor tiap hari kerja jam 10.** Satu lagu milik kantor ini sendiri,
+  disetel Senin–Jumat jam 10 seperti Indonesia Raya disetel Selasa & Kamis.
+  Ini satu-satunya bunyi di halaman yang datang dari berkas, bukan dari
+  oscillator — dan justru karena itu berkasnya **tidak ikut di repo**: isinya
+  milik pemilik mesin, sedangkan repo ini dipasang orang lain lewat npm. Taruh
+  sendiri sebagai `lagu-kantor.m4a` (atau `.mp3`/`.ogg`/`.opus`/`.webm`/`.wav`)
+  di folder proyek, atau tunjuk lewat `AGENT_ROOM_LAGU`. Tanpa berkas itu rute
+  `/lagu-kantor` membalas 204 dan jadwalnya cuma diam — sama sekali tanpa pesan
+  merah, dan janji "nol file audio eksternal" tetap berlaku untuk semua yang
+  dibawa repo. Lagunya lewat `busMusik` (jadi ikut slider volume musik dan ikut
+  ducking foley), beat lofi diam selama ia jalan, dan Selasa & Kamis ia
+  menyusul sesudah Indonesia Raya alih-alih menimpanya. Centangnya di panel
+  ⚙️ diingat browser; `mainkanLaguKantor()` di konsol untuk mencobanya tanpa
+  menunggu jam 10.
+
+### Diperbaiki
+
+- **Beat lofi tidak lagi melempar kalau gaya musik sempat kosong di tengah
+  birama.** Scheduler membaca `musikGayaAktif` di setiap langkah, jadi
+  mengosongkannya di luar awal birama membuat sisa birama itu melempar di
+  `G.kord`. Sekarang gayanya dipasang ulang begitu ketahuan kosong, dan yang
+  dulu mengosongkannya (label yang kembali sesudah lagu kantor selesai) tidak
+  perlu mengosongkan apa pun.
+
 ## [0.2.0] — 2026-09-07
 
 ### Ditambahkan

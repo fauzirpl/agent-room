@@ -45,3 +45,7 @@ suara/
 # daftar nama pegawai pilihanmu: data lokal (daftar bawaan ada di server.mjs)
 nama.json
 nama.json.tmp
+
+# lagu kantor: berkas audio milik pemilik mesin ini, bukan kode dan bukan
+# milik repo. Kantor tanpa berkas ini tetap jalan (jadwalnya cuma diam).
+lagu-kantor.*

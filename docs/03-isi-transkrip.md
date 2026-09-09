@@ -217,6 +217,7 @@ posisi tombol berbeda:
 | 🔊 efek suara | foley per stasiun tiap event (stempel, laci arsip, kipas server, kursi rapat, ketikan) nyala/mati |
 | 🔔 notifikasi tugas selesai | lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
 | 🎧 musik lofi kantor | chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio — gayanya ikut suasana ruangan |
+| 🎵 lagu kantor tiap jam 10 | izin menyetel lagu milik kantor ini Senin–Jumat jam 10; berkasnya kamu taruh sendiri, tidak ikut di repo |
 
 Dua yang pertama diingat peramban (`localStorage`), dan halaman tetap jalan
 kalau peramban memang tidak mengizinkannya. Tiga setelan suara (efek suara,
@@ -268,6 +269,29 @@ dipakai ditulis kecil di sebelah centangnya di panel ⚙️. Uji cepat tanpa
 menunggu jamnya tiba: `?musik=malam`, digabung dengan `?jam=` dan `?hujan=`.
 Selama Indonesia Raya diputar (Selasa & Kamis jam 10) beat lofinya diam —
 loop-nya tetap jalan, cuma tidak membunyikan apa pun sampai lagunya selesai.
+
+Satu-satunya bunyi di seluruh halaman yang datang dari **berkas**, bukan dari
+oscillator, adalah **lagu kantor**: satu lagu milik kantor ini sendiri yang
+disetel Senin–Jumat jam 10, sebagaimana Indonesia Raya disetel Selasa & Kamis
+jam 10. Berkasnya sengaja **tidak ikut di repo** — isinya milik pemilik mesin,
+dan repo ini dipasang orang lain lewat npm. Taruh sendiri sebagai
+`lagu-kantor.m4a` (atau `.mp3`, `.ogg`, `.opus`, `.webm`, `.wav`) di folder
+proyek, atau tunjuk lewat `AGENT_ROOM_LAGU`. Tanpa berkas itu rute
+`/lagu-kantor` membalas 204, jadwalnya cuma diam, dan janji "nol file audio
+eksternal" tetap berlaku untuk semua yang dibawa repo — tidak ada pesan merah,
+persis seperti jalur `/ucap` tanpa kunci.
+
+Yang membuatnya berkelakuan sebagai warga ruangan, bukan sebagai tab yang
+menyala sendiri: ia lewat `busMusik`, jadi slider volume musik berlaku
+untuknya dan ducking foley ikut menekannya; beat lofi **diam** selama lagunya
+jalan (loop-nya tetap berjalan, cuma tidak membunyikan apa pun, jadi tidak
+perlu start ulang); dan Selasa & Kamis ia **mengalah** pada Indonesia Raya —
+jadwalnya dicek tiap 20 detik dan tidak menandai "sudah diputar hari ini"
+selama lagu kebangsaan masih jalan, jadi ia menyusul sesudahnya, bukan
+menimpanya. Centangnya di panel ⚙️ **diingat** browser (beda dari tiga centang
+suara di atasnya): itu cuma izin untuk menjadwalkan, dan lagunya toh tetap
+menunggu klik pertamamu seperti bunyi lain. Dicoba tanpa menunggu jam 10:
+`mainkanLaguKantor()` di konsol.
 
 Efek suara tool call bukan lagi satu blip seragam, tapi **foley per stasiun**
 (`foley()` + kamus `FOLEY` di `room.js`): stempel yang thud lalu klik pegas

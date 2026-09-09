@@ -24,6 +24,12 @@
 // gaya yang boleh naik melewati plafon volume, dan ayunan swing tidak boleh
 // sampai membalik urutan langkah.
 //
+// Ikut dijaga di sini: jadwal LAGU KANTOR (laguWaktunya). Bukan soal musik
+// lofi, tapi kelas bugnya sama persis — "jam 10 pagi Senin s.d. Jumat" yang
+// meleset satu hari tidak melempar apa pun, cuma tidak berbunyi (atau berbunyi
+// di hari Minggu), dan itu baru ketahuan seminggu kemudian. Jadwalnya fungsi
+// murni dari satu Date supaya bisa diuji tanpa menunggu hari Senin.
+//
 // Pemilih suasananya (musikSuasanaDari) sengaja fungsi murni dari fakta yang
 // dioper, jadi seluruh kombinasi bisa diuji tanpa memalsukan satu ruangan
 // penuh agen — yang diperiksa di sini aturannya, bukan kebetulan satu potret.
@@ -39,7 +45,8 @@ const tolak = (t, ket) => { gagal++; console.log('  ' + merah('✗') + ' ' + t +
 const periksa = (ok, t, ket) => (ok ? lulus(t) : tolak(t, ket));
 
 const ctx = muatKonteks();
-const { nadaHz, musikGayaNama, musikDrumNama, musikGayaDari, musikSuasanaDari, babakHari } = ctx;
+const { nadaHz, musikGayaNama, musikDrumNama, musikGayaDari, musikSuasanaDari, babakHari,
+        laguWaktunya } = ctx;
 const NAMA = musikGayaNama();
 const DRUM = musikDrumNama();
 
@@ -178,6 +185,26 @@ console.log(tebal('\nMusik lofi: gayanya ikut suasana ruangan'));
   const g = ctx.musikGayaKini();
   periksa(NAMA.includes(g.nama) && Array.isArray(g.kord) && g.kord.length > 0 && g.langkahDur > 0,
     `musikGayaKini() merakit gaya utuh dari ruangan sungguhan (dapat '${g.nama}', ${g.bpm} bpm)`);
+}
+
+/* ------------------------------------------------- jadwal lagu kantor ----- */
+{
+  // Senin 7 s.d. Minggu 13 September 2026 (7 = Senin). Yang diuji aturannya:
+  // lima hari kerja, satu jam saja, dan tidak ada hari yang kelewat atau
+  // kebablasan — kelas bug "jam 10 pagi" yang paling sering adalah `getDay()`
+  // yang lupa bahwa Minggu itu 0, bukan 7.
+  const jam10 = (tgl) => new Date(2026, 8, tgl, 10, 5);
+  const kerja = [7, 8, 9, 10, 11].filter((t) => laguWaktunya(jam10(t)));
+  const akhirPekan = [12, 13].filter((t) => laguWaktunya(jam10(t)));
+  periksa(kerja.length === 5 && akhirPekan.length === 0,
+    'jam 10 menyala Senin s.d. Jumat saja — Sabtu & Minggu diam',
+    `hari kerja yang kena: ${kerja.length}/5, akhir pekan yang bocor: ${akhirPekan.length}`);
+
+  const jamLain = [0, 6, 9, 11, 13, 22].filter((j) => laguWaktunya(new Date(2026, 8, 7, j, 30)));
+  periksa(!jamLain.length && laguWaktunya(new Date(2026, 8, 7, 10, 0))
+    && laguWaktunya(new Date(2026, 8, 7, 10, 59)),
+    'sepanjang jam 10 dianggap waktunya, jam lain tidak',
+    jamLain.length ? `jam yang bocor: ${jamLain.join(', ')}` : '');
 }
 
 console.log();

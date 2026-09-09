@@ -6593,6 +6593,8 @@ const LOFI_LABEL = {
   istirahat: 'jam istirahat', pulang: 'jelang pulang', lembur: 'lembur',
   malam: 'kantor malam', libur: 'hari libur', hujan: 'hujan di jendela',
   badai: 'badai', tegang: 'ada yang menunggu',
+  // bukan gaya di LOFI_GAYA: ini keadaan, dipasang mainkanLaguKantor()
+  lagu: 'lagu kantor',
 };
 
 const MUSIK_PAKSA = new URLSearchParams(location.search).get('musik');
@@ -6784,13 +6786,16 @@ function musikLangkahBunyi(G, birama, langkah, t) {
 function musikJadwal() {
   while (musikBerikut < audio.currentTime + 0.12) {
     // Gaya dibaca ulang di awal birama saja: perpindahannya jatuh di sambungan
-    // (~10-12 detik sekali), tidak memotong di tengah ketukan.
-    if (musikLangkah === 0) musikPasangGaya();
+    // (~10-12 detik sekali), tidak memotong di tengah ketukan. `|| !musikGayaAktif`
+    // itu pagar, bukan hiasan: sekali gaya sempat kosong di tengah birama,
+    // seluruh sisa birama melempar di baris G.kord di bawah.
+    if (musikLangkah === 0 || !musikGayaAktif) musikPasangGaya();
     const G = musikGayaAktif;
-    // Indonesia Raya lewat bus yang sama. Beat lofi menumpang di atasnya bukan
-    // cuma jelek, tapi salah tempat — jadi loop-nya dibiarkan jalan (biar tidak
-    // perlu start ulang) tapi tidak membunyikan apa pun sampai lagunya selesai.
-    if (!rayaSedangMain) musikLangkahBunyi(G, musikBirama, musikLangkah, musikBerikut);
+    // Indonesia Raya dan lagu kantor lewat bus yang sama. Beat lofi menumpang di
+    // atasnya bukan cuma jelek, tapi salah tempat — jadi loop-nya dibiarkan
+    // jalan (biar tidak perlu start ulang) tapi tidak membunyikan apa pun
+    // sampai keduanya selesai.
+    if (!rayaSedangMain && !laguMain) musikLangkahBunyi(G, musikBirama, musikLangkah, musikBerikut);
     const ganjil = musikLangkah % 2 === 1;
     musikLangkah++;
     if (musikLangkah >= 16) { musikLangkah = 0; musikBirama = (musikBirama + 1) % G.kord.length; }
@@ -6832,6 +6837,7 @@ function musikNyalakan() {
   musikJadwal();
 }
 function musikMatikan() {
+  hentikanLaguKantor();   // lagu kantor lewat bus yang sama; jangan tertinggal bunyi
   if (musikGain) musikGain.gain.setTargetAtTime(0.0001, audio.currentTime, 0.15);
   clearTimeout(musikTimer);
   if (musikKresek) { musikKresek.stop(); musikKresek = null; musikKresekG = null; }
@@ -6976,6 +6982,110 @@ function cekJadwalRaya() {
 }
 setTimeout(cekJadwalRaya, 0);
 setInterval(cekJadwalRaya, 20000);
+
+/* ---------- lagu kantor (Senin-Jumat jam 10) ------------------------------
+   Satu-satunya bunyi di halaman ini yang datang dari BERKAS, bukan dari
+   oscillator: lagu milik kantornya sendiri, disetel tiap hari kerja jam 10,
+   seperti Indonesia Raya di atas disetel Selasa & Kamis. Berkasnya tidak ikut
+   di repo (lihat rute /lagu-kantor di server.mjs) — kalau tidak ada, rutenya
+   membalas 204, elemen <audio> gagal memuat, dan yang terjadi persis tidak
+   ada apa-apa. Itu jalur normal, bukan galat.
+
+   Tiga hal yang membuatnya berkelakuan seperti warga ruangan, bukan seperti
+   tab yang menyala sendiri:
+
+   * Lewat busMusik, bukan langsung ke speaker. Slider volume musik berlaku
+     untuknya, dan ducking foley (musikMenyingkir) ikut menekannya tiap ada
+     bunyi meja — sama seperti beat lofi.
+   * Beat lofi DIAM selama lagunya jalan (lihat musikJadwal). Loop-nya tetap
+     berjalan supaya tidak perlu start ulang, cuma tidak membunyikan apa pun.
+   * Selasa & Kamis ia mengalah pada Indonesia Raya: jadwalnya dicek tiap 20
+     detik dan tidak menandai "sudah diputar hari ini" selama lagu kebangsaan
+     masih jalan, jadi ia MENYUSUL sesudahnya, bukan menimpanya. */
+
+/* Nilai yang diingat browser dipasang belakangan, di blok panel Pengaturan —
+   `ingatan` sendiri baru didefinisikan jauh di bawah sini. Idiom yang sama
+   dipakai cekJadwalRaya: yang membaca localStorage cuma isi fungsi, bukan
+   baris yang dijalankan waktu berkas ini dimuat. */
+let laguOn = true;
+let laguEl = null;        // <audio>; dibuat sekali, dipakai ulang tiap hari
+let laguSumber = null;    // MediaElementSource-nya — cuma boleh dibuat sekali per elemen
+let laguMain = false;
+
+/* Jadwalnya sengaja fungsi murni dari satu Date supaya bisa diuji tanpa
+   menunggu hari Senin (lihat uji-musik.mjs). Hari libur nasional tidak
+   dikecualikan: yang dijaga hariLibur() itu rupa ruangan, sedangkan ini
+   jadwal yang kamu pasang sendiri — kalau kantornya kamu buka di tanggal
+   merah, lagunya ikut menyala. */
+function laguWaktunya(d) {
+  const hari = d.getDay();
+  return hari >= 1 && hari <= 5 && d.getHours() === 10;
+}
+
+function mainkanLaguKantor() {
+  if (laguMain || rayaSedangMain) return false;
+  pastikanAudio();
+  if (audio.state === 'suspended') audio.resume().catch(() => {});
+  if (!laguEl) {
+    laguEl = new Audio('/lagu-kantor');
+    laguEl.preload = 'auto';
+    /* Disambung ke busMusik lewat Web Audio, bukan diatur pakai el.volume:
+       yang lewat bus ikut slider musik DAN ikut ducking. Sumbernya seasal
+       (same-origin) dengan halaman, jadi tidak dibisukan peramban. */
+    try {
+      laguSumber = audio.createMediaElementSource(laguEl);
+      laguSumber.connect(busMusik);
+    } catch {
+      /* Peramban yang menolak MediaElementSource: jatuh ke elemen polos,
+         volumenya dikalikan tangan supaya slider musik tetap berlaku. */
+      laguSumber = null;
+    }
+    /* `laguMain` baru menyala di 'playing', bukan di sini: kalau berkasnya
+       tidak ada, yang datang 'error' dan beat lofi tidak pernah sempat
+       terdiam barang sekejap. */
+    laguEl.addEventListener('playing', () => { laguMain = true; tampilSuasanaMusik('lagu'); });
+    for (const kabar of ['ended', 'error', 'pause']) laguEl.addEventListener(kabar, laguSelesai);
+  }
+  if (!laguSumber) laguEl.volume = Math.max(0, Math.min(1, VOL.musik));
+  try { laguEl.currentTime = 0; } catch { /* metadata belum ada; tidak apa-apa */ }
+  laguEl.play().catch(() => laguSelesai());   // autoplay diblokir = diam saja
+  return true;
+}
+
+function laguSelesai() {
+  if (!laguMain) return;
+  laguMain = false;
+  /* Labelnya dikembalikan ke suasana yang sedang berlaku, bukan dikosongkan
+     dan bukan dengan menghapus musikGayaAktif: scheduler membaca gaya itu di
+     SETIAP langkah, jadi mengosongkannya di tengah birama bikin `G.kord`
+     melempar sampai birama berikutnya tiba. (Persis itu yang pernah terjadi.) */
+  tampilSuasanaMusik(musikNyala && musikGayaAktif ? musikGayaAktif.nama : '');
+}
+
+// Dihentikan tangan: centang di panel dicabut, atau musik dimatikan.
+function hentikanLaguKantor() {
+  if (laguEl) { try { laguEl.pause(); } catch { /* elemen sudah dilepas */ } }
+  laguSelesai();
+}
+
+/* Dicek tiap 20 detik, idiom yang sama dengan cekJadwalRaya di atas: tanggal
+   terakhir dititip di localStorage supaya tahan reload dan tidak diputar
+   ulang tiap 20 detik sepanjang jam 10. */
+function cekJadwalLagu() {
+  if (!laguOn) return;
+  const d = new Date();
+  if (!laguWaktunya(d)) return;
+  if (rayaSedangMain || laguMain) return;   // mengalah; 20 detik lagi dicoba lagi
+  const tgl = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  if (ingatan.baca('laguTerakhir', '') === tgl) return;
+  ingatan.tulis('laguTerakhir', tgl);
+  mainkanLaguKantor();
+}
+setTimeout(cekJadwalLagu, 0);
+setInterval(cekJadwalLagu, 20000);
+
+// Buat dicoba dari konsol tanpa menunggu jam 10, sejajar mainkanIndonesiaRaya()
+window.mainkanLaguKantor = mainkanLaguKantor;
 
 function blip(freq, dur) {
   if (!sound || !audio) return;
@@ -10516,6 +10626,32 @@ function notifPerambanGambar() {
     izin === 'default' ? 'belum diminta' : 'peramban ini tidak mendukung';
   setNotifPeramban.disabled = izin !== 'default';
 }
+/* Lagu kantor jam 10. BOLEH diingat browser — alasannya sama dengan pengingat
+   di atas: ini bukan bunyi yang menyala sendiri, cuma izin untuk menjadwalkan,
+   dan lagunya toh tetap menunggu AudioContext yang dibuka lewat klik. */
+const setLagu = document.getElementById('setLagu');
+const laguKetEl = document.getElementById('laguKet');
+function laguSet(v) {
+  laguOn = v;
+  ingatan.tulis('laguKantor', v ? '1' : '0');
+  setLagu.checked = v;
+  if (!v) hentikanLaguKantor();   // dicabut di tengah lagu = berhenti sekarang
+}
+laguSet(ingatan.baca('laguKantor', '1') !== '0');
+setLagu.onchange = () => laguSet(setLagu.checked);
+/* Keterangan kecil di sebelah centangnya: nama berkas yang ketemu, atau
+   pemberitahuan bahwa belum ada. Gagal bertanya = tulisannya dikosongkan,
+   bukan pesan merah — jadwalnya sendiri tidak menunggu jawaban ini. */
+fetch('/lagu-kantor/info')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((j) => {
+    if (!j || !laguKetEl) return;
+    laguKetEl.textContent = j.ada
+      ? '· ' + j.nama + ' (' + Math.round(j.ukuran / 1024 / 1024 * 10) / 10 + ' MB)'
+      : '· belum ada berkasnya';
+  })
+  .catch(() => { /* server lama tanpa rute ini, atau offline */ });
+
 setPengingat.checked = pengingatOn;
 setPengingat.onchange = () => pengingatSet(setPengingat.checked);
 setNotifPeramban.onclick = async () => {

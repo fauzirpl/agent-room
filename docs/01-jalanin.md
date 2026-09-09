@@ -242,6 +242,7 @@ untuk yang memang tidak punya (`Stop`, `UserPromptSubmit`).
 | `AGENT_ROOM_SUARA_URL` | OpenRouter `/audio/speech` | alamat penyedia TTS; diarahkan ke penyedia palsu oleh `uji-suara.mjs` supaya uji tidak pernah keluar jaringan |
 | `AGENT_ROOM_SUARA_MODEL_URL` | OpenRouter `/models` | alamat daftar model TTS untuk datalist di panel ⚙️ |
 | `AGENT_ROOM_SUARA_HZ` | `24000` | laju cuplik yang diasumsikan waktu format `pcm` dibungkus jadi WAV |
+| `AGENT_ROOM_LAGU` | *(kosong)* | berkas lagu kantor yang disetel Senin–Jumat jam 10. Kosong = dicari sendiri sebagai `lagu-kantor.m4a`/`.mp3`/`.ogg`/`.opus`/`.webm`/`.wav` di folder proyek. Tidak ada berkasnya = jadwalnya cuma diam (lihat [Isi transkrip → suara](03-isi-transkrip.md)) |
 
 ### Gerbang: penjaga Host & kunci event
 

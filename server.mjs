@@ -4227,6 +4227,39 @@ async function cuacaSekarang() {
 
    Endpoint OpenRouter-nya OpenAI-compatible dan membalas byte audio mentah —
    bukan JSON, bukan SSE — jadi cukup fetch polos dan dependencies tetap {}. */
+/* ----------------------------------------------------------- lagu kantor ---
+   Satu lagu milik kantor ini sendiri, disetel tiap hari kerja jam 10 (lihat
+   cekJadwalLagu di room.js). Berbeda dari SEMUA bunyi lain di proyek ini, yang
+   satu ini memang berkas audio sungguhan -- dan justru karena itu ia TIDAK
+   ikut di repo:
+
+   * Isinya milik pemilik mesin, bukan milik proyek. Repo ini dipasang orang
+     lain lewat npm; lagu pribadi tidak boleh ikut terbawa ke mesin mereka.
+   * Janji "nol file audio eksternal" tetap berlaku untuk yang dibawa repo.
+     Kantor tanpa berkas ini jalan persis seperti sebelumnya: rutenya membalas
+     204 dan jadwalnya cuma diam, sama sekali tanpa pesan merah.
+
+   Taruh berkasnya sebagai `lagu-kantor.<ekstensi>` di akar folder proyek, atau
+   tunjuk lewat AGENT_ROOM_LAGU. Ekstensi yang dikenal ada di LAGU_JENIS;
+   urutannya = urutan dicari, yang paling luas dukungannya di peramban dulu. */
+const LAGU_JENIS = {
+  '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg',
+  '.opus': 'audio/ogg', '.webm': 'audio/webm', '.wav': 'audio/wav',
+};
+const BERKAS_LAGU = process.env.AGENT_ROOM_LAGU || '';
+/* Dicari tiap permintaan, bukan sekali waktu server nyala: berkasnya boleh
+   kamu taruh, ganti, atau cabut tanpa menjalankan ulang kantornya. */
+function cariLagu() {
+  try {
+    if (BERKAS_LAGU) return fs.existsSync(BERKAS_LAGU) ? BERKAS_LAGU : '';
+    for (const ekst of Object.keys(LAGU_JENIS)) {
+      const f = path.join(__dirname, 'lagu-kantor' + ekst);
+      if (fs.existsSync(f)) return f;
+    }
+  } catch { /* folder tidak terbaca = anggap tidak ada lagu */ }
+  return '';
+}
+
 const DIR_SUARA = process.env.AGENT_ROOM_SUARA_DIR || path.join(__dirname, 'suara');
 const BERKAS_SUARA = process.env.AGENT_ROOM_SUARA || path.join(__dirname, 'suara.json');
 /* Kunci dipisah dari suara.json supaya suara.json aman di-`cat` kapan saja.
@@ -6216,6 +6249,51 @@ const server = http.createServer(async (req, res) => {
       console.warn('[agent-room] suara: ' + err.message);
       res.writeHead(204).end();
     }
+    return;
+  }
+
+  /* Lagu kantor. Dua jawaban saja: berkasnya ada (200 + audio) atau tidak
+     (204). 204 dipilih supaya sama persis dengan jalur /ucap: bagi halaman,
+     "belum ditaruh" dan "tidak ada klip" itu keadaan yang sama, dan tidak ada
+     satu pun yang perlu jadi pesan merah. */
+  if (url.pathname === '/lagu-kantor' && (req.method === 'GET' || req.method === 'HEAD')) {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const berkas = cariLagu();
+    if (!berkas) { res.writeHead(204).end(); return; }
+    let st;
+    try { st = fs.statSync(berkas); } catch { res.writeHead(204).end(); return; }
+    /* ETag dari ukuran + mtime: ganti lagunya, peramban ambil yang baru; tidak
+       diganti, jawabannya 304 tanpa badan. Berkasnya megabyte-an dan diminta
+       tiap hari jam 10, jadi ini bukan penghematan yang cuma teoretis. */
+    const etag = '"' + st.size.toString(36) + '-' + Math.floor(st.mtimeMs).toString(36) + '"';
+    const kepala = {
+      'content-type': LAGU_JENIS[path.extname(berkas).toLowerCase()] || 'application/octet-stream',
+      'content-length': st.size,
+      etag,
+      'accept-ranges': 'none',
+      'cache-control': 'private, no-cache',
+    };
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, { etag }).end(); return; }
+    if (req.method === 'HEAD') { res.writeHead(200, kepala).end(); return; }
+    res.writeHead(200, kepala);
+    /* Di-stream, bukan readFile: lagu tiga menit sudah belasan megabyte kalau
+       WAV, dan tidak ada gunanya menahannya utuh di memori server. */
+    const aliran = fs.createReadStream(berkas);
+    aliran.on('error', () => res.destroy());
+    req.on('close', () => aliran.destroy());
+    aliran.pipe(res);
+    return;
+  }
+
+  /* Halaman menanyakan ini sekali waktu dibuka, cuma untuk menulis nama
+     berkasnya di panel — jadwalnya sendiri tidak menunggu jawaban ini. */
+  if (url.pathname === '/lagu-kantor/info' && req.method === 'GET') {
+    if (!asalSah(req)) { res.writeHead(403).end(); return; }
+    const berkas = cariLagu();
+    let ukuran = 0;
+    if (berkas) { try { ukuran = fs.statSync(berkas).size; } catch { /* hilang di sela-sela */ } }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+    res.end(JSON.stringify({ ada: Boolean(berkas), nama: berkas ? path.basename(berkas) : '', ukuran }));
     return;
   }
 
