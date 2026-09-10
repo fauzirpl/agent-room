@@ -82,7 +82,7 @@ daftarEvent(
   mulai(E) {
     E.data.jeda = 0;
     const a = pemeran(E, ['arsiparis', 'magang']);
-    if (a) { a.doingEvent = 'mengambil ember cadangan'; a.goToXY(440, 240, 'up'); }
+    if (a) { a.doingEvent = 'mengambil ember cadangan'; a.goToXY(pantriX(440), 240, 'up'); }   // stok pantri
   },
   tick(E, dt) {
     E.data.jeda -= dt;
@@ -221,8 +221,9 @@ daftarEvent(
      ke penghitung yang tidak pernah terisi. */
   mulai(E) {
     const org = pinjamAktor(E, 2);
-    org.forEach((a, i) => { a.doingEvent = 'memungut berkas tumpah'; a.goToXY(430 + i * 20, 300, 'down'); });
-    for (let i = 0; i < 14; i++) spawn('paper', 436, 280);
+    // dus arsip yang ambruk itu tumpukan di pojok pantri: angka denah lama, lihat pantriX()
+    org.forEach((a, i) => { a.doingEvent = 'memungut berkas tumpah'; a.goToXY(pantriX(430) + i * 20, 300, 'down'); });
+    for (let i = 0; i < 14; i++) spawn('paper', pantriX(436), 280);
     E.data.sisa = 8;
   },
   tick(E) {
@@ -240,9 +241,9 @@ daftarEvent(
   gambarProp(E) {
     // dus terguling selama belum beres; sesudahnya drawDus() bawaan sudah cukup
     if (E.data.sisa <= 0) return;
-    r(410, 290, 20, 14, '#a37b4e');
-    r(412, 292, 16, 10, '#b98d5e');
-    for (let i = 0; i < Math.min(6, E.data.sisa); i++) r(400 + i * 11, 314, 3, 2, P.paper);
+    r(pantriX(410), 290, 20, 14, '#a37b4e');
+    r(pantriX(412), 292, 16, 10, '#b98d5e');
+    for (let i = 0; i < Math.min(6, E.data.sisa); i++) r(pantriX(400) + i * 11, 314, 3, 2, P.paper);
   },
   sortY: 305,
   selesai(E) { for (const a of E.aktor) a.pose = null; },

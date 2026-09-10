@@ -219,8 +219,9 @@ daftarEvent(
    Perhentiannya TIDAK diambil dari daftar meja apa adanya, tapi dari slotIdx
    pemeran yang benar-benar dipinjam: kalau tidak, sales berpidato di depan
    meja kosong sementara "korbannya" kabur dari ujung ruangan yang lain. Meja
-   slot 3 (x=444) dibuang — pojok itu sudah berdesakan dengan pantry
-   (x414..478) dan tong sampah (437,278).
+   pojok (MEJA_POJOK) dibuang — pojok itu berdesakan dengan pantry. Dulu itu
+   slot 3 (x=444) di samping pantri x414..478; sejak pantri pindah ke x510..574
+   dan meja ke-7 (x=510) masuk di bawahnya, pojok yang berdesakan itu slot 6.
 
    Berdiri di y=302: 20 px di depan papan meja kerja (drawMejaKerja y=322),
    jadi tidak menembus perabot apa pun; sortY 302 > 249 (meja rapat) supaya
@@ -263,7 +264,7 @@ daftarEvent(
   // (15,8 detik untuk cabang tanpa korban, sampai 43,7 detik dengan tiga).
   perluAktor: true,
   mulai(E) {
-    const korban = pinjamAktor(E, 3, (o) => o.station === 'think' && o.slotIdx !== 3);
+    const korban = pinjamAktor(E, 3, (o) => o.station === 'think' && o.slotIdx !== MEJA_POJOK);
     /* Urut menurut TITIK HENTI, bukan menurut posisi orangnya sekarang.
        bisaDipinjam() cuma menolak state 'work', jadi pegawai yang sedang
        BERJALAN pulang ke mejanya (state 'walk', station-nya sudah 'think')

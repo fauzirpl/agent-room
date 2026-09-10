@@ -22,8 +22,63 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   menyusul sesudah Indonesia Raya alih-alih menimpanya. Centangnya di panel
   ⚙️ diingat browser; `mainkanLaguKantor()` di konsol untuk mencobanya tanpa
   menunggu jam 10.
+- **WC.** Pintu kamar mandi di pojok kiri dinding belakang, cermin pintu kadis
+  di pojok kanan: kusen aluminium, daun PVC biru muda berkisi-kisi, plang
+  pria · WC · wanita, slot ISI/KOSONG, dan sandal jepit di depan pintu yang
+  hilang selagi ada orangnya. Pegawai standby sesekali memakainya (1 dari 10
+  kali memilih tujuan, 8–18 detik di dalam); sesi nyata tidak pernah — tool
+  call tidak boleh menunggu orang di toilet. Rinciannya di
+  [docs/02](docs/02-ruangan.md), bagian *WC, dan dunia yang dilebarkan ke
+  kanan*.
+- **Semua perabot bisa diklik: zoom + Kartu Inventaris Barang.** Kamera
+  membidik barangnya (zoom 2/3/4, seperti klik bukaan ruang kadis; klik pintu
+  kadis masuk ke ruangannya), dan di sebelahnya terbuka kartu inventaris
+  bergaya BMN — kode barang, NUP, tahun perolehan, dan kondisi yang dibaca
+  hidup dari ruangan (ember, galon, toner, WC isi/kosong). Barang yang punya
+  stasiun menyebut tool Claude Code yang dikerjakan di situ, siapa yang sedang
+  memakainya, dan berapa tool call yang jatuh ke sana. Klik lagi, lantai
+  kosong, atau Esc untuk keluar.
+- **Meja kerja ke-7** di sayap baru (x=510) — baris depan penuh. "Meja pojok"
+  milik wifi-sudut-lemah ikut pindah ke meja paling kanan (`MEJA_POJOK`).
+- **Tiga belas perabot pengisi ruang kosong**, dipilih dari peta keterisian
+  (piksel perabot + 65.280 rute pegawai) supaya tidak ada yang menghalangi
+  jalan: papan pengumuman, kotak P3K, mesin fotokopi, lemari piala, papan
+  kinerja harian (grafiknya hidup dari tool call), poster BerAKHLAK, bangku
+  tunggu besi, rak brosur, akuarium arwana, sofa tamu & meja kopi, palem,
+  tiang hand sanitizer, tempat sampah pilah, dan mesin penghancur kertas.
+  Pegawai standby sesekali memfotokopi. Semuanya bisa diklik.
+
+### Diubah
+
+- **Papan “Tentang kantor ini” muncul di tengah layar**, bukan lagi rata kanan.
+  Rata kanan dulu dipilih supaya papan berdampingan dengan banner yang terjepit
+  di sepertiga kiri layar, tapi di layar lebar itu menaruhnya menempel di tepi —
+  jauh dari mata, dan terasa dilempar ke pinggir. Tirainya tetap lebih terang
+  dari dialog lain, jadi banner yang baru dizoom masih kelihatan di kirinya.
+
+- **Ruangan dilebarkan dari 480 ke 576 piksel dunia**, ke kanan, satu bentang
+  pilar — lahan untuk ekspansi. Koordinat lama tidak ada yang bergeser; semua
+  yang berarti "tepi kanan" (tamu masuk, pintu keluar ritual pulang) ikut
+  pindah ke tepi baru karena memang ditulis dengan `W`. Di layar yang sama
+  sprite tampil sedikit lebih kecil, karena kanvas yang lebih lebar dipaskan
+  ke panggung yang sama.
+- **Pantri pindah ke pojok kanan** (x414 → x510). Event yang menaruh orang dan
+  barang di dalamnya kini menulis angka denah lama lewat `pantriX()`, jadi
+  pemindahan berikutnya cukup mengubah `PANTRI.x`.
+- **Pintu kadis jadi pintu dua daun** 48×86 (dulu satu daun 34×82), dengan lis
+  mahkota dan gagang kuningan; tepi kirinya tidak bergeser.
+- Dus tambahan lemari arsip yang penuh kini digambar di depan lemari, bukan di
+  kirinya — tempat itu sekarang pintu WC.
 
 ### Diperbaiki
+
+- **`teknisi-dipanggil-ke-kolong-meja` tidak lagi menyeret pegawai yang masih
+  bekerja.** Tanpa teknisi, pemilik meja didorong ke daftar pemeran tanpa
+  `bisaDipinjam()` — pelanggaran Aturan 1 yang ditangkap invarian J
+  `uji-ulang.mjs` begitu urutan acaknya bergeser. Catatan jujur: kode di commit
+  sebelumnya pun sudah gagal `uji-ulang` di benih 4 (`kucing-di-atas-keyboard`,
+  kelas yang sama) dan benih 7 (bocor peserta); benih bawaan saja yang selama
+  ini lolos. Keduanya belum disentuh.
 
 - **Beat lofi tidak lagi melempar kalau gaya musik sempat kosong di tengah
   birama.** Scheduler membaca `musikGayaAktif` di setiap langkah, jadi

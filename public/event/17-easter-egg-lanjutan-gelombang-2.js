@@ -355,15 +355,15 @@ daftarEvent(
       E.data.baca = true;
       a.say('astaga, nama Pak Kadis kurang satu huruf');
       a.laju = 1.5;
-      a.goToXY(439, 276, 'down');
+      a.goToXY(pantriX(439), 276, 'down');
     }
     // Dulu "x > 340": arahnya pasti dari kiri karena tong-nya jauh dari
-    // meja kerja manapun. Sekarang tong ada di pantry (x439) yang lebih
-    // dekat ke sebagian meja -- jarak ke target, bukan ambang satu arah,
-    // supaya tetap benar dari kedua sisi.
-    if (E.data.baca && a.diam && Math.abs(a.x - 439) < 10 && !E.data.buang) {
+    // meja kerja manapun. Sekarang tong ada di pantry (denah lama x439,
+    // lihat pantriX) yang lebih dekat ke sebagian meja -- jarak ke target,
+    // bukan ambang satu arah, supaya tetap benar dari kedua sisi.
+    if (E.data.baca && a.diam && Math.abs(a.x - pantriX(439)) < 10 && !E.data.buang) {
       E.data.buang = true;
-      for (let i = 0; i < 4; i++) spawn('paper', 439, 276);
+      for (let i = 0; i < 4; i++) spawn('paper', pantriX(439), 276);
       a.bawa = null;
       a.laju = 1;
       a.goTo('web');

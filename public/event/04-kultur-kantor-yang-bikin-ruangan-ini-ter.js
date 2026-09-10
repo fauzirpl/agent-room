@@ -12,7 +12,7 @@ daftarEvent(
     const a = pemeran(E);
     if (!a) return;
     a.doingEvent = 'menyeduh kopi';
-    a.goToXY(470, 256, 'up');
+    a.goToXY(pantriX(470), 256, 'up');
   },
   tick(E) {
     const a = E.aktor[0];
@@ -20,7 +20,7 @@ daftarEvent(
     a.pose = 'angkat';
     if (Math.random() < 0.3) spawn('steam', a.x + 6, a.y - 18);
     pada(E, 4, () => { a.bawa = 'gelas'; a.bawaSampai = now + 60000; });
-    pada(E, 6, () => { spawn('paper', 439, 268, '#8a6844'); });   // sachet ke tong
+    pada(E, 6, () => { spawn('paper', pantriX(439), 268, '#8a6844'); });   // sachet ke tong
     pada(E, 8, () => { a.pose = null; RUANGAN.gelasDispenser = Math.max(0, RUANGAN.gelasDispenser - 1); });
   },
 },
@@ -32,18 +32,18 @@ daftarEvent(
   perluAktor: true,
   syarat: (S) => (S.jam >= 9.6 && S.jam < 10.4) || (S.jam >= 14.5 && S.jam < 15),
   mulai(E) {
-    // Tiga orang tidak muat di pojok dispenser (cuma 18px, x462..480) --
-    // berkerumun di lantai pantry yang lebih lega, pola sama seperti
-    // ngerumpi-di-pantry (x428+i*14).
+    // Tiga orang tidak muat di pojok dispenser (cuma 18px, denah lama
+    // x462..480) -- berkerumun di lantai pantry yang lebih lega, pola sama
+    // seperti ngerumpi-di-pantry (x428+i*14). Angka denah lama, lihat pantriX().
     pinjamAktor(E, 3).forEach((a, i) => {
       a.doingEvent = 'ngopi bareng';
-      a.goToXY(424 + i * 14, 278, 'up');
+      a.goToXY(pantriX(424) + i * 14, 278, 'up');
     });
   },
   tick(E) {
     const siap = E.aktor.filter((a) => a.diam);
     if (siap.length >= 2) {
-      if (Math.random() < 0.09) spawn('steam', 438, 268);
+      if (Math.random() < 0.09) spawn('steam', pantriX(438), 268);
       // 'talk' bergantian, tidak pernah bersamaan — itu yang bikin terbaca ngobrol
       const giliran = Math.floor(E.umur / 1.2) % siap.length;
       if (Math.floor(E.umur / 1.2) !== E.data.g) {
@@ -94,13 +94,14 @@ daftarEvent(
   mulai(E) {
     const dipinjam = pinjamAktor(E, 3);
     if (dipinjam.length < 2) { E.selesaiCepat = true; return; }
-    // Ruangan pantry sekarang di x414..478 (drawPantry, room.js), meja
-    // makan kecilnya di tx=442. Orangnya berkumpul di depan meja itu,
-    // menghadap 'up' -- sama seperti gorengan-di-meja-rapat menghadap
-    // meja rapat, bukan menghadap kamera.
+    // Ruangan pantry di denah lama x414..478 (drawPantry, room.js), meja
+    // makan kecilnya di tx=442 -- diterjemahkan pantriX() ke letak pantri
+    // sekarang. Orangnya berkumpul di depan meja itu, menghadap 'up' --
+    // sama seperti gorengan-di-meja-rapat menghadap meja rapat, bukan
+    // menghadap kamera.
     dipinjam.forEach((a, i) => {
       a.doingEvent = 'ngerumpi di pantry';
-      a.goToXY(428 + i * 14, 272, 'up');
+      a.goToXY(pantriX(428) + i * 14, 272, 'up');
     });
   },
   tick(E) {
@@ -122,8 +123,8 @@ daftarEvent(
   kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 3,
   syarat: (S) => RUANGAN.gelasDispenser <= 1 && S.orang.length >= 5,
   mulai(E) {
-    const a = pemeranDekat(E, 466, 256, 220);
-    if (a) { a.doingEvent = 'mengintip baki gelas'; a.goToXY(466, 256, 'up'); }
+    const a = pemeranDekat(E, pantriX(466), 256, 220);
+    if (a) { a.doingEvent = 'mengintip baki gelas'; a.goToXY(pantriX(466), 256, 'up'); }
   },
   tick(E) {
     const a = E.aktor[0];
@@ -143,7 +144,7 @@ daftarEvent(
     if (!a) return;
     // tidak ada 'steam' sama sekali — itu petunjuknya sudah dingin dan habis
     pada(E, 1, () => { a.pose = 'angkat'; });
-    pada(E, 2.2, () => { a.pose = null; a.bawa = null; a.bawaSampai = 0; hadapkan(a, 466, 256); });
+    pada(E, 2.2, () => { a.pose = null; a.bawa = null; a.bawaSampai = 0; hadapkan(a, pantriX(466), 256); });
   },
 },
 
@@ -162,7 +163,7 @@ daftarEvent(
     const a = E.aktor[0];
     if (!a || !a.diam) return;
     pada(E, 3, () => { for (let i = 0; i < 5; i++) spawn('ink', 34, 262, '#8a6844'); a.say('biar subur'); });
-    pada(E, 5, () => a.goToXY(439, 270, 'up'));       // buang gelas ke tong
+    pada(E, 5, () => a.goToXY(pantriX(439), 270, 'up'));       // buang gelas ke tong
     pada(E, 8, () => { a.bawa = null; a.bawaSampai = 0; });
   },
 },
@@ -388,15 +389,15 @@ daftarEvent(
   mulai(E) {
     RUANGAN.tongPenuh = 1;
     const a = pemeran(E, ['magang']);
-    if (a) { a.doingEvent = 'mengganti kantong sampah'; a.goToXY(439, 280, 'up'); }
+    if (a) { a.doingEvent = 'mengganti kantong sampah'; a.goToXY(pantriX(439), 280, 'up'); }
   },
   tick(E) {
     const a = E.aktor[0];
     if (!a) return;
     if (a.diam && !E.data.ikat) pada(E, 6, () => { E.data.ikat = true; a.pose = 'jongkok'; a.say('sudah bau ini'); });
-    pada(E, 10, () => { a.pose = null; a.bawa = 'kardus'; a.goToXY(452, 300, 'right'); });
+    pada(E, 10, () => { a.pose = null; a.bawa = 'kardus'; a.goToXY(pantriX(452), 300, 'right'); });
     pada(E, 18, () => { RUANGAN.tongPenuh = 0; a.alpha = 0; });
-    pada(E, 22, () => { a.alpha = 1; a.goToXY(439, 280, 'up'); });
+    pada(E, 22, () => { a.alpha = 1; a.goToXY(pantriX(439), 280, 'up'); });
     pada(E, 28, () => { a.bawa = null; });
   },
   gambarAtas(E) {
@@ -404,7 +405,7 @@ daftarEvent(
     // dua lalat berputar pelan di atas tong; ini yang bikin orang memutar
     for (let i = 0; i < 2; i++) {
       const t = now / 420 + i * 3.1;
-      r(437 + Math.cos(t) * 5, 270 + Math.sin(t * 1.3) * 3, 1, 1, '#2c3440');
+      r(pantriX(437) + Math.cos(t) * 5, 270 + Math.sin(t * 1.3) * 3, 1, 1, '#2c3440');
     }
   },
 },

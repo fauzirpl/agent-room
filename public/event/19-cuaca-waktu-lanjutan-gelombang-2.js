@@ -30,7 +30,7 @@ daftarEvent(
   tick(E, dt) {
     MOD.ambPlus = 0.05;
     MOD.kipas = 1.7;
-    if (Math.random() < 0.15 * dt) spawn('splash', 466, 262, '#bcd9ee');
+    if (Math.random() < 0.15 * dt) spawn('splash', pantriX(466), 262, '#bcd9ee');   // dispenser
     if (!E.data.idle && E.umur > 5) {
       const a = pinjamAktor(E, 1, (o) => o.station !== 'think')[0];
       if (a) { E.data.idle = a; a.goTo('idle'); }
@@ -87,7 +87,7 @@ daftarEvent(
   tick(E, dt) {
     MOD.ambPlus = 0.06;
     MOD.kipas = 1.5;
-    if (Math.random() < 0.1 * dt) spawn('splash', 466, 258, '#bcd9ee');
+    if (Math.random() < 0.1 * dt) spawn('splash', pantriX(466), 258, '#bcd9ee');   // dispenser
   },
   selesai(E) { for (const a of E.data.orang) a.pose = null; },
 },

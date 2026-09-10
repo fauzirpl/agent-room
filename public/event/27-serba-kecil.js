@@ -133,7 +133,7 @@ daftarEvent(
       E.data.tahap = 0;
       a.doingEvent = 'ambil lap ke pantry';
       a.say('kok rame di meja saya');
-      a.goToXY(424, 280, 'up');              // meja pantry, tempat lap digantung
+      a.goToXY(pantriX(424), 280, 'up');     // meja pantry, tempat lap digantung
     }
 
     // Direbut tool call sungguhan? tahapnya dimatikan (9 = cabang "tidak ada
@@ -168,14 +168,14 @@ daftarEvent(
         a.pose = null;
         a.bawa = 'kertas';
         a.doingEvent = 'buang bungkus';
-        a.goToXY(439, 270, 'up');            // tong sampah
+        a.goToXY(pantriX(439), 270, 'up');   // tong sampah
       }
     } else if (E.data.tahap === 3 && a.diam) {
       E.data.tahap = 4;
       a.bawa = null;
       a.doingEvent = '';
       RUANGAN.tongPenuh = Math.min(1, RUANGAN.tongPenuh + 0.06);
-      for (let i = 0; i < 2; i++) spawn('dust', 439, 272);
+      for (let i = 0; i < 2; i++) spawn('dust', pantriX(439), 272);
     }
   },
   gambarProp(E) {

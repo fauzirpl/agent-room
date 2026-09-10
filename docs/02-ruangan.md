@@ -13,7 +13,7 @@
 | PC server | perintah **git** (`git`, `gh`, `jj`, …) lewat `Bash`/`PowerShell` | rak besi: patch panel, dua server, storage, switch, UPS, kabel UTP menjuntai, APAR di sampingnya |
 | Meja rapat | `Task`, `Agent`, `Workflow`, plus **kegiatan berpikir selagi ada subagent berjalan** | meja panjang bertaplak putih + rimpel hijau, 9 kursi, peserta undangan ikut duduk, ada yang bicara ada yang mencatat notulen |
 | Ruang kadis | `Skill`, `SendMessage`, `mcp__*` | ketuk pintu bawa map disposisi; kalau bukaannya terbuka, pegawainya benar-benar masuk ke dalam (lihat **Ruang kadis**) |
-| Meja kerja | `TodoWrite`, `AskUserQuestion`, **semua perintah shell non-git**, dan tempat pulang waktu menganggur | **4 meja** di baris depan, laptopnya menyala hanya di meja yang ditempati |
+| Meja kerja | `TodoWrite`, `AskUserQuestion`, **semua perintah shell non-git**, dan tempat pulang waktu menganggur | **7 meja** di baris depan, laptopnya menyala hanya di meja yang ditempati |
 | Ruang tunggu | limpahan waktu empat meja penuh | berdiri ngopi dekat dispenser — baris depan tengah |
 
 Arahan baru dari kamu (`UserPromptSubmit`) memanggil pegawainya ke **meja rapat**
@@ -51,7 +51,7 @@ branch. Itu bukan event acak: tidak masuk log, tidak menaikkan statistik, dan
 batal seketika begitu tool call datang. Beda proyek tetap asing.
 
 **Antrean stasiun.** Stasiun punya kapasitas (PC server 4 slot, meja rapat 9
-kursi, meja kerja 6). Dulu yang kelima berdiri berimpit di slot pertama;
+kursi, meja kerja 7). Dulu yang kelima berdiri berimpit di slot pertama;
 sekarang dia **mengantre** di lajur di belakang stasiun — berjarak 10 px,
 paling banyak tiga yang kelihatan — dengan pose berdiri biasa menghadap
 stasiunnya, bukan pose butuh manusia. Begitu ada slot kosong, yang paling
@@ -231,6 +231,13 @@ selubung malam menutup selebar dunia (jadi dunia yang lebih lebar akan terbelah
 siang/malam), dan titik pintu keluar dihitung dari lebar dunia — melebarkannya
 menaruh pintu itu di dalam tembok.
 
+Belakangan dunia **memang** dilebarkan (ke 576, lihat **WC, dan dunia yang
+dilebarkan ke kanan**), dan itu tidak membatalkan alasan di atas: yang ditolak
+adalah menaruh ruang kadis di lahan tambahan yang *bertembok*. Sayap yang
+ditambahkan belakangan justru lantai terbuka yang menyambung ruang utama, jadi
+"tepi kanan" tetap tepi kanan, selubung malam tetap satu, dan pintu keluar
+jatuh di lantai, bukan di tembok.
+
 **Letaknya tidak ditebak.** Kotak yang diusulkan rancangan (154×94 di x284)
 ternyata menimpa 9.165 piksel milik 17 perabot berbeda — yang terbesar rak PC
 server, stasiun yang dipakai tiap hari. Jadi yang dicari adalah **persegi kosong
@@ -275,10 +282,14 @@ pura-pura bisa dipilih.
 
 ## Pantri, dan sekat yang akhirnya jadi dinding
 
-Pantri menempati pojok kanan-depan (`x414..478`, `y196..288`) di balik sekat
-kayu rendah: satu panel di belakang, satu panel di sisi kiri. Tapaknya sudah
-lama begitu dan **tidak digeser** — puluhan event menaruh orang di koordinat di
-dalamnya, dan `sortY` prop-nya dikunci golden z-order.
+Pantri menempati pojok kanan-depan (`x510..574`, `y196..288`) di balik sekat
+kayu rendah: satu panel di belakang, satu panel di sisi kiri. Lama tapaknya
+`x414..478`; sejak dunia dilebarkan ke 576 ia digeser +96 ke pojok kanan yang
+baru — tepat sejauh tepi kanannya bergeser (lihat **WC, dan dunia yang
+dilebarkan ke kanan**). Angka-angka di bawah ini ditulis dalam **denah lama**,
+karena begitulah event menyebutnya: `pantriX(466)` menerjemahkan "dispenser di
+x466" ke letak pantri sekarang, dan `sortY` prop-nya tetap dikunci golden
+z-order.
 
 Yang berubah: sekat itu dulu **cuma gambar**. `route()` tidak punya pengertian
 rintangan sama sekali, jadi setiap kaki yang menuju pantri menembus kayunya di
@@ -339,6 +350,154 @@ pantri ber-`sortY` 270, jadi lantai yang ikut digambar di sana akan menimpa
 siapa pun yang berdiri di `y<270`. Orang mengenali batas sebuah ruangan dari
 lantainya sebelum dari sekatnya, dan itu yang paling murah membuat pantri
 terbaca sebagai ruang lain alih-alih sebagai perabot yang berkumpul di pojok.
+
+## WC, dan dunia yang dilebarkan ke kanan
+
+Kantor ini akhirnya punya WC. Pintunya di **pojok kiri dinding belakang**
+(`WC` di kepala `room.js`: kusen 24×80 di x0..23, y30..110) — cermin pintu kadis di
+pojok kanan. Letaknya bukan soal selera: itu satu-satunya bidang dinding yang
+masih kosong dari bawah papan nama sampai lantai. Kotaknya disapu seperti
+bukaan kadis — `drawWall` di kelima tema, 27 PROPS, 166 hook gambar event,
+umur 0..30 detik tiap 0,05 — dan yang menyentuhnya cuma bayangan papan nama
+(berhenti y=27), lemari arsip (mulai x=24), cicak-jatuh yang merayap di kusen
+(digambar sesudah dinding, jadi di atas pintu, tidak tertimpa), tikus di
+lantai, dan dua sapuan cahaya malam yang memang harus lewat.
+
+Rupanya sengaja **bukan** pintu kayu seperti kadis, supaya tidak terbaca ruang
+pejabat kedua: kusen aluminium, daun PVC biru muda beralur dengan kisi-kisi di
+bawah, plang biru pria · WC · wanita yang disekrup di daunnya, dan slot
+ISI/KOSONG di bawah gagang. Dua tanda "ada orangnya" lagi yang terbaca tanpa
+membaca huruf: kisi-kisinya berpendar lampu dari dalam, dan **sandal jepit** di
+depan pintu hilang — dipakai masuk.
+
+Yang memakainya cuma **pegawai standby**: tiap kali memilih tujuan
+mondar-mandir, 1 dari 10 kesempatan dia ke WC (kalau kosong), berdiri di
+ambang, pintunya terbuka, dia memudar ke dalam, dan 8–18 detik kemudian keluar
+lagi menghadap ruangan. Itu rutinitas di `class Standby` (`keWC`/`tickWC`),
+sekelas notulen — bukan event acak, tidak masuk log, tidak menaikkan statistik.
+Selama di sana dia `adaTugas` (event, apel, dan notulen tidak meminjam orang
+yang sedang di toilet) dan `betah` (jam menganggur tidak menyuruhnya balik ke
+meja dari dalam WC). **Sesi nyata tidak pernah ke WC**: tempatnya waktu
+menganggur adalah mejanya, dan tool call tidak boleh menunggu orang yang sedang
+di dalam (Aturan 1). Akibatnya, dengan empat sesi nyata atau lebih — tidak ada
+standby — WC-nya selalu kosong.
+
+**Dunia dilebarkan dari 480 ke 576**, satu bentang pilar (garis pilar dinding
+tiap 96 px, jadi sambungannya jatuh tepat di pilar x=480). Arahnya ke **kanan**,
+dan itu satu-satunya arah yang aman: semua koordinat lama — ratusan literal di
+`public/event/*.js`, golden z-order, golden bukaan kadis — tetap berlaku apa
+adanya. Sebelum mengubahnya, disapu dulu koordinat mati di atas x=480
+(`goToXY`, `spawn`, `x:`, pasangan `(x, y)`, perbandingan `x > 4xx`): nol. Semua
+yang berarti "tepi kanan" — tamu masuk di `W + 16`, pintu keluar `PINTU_X`,
+penjaga "masih di layar" — sudah ditulis dengan `W`, jadi ikut pindah ke tepi
+baru. Yang berubah karenanya:
+
+- pintu keluar ritual pulang ±170 px dari mesin absen (dulu ±60) — ±3,3 detik,
+  masih muat di jatah 6 detik bersama absennya;
+- tamu dari kanan berjalan ±96 px lebih jauh; adegan mereka menunggu tiba,
+  bukan berpatokan detik, jadi urutannya tidak bergeser;
+- lampu neon tetap dua. Tabung ketiga di sayap baru berarti mengubah
+  `MOD.neonMati` di empat berkas event yang menulis `[1, 1]` untuk pemadaman.
+
+Tiga perabot lalu mengisi lahan barunya.
+
+**Pantri pindah ke pojok kanan** (`PANTRI.x` 414 → 510), tepat +96, jadi
+letaknya terhadap dinding kanan identik dengan dulu. Yang sulit bukan
+gambarnya — `drawPantry()` sudah relatif terhadap `PANTRI.x` — melainkan
+58 angka mati di 12 berkas event yang menaruh orang, uap, dan barang di
+dalamnya. Angka itu dibiarkan terbaca dalam denah lama dan dibungkus
+`pantriX()`, jadi pemindahan berikutnya cukup mengubah satu angka. Buktinya
+dua sapuan yang menjalankan seluruh 337 event dari `mulai` sampai `selesai`
+tiap 0,1 detik sambil mencatat `goToXY`, `spawn`, dan gambar: sebelum pindah
+23 event berurusan dengan kotak pantri lama; sesudahnya yang tersisa di kotak
+lama cuma kipas, meja 444, lajur pel, dan tamu yang lewat, sementara semua
+benda pantri muncul utuh di kotak baru. `uji-pantri.mjs` ikut membaca bentuk
+`goToXY(pantriX(…), …)` — cakupannya tetap 12 tujuan seperti sebelum pindah.
+Kolom memutarnya kini `x=500` (kolom pintu): kipasnya tidak ikut pindah, jadi
+kolom itu sudah bebas perabot.
+
+**Meja kerja ke-7** di `x=510` (papan x478..542), satu-satunya yang muat di
+sayap baru — baris depan dengan itu penuh. Indeksnya 6, ditaruh di ujung
+`MEJA_KERJA_X` seperti aturan lama. "Meja pojok" yang dulu dikunci sebagai
+indeks 3 (x444) oleh wifi-sudut-lemah dan sales di 29-gel4-b sekarang
+`MEJA_POJOK` — meja paling kanan, dihitung. Koridornya persis menyusur muka
+sekat kiri pantri, jadi `route()` punya satu aturan kecil: titik di muka
+sekat didekati lewat kolom `PANTRI_LUAR`, baru menyamping di garis kakinya.
+
+**Pintu kadis jadi pintu dua daun**, 48×86 di `x440..488` (dulu satu daun
+34×82 sampai x474), diperbesar ke kanan dan ke atas. Tepi kirinya sengaja
+tetap: ambang `(452,140)`, slot antre 440/452/464, keset, dan gambar event
+yang menempel di daunnya semuanya dihitung dari tepi itu.
+
+Sisa lahan kosong: dinding x488..576 dan lantai tengah-kanan bekas pantri.
+
+Satu benturan kecil dengan WC ikut dibereskan: dus tambahan lemari arsip
+(saat `arsipPenuh`) dulu digambar di **kiri** lemari, x0..42 — persis kaki
+pintu WC. Sekarang di depan lemari, sesuai keterangan `RUANGAN.dusTambahanArsip`.
+
+### Perabot pengisi ruang kosong
+
+Sesudah pelebaran, sisa ruang kosong diisi — dan "kosong" di sini **diukur,
+bukan dikira**. Peta keterisian dibuat dengan membandingkan piksel dinding+lantai
+polos terhadap piksel semua perabot, lalu ditumpangi 65.280 rute `route()`
+sungguhan (antar semua slot stasiun, kursi rapat, ruang tunggu, WC, pantri,
+pintu keluar, dan setiap tujuan `goToXY` literal di registri event) selebar
+badan pegawai. Yang boleh diisi hanya sel yang kosong **dan** tidak pernah
+dilewati badan siapa pun; tiap calon kotak lalu disapu lagi terhadap gambar dan
+langkah semua event (umur 0..30 detik).
+
+| Tempat | Perabot | Catatan dari sapuan |
+|---|---|---|
+| dinding sayap timur | papan pengumuman, kotak P3K | bersih |
+| lantai sayap timur (dasar y120) | mesin fotokopi, lemari kaca piala | bersih |
+| dinding antara jendela & bukaan kadis | papan kinerja harian | x258..285: gorden kanan melebar sampai x252, bayangannya harus berhenti sebelum SISIP (x290) |
+| dinding atas papan visi | poster BerAKHLAK | mulai y43: `rapat-pimpinan-dadakan` menarik garis di y40 |
+| lantai kiri-tengah | bangku tunggu besi, rak brosur | berhenti di x96 & dasar y202: `bagan-di-flipchart` memasang flipchart di x95..123 y207..246 |
+| lantai kanan-tengah | akuarium arwana, sofa tamu & meja kopi, palem, tiang hand sanitizer | sofa mulai x398: `patch-panel-dilabeli` berdiri di (390,176) |
+| samping meja 444 | tempat sampah pilah | di antara lajur pel OB (y262) dan layar meja 444 (y300) |
+| pojok kanan bawah | mesin penghancur kertas | mulai y316: tiga event berdiri di (546..548,300) |
+
+Satu kantong **dicoret**: lantai kiri bawah x94..128 y266..310 — sekitar 40
+event menaruh orang di depan meja 86 dan memercik balon di sana. Yang tersisa
+kosong sesudah dua putaran (±1.300 dari 5.280 sel) hampir seluruhnya jalur
+jalan: lajur atas, lajur bawah, koridor turun ke meja, dan ruang tunggu.
+
+Dua yang hidup: **papan kinerja** menggambar delapan batang, satu per
+stasiun, dari tool call yang jatuh ke sana sejak halaman dibuka
+(`tapakStasiun`) — yang tertinggi merah, garis putus merah = "target 80%".
+**Mesin fotokopi** menyalakan lampu pindai dan mengeluarkan lembar selagi ada
+yang berdiri di depannya; pegawai standby mampir ke sana sesekali (8% tiap
+memilih tujuan), dan jam menganggur memulangkannya ke meja seperti biasa.
+Semuanya bisa diklik (zoom + kartu inventaris), dan golden z-order cuma
+bertambah label barunya: tanpa label itu urutan ke-18 kasusnya identik dengan
+sebelum perabot ini ada.
+
+## Kartu inventaris barang & zoom perabot
+
+Semua perabot bisa diklik. Kamera membidik barangnya — rasanya sama dengan
+mengklik bukaan ruang kadis — dan di sebelahnya terbuka **Kartu Inventaris
+Barang**: kode barang dan NUP bergaya BMN (tiruan, bukan kode resmi), tahun
+perolehan, lokasi, dan kondisi B/RR/RB yang **hidup** — ember berapa persen,
+galon tinggal berapa gelas, AC bocor atau mati, WC isi atau kosong dan siapa
+di dalamnya. Barang yang punya stasiun menyebut tool Claude Code yang
+dikerjakan di situ, siapa yang sedang memakainya, dan berapa tool call yang
+jatuh ke sana sejak halaman dibuka (`tapakStasiun`, lintas sesi). Tiap meja
+kerja punya kartunya sendiri.
+
+| Klik | Yang terjadi |
+|---|---|
+| pegawai | kartu pegawai seperti biasa — pegawai selalu menang |
+| X-banner, bukaan kadis | perilaku lama, tidak berubah |
+| perabot | zoom 2/3/4 (terbesar yang masih memuat barangnya) + kartu inventaris |
+| pintu kadis | zoom ke **dalam ruang kadis**, gordennya dipaksa tersibak selama kartunya terbuka |
+| barang yang sama / lantai kosong / Esc | zoom keluar, kartu ditutup |
+
+Kotak barang yang bertumpuk (jam di dinding, dispenser di dalam pantri)
+diputus luasnya: yang terkecil menang, karena itu yang ditunjuk. Kursor
+berubah jadi tangan dan bingkai tipis putus-putus muncul di atas barang yang
+bisa diklik; yang kartunya terbuka dibingkai lebih tebal dan berdenyut.
+Kartunya meminjam `#kartu` milik kartu pegawai, tapi keadaannya terpisah
+(`barangTerpilih`), jadi `terpilih` tetap cuma berarti pegawai.
 
 ## Peserta rapat
 
@@ -558,7 +717,7 @@ memutar lewat lajur depan meja dinding atau lajur depan meja rapat, tersambung d
 sisi kiri (dekat bendera) dan kanan.
 
 Stasiun yang paling sering dipakai dibuat berkapasitas banyak: **meja rapat**
-punya 9 kursi, **meja kerja** 6 meja dengan titik berdiri yang didaftar manual
+punya 9 kursi, **meja kerja** 7 meja dengan titik berdiri yang didaftar manual
 (koridor turun yang benar-benar bebas perabot — dua di antaranya sengaja mepet,
 cuma berjarak 66px, karena itu batas paling longgar yang masih muat di celah
 tersisa), dan **PC server** 4 slot dengan
@@ -1036,9 +1195,11 @@ ditangani global, jadi tidak perlu diulang per elemen.
 
 ### Resolusi HD: kisi 480×356, piksel di baliknya sebanyak layar
 
-Ruangan ini digambar di kisi **480×356 piksel dunia**, dan itu tidak pernah
-berubah: semua koordinat di `room.js`, semua tabel stasiun, semua golden uji,
-dan kamera bekerja di angka yang sama seperti hari pertama. Yang dulu ikut
+Ruangan ini digambar di kisi **480×356 piksel dunia** — sejak pintu WC
+**576×356**, dilebarkan ke kanan tanpa menggeser satu koordinat lama pun (lihat
+**WC, dan dunia yang dilebarkan ke kanan**). Semua koordinat di `room.js`, semua
+tabel stasiun, semua golden uji, dan kamera bekerja di angka yang sama seperti
+hari pertama. Yang dulu ikut
 terkunci di 480×356 adalah **kanvasnya** — dan itu masalahnya.
 
 Kanvas 480 px yang direntangkan ke layar 1.100 px diperbesar peramban dengan
@@ -1138,14 +1299,15 @@ Tiga hal yang ditata bersama, bukan sendiri-sendiri:
   `KAMERA.zoom` benar-benar sampai, bukan sesudah jeda tetap: dengan
   `prefers-reduced-motion` kameranya langsung sampai, dan panel yang tetap
   menunggu 600 ms akan terasa macet.
-- **Papannya rata kanan, latarnya terang.** Penjepitan kamera (`tickKamera`)
+- **Papannya di tengah, tirainya terang.** Penjepitan kamera (`tickKamera`)
   melarang bidikan melihat keluar ruangan, jadi banner yang menempel di tepi
-  kiri terjepit ke sepertiga kiri layar — bukan ke tengah. Itu dipakai: papan
-  informasinya berdiri di sisi seberang dengan tirai yang jauh lebih terang
-  dari dialog lain, jadi banner dan keterangannya berdampingan seperti benda
-  pameran dan plakatnya. Tirai gelap penuh layar akan membuang zoom yang baru
-  saja dilakukan. Di bawah 900 px papan kembali ke tengah, karena di situ
-  memang tidak ada ruang untuk berdampingan.
+  kiri terjepit ke sepertiga kiri layar — bukan ke tengah. Papan informasinya
+  muncul di tengah layar seperti dialog lain, dengan tirai yang jauh lebih
+  terang, jadi banner yang baru dizoom tetap kelihatan di kirinya; tirai gelap
+  penuh layar akan membuang zoom yang baru saja dilakukan. Papan ini pernah
+  rata kanan, supaya berdampingan dengan bannernya seperti benda pameran dan
+  plakatnya — tapi di layar lebar itu justru menaruhnya menempel di tepi, jauh
+  dari mata, dan terasa dilempar ke pinggir.
 
 Menutupnya (tombol ✕, Esc, klik di luar papan, atau klik bannernya lagi)
 **sekaligus melepas bidikannya** — papan yang tertutup sementara kameranya
@@ -1167,7 +1329,7 @@ diadu ke `package.json` tiap `npm test`.
 
 ### Kamera
 
-Kisi dunianya tetap 480×356 dan `fit()` cuma mengurus piksel layar (skala CSS
+Kisi dunianya tetap (576×356 sejak pintu WC) dan `fit()` cuma mengurus piksel layar (skala CSS
 plus `SS` di atas); kameranya (`KAMERA` di room.js) hidup di koordinat dunia
 dan dipasang di `frame()` lewat `setTransform` — dikalikan `SS` di situ juga —
 sebelum segala gambar, jadi lantai, props, pegawai, dan partikel tidak tahu ada

@@ -151,8 +151,9 @@ console.log(tebal('\nGeometri bukaan'));
     'tanpa ini slotBebas() memakai bawaan 12 langkah 19 px, antreannya menjulur ke rak server');
   const s = H.STATIONS.agent;
   const slotX = [0, 1, 2].map((k) => s.x + (k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * s.step));
-  ok('ketiga slot stasiun agent lolos saringan tepi slotBebas (16..464)',
-    slotX.every((x) => x >= 16 && x <= 480 - 16), slotX.join(' · '));
+  const lebar = R().W;       // dunia sudah pernah melebar (480 -> 576); jangan menebaknya
+  ok(`ketiga slot stasiun agent lolos saringan tepi slotBebas (16..${lebar - 16})`,
+    slotX.every((x) => x >= 16 && x <= lebar - 16), slotX.join(' · '));
 }
 
 /* =======================================================================
@@ -670,10 +671,11 @@ console.log(tebal('\nGorden, tahan, dan zoom'));
   sama('bidikan dikunci ke pusat bukaan',
     [KAMERA.targetX, KAMERA.targetY, KAMERA.targetZoom],
     [S.x + S.w / 2, S.y + S.h / 2, SISIP_ZOOM]);
-  const hw = 480 / (2 * SISIP_ZOOM), hh = 356 / (2 * SISIP_ZOOM);
+  const { W: DW, H: DH } = R();
+  const hw = DW / (2 * SISIP_ZOOM), hh = DH / (2 * SISIP_ZOOM);
   ok('pusat bidikan tidak menabrak penjepitan tickKamera',
-    KAMERA.targetX >= hw && KAMERA.targetX <= 480 - hw
-    && KAMERA.targetY >= hh && KAMERA.targetY <= 356 - hh,
+    KAMERA.targetX >= hw && KAMERA.targetX <= DW - hw
+    && KAMERA.targetY >= hh && KAMERA.targetY <= DH - hh,
     `hw ${hw} · hh ${hh.toFixed(1)}`);
   ok('bidikan zoom itu benar-benar memuat seluruh tinggi bukaan', 356 / SISIP_ZOOM >= S.h,
     `${(356 / SISIP_ZOOM).toFixed(0)} px >= ${S.h} px`);

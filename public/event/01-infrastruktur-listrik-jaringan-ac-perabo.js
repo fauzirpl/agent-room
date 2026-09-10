@@ -325,7 +325,7 @@ daftarEvent(
     const a = E.data.a;
     if (!a || !a.eventKerja) return;
     pada(E, 1.5, () => a.say('goyang terus dari kemarin'));
-    pada(E, 3, () => { a.doingEvent = 'ambil karton'; a.goToXY(440, 250, 'up'); });
+    pada(E, 3, () => { a.doingEvent = 'ambil karton'; a.goToXY(pantriX(440), 250, 'up'); });   // dus arsip di pojok pantri
     pada(E, 10, () => { a.bawa = 'kardus'; a.goToXY(MEJA_KERJA_X[E.data.slot], 300, 'down'); });
     pada(E, 16, () => { a.pose = 'jongkok'; });
     pada(E, 19, () => { E.data.ganjal = true; a.pose = null; a.bawa = null; });
@@ -368,7 +368,7 @@ daftarEvent(
   mulai(E) {
     RUANGAN.tanamanLayu = 1;
     const a = pemeran(E, ['magang', 'arsiparis', 'humas']);
-    if (a) { a.doingEvent = 'menyiram tanaman'; a.goToXY(466, 256, 'up'); }
+    if (a) { a.doingEvent = 'menyiram tanaman'; a.goToXY(pantriX(466), 256, 'up'); }   // isi gelas di dispenser
   },
   tick(E, dt) {
     const a = E.aktor[0];

@@ -85,9 +85,13 @@ daftarEvent(
   tick(E, dt) {
     const T = E.data.t;
     // 0,8x kecepatan orang biasa: dia memanggul galon
+    // berhenti di muka pantri (denah lama x424, lihat pantriX); pulangnya
+    // tetap lewat tepi kiri, jadi jalan ±96 px lebih jauh dari dulu — masih
+    // ±30 dari 40 detik jatahnya
+    const henti = pantriX(424);
     if (T.fase === 'masuk') {
-      T.x = Math.min(424, T.x + 42 * dt);
-      if (T.x >= 424) { T.fase = 'pasang'; T.mulaiPasang = E.umur; }
+      T.x = Math.min(henti, T.x + 42 * dt);
+      if (T.x >= henti) { T.fase = 'pasang'; T.mulaiPasang = E.umur; }
     } else if (T.fase === 'pulang') {
       T.x -= 46 * dt;
     }
@@ -103,18 +107,18 @@ daftarEvent(
           E.data.terpasang = true;
           T.panggul = false;                        // sudah pindah ke dispenser
           RUANGAN.gelasDispenser = 6;
-          for (let i = 0; i < 3; i++) spawn('steam', 468, 250, '#b8dcf4');
+          for (let i = 0; i < 3; i++) spawn('steam', pantriX(468), 250, '#b8dcf4');
         }
       } else if (t > 6 && T.fase === 'pasang') { T.fase = 'pulang'; }
     }
 
     // satu pegawai membantu memegang, berdiri di sebelahnya
     if (!E.data.bantu && T.fase === 'pasang') {
-      E.data.bantu = pemeranDekat(E, 424, LANE_DOWN, 260) || pemeran(E);
+      E.data.bantu = pemeranDekat(E, pantriX(424), LANE_DOWN, 260) || pemeran(E);
       if (E.data.bantu) {
         E.data.bantu.doingEvent = 'membantu angkat galon';
         E.data.bantu.pose = 'angkat';
-        E.data.bantu.goToXY(410, 268, 'right');
+        E.data.bantu.goToXY(pantriX(410), 268, 'right');
         E.data.bantu.say('satu ya, Bang');
       }
     }
@@ -469,7 +473,7 @@ daftarEvent(
   kelas: 'panggung', bobot: B.jarang, cooldown: 2100, durasi: 22,
   syarat: (S) => S.orang.length >= 3,
   mulai(E, S) {
-    E.data.k = { x: 440, y: 236, fase: 'lari', t: 0, terbang: 0 };
+    E.data.k = { x: pantriX(440), y: 236, fase: 'lari', t: 0, terbang: 0 };   // keluar dari pantri
     // dua yang terdekat panik ke lajur seberang
     const dekat = S.orang.filter((o) => bisaDipinjam(o)).slice(0, 2);
     E.data.panik = dekat;
@@ -484,7 +488,7 @@ daftarEvent(
     if (E.data.sapu) {
       E.data.sapu.bawa = 'sapu';
       E.data.sapu.doingEvent = 'mengusir kecoa';
-      E.data.sapu.goToXY(400, 240, 'right');
+      E.data.sapu.goToXY(pantriX(400), 240, 'right');   // di muka sekat kiri pantri
     }
   },
   tick(E, dt) {

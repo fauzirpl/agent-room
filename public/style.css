@@ -562,6 +562,14 @@ body {
 .kartu-tutup:hover { color: var(--tinta); }
 .kartu-jab { color: var(--emas-tua); font-size: 10.5px; margin-top: 2px; }
 .kartu-tugas { color: var(--tinta-pudar); font-size: 10px; font-style: italic; margin: 2px 0 8px; }
+/* Kartu inventaris barang (room.js: bukaKartuBarang) meminjam .kartu yang
+   sama; bedanya cuma kop kecil di atas, seperti label yang ditempel di
+   perabot milik negara, dan kolom kiri yang lebih lebar untuk "tool call". */
+.kartu.kib .kib-judul {
+  font-size: 8.5px; letter-spacing: .14em; color: var(--tinta-pudar);
+  margin-bottom: 4px; font-weight: 600;
+}
+.kartu.kib .kartu-info { grid-template-columns: 70px 1fr; }
 
 .kartu-info {
   display: grid; grid-template-columns: 62px 1fr; gap: 2px 8px;
@@ -1090,22 +1098,18 @@ body.mode-overlay .app::before, body.mode-overlay .panel, body.mode-overlay .sta
 body.mode-overlay .stage-inner { padding: 0; }
 body.mode-overlay #room { box-shadow: none; border-radius: 0; }
 
-/* Papan informasi X-banner (#dlgTentang). Dua bedanya dari dialog lain
-   disengaja. (1) Latarnya jauh lebih terang: kamera sedang membidik banner
-   dengan zoom 4, dan tirai gelap biasa membuang zoom yang baru saja
-   dilakukan. (2) Rata KANAN: penjepitan kamera menaruh banner di sepertiga
-   kiri layar, jadi papan ini berdiri di sisi seberangnya — benda pameran dan
-   plakatnya, bukan saling tutup. Di layar sempit dia kembali ke tengah,
-   karena di situ memang tidak ada ruang untuk berdampingan. */
-.tentang-latar {
-  background: rgba(36, 26, 17, .42);
-  justify-content: flex-end;
-  padding: 24px 28px;
-}
+/* Papan informasi X-banner (#dlgTentang). Satu bedanya dari dialog lain
+   disengaja: latarnya jauh lebih terang. Kamera sedang membidik banner dengan
+   zoom 4, dan tirai gelap biasa membuang zoom yang baru saja dilakukan.
+
+   Letaknya di TENGAH, sama seperti dialog lain — posisinya diwarisi utuh dari
+   .dlg-latar. Papan ini pernah dibuat rata kanan supaya berdampingan dengan
+   banner yang terjepit di sepertiga kiri layar, tapi di layar lebar itu justru
+   menaruhnya menempel di tepi, jauh dari mata, dan terasa dilempar ke
+   pinggir. Jangan dikembalikan ke sana: bannernya tetap kelihatan di kiri
+   lewat tirai yang terang, dan itu sudah cukup. */
+.tentang-latar { background: rgba(36, 26, 17, .42); }
 .dlg.tentang { width: min(360px, 100%); height: auto; max-height: min(560px, 100%); }
-@media (max-width: 900px) {
-  .tentang-latar { justify-content: center; padding: 20px; }
-}
 .tentang-badan {
   overflow-y: auto; min-height: 0;
   padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 13px;

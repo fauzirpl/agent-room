@@ -424,6 +424,11 @@ function siapkan(opsi) {
 /* ------------------------------------------------------------ jalankan --- */
 function jalankan(opsi, fixture, alat) {
   const { ctx, H, J, ada, peringatan, konsol, jam, pristine, mata } = alat;
+  // Lebar dunia dibaca dari room.js, bukan diketik: dunianya sudah pernah
+  // melebar (480 -> 576), dan batas "x > 560" lama menuduh pegawai yang
+  // sedang ngopi di pantri pojok kanan keluar dunia. Kelonggarannya tetap
+  // +80 seperti dulu (pintu keluar W+20, tamu W+30).
+  const LEBAR_DUNIA = typeof ctx.sisipRujukan === 'function' ? ctx.sisipRujukan().W : 480;
 
   const baris = opsi.sampai ? fixture.baris.slice(0, opsi.sampai) : fixture.baris;
   const preTotal = baris.filter((b) => b.kind === 'pre').length;
@@ -575,7 +580,7 @@ function jalankan(opsi, fixture, alat) {
       const buruk = (v) => typeof v !== 'number' || !Number.isFinite(v);
       if (buruk(a.x) || buruk(a.y) || buruk(a.alpha)) {
         catatGagal('D:posisi', `${konteks()} :: '${a.id}' x=${a.x} y=${a.y} alpha=${a.alpha} (bukan angka hingga)`, `${a.id}:hingga`);
-      } else if (a.x < -40 || a.x > 520 + 40 || a.y < -40 || a.y > 400 + 40 || a.alpha < 0 || a.alpha > 1) {
+      } else if (a.x < -40 || a.x > LEBAR_DUNIA + 80 || a.y < -40 || a.y > 400 + 40 || a.alpha < 0 || a.alpha > 1) {
         catatGagal('D:posisi', `${konteks()} :: '${a.id}' x=${a.x.toFixed(1)} y=${a.y.toFixed(1)} alpha=${a.alpha.toFixed(2)} di luar batas wajar`, `${a.id}:batas`);
       }
     }

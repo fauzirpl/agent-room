@@ -72,15 +72,19 @@ const gambarJalur = (a, p) => [a[0] + ',' + a[1], ...p.map((t) => t.x + ',' + t.
 
 /* -------------------------------------------------------------- tujuan --- *
  * Dipindai dari definisi event, bukan didaftar tangan. goToXY(<angka>,<angka>)
- * saja: yang koordinatnya dihitung (mis. `428 + i * 14`) tidak bisa dibaca
- * statis, jadi tiga titik ngerumpi-di-pantry ditambahkan terpisah di bawah. */
+ * dan — sejak pantri pindah ke pojok kanan — goToXY(pantriX(<angka>),<angka>),
+ * bentuk yang dipakai event untuk menyebut titik pantri dengan angka denah
+ * lama. Yang kedua diterjemahkan dengan pantriX() ASLI dari room.js, bukan
+ * ditambah 96 di sini. Yang koordinatnya dihitung (mis. `pantriX(428) + i *
+ * 14`) tidak bisa dibaca statis, jadi tiga titik ngerumpi-di-pantry
+ * ditambahkan terpisah di bawah. */
 function tujuanDariEvent() {
   const dir = path.join(__dirname, 'public', 'event');
   const titik = new Map();
   for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.js'))) {
     const src = fs.readFileSync(path.join(dir, f), 'utf8');
-    for (const m of src.matchAll(/goToXY\(\s*(-?\d+)\s*,\s*(-?\d+)/g)) {
-      const x = +m[1], y = +m[2];
+    for (const m of src.matchAll(/goToXY\(\s*(?:pantriX\(\s*(-?\d+)\s*\)|(-?\d+))\s*,\s*(-?\d+)/g)) {
+      const x = m[1] != null ? R.pantriX(+m[1]) : +m[2], y = +m[3];
       if (!diPantri(x, y)) continue;
       if (!titik.has(x + ',' + y)) titik.set(x + ',' + y, { xy: [x, y], asal: f });
     }
@@ -89,9 +93,9 @@ function tujuanDariEvent() {
 }
 
 const dariEvent = tujuanDariEvent();
-// ngerumpi-di-pantry menaruh tiga orang di `428 + i*14, 272` — dihitung, jadi
-// tidak terpindai. Ditulis di sini supaya titik terjauhnya tetap teruji.
-const TAMBAHAN = [[428, 272], [442, 272], [456, 272]];
+// ngerumpi-di-pantry menaruh tiga orang di `pantriX(428) + i*14, 272` —
+// dihitung, jadi tidak terpindai. Ditulis di sini supaya titik terjauhnya tetap teruji.
+const TAMBAHAN = [[R.pantriX(428), 272], [R.pantriX(442), 272], [R.pantriX(456), 272]];
 const TUJUAN = [...dariEvent.map((t) => t.xy), ...TAMBAHAN];
 
 const ASAL = [
@@ -101,7 +105,10 @@ const ASAL = [
   ['ruang tunggu', [STATIONS.idle.x, STATIONS.idle.y]],
   ['rak server', [STATIONS.server.x, STATIONS.server.y]],
   ['ruang kadis', [STATIONS.agent.x, STATIONS.agent.y]],
-  ['lantai bawah pantri', [452, 300]],
+  ['lantai bawah pantri', [R.pantriX(452), 300]],
+  // meja kerja ke-7 (x=510) berdiri di muka sekat kiri — route() mendekatinya
+  // lewat kolom pintu, dan jalurnya dari/ke pantri tidak boleh menembus kayu
+  ['meja pojok', [Math.max(...STATIONS.think.slotsX), STATIONS.think.y]],
   ['depan pintu pantri', [R.PANTRI_LUAR, PANTRI.ambang]],
 ];
 

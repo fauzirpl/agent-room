@@ -580,7 +580,9 @@ daftarEvent(
        seluruh kantor dari kiri cuma untuk sampai ke situ tidak masuk akal.
        Berdiri di (450,268): 12 px di kiri badan dispenser, di dalam pantry
        (sekat pantry x414..420), dan tidak menindih tong sampah (x437..446,
-       y276..288) yang ada di depan-bawahnya. */
+       y276..288) yang ada di depan-bawahnya. Semua x di catatan ini angka
+       DENAH LAMA pantri (sekat kiri x414); kodenya menerjemahkannya lewat
+       pantriX() ke letak pantri sekarang, jadi jarak-jaraknya tetap benar. */
     const T = TOKOH.buat({
       pal: { main: '#c8302c', pants: '#20242c', skin: '#c98f5e', hair: '#1b1712' },
       aksesori(x, y, hadap, o) {
@@ -589,7 +591,7 @@ daftarEvent(
       },
     }, true, LANE_DOWN);
     T.barbelDiBahu = true;
-    TOKOH.antar(T, 450, 268);
+    TOKOH.antar(T, pantriX(450), 268);     // angka denah lama pantri, lihat pantriX()
     E.data.t = T;
   },
   tick(E, dt, S) {
@@ -609,7 +611,8 @@ daftarEvent(
     }
     if (E.umur > 2.4 && E.umur < 26) TOKOH.gempar(T.x, T.y, dt, 0.7);
 
-    /* Barbel diletakkan di lantai pantry di (424,270). Celah antara sekat
+    /* Barbel diletakkan di lantai pantry di (424,270) — denah lama, lihat
+       pantriX(). Celah antara sekat
        pantry (drawPantry: r(414,196,6,92) = x414..420) dan tutup tong sampah
        (drawTongSampah: r(436,276,11,2) = x436..447) cuma 16 px, sementara
        barbelnya 20 px dari piringan ke piringan — jadi tidak ada titik di
@@ -621,8 +624,8 @@ daftarEvent(
     if (E.data.letakPada && E.umur > E.data.letakPada && !E.data.letak) {
       E.data.letak = true;
       T.barbelDiBahu = false;
-      E.data.barbelX = 424;
-      spawn('dust', 424, 268);
+      E.data.barbelX = pantriX(424);
+      spawn('dust', pantriX(424), 268);
       blip(120, 0.09);
       E.data.angkatPada = E.umur + 1.6;
     }
@@ -641,7 +644,7 @@ daftarEvent(
       E.data.pasang = true;
       T.galonDiTangan = false;                     // galonnya pindah ke dispenser
       RUANGAN.gelasDispenser = 6;
-      for (let i = 0; i < 4; i++) spawn('splash', 466, 238, '#b8dcf4');
+      for (let i = 0; i < 4; i++) spawn('splash', pantriX(466), 238, '#b8dcf4');
       blip(520, 0.07);
       TOKOH.tengok(S, T.x, T.y, 1400);
       E.data.tepukSampai = E.umur + 2.6;
@@ -1144,7 +1147,7 @@ daftarEvent(
       // Yang paling kanan mampir ke tong sampah (drawTongSampah tx=437,
       // ty=278). Berdiri di (428,266): 9 px di kiri tongnya, di dalam pantry
       // dan tidak menindih dispenser (x462..480).
-      TOKOH.antar(R[2], 428, 266);
+      TOKOH.antar(R[2], pantriX(428), 266);
       R[2].fase = 'ke-tong';
       R[0].fase = 'tunggu';
       R[1].fase = 'tunggu';
@@ -1154,7 +1157,7 @@ daftarEvent(
       E.data.tong = true;
       RUANGAN.tongPenuh = 0;                       // isinya benar-benar diangkut
       R[2].karungPenuh = true;                     // karungnya menggembung
-      for (let i = 0; i < 4; i++) spawn('dust', 441, 272);
+      for (let i = 0; i < 4; i++) spawn('dust', pantriX(441), 272);
       blip(240, 0.07);
       E.data.pulangPada = E.umur + 2.4;
     }

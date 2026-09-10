@@ -214,15 +214,15 @@ daftarEvent(
     E.data.a = a;
     a.bawa = 'boks';
     a.laju = 0.6;
-    a.goToXY(452, 300, 'up');
+    a.goToXY(pantriX(452), 300, 'up');     // angka denah lama pantri, lihat pantriX()
   },
   tick(E) {
     const a = E.data.a;
     if (!a) return;
-    if (a.diam && a.x > 440 && !E.data.angkat) {
+    if (a.diam && a.x > pantriX(440) && !E.data.angkat) {
       E.data.angkat = true;
-      a.goToXY(440, 240, 'up');
-    } else if (E.data.angkat && a.diam && Math.abs(a.x - 440) < 4 && Math.abs(a.y - 240) < 4 && !E.data.taruh) {
+      a.goToXY(pantriX(440), 240, 'up');
+    } else if (E.data.angkat && a.diam && Math.abs(a.x - pantriX(440)) < 4 && Math.abs(a.y - 240) < 4 && !E.data.taruh) {
       E.data.taruh = true;
       RUANGAN.dusTambahanArsip = Math.min(2, RUANGAN.dusTambahanArsip + 1);
       RUANGAN.arsipPenuh = true;
@@ -299,22 +299,23 @@ daftarEvent(
       E.data.tekan = true;
       a.bawa = 'gelas';
       a.say('Angkat sama-sama, jangan pinggangnya');
-      a.goToXY(440, 220, 'up');
+      a.goToXY(pantriX(440), 220, 'up');
     }
-    if (E.data.tekan && a.diam && a.x > 430 && !E.data.angkat) {
+    if (E.data.tekan && a.diam && a.x > pantriX(430) && !E.data.angkat) {
       E.data.angkat = true;
       a.bawa = 'jerigen';
       a.laju = 0.6;
-      // Dispenser sekarang di pantry (x462..480) -- BUKAN di 'idle' (x282)
-      // lagi, jadi jalan langsung ke situ, bukan lewat stasiun idle.
-      a.goToXY(455, 272, 'right');
+      // Dispenser sekarang di pantry (denah lama x462..480, lihat pantriX)
+      // -- BUKAN di 'idle' (x282) lagi, jadi jalan langsung ke situ, bukan
+      // lewat stasiun idle.
+      a.goToXY(pantriX(455), 272, 'right');
     }
-    if (E.data.angkat && a.diam && a.x > 452 && !E.data.pasang) {
+    if (E.data.angkat && a.diam && a.x > pantriX(452) && !E.data.pasang) {
       E.data.pasang = true;
       a.bawa = null;
       a.laju = 1;
       RUANGAN.gelasDispenser = 6;
-      for (let i = 0; i < 4; i++) spawn('splash', 466, 238, '#b8dcf4');
+      for (let i = 0; i < 4; i++) spawn('splash', pantriX(466), 238, '#b8dcf4');
     }
   },
   selesai(E) { if (E.data.a) { E.data.a.laju = 1; E.data.a.bawa = null; } },
@@ -587,8 +588,8 @@ daftarEvent(
     if (E.data.orang.length < 2) return;
     // Dua orang juga tidak muat di pojok dispenser -- berhadapan di lantai
     // pantry, pola sama seperti kopi-jam-sepuluh.
-    E.data.orang[0].goToXY(432, 278, 'right');
-    E.data.orang[1].goToXY(452, 278, 'left');
+    E.data.orang[0].goToXY(pantriX(432), 278, 'right');
+    E.data.orang[1].goToXY(pantriX(452), 278, 'left');
   },
   tick(E, dt) {
     const O = E.data.orang;

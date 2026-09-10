@@ -258,9 +258,10 @@ daftarEvent(
     RUANGAN.gordenKanan = Math.max(RUANGAN.gordenKanan, 12);
   },
   gambarProp() {
-    r(462, 254, 18, 34, '#c9c3b0');
-    r(462, 254, 18, 1, '#e2ddc8');
-    for (let i = 0; i < 3; i++) r(464 + i * 5, 258, 1, 26, '#b0a98e');
+    // kain penutup dispenser (pojok kanan pantri, denah lama x462, lihat pantriX)
+    r(pantriX(462), 254, 18, 34, '#c9c3b0');
+    r(pantriX(462), 254, 18, 1, '#e2ddc8');
+    for (let i = 0; i < 3; i++) r(pantriX(464) + i * 5, 258, 1, 26, '#b0a98e');
   },
   sortY: 300,
 },

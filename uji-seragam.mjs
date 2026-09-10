@@ -352,6 +352,8 @@ function orangCabang(face, mesin) {
 /* ============================================================ 6. sisi meja */
 judul('6. urutan meja: lokal ke kiri, cabang ke kanan');
 const MEJA = H.MEJA_KERJA_X;
+// meja paling kanan = meja pojok; dulu indeks 3 (x444), sejak meja ke-7 indeks 6 (x510)
+const POJOK = MEJA.indexOf(Math.max(...MEJA));
 function urutSumber(nama) {
   const m = ROOM.match(new RegExp('const ' + nama + ' = \\[([0-9,\\s]*)\\]'));
   return m ? m[1].split(',').map((s) => Number(s.trim())) : null;
@@ -378,7 +380,7 @@ function urutSumber(nama) {
   bersih();
   const kL = ctx.slotMeja(lok), kC = ctx.slotMeja(cab);
   sama('kantor kosong: lokal dapat meja paling kiri', [kL, MEJA[kL]], [2, 86]);
-  sama('kantor kosong: cabang dapat meja paling kanan', [kC, MEJA[kC]], [3, 444]);
+  sama('kantor kosong: cabang dapat meja paling kanan', [kC, MEJA[kC]], [POJOK, Math.max(...MEJA)]);
 
   // 3 lokal sudah terpasang di 2, 0, 4 (86, 176, 242)
   const duduk = (slotIdx, mesin) => {
@@ -390,20 +392,20 @@ function urutSumber(nama) {
   };
   bersih();
   duduk(2); duduk(0); duduk(4);
-  sama('3 lokal di 2,0,4 → cabang berikutnya TETAP meja pojok kanan', ctx.slotMeja(cab), 3);
+  sama('3 lokal di 2,0,4 → cabang berikutnya TETAP meja pojok kanan', ctx.slotMeja(cab), POJOK);
   sama('3 lokal di 2,0,4 → lokal berikutnya limpah ke 5 (x=308)', ctx.slotMeja(lok), 5);
 
   bersih();
   for (let k = 0; k < MEJA.length; k++) duduk(k);
-  sama('6 meja penuh: lokal -1', ctx.slotMeja(lok), -1);
-  sama('6 meja penuh: cabang -1', ctx.slotMeja(cab), -1);
+  sama(`${MEJA.length} meja penuh: lokal -1`, ctx.slotMeja(lok), -1);
+  sama(`${MEJA.length} meja penuh: cabang -1`, ctx.slotMeja(cab), -1);
   ok('slotBebas() setuju kantor penuh (stasiunPulang tetap benar)',
     ctx.slotBebas('think', lok) === -1 && ctx.stasiunPulang(lok) === 'idle');
 
   // Yang mengantre berdiri di lajur, bukan di slot — persis aturan slotBebas.
   bersih();
-  const antre = duduk(3); antre.antre = 1;
-  sama('penghuni ber-antre tidak menahan slotnya', ctx.slotMeja(cab), 3);
+  const antre = duduk(POJOK); antre.antre = 1;
+  sama('penghuni ber-antre tidak menahan slotnya', ctx.slotMeja(cab), POJOK);
 }
 
 /* ================================================= 7. kongsi seproyek menang */
@@ -427,11 +429,11 @@ judul('7. kongsi seproyek menang atas aturan sisi');
   // Beda proyek: aturan sisi kembali berlaku.
   tamu.project = 'beta';
   const k2 = ctx.slotKongsi(tamu);
-  sama('beda proyek: cabang kembali ke sisi kanan (x=444)', [k2, MEJA[k2]], [3, 444]);
+  sama(`beda proyek: cabang kembali ke sisi kanan (x=${MEJA[POJOK]})`, [k2, MEJA[k2]], [POJOK, MEJA[POJOK]]);
 
   // Cabang tanpa proyek sama sekali juga ikut aturan sisi.
   tamu.project = '';
-  sama('cabang tanpa proyek: sisi kanan', ctx.slotKongsi(tamu), 3);
+  sama('cabang tanpa proyek: sisi kanan', ctx.slotKongsi(tamu), POJOK);
 
   // Pegawai lokal tanpa rekan: sisi kiri — perubahan perilaku yang terlihat
   // walau tidak ada mesin kedua sama sekali (dicatat di komentar room.js).

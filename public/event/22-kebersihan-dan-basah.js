@@ -205,8 +205,11 @@ daftarEvent(
           basahSapuSampah(T.x);
         }
         if (!E.data.papan && T.x >= 196) { E.data.papan = true; T.jeda = 2.4; }
-        if (T.x >= 404) {
-          T.fase = 'pulang';                 // berhenti sebelum sekat pantry (x414)
+        // Berhenti sebelum sekat pantry (denah lama x414, lihat pantriX). Sejak
+        // pantri pindah ke pojok kanan, lajurnya ±96 px lebih panjang: masuk
+        // 1,3 + pel ±20 + pulang ±11 = ±32 dari 35 detik jatahnya.
+        if (T.x >= pantriX(404)) {
+          T.fase = 'pulang';
           // Sudah menyapu seluruh lajur: kekusutan harian (room.js) dipangkas
           // SEBAGIAN, bukan sampai bersih seperti jumat-bersih — yang dipegang
           // OB cuma lantainya, tumpukan di meja orang tidak disentuhnya.

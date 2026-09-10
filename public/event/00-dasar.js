@@ -238,7 +238,8 @@ function taksirHijri(d) {
 const KOORD = {
   jam: [168, 38], garuda: [300, 16], jendela: [212, 138], stempel: [286, 140],
   filing: [132, 138], arsip: [54, 138], rak: [390, 141], pintu: [452, 140],
-  dispenser: [466, 256], pot: [44, 268], kipas: [400, 268], tong: [439, 276],
+  // dispenser & tong ikut pantri (angka denah lama, lihat pantriX di room.js)
+  dispenser: [pantriX(466), 256], pot: [44, 268], kipas: [400, 268], tong: [pantriX(439), 276],
   rapat: [246, 200], banner: [30, 240],
 };
 

@@ -539,7 +539,11 @@ daftarEvent(
     const teknisi = pemeran(E, ['teknisi', 'pranata_muda']);
     E.data.adaTeknisi = !!teknisi;
     if (teknisi) { teknisi.doingEvent = 'membetulkan kabel di kolong meja'; teknisi.goToXY(E.data.x, 300, 'down'); }
-    else { korban.eventKerja = E; korban.betahAsli = korban.betah; korban.betah = true; E.aktor.push(korban); }
+    // Tanpa teknisi, pemilik mejanya sendiri yang jongkok — tapi cuma kalau
+    // dia BOLEH dipinjam. Dulu korban didorong ke E.aktor tanpa saringan, jadi
+    // pegawai yang masih memegang tool call ikut diseret (Aturan 1; ditangkap
+    // uji-ulang invarian J). Mejanya tetap padam sebentar tanpa pemeran.
+    else if (bisaDipinjam(korban)) { korban.eventKerja = E; korban.betahAsli = korban.betah; korban.betah = true; E.aktor.push(korban); }
   },
   tick(E) {
     if (E.data.slot == null) { E.selesaiCepat = true; return; }
@@ -591,31 +595,33 @@ daftarEvent(
 {
   id: 'wifi-sudut-lemah',
   kelas: 'latar', bobot: B.sedang, cooldown: 480, durasi: 25,
-  syarat: (S) => S.orang.some((o) => o.station === 'think' && o.slotIdx === 3 && o.diam),
+  // meja pojok = meja paling kanan (MEJA_POJOK, room.js) — dulu dikunci
+  // slotIdx 3 (x444); sejak meja ke-7 di sayap timur, itu x510
+  syarat: (S) => S.orang.some((o) => o.station === 'think' && o.slotIdx === MEJA_POJOK && o.diam),
   perluAktor: true,
   mulai(E, S) {
-    const a = S.orang.find((o) => o.station === 'think' && o.slotIdx === 3 && o.diam && bisaDipinjam(o));
+    const a = S.orang.find((o) => o.station === 'think' && o.slotIdx === MEJA_POJOK && o.diam && bisaDipinjam(o));
     if (!a) return;
     a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
     a.doingEvent = 'pindah cari sinyal';
     a.bawa = 'laptop';
-    MOD.mejaPadam = 3;
+    MOD.mejaPadam = MEJA_POJOK;
     a.goToXY(360, 152, 'up');
   },
   tick(E) {
-    MOD.wifiLemahSlot = 3;
+    MOD.wifiLemahSlot = MEJA_POJOK;
     const a = E.aktor[0];
     if (a && a.diam) {
       a.pose = 'dudukLantai';
       if (Math.random() < 0.06) spawn('data', a.x, a.y - 22);
       pada(E, 2, () => a.say('di pojok sini sinyalnya cuma satu batang'));
     }
-    pada(E, 22, () => { if (a) { a.pose = null; a.bawa = null; a.goToXY(444, 300, 'down'); } });
+    pada(E, 22, () => { if (a) { a.pose = null; a.bawa = null; a.goToXY(MEJA_KERJA_X[MEJA_POJOK], 300, 'down'); } });
   },
   gambarDinding() {
     const x = 300, y = 20;                       // digeser dari (300,14): hindari Garuda
     r(x, y, 10, 10, '#f2f0e6');
-    r(x + 3, y + 3, 2, 2, MOD.wifiLemahSlot === 3 && Math.sin(now / 260) > 0 ? '#e8a33a' : '#57d06a');
+    r(x + 3, y + 3, 2, 2, MOD.wifiLemahSlot === MEJA_POJOK && Math.sin(now / 260) > 0 ? '#e8a33a' : '#57d06a');
   },
   selesai(E) { if (E.aktor[0]) { E.aktor[0].pose = null; E.aktor[0].bawa = null; } },
 },
