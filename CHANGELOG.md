@@ -69,6 +69,11 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   mahkota dan gagang kuningan; tepi kirinya tidak bergeser.
 - Dus tambahan lemari arsip yang penuh kini digambar di depan lemari, bukan di
   kirinya — tempat itu sekarang pintu WC.
+- **Lagu kantor jam 10 mati bawaan.** Jam 10 sudah milik Indonesia Raya
+  (Selasa & Kamis); lagu kantor cuma menyala kalau centang 🎵 di panel ⚙️
+  dinyalakan sendiri. Izinnya pindah ke kunci `laguKantorIzin`: kunci lama
+  diabaikan karena versi sebelumnya menulis "nyala" ke sana tiap halaman
+  dibuka, jadi mengganti bawaannya saja tidak akan mematikan apa pun.
 
 ### Diperbaiki
 

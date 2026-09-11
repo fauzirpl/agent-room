@@ -217,7 +217,7 @@ posisi tombol berbeda:
 | 🔊 efek suara | foley per stasiun tiap event (stempel, laci arsip, kipas server, kursi rapat, ketikan) nyala/mati |
 | 🔔 notifikasi tugas selesai | lonceng tiga nada, disusul diucapkan lewat Web Speech API kalau browsernya punya |
 | 🎧 musik lofi kantor | chord, beat, dan desis vinyl, semua disintesis langsung, tanpa file audio — gayanya ikut suasana ruangan |
-| 🎵 lagu kantor tiap jam 10 | izin menyetel lagu milik kantor ini Senin–Jumat jam 10; berkasnya kamu taruh sendiri, tidak ikut di repo |
+| 🎵 lagu kantor tiap jam 10 | **mati bawaan** — izin menyetel lagu milik kantor ini Senin–Jumat jam 10; berkasnya kamu taruh sendiri, tidak ikut di repo |
 
 Dua yang pertama diingat peramban (`localStorage`), dan halaman tetap jalan
 kalau peramban memang tidak mengizinkannya. Tiga setelan suara (efek suara,
@@ -272,8 +272,13 @@ loop-nya tetap jalan, cuma tidak membunyikan apa pun sampai lagunya selesai.
 
 Satu-satunya bunyi di seluruh halaman yang datang dari **berkas**, bukan dari
 oscillator, adalah **lagu kantor**: satu lagu milik kantor ini sendiri yang
-disetel Senin–Jumat jam 10, sebagaimana Indonesia Raya disetel Selasa & Kamis
-jam 10. Berkasnya sengaja **tidak ikut di repo** — isinya milik pemilik mesin,
+bisa disetel Senin–Jumat jam 10, sebagaimana Indonesia Raya disetel Selasa &
+Kamis jam 10. Sejak 2026-09-10 ia **mati bawaan** — jam 10 sudah milik
+Indonesia Raya — dan cuma menyala kalau centang 🎵 di panel ⚙️ kamu nyalakan
+sendiri. Izinnya disimpan di kunci baru `laguKantorIzin`: versi sebelumnya
+menulis "nyala" ke kunci `laguKantor` setiap halaman dibuka, jadi kunci lama
+itu diabaikan supaya lagunya benar-benar mati di browser yang sudah pernah
+membuka halaman ini. Berkasnya sengaja **tidak ikut di repo** — isinya milik pemilik mesin,
 dan repo ini dipasang orang lain lewat npm. Taruh sendiri sebagai
 `lagu-kantor.m4a` (atau `.mp3`, `.ogg`, `.opus`, `.webm`, `.wav`) di folder
 proyek, atau tunjuk lewat `AGENT_ROOM_LAGU`. Tanpa berkas itu rute

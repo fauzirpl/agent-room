@@ -7656,7 +7656,7 @@ setInterval(cekJadwalRaya, 20000);
    `ingatan` sendiri baru didefinisikan jauh di bawah sini. Idiom yang sama
    dipakai cekJadwalRaya: yang membaca localStorage cuma isi fungsi, bukan
    baris yang dijalankan waktu berkas ini dimuat. */
-let laguOn = true;
+let laguOn = false;       // MATI bawaan sejak 2026-09-10 — lihat laguSet() di panel Pengaturan
 let laguEl = null;        // <audio>; dibuat sekali, dipakai ulang tiap hari
 let laguSumber = null;    // MediaElementSource-nya — cuma boleh dibuat sekali per elemen
 let laguMain = false;
@@ -11685,17 +11685,26 @@ function notifPerambanGambar() {
 }
 /* Lagu kantor jam 10. BOLEH diingat browser — alasannya sama dengan pengingat
    di atas: ini bukan bunyi yang menyala sendiri, cuma izin untuk menjadwalkan,
-   dan lagunya toh tetap menunggu AudioContext yang dibuka lewat klik. */
+   dan lagunya toh tetap menunggu AudioContext yang dibuka lewat klik.
+
+   MATI BAWAAN (2026-09-10): jam 10 sudah milik Indonesia Raya (Selasa &
+   Kamis), jadi lagu kantor cuma menyala kalau kamu sendiri mencentangnya.
+   Kuncinya BARU ('laguKantorIzin'), bukan 'laguKantor' yang lama: versi lama
+   menulis '1' ke kunci itu SETIAP halaman dibuka (laguSet dipanggil dengan
+   bawaannya), jadi semua browser yang pernah membuka halaman ini menyimpan
+   "nyala" tanpa pernah memilihnya. Mengganti bawaannya saja tidak akan
+   mematikan apa pun. Sekarang nilainya hanya ditulis waktu centangnya diubah
+   tangan, dan kunci lama diabaikan. */
 const setLagu = document.getElementById('setLagu');
 const laguKetEl = document.getElementById('laguKet');
-function laguSet(v) {
+function laguSet(v, dariTangan) {
   laguOn = v;
-  ingatan.tulis('laguKantor', v ? '1' : '0');
+  if (dariTangan) ingatan.tulis('laguKantorIzin', v ? '1' : '0');
   setLagu.checked = v;
   if (!v) hentikanLaguKantor();   // dicabut di tengah lagu = berhenti sekarang
 }
-laguSet(ingatan.baca('laguKantor', '1') !== '0');
-setLagu.onchange = () => laguSet(setLagu.checked);
+laguSet(ingatan.baca('laguKantorIzin', '0') === '1');
+setLagu.onchange = () => laguSet(setLagu.checked, true);
 /* Keterangan kecil di sebelah centangnya: nama berkas yang ketemu, atau
    pemberitahuan bahwa belum ada. Gagal bertanya = tulisannya dikosongkan,
    bukan pesan merah — jadwalnya sendiri tidak menunggu jawaban ini. */

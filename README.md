@@ -67,10 +67,9 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   suasana: apel pagi lebih cerah, jam istirahat jadi lounge, hujan menutup
   padnya, malam nyaris cuma desis vinyl, dan kalau ada sesi yang macet
   akornya menggantung. Coba `?musik=malam`
-- Kalau kamu taruh sendiri satu berkas `lagu-kantor.m4a` di folder proyek,
-  kantor menyetelnya tiap Senin–Jumat jam 10 — satu-satunya bunyi yang datang
-  dari berkas, dan satu-satunya yang tidak ikut di repo. Selasa & Kamis ia
-  menyusul sesudah Indonesia Raya
+- Indonesia Raya berkumandang tiap Selasa & Kamis jam 10. Lagu kantor milikmu
+  sendiri (`lagu-kantor.m4a` di folder proyek) juga bisa disetel Senin–Jumat
+  jam 10, tapi mati bawaan — nyalakan lewat centang 🎵 di panel ⚙️
 - Tiap kejadian punya bunyinya sendiri: kucing mengeong, dus ambruk, pintu
   berderit, tepuk tangan waktu syukuran. Opsional, kejadiannya juga
   **dibacakan** suara TTS kalau kunci OpenRouter sudah dipasang di panel ⚙️
@@ -176,9 +175,9 @@ removes it, `--coba` only shows what would be run).
   music — all synthesized on the fly, zero external audio files. The music
   follows the room’s mood: brighter at morning roll call, lounge at lunch,
   muffled when it rains, nearly just vinyl hiss at night
-- Drop a `lagu-kantor.m4a` of your own into the project folder and the office
-  plays it every weekday at 10 — the one sound that comes from a file, and the
-  one thing the repo never ships
+- The national anthem plays every Tuesday & Thursday at 10. An office song of
+  your own (`lagu-kantor.m4a` in the project folder) can play every weekday at
+  10 too, but it is off by default — switch it on with the 🎵 box in ⚙️
 - Optional: assign new tasks and browse folders straight from the page
 
 ### Ask the office from another session
