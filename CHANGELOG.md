@@ -47,6 +47,20 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   tunggu besi, rak brosur, akuarium arwana, sofa tamu & meja kopi, palem,
   tiang hand sanitizer, tempat sampah pilah, dan mesin penghancur kertas.
   Pegawai standby sesekali memfotokopi. Semuanya bisa diklik.
+- **Tiga kejadian kantor dari sisa katalog event.** Kursi kurang: begitu sesi
+  nyata melebihi jumlah meja kerja selama 25 detik, seorang standby menyeret
+  kursi rapat jauh terakhir ke baris meja kerja (dan benar-benar mengurangi
+  kursi rapat yang bisa diduduki) — kembali sendiri kalau lengang 60 detik.
+  Ngobrol di lorong: dua pegawai berhenti di mulut koridor, memberi jalan
+  sebentar kalau ada yang lewat. Kucing tidur di karpet meja rapat: muncul
+  kalau rapat sedang sepi, satu orang terdekat menyimpang menghindarinya
+  sambil bilang "sst, biarin aja".
+- **Gudang ATK & arsip.** Pintu kedua di dinding belakang, bentang pilar
+  kedua (x608..640) — dunia dilebarkan lagi dari 576 ke 672 untuk lahannya.
+  Polanya disalin dari WC (rutinitas standby, memudar masuk/keluar, sesi
+  nyata tidak pernah ke sana) tapi rupanya sengaja beda: daun metal dengan
+  strip hazard kuning-hitam dan gembok gantung, bukan plang huruf. Standby
+  mampir 8% tiap memilih tujuan, pulangnya bawa kardus. Bisa diklik.
 
 ### Diubah
 
@@ -69,6 +83,10 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   mahkota dan gagang kuningan; tepi kirinya tidak bergeser.
 - Dus tambahan lemari arsip yang penuh kini digambar di depan lemari, bukan di
   kirinya — tempat itu sekarang pintu WC.
+- **Lampu neon ketiga di sayap timur** (x=530). Event pemadaman kini
+  memadamkan semua tabung lewat `neonSemua()`, bukan `[1, 1]` yang ditulis
+  tangan; `neon-sebelah-mati` bisa mengenai tabung mana saja dan meredupkan
+  wilayah terdekatnya. Tabung ketiga ikut punya kartu inventaris.
 - **Lagu kantor jam 10 mati bawaan.** Jam 10 sudah milik Indonesia Raya
   (Selasa & Kamis); lagu kantor cuma menyala kalau centang 🎵 di panel ⚙️
   dinyalakan sendiri. Izinnya pindah ke kunci `laguKantorIzin`: kunci lama

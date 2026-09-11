@@ -396,8 +396,14 @@ baru. Yang berubah karenanya:
   masih muat di jatah 6 detik bersama absennya;
 - tamu dari kanan berjalan ±96 px lebih jauh; adegan mereka menunggu tiba,
   bukan berpatokan detik, jadi urutannya tidak bergeser;
-- lampu neon tetap dua. Tabung ketiga di sayap baru berarti mengubah
-  `MOD.neonMati` di empat berkas event yang menulis `[1, 1]` untuk pemadaman.
+- lampu neon jadi **tiga**: tabung ketiga di plafon sayap timur (`NEON_X`
+  170 · 410 · **530**). Semua yang menggambar cahaya sudah melingkari
+  `NEON_X`; yang harus diubah cuma penulis `MOD.neonMati` sebagai array utuh —
+  tiga event pemadaman yang dulu menulis `[1, 1]` kini memakai
+  `neonSemua(v)`, dan `kedipNeon()` membaca tabung yang tidak disebut sebagai
+  0, bukan NaN. `neon-sebelah-mati` memilih dari ketiganya dan meredupkan
+  wilayah terdekat ke tabung itu (x0..290 · 290..470 · 470..576, titik tengah
+  antar-tabung), bukan lagi belahan x=240.
 
 Tiga perabot lalu mengisi lahan barunya.
 
@@ -471,6 +477,82 @@ memilih tujuan), dan jam menganggur memulangkannya ke meja seperti biasa.
 Semuanya bisa diklik (zoom + kartu inventaris), dan golden z-order cuma
 bertambah label barunya: tanpa label itu urutan ke-18 kasusnya identik dengan
 sebelum perabot ini ada.
+
+### Tiga kejadian baru dari sisa katalog: kursi, lorong, kucing
+
+Papan skor `uji-katalog.mjs` sempat menunjuk enam id "murah" (`layak`/
+`layak-dengan-catatan`) sebagai kandidat berikutnya. Digali satu-satu, empat
+di antaranya ternyata sudah selesai lewat jalan lain dan sengaja tidak
+disentuh lagi: `hujan-deras`/`hujan-petir-kedip` kalah sama cuaca sungguhan
+(`CUACA`, lihat "Hujan ikut cuaca sungguhan" di bawah — memaksanya jadi event
+acak bikin log "hujan turun/reda" berbohong), `cicak-berburu-di-neon` dobel
+sama `cicak-di-dinding`, dan `sobek-kalender-dinding` dobel sama
+`kalender-dinas-diganti` (gelombang 1). `apel-pagi` malah sudah lengkap —
+cuma dibangun sebagai ritual harian sendiri (`APEL_PAKSA` dkk, bukan
+`daftarEvent()`), jadi papan skor menghitungnya "belum" padahal ada — sama
+persis seperti yang sudah dicatat di bagian katalog.
+
+Yang beneran kosong cuma tiga, dan ketiganya sengaja dipangkas ke versi
+murah — catatan teknis di `event-acak.json` sendiri yang menyarankan begitu,
+bukan keputusan sepihak di sini:
+
+- **Kursi kurang ditarik** (`kursi-tambahan-ditarik`) — bukan `daftarEvent()`
+  sama sekali, tapi rutinitas `class Standby` sekelas WC/notulen: begitu
+  jumlah sesi nyata melebihi jumlah meja kerja (`MEJA_KERJA_X.length`) selama
+  25 detik tanpa putus (`ramaiSejak`, dihitung tiap frame di `tickRuangan`
+  seperti `CUACA.hujanTinggiSejak`), satu standby menyeret kursi rapat jauh
+  terakhir ke celah kosong baris meja kerja (`KURSI_TAMBAHAN`, x=250 y=316).
+  Kursi itu memang lenyap dari meja rapat — `slotBebas('rapat', ...)` dan
+  `kursiKosong()` sama-sama memblokir indeksnya, bukan cuma kosmetik — dan
+  kembali sendiri kalau lengang 60 detik (`sepiSejak`). Rancangan aslinya
+  minta kursi ini juga direbut paksa begitu rapat kekurangan kursi; itu
+  sengaja tidak dibuat supaya tidak menyentuh jalur kursi peserta rapat yang
+  sudah dipakai belasan event lain.
+- **Ngobrol di lorong** (`ngobrol-di-lorong`) — sepupu `ngobrol-di-dispenser`,
+  berdiri persis di mulut koridor (LANE_DOWN x=196/214). Rancangan aslinya
+  minta `route()` memutar semua orang lewat LANE_UP; catatan tekniknya sendiri
+  menolak itu (perjalanan think→think tidak pernah punya alternatif lajur,
+  dan `route()` dipakai tiap perpindahan tanpa tes) — jadi cuma dua orangnya
+  yang menggeser badan 8px kalau ada yang lewat, bukan mengatur ulang jalur
+  siapa pun. Bubar sendiri kalau `inspeksi-mendadak` mulai.
+- **Kucing tidur di karpet** (`kucing-tidur-di-karpet`) — ketiga dari keluarga
+  kucing (setelah `kucing-kantor` yang jalan lewat dan `kucing-tidur-di-rak-
+  server`), muncul kalau kursi rapat hampir semuanya kosong. Rancangan
+  aslinya juga minta titik singgah baru di `route()`; catatan tekniknya
+  menyebut ini "mahal dan berisiko" karena alasan yang sama, jadi dipangkas
+  ke `pemeranDekat()` seperti `kucing-kantor` — cuma satu orang terdekat yang
+  menyimpang menghindarinya, bukan seisi ruangan.
+
+## Gudang ATK & arsip, dan dunia yang dilebarkan lagi
+
+Bentang pilar pertama (x480..576, lahan ekspansi dari pelebaran WC) sudah
+penuh — pantri, meja ke-7, dan perabot pengisi persis mengisinya sampai
+x574. Jadi ruangan baru berikutnya butuh lahan baru lagi: **dunia dilebarkan
+dari 576 ke 672**, satu bentang pilar lagi, dengan alasan dan cara yang
+identik dengan pelebaran pertama (lihat *WC, dan dunia yang dilebarkan ke
+kanan* di atas) — disapu dulu untuk koordinat mati di atas x=576 (nol,
+sama seperti sapuan x=480 sebelumnya), semua yang berarti "tepi kanan"
+ditulis dengan `W` jadi ikut pindah tanpa disentuh, dan bentang lama
+tidak bergeser satu koordinat pun.
+
+Ruangan barunya: **gudang ATK & arsip**, pintu kedua di dinding belakang
+(`GUDANG` di kepala `room.js`: kusen 32×80 di x608..640, y30..110 — margin
+32px simetris dari kedua pilar bentang kedua). Polanya **disalin persis dari
+WC** — rutinitas kecil di `class Standby` (`keGudang`/`tickGudang`/
+`selesaiGudang`), bukan event acak, sesi nyata tidak pernah ke sana — tapi
+rupanya sengaja beda supaya tidak terbaca WC kedua: daun metal abu-hijau tua
+dengan strip hazard kuning-hitam (bukan plang huruf — "GUDANG" enam huruf di
+5px cuma jadi gumpalan, beda dari "WC" yang dua huruf), dan gembok gantung
+sebagai pengganti slot ISI/KOSONG — tertutup waktu kosong, terangkat terbuka
+waktu ada orangnya. Kardus kosong di depan pintu (`drawDusGudang`) hilang
+kalau terisi, sama fungsinya dengan sandal jepit WC.
+
+Peluangnya 8% tiap standby memilih tujuan mondar-mandir (WC 10%, fotokopi
+8%), lebih singkat di dalamnya (5–11 detik, WC 8–18 — ambil ATK lebih cepat
+dari ke toilet), dan pulangnya bawa kardus (`a.bawa = 'kardus'`, dipakai
+ulang dari `drawBawaan`, bukan bawaan baru). Bisa diklik seperti semua
+perabot lain: zoom + kartu inventaris, kode BMN `1.03.01.01.019` satu
+keluarga dengan pintu WC (`1.03.01.01.014`).
 
 ## Kartu inventaris barang & zoom perabot
 

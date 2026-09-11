@@ -2,7 +2,7 @@
 
 Hasil rapat desain 12 sudut pandang, disaring kelayakannya terhadap kode nyata
 di [public/room.js](public/room.js). **373 event unik**, 346 di antaranya dinilai
-bisa dikerjakan, dan **306 sudah jadi kode** di [public/event/](public/event/)
+bisa dikerjakan, dan **308 sudah jadi kode** di [public/event/](public/event/)
 (dipecah per tema, urutannya di `manifest.json`) — ditandai **+** di katalog
 di bawah.
 
@@ -461,7 +461,7 @@ Yang membuat kantor terasa kantor Indonesia: ojol, gorengan, arisan, ngobrol di 
 |  | **Kursi kurang** | agents.size > 6 (semua meja kerja penuh dan ruang tunggu terpakai) selama >=… | Seorang penghuni berjalan ke meja rapat, mengambil satu kursi dari sisi jauh (kursi itu hilang dari drawKursiJauh),… | jarang | 12s | 4 | mahal |
 |  | **Kursi tambahan dari gudang** | Bukan acak murni: dijalankan saat jumlah peserta rapat melebihi KURSI_TOTAL,… | Pegawai keluar lewat pintu kadis, kembali 4 detik kemudian menyeret dua kursi plastik putih bertumpuk (kotak 8x14… | sedang | 26s | 4 | mahal |
 |  | **Lepas sambut sesi purna** | Sesi berakhir (SessionEnd) setelah Date.now() - a.sejak > 30 menit DAN jumlah… | Sebelum pegawai itu berjalan keluar ke x=-20, penghuni lain yang tidak sedang state 'work' pindah ke lajur… | jarang | 10s | 4 | mahal |
-|  | **Ngobrol di lorong** | Acak tiap 3-8 menit jam kerja kalau ada minimal 2 pegawai standby/idle | Dua pegawai berhenti berhadapan di LANE_DOWN sekitar x=196 dan x=214 (tepat di mulut koridor), hadap saling… | sering | 30s | 4 | mahal |
+| **+** | **Ngobrol di lorong** | Acak tiap 3-8 menit jam kerja kalau ada minimal 2 pegawai standby/idle | Dua pegawai berhenti berhadapan di LANE_DOWN sekitar x=196 dan x=214 (tepat di mulut koridor), hadap saling… | sering | 30s | 4 | mahal |
 | **+** | **Ojol antar kopi** | Jam 9-11 dan 14-16, acak tiap ~8 menit. Cooldown 10 menit | Ojol berjaket hijau + helm masuk 6 px dari pintu kiri, memegang kantong plastik 6x7 px berisi dua gelas | sering | 30s | 4 | mahal |
 | **+** | **Payung basah di pojok** | Hanya saat atau sampai 2 menit setelah hujan-deras-jendela | Prop kecil sementara: payung terlipat berdiri disandarkan di dinding dekat tanaman pot (x=36, y=250) — batang 1x22… | sedang | 75s | 4 | mahal |
 |  | **Pel lantai** | Acak dengan jadwal: peluang jauh lebih besar pada 07:00-08:00 dan 15:30-16:30… | Pegawai kebersihan (pakai wearpack) menyeret ember pel dan mendorong kain pel: pita lantai basah selebar 20 px… | sedang | 50s | 4 | mahal |
@@ -517,7 +517,7 @@ Makhluk dan orang yang tidak diundang masuk ruangan.
 | **+** | **Nyamuk jam pulang** | Jam 16.5-19 (senja) atau setelah event laron | Titik 1 px gelap terbang dengan lintasan sinus ganda (amplitudo 6 px, frekuensi beda di x dan y) mengelilingi… | sering | 20s | 3 | catatan |
 |  | **Anak kucing di dus arsip** | Acak, peluang kecil per 5 menit, hanya jam 07-16 (ambien().jam) | Dua kepala anak kucing 3x3 px muncul dari bibir dus arsip (prop drawDus), bergantian nongol-sembunyi tiap 1,5 dtk | jarang | 60s | 4 | mahal |
 |  | **Burung nyasar masuk jendela** | Siang (luar > 0.8), acak 1 kali per ~25 menit | Burung gereja 5x4 px masuk dari jendela (212, 60), terbang dalam lintasan bezier acak melintasi ruangan setinggi y… | jarang | 18s | 4 | mahal |
-|  | **Kucing tidur di karpet rapat** | Acak, peluang kecil tiap 60 dtk, hanya kalau kursi rapat terisi < 3 | Kucing oranye 9x5 px meringkuk di karpet merah pada (238, 244), tepat di depan sisi meja rapat | sering | 90s | 4 | mahal |
+| **+** | **Kucing tidur di karpet rapat** | Acak, peluang kecil tiap 60 dtk, hanya kalau kursi rapat terisi < 3 | Kucing oranye 9x5 px meringkuk di karpet merah pada (238, 244), tepat di depan sisi meja rapat | sering | 90s | 4 | mahal |
 |  | **Laron selepas hujan** | Hanya 0-60 detik setelah hujan-deras berhenti DAN A.lampu > 0.7 (malam) | Partikel baru 'laron': 1 px '#e8dcb8' dengan sepasang sayap 1 px alpha .4 di kiri-kanan, 14 butir mengorbit tiap… | jarang | 60s | 4 | tolak |
 | **+** | **Semut mengular ke gorengan** | Hanya kalau event abang-gorengan sudah pernah jalan dan bungkus gorengan… | Barisan 14 titik 1 px hitam bergerak berurutan sepanjang jalur tetap dari ubin retak di (120, 300) memanjat kaki… | sedang | 50s | 4 | mahal |
 |  | **Tamu datang** | agents.size === 0 (cuma standby di ruangan) selama >= 90 detik, jam mesin… | Sosok tamu (Agent khusus, palet batik gelap + tas kotak 5x4 di tangan, bukan sesi) masuk dari x=-14, singgah ke… | jarang | 60s | 4 | mahal |

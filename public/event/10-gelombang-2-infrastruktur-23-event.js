@@ -338,7 +338,7 @@ daftarEvent(
   syarat: () => !CUACA.petir,
   tick(E, dt, S) {
     const t = E.umur;
-    MOD.neonMati = t < 0.55 ? [1, 1] : [0, 0];
+    MOD.neonMati = neonSemua(t < 0.55 ? 1 : 0);
     MOD.lampu = t < 0.55 ? 0 : 1;
     pada(E, 0.05, () => { for (const o of S.orang) if (!o.path.length) o.busyUntil = Math.max(o.busyUntil, now + 1400); });
     pada(E, 0.1, () => { menoleh(S.orang, 0, 0, 1); for (const o of S.orang.slice(0, 2)) spawn('talk', o.x, o.y - 26); });
@@ -388,7 +388,7 @@ daftarEvent(
   },
   tick(E, dt, S) {
     const genset = E.data.genset;
-    MOD.neonMati = E.umur < 4 ? [1, 1] : [genset ? 0.15 : 0, genset ? 0.15 : 0];
+    MOD.neonMati = neonSemua(E.umur < 4 ? 1 : (genset ? 0.15 : 0));
     MOD.lampu = E.umur < 4 ? 0 : (genset ? 0.85 : 1);
     MOD.getar = genset && E.umur >= 4 ? 1 : 0;
     pada(E, 0.1, () => { for (const o of S.orang) o.busyUntil = Math.max(o.busyUntil, now + 1800); });
@@ -423,7 +423,8 @@ daftarEvent(
   kelas: 'panggung', bobot: B.sedang, cooldown: 720, durasi: 45,
   syarat: (S) => S.lampu > 0.3,
   mulai(E) {
-    E.data.sisi = Math.random() < 0.5 ? 0 : 1;     // 0 = kiri (170), 1 = kanan (410)
+    // tabung mana saja dari NEON_X: kiri (170), kanan (410), sayap timur (530)
+    E.data.sisi = Math.floor(Math.random() * NEON_X.length);
   },
   tick(E) {
     const i = E.data.sisi;
@@ -432,17 +433,22 @@ daftarEvent(
       ? [1, 0.2, 0, 0.6, 0][Math.min(4, Math.floor(t / 0.24))]
       : (t > 43 ? Math.max(0, 1 - (t - 43) / 1.5) : 1);
     pada(E, 3, () => {
-      const a = pemeranDekat(E, i === 0 ? 170 : 410, 164, 220);
-      if (a) { a.doingEvent = 'melapor lampu mati'; a.goTo('server'); a.say('tolong catat, Pak, TL yang ' + (i === 0 ? 'kiri' : 'kanan')); }
+      const a = pemeranDekat(E, NEON_X[i], 164, 220);
+      if (a) { a.doingEvent = 'melapor lampu mati'; a.goTo('server'); a.say('tolong catat, Pak, TL yang ' + NEON_NAMA[i]); }
     });
   },
   gambarAtas(E) {
     const i = E.data.sisi;
-    const g = MOD.neonMati[i];
+    const g = MOD.neonMati[i] || 0;
     if (g < 0.3) return;
     ctx.globalAlpha = 0.07 * g;
     ctx.fillStyle = '#2c3440';
-    if (i === 0) r(0, 0, 240, H, '#2c3440'); else r(240, 0, W - 240, H, '#2c3440');
+    /* Bagian ruangan yang ikut redup = wilayah yang paling dekat ke tabung
+       itu, dibatasi titik tengah antar-tabung. Dengan dua tabung dulu itu
+       persis belahan x=240; dengan tiga jadi x0..290, 290..470, 470..W. */
+    const kiri = i === 0 ? 0 : (NEON_X[i - 1] + NEON_X[i]) / 2;
+    const kanan = i === NEON_X.length - 1 ? W : (NEON_X[i] + NEON_X[i + 1]) / 2;
+    r(kiri, 0, kanan - kiri, H, '#2c3440');
     ctx.globalAlpha = 1;
   },
 },

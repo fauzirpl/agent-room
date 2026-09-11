@@ -85,6 +85,50 @@ daftarEvent(
   },
 },
 
+/* Sepupu ngobrol-di-dispenser, tapi di mulut koridor (LANE_DOWN x186..226) —
+   jadi dua orangnya berdiri PERSIS di jalur orang lewat. Rancangan aslinya
+   minta route() memutar semua orang lewat LANE_UP; itu perlu lajur alternatif
+   yang tidak pernah ada untuk perjalanan think->think (lihat catatan
+   desainnya), jadi dipangkas ke versi murah: dua orangnya sendiri yang
+   menggeser badan 8px kalau ada yang numpang lewat, bukan mengatur ulang
+   jalur siapa pun. Bubar sendiri kalau inspeksi-mendadak mulai. */
+{
+  id: 'ngobrol-di-lorong',
+  kelas: 'latar', bobot: B.sering, cooldown: 180, durasi: 30,
+  perluAktor: true,
+  syarat: (S) => S.kerjaJam && S.orang.filter(bisaDipinjam).length >= 2,
+  mulai(E) {
+    const dua = pinjamAktor(E, 2);
+    if (dua.length < 2) { E.selesaiCepat = true; return; }
+    const [a, b] = dua;
+    a.doingEvent = 'ngobrol di lorong'; b.doingEvent = 'ngobrol di lorong';
+    a.goToXY(196, LANE_DOWN, 'right');
+    b.goToXY(214, LANE_DOWN, 'left');
+  },
+  tick(E, dt, S) {
+    if (sedangJalan('inspeksi-mendadak')) { E.selesaiCepat = true; return; }
+    const [a, b] = E.aktor;
+    if (!a || !b || !a.diam || !b.diam) return;
+    // siapa pun yang numpang lewat mulut koridor: keduanya memberi jalan
+    // sebentar, bukan orang lain yang berbelok memutar.
+    const lewat = S.orang.some((o) => o !== a && o !== b && !o.diam
+      && Math.abs(o.y - LANE_DOWN) < 6 && o.x > 182 && o.x < 228);
+    a.x = 196 - (lewat ? 8 : 0);
+    b.x = 214 + (lewat ? 8 : 0);
+    const giliran = Math.floor(E.umur * 1.2) % 2;
+    if (Math.floor(E.umur * 1.2) !== E.data.g) {
+      E.data.g = Math.floor(E.umur * 1.2);
+      const o = giliran ? a : b;
+      spawn('talk', o.x, o.y - 26);
+      if (Math.random() < 0.4) { o.pose = 'nunjuk'; o.tandaPoseSampai = E.umur + 0.5; }
+    }
+    if (a.tandaPoseSampai && E.umur > a.tandaPoseSampai) { a.pose = null; a.tandaPoseSampai = 0; }
+    if (b.tandaPoseSampai && E.umur > b.tandaPoseSampai) { b.pose = null; b.tandaPoseSampai = 0; }
+    pada(E, 2, () => a.say('eh, itu berkas kemarin sudah naik belum?'));
+  },
+  selesai(E) { for (const a of E.aktor) { a.pose = null; a.tandaPoseSampai = 0; } },
+},
+
 {
   id: 'ngerumpi-di-pantry',
   babak: { istirahat: 2.5, apel: 0, lembur: .5, malam: .3 },   // pengali bobot per babak hari kerja (S.babak)
@@ -473,7 +517,7 @@ daftarEvent(
       a.pose = 'angkat';
       pada(E, 4, () => { E.data.tekan = true; a.pose = null; a.say('terang kok dari jendela'); });
     }
-    if (E.data.tekan) { MOD.neonMati = [1, 1]; MOD.lampu = 0; }
+    if (E.data.tekan) { MOD.neonMati = neonSemua(1); MOD.lampu = 0; }   // semua tabung, berapa pun jumlahnya
   },
   gambarDinding() {
     r(430, 120, 5, 8, '#e2ddc8');            // saklar dinding

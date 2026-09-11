@@ -38,6 +38,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -78,6 +79,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -118,6 +120,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -158,6 +161,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -198,6 +202,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -238,6 +243,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -278,6 +284,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -318,6 +325,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -358,6 +366,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -398,6 +407,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -437,6 +447,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur",
       "orang:A"
@@ -477,6 +488,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "orang:A",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
@@ -518,6 +530,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -560,6 +573,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -601,6 +615,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -641,6 +656,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -682,6 +698,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ],
@@ -723,6 +740,7 @@
       "prop:drawKipas",
       "prop:drawBukuTamu",
       "prop:drawSampahPilah",
+      "prop:drawKursiTambahan",
       "prop:drawMejaKerja",
       "prop:drawPenghancur"
     ]

@@ -284,4 +284,52 @@ daftarEvent(
   selesai(E) { if (E.data.a) E.data.a.pose = null; },
 },
 
+/* Ketiga dari keluarga kucing (kucing-kantor jalan lewat, kucing-tidur-di-rak-
+   server nangkring di rak yang lagi dingin) — ini yang meringkuk di karpet
+   meja rapat waktu meja rapatnya sendiri sedang sepi. Rancangan aslinya minta
+   route() diberi titik singgah supaya SEMUA orang memutar; itu ditolak sendiri
+   di catatan desainnya (route() dipakai tiap perpindahan dan tidak ada tesnya)
+   — jadi cuma satu orang terdekat yang menyimpang, pakai pemeranDekat seperti
+   kucing-kantor, bukan mengubah jalur semua orang. */
+{
+  id: 'kucing-tidur-di-karpet',
+  kelas: 'latar', bobot: B.sering, cooldown: 360, durasi: 90,
+  syarat: () => KURSI_TOTAL - kursiKosong() < 3,
+  mulai(E) { E.data.napas = 0; },
+  tick(E, dt) {
+    const D = E.data;
+    D.napas += dt;
+    if (D.napas > 4) { D.napas = 0; spawn('steam', 240, 240); }
+    if (!D.a && !D.lepas && E.umur > 1) {
+      const a = pemeranDekat(E, 232, 252, 160);
+      if (a) {
+        D.a = a;
+        a.pose = 'jongkok';
+        a.doingEvent = 'menghindari kucing tidur';
+        a.goToXY(232, 252, 'right');
+        a.say('sst, biarin aja');
+      }
+    }
+    if (D.a && D.a.diam && !D.lepas && E.umur > 7) {
+      D.lepas = true;
+      D.a.pose = null;
+      lepaskanAktor(D.a);
+      D.a = null;
+    }
+  },
+  gambarProp() {
+    const x = 238, y = 244;
+    const tail = Math.round(Math.sin(now / 900) * 4);
+    ctx.globalAlpha = 0.15; ctx.fillStyle = '#20301f';
+    ctx.beginPath(); ctx.ellipse(x + 4, y + 4, 6, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    r(x, y, 9, 5, '#d99a4e');                              // badan meringkuk
+    r(x + 1, y - 2, 4, 3, '#d99a4e');                       // kepala
+    r(x + 1, y - 3, 1, 1, '#d99a4e'); r(x + 3, y - 3, 1, 1, '#d99a4e');   // telinga
+    r(x - 3 + tail, y + 1, 4, 2, '#d99a4e');                // ekor melingkar, bergoyang pelan
+  },
+  sortY: 246,
+  selesai(E) { if (E.data.a) { E.data.a.pose = null; lepaskanAktor(E.data.a); } },
+},
+
 );
