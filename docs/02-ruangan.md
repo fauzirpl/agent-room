@@ -578,6 +578,64 @@ kantor yang mengosong), sekarang dia beneran jalan ke musola dan berpose
 sholat di sana selama event berjalan — `MOD.hening` dan pegawai kedua yang
 "ngopi sambil menunggu" (`E.data.kopi`) tidak berubah.
 
+### Satpam berpatroli
+
+WC, gudang, dan musola di atas semuanya rutinitas "jalan ke satu titik,
+tunggu, pulang" — begitu tiba, dia diam di situ sampai waktunya habis, lalu
+balik kanan. Satpam sengaja dibuat **beda bentuknya**, bukan cuma beda kulit:
+dia keliling **berurutan** lewat beberapa titik sekaligus (`SATPAM_RUTE`,
+dideklarasikan dekat `class Standby` di `room.js`, sesudah
+`calonPetugasNotulen()`), singgah sebentar di tiap satu (pose `'nunjuk'`,
+seolah menyorotkan senter), baru lanjut ke titik berikutnya — dan pulang ke
+pos jaga sesudah titik terakhir. Rutinitasnya sendiri (`mulaiSatpam`/
+`tickSatpam`/`selesaiSatpam`, dekat `destroy()` milik `class Standby`)
+sekelas WC/gudang/musola/kursi/notulen: bukan `daftarEvent()`, tidak lewat
+penjadwal, tidak masuk log — jalan sendiri tiap ±4 menit (`SATPAM_JEDA_MS`,
+`window.SATPAM_UJI_MS` mempercepatnya di uji, pola yang sama dengan
+`jedaNotulen()`).
+
+Titik-titiknya **bukan geometri baru** — dunia `W = 672` tidak dilebarkan lagi
+untuk fitur ini, dan tidak ada perabot "pos jaga" baru digambar. Yang
+dipinjam semuanya sudah ada untuk keperluan lain:
+
+| Titik | Koordinat | Dipinjam dari |
+|---|---|---|
+| dekat pintu keluar | `ABSEN_X, ABSEN_Y` (424,152) | mesin absen, ritual pulang |
+| ambang pintu WC | `WC.titikX, WC.titikY` (12,116) | `keWC()` |
+| ambang pintu gudang | `GUDANG.titikX, GUDANG.titikY` (624,116) | `keGudang()` |
+| depan ruang kadis | `STATIONS.agent.x, 152` (452,152) | ambang `agent` — y digeser dari 140 ke 152 supaya tidak berhimpit dengan sesi nyata yang sedang antre/bekerja tepat di depan pintu |
+| depan pintu pantri | `PANTRI_LUAR, PANTRI.ambang` (500,272) | titik hinge yang sudah dipakai `route()` sendiri buat menembus sekat pantri |
+| pos jaga (pulang) | `goTo('idle')` | `STATIONS.idle` — ruang tunggu, sudah punya slot/antre sendiri |
+
+Perannya (`satpam` di `JABATAN`: peci, kumis, seragam khaki-coklat sendiri,
+kerudung `#4a3c1f` buat yang jenis kelaminnya perempuan — lihat "Persona
+pegawai" & `uji-jk.mjs`) **sengaja tidak** ditambahkan ke `PERAN_STANDBY`.
+Array itu panjangnya 4, persis sama dengan `MIN_DI_LAYAR`: tiap standby yang
+hidup memang dijatah satu peran unik dari situ, jadi menyisipkan entri kelima
+di sana cuma bikin perannya nyaris tidak pernah kepilih (butuh standby kelima
+yang jarang ada). Sebagai gantinya, giliran pertama siapa saja — standby
+menganggur mana pun — dan `mulaiSatpam()` memanggil `setPeran('satpam')` atas
+dia; sesudah itu `calonPetugasSatpam()` mendahulukannya lagi tiap giliran
+berikutnya, persis pola arsiparis didahulukan `calonPetugasNotulen()`. Kalau
+dia dihapus (`jagaPopulasi` menyusutkan populasi standby, atau tombol "hapus
+dari daftar"), `destroy()` melepas kuncinya (`petugasSatpam`) dan giliran
+berikutnya jatuh ke standby lain — peran `'satpam'`-nya ikut hilang bersama
+orangnya, bukan berpindah.
+
+Senternya (`a.bawa = 'senter'`, kasus baru di `drawBawaan`) dipegang selama
+seluruh putaran, bukan cuma sekali seperti kardus gudang — dilepas
+`selesaiSatpam()`, bukan menunggu `bawaSampai` kedaluwarsa sendiri. Direbut
+event acak di tengah jalan (pagar `this.eventKerja` yang sama seperti
+`tickWC`) membatalkan seluruh putaran, bukan melanjutkannya dari titik
+terakhir — giliran berikutnya mulai dari titik pertama lagi.
+
+**Sesi nyata tidak pernah dipaksa berpatroli**: rutinitasnya seluruhnya hidup
+di `class Standby` (`mulaiSatpam`/`tickSatpam`/`selesaiSatpam`), yang tidak
+pernah dipanggil dari `class Agent` dasarnya. Peran `'satpam'` sendiri cuma
+kulit — kartu pegawai membolehkan siapa pun (termasuk sesi nyata) memilihnya
+dari dropdown jabatan seperti peran lain, tapi memilihnya cuma mengganti
+seragam, tidak menyalakan `tickSatpam()` sama sekali.
+
 ## Kartu inventaris barang & zoom perabot
 
 Semua perabot bisa diklik. Kamera membidik barangnya — rasanya sama dengan

@@ -67,6 +67,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   mampir 6% tiap memilih tujuan, berpose sholat (diam/hormat/jongkok
   bergantian) beberapa detik tanpa memudar. `istirahat-sholat-dzuhur` ikut
   diarahkan ke sini, bukan sekadar mengucap kalimat lalu menghilang konsep.
+- **Satpam berpatroli.** Beda bentuk dari WC/gudang/musola: bukan sekali
+  jalan-tunggu-pulang, tapi keliling berurutan lewat lima titik yang sudah
+  ada (ambang WC, ambang gudang, depan ruang kadis, depan pantri, dekat pintu
+  keluar), singgah sebentar sambil menyorotkan senter di tiap satu, lalu
+  pulang ke pos jaga (ruang tunggu) — berulang tiap ±4 menit. Tidak ada
+  ruangan, dinding, atau perabot baru; peran `satpam` (peci, seragam
+  khaki-coklat sendiri) sengaja tidak masuk daftar peran standby yang
+  diundi sejak lahir — giliran pertama siapa saja, lalu dia didahulukan lagi
+  tiap putaran berikutnya, sama seperti arsiparis didahulukan urusan notulen.
+  Sesi nyata tidak pernah dipaksa berpatroli.
 
 ### Diubah
 

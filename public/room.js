@@ -4440,6 +4440,22 @@ const JABATAN = [
     padanan: 'Intern',
     tugas: 'membantu pekerjaan ringan sambil belajar alur kantor',
     pal: { main: '#dfe4ea', pants: '#2e3440', skin: '#f0c79c', hair: '#241a12', head: 'hair', jilbab: '#8e9299' } },
+  /* Satpam SENGAJA tidak masuk PERAN_STANDBY/PERAN_BAWAAN/PERAN_PESERTA di
+     bawah: PERAN_STANDBY panjangnya 4, sama persis dengan MIN_DI_LAYAR — tiap
+     standby yang hidup memang dijatah satu peran unik dari situ, jadi
+     menambah entri kelima ke array itu cuma bikin peran itu nyaris tidak
+     pernah kepilih (butuh standby kelima yang jarang ada). Yang dipakai
+     rutinitas keliling (blok SATPAM_RUTE dekat class Standby) adalah
+     setPeran('satpam') dinamis atas standby yang sedang menganggur, giliran
+     pertama siapa saja — sesudah itu dia yang didahulukan giliran berikutnya
+     (calonPetugasSatpam), sama seperti arsiparis didahulukan di
+     calonPetugasNotulen(). Tetap didaftar di JABATAN karena setPeran() &
+     seragam harian keduanya bergantung ke situ (butuh entri pal lengkap
+     termasuk jilbab — lihat uji-jk.mjs). */
+  { id: 'satpam', nama: 'Satuan Pengamanan', singkat: 'Satpam',
+    padanan: 'Trust & Safety',
+    tugas: 'berkeliling memeriksa tiap pintu dan sudut kantor secara berkala, lalu kembali ke pos jaga',
+    pal: { main: '#5c4a2e', pants: '#2e2a20', skin: '#d9a273', hair: '#1d1712', head: 'peci', jilbab: '#4a3c1f', kumis: true } },
 ];
 
 const JABATAN_ID = new Map(JABATAN.map((j) => [j.id, j]));
@@ -5214,6 +5230,10 @@ function drawBawaan(a, x, yb) {
     case 'map-kuning':r(bx, yb - 13, 8, 6, '#c9a03a'); r(bx + 1, yb - 11, 6, 1, P.paper); break;
     case 'amplop-coklat': r(bx, yb - 12, 7, 5, '#a37b4e'); r(bx, yb - 12, 7, 1, '#c9a97a'); break;
     case 'koper':     r(bx, yb - 12, 6, 5, '#4a3626'); r(bx + 1, yb - 13, 4, 1, '#6b4a2e'); break;
+    // senter satpam berpatroli (lihat SATPAM_RUTE dekat class Standby):
+    // badan gelap, lensa terang di ujung -- satu-satunya penanda barang
+    // yang dibutuhkan, seragamnya sendiri sudah beda warna.
+    case 'senter':    r(bx + 1, yb - 12, 3, 7, '#2b2f35'); r(bx + 1, yb - 13, 3, 2, '#e8d98a'); break;
   }
 }
 
@@ -6698,6 +6718,11 @@ class Standby extends Agent {
         return;
       }
     }
+    if (this.tugasSatpam) { this.tickSatpam(); return; }
+    if (!petugasSatpam) {
+      if (!satpamBerikutnya) satpamBerikutnya = now + jedaSatpam();   // jam mulai berjalan begitu standby pertama lahir
+      else if (now > satpamBerikutnya && calonPetugasSatpam() === this) { this.mulaiSatpam(); return; }
+    }
     if (this.tugasWC) { this.tickWC(); return; }
     if (this.tugasKursi) { this.tickKursi(); return; }
     if (this.tugasGudang) { this.tickGudang(); return; }
@@ -6946,11 +6971,70 @@ class Standby extends Agent {
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
   }
+  /* Satpam berpatroli. Beda dari WC/gudang/musola/kursi/notulen di atas:
+     bukan satu tujuan lalu pulang, tapi KELILING beberapa titik berurutan
+     (SATPAM_RUTE, dideklarasikan di bawah class ini persis seperti
+     NOTULEN_X dkk.) — singgah sebentar (pose 'nunjuk', menyorotkan senter)
+     di tiap satu, baru lanjut ke titik berikutnya, dan balik ke pos jaga
+     (STATIONS.idle) sesudah titik terakhir. 'jalan' -> 'cek' berulang untuk
+     tiap titik, lalu 'pulang' sekali di akhir. */
+  mulaiSatpam() {
+    petugasSatpam = this;
+    satpamBerikutnya = now + jedaSatpam();
+    if (this.peran !== 'satpam') this.setPeran('satpam');   // menempel: giliran berikutnya dia didahulukan lagi
+    this.tugasSatpam = 'jalan';
+    this.satpamIdx = 0;
+    this.bawa = 'senter';
+    this.adaTugas = true;
+    this.betah = true;
+    this.doingEvent = 'berpatroli keliling kantor';
+    const t = SATPAM_RUTE[0];
+    this.goToXY(t.x, t.y, t.hadap);
+  }
+  tickSatpam() {
+    // pagar yang sama seperti tickWC: direbut event acak di tengah jalan —
+    // putarannya batal, bukan dilanjutkan dari titik terakhir.
+    if (this.eventKerja) { this.selesaiSatpam(false); return; }
+    if (this.tugasSatpam === 'jalan') {
+      if (!this.path.length) {
+        this.tugasSatpam = 'cek';
+        this.pose = 'nunjuk';
+        this.satpamT = now + SATPAM_CEK_MS_MIN + Math.random() * (SATPAM_CEK_MS_MAX - SATPAM_CEK_MS_MIN);
+      }
+    } else if (this.tugasSatpam === 'cek') {
+      if (now > this.satpamT) {
+        this.pose = null;
+        this.satpamIdx++;
+        if (this.satpamIdx < SATPAM_RUTE.length) {
+          const t = SATPAM_RUTE[this.satpamIdx];
+          this.tugasSatpam = 'jalan';
+          this.goToXY(t.x, t.y, t.hadap);
+        } else {
+          this.tugasSatpam = 'pulang';
+          this.goTo('idle');           // pos jaga: stasiun yang sudah ada, bukan koordinat baru
+        }
+      }
+    } else if (this.tugasSatpam === 'pulang') {
+      if (!this.path.length) this.selesaiSatpam(true);
+    }
+  }
+  selesaiSatpam(lanjut) {
+    this.tugasSatpam = '';
+    this.pose = null;
+    this.adaTugas = false;
+    this.bawa = null;
+    if (this.eventKerja) this.betahAsli = false;
+    else { this.betah = false; this.doingEvent = ''; }
+    if (petugasSatpam === this) petugasSatpam = null;
+    // this.peran TIDAK dikembalikan -- lihat komentar mulaiSatpam().
+    if (lanjut) this.nextMove = now + 11000 + Math.random() * 15000;
+  }
   destroy() {
     if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
     if (wcKeadaan.penghuni === this) wcKeadaan.penghuni = null;   // ...dan tidak boleh mengunci WC
     if (gudangKeadaan.penghuni === this) gudangKeadaan.penghuni = null;   // ...atau gudang
     if (musolaKeadaan.penghuni === this) musolaKeadaan.penghuni = null;   // ...atau musola
+    if (petugasSatpam === this) petugasSatpam = null;      // ...atau putaran keliling
     if (petugasKursi === this) {
       // dihapus jagaPopulasi() persis waktu menyeret: batalkan, jangan sampai
       // kursinya lenyap dari meja rapat tanpa pernah muncul di baris meja kerja.
@@ -6987,6 +7071,42 @@ function calonPetugasNotulen() {
   // sedang berdiri diam didahulukan supaya tidak memotong langkah orang.
   const bisa = standby.filter((b) => bisaDipinjam(b));
   return bisa.find((b) => b.peran === 'arsiparis') || bisa.find((b) => !b.path.length) || bisa[0] || null;
+}
+
+/* Satpam berpatroli — rutinitas standby lagi, sekelas WC/gudang/musola/kursi/
+   notulen di atas: bukan event acak (tidak lewat penjadwal, tidak masuk log),
+   cuma jalan sendiri di class Standby. BEDANYA dari keempat rutinitas itu:
+   bukan satu tujuan-tunggu-pulang, tapi KELILING berurutan lewat beberapa
+   titik sekaligus (mulaiSatpam/tickSatpam/selesaiSatpam, dekat destroy() di
+   atas), baru pulang ke pos sesudah titik terakhir.
+
+   Titik-titiknya BUKAN geometri baru — dipinjam dari yang sudah ada: ambang
+   WC, ambang gudang, ambang ruang kadis (offset y=152, bukan y=140 milik
+   STATIONS.agent, supaya tidak berhimpit dengan sesi nyata yang sedang
+   antre/bekerja tepat di depan pintu itu), depan pintu pantri (titik
+   PANTRI_LUAR yang sama dipakai route() sendiri), dan mesin absen dekat
+   pintu keluar. Pos jaganya STATIONS.idle (ruang tunggu): sudah punya
+   slot/antre sendiri, jadi "kembali ke pos" cukup goTo('idle') seperti
+   standby lain yang sedang tidak bertugas. */
+const SATPAM_RUTE = [
+  { x: ABSEN_X, y: ABSEN_Y, hadap: 'up' },                 // dekat pintu keluar & mesin absen
+  { x: WC.titikX, y: WC.titikY, hadap: 'up' },             // ambang pintu WC
+  { x: GUDANG.titikX, y: GUDANG.titikY, hadap: 'up' },     // ambang pintu gudang
+  { x: STATIONS.agent.x, y: 152, hadap: 'up' },            // depan ambang ruang kadis
+  { x: PANTRI_LUAR, y: PANTRI.ambang, hadap: 'right' },    // depan pintu pantri
+];
+const SATPAM_CEK_MS_MIN = 1400, SATPAM_CEK_MS_MAX = 2600;   // lama berhenti "memeriksa" tiap titik
+const SATPAM_JEDA_MS = 240000;   // jeda antar putaran keliling (4 menit)
+let satpamBerikutnya = 0;        // now-timestamp putaran berikutnya; 0 = jam belum jalan, sama seperti notulenBerikut
+let petugasSatpam = null;        // standby yang sedang berpatroli, null = tidak ada yang jalan
+// window.SATPAM_UJI_MS mempercepat jedanya (uji) — sama pola dengan jedaNotulen()
+const jedaSatpam = () => (typeof window !== 'undefined' && window.SATPAM_UJI_MS) || SATPAM_JEDA_MS;
+function calonPetugasSatpam() {
+  // siapa pun yang sedang menganggur; yang perannya SUDAH 'satpam' (giliran
+  // sebelumnya, lihat mulaiSatpam) didahulukan — pola yang sama dengan
+  // arsiparis di calonPetugasNotulen() di atas.
+  const bisa = standby.filter((b) => bisaDipinjam(b));
+  return bisa.find((b) => b.peran === 'satpam') || bisa.find((b) => !b.path.length) || bisa[0] || null;
 }
 
 // standby = penambal, jumlahnya selalu (4 - sesi nyata - yang sudah dihapus
