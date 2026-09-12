@@ -2,7 +2,7 @@
 
 Hasil rapat desain 12 sudut pandang, disaring kelayakannya terhadap kode nyata
 di [public/room.js](public/room.js). **373 event unik**, 346 di antaranya dinilai
-bisa dikerjakan, dan **308 sudah jadi kode** di [public/event/](public/event/)
+bisa dikerjakan, dan **310 sudah jadi kode** di [public/event/](public/event/)
 (dipecah per tema, urutannya di `manifest.json`) — ditandai **+** di katalog
 di bawah.
 
@@ -374,7 +374,7 @@ Ritual dinas: apel, disposisi, inspeksi, tamu, audit, tanda tangan.
 | **+** | **Berkas dioper berputar** | Ada minimal 3 pegawai. Acak tiap 7-12 menit, cooldown 10 menit | Sebuah map kuning (4x5 px) berpindah tangan: A jalan ke B ('paper' loncat), B jalan ke C, C jalan kembali ke A | sedang | 28s | 4 | mahal |
 | **+** | **Kadis dan sekdis rapat tertutup** | Ada kadis dan sekdis bersamaan di ruangan | Sekdis berjalan ke pintu ruang kadis, pintu terbuka lalu tertutup rapat | jarang | 30s | 4 | mahal |
 |  | **Kepala dinas keluar ruangan** | Acak, cooldown 14 menit, hanya jam kerja | Pintu kadis membuka (daun bergeser 8 px), keluar sosok berjabatan kadis lengkap dengan peci dan map di ketiak,… | jarang | 24s | 4 | mahal |
-|  | **Kiriman dus arsip** | Acak 1x per 30 menit, jam 9-15. Cooldown 25 menit | Tiga dus jatuh berurutan di 440,206 dari y-20 dengan g=400 dan satu pantulan 2 px | jarang | 45s | 4 | mahal |
+| **+** | **Kiriman dus arsip** | Acak 1x per 30 menit, jam 9-15. Cooldown 25 menit | Tiga dus jatuh berurutan di 440,206 dari y-20 dengan g=400 dan satu pantulan 2 px | jarang | 45s | 4 | mahal |
 | **+** | **Kuota fotokopi bulan ini habis** | Acak, cooldown 6 menit. Terjemahan dari: rate limit | Prop baru: mesin fotokopi 22x26 px berdiri di kiri meja printer (x=158, dasar 118) — kotak abu dengan tutup kaca,… | sedang | 14s | 4 | mahal |
 | **+** | **Pemohon surat menunggu** | Jam 8-15, acak tiap ~4 menit. Cooldown 6 menit | Warga berkemeja polos membawa map cokelat masuk dari kiri, berjalan ke ruang tunggu, dan BERDIRI menunggu di slot… | sering | 65s | 4 | mahal |
 |  | **Rak server tidak boleh dibuka sembarangan** | Ada teknisi dan sandiman, dan teknisi menuju rak server (x390) | Teknisi berdiri di depan rak dan mengulurkan tangan ke pintu rak | jarang | 16s | 4 | mahal |
@@ -469,7 +469,7 @@ Yang membuat kantor terasa kantor Indonesia: ojol, gorengan, arisan, ngobrol di 
 |  | **Rapat molor, kopi masuk** | Ada entri rapatAktif dengan now - sejak > 5 menit DAN jumlah yang duduk >= 3 | Seorang penghuni yang tidak sedang bekerja (prioritas standby) mengambil gelas di dispenser (berdiri 2 detik, 3… | sedang | 20s | 4 | mahal |
 | **+** | **Sales mesin fotokopi** | Jam 9-15, acak tiap ~12 menit. Cooldown 20 menit | Sales berkemeja putih + tas jinjing hitam masuk sampai tengah ruangan tanpa dipersilakan, membawa brosur mengkilap… | sedang | 55s | 4 | mahal |
 | **+** | **Satpam patroli** | Acak tiap ~6 menit, dan selalu sekali saat pergantian fase ke malam | Satpam seragam biru tua + topi (pal baru di JABATAN: main '#2b3f6b', head 'topi') masuk dari kiri di LANE_DOWN,… | sering | 40s | 4 | mahal |
-|  | **Senam Jumat pagi** | Bukan acak: hari Jumat, jam 07.00-08.00, sekali per hari, dan tidak boleh… | Semua penghuni berkumpul di karpet merah dalam formasi longgar (grid 3 kolom, jarak 26 px), badannya naik-turun 2… | jarang | 20s | 4 | mahal |
+| **+** | **Senam Jumat pagi** | Bukan acak: hari Jumat, jam 07.00-08.00, sekali per hari, dan tidak boleh… | Semua penghuni berkumpul di karpet merah dalam formasi longgar (grid 3 kolom, jarak 26 px), badannya naik-turun 2… | jarang | 20s | 4 | mahal |
 |  | **Anak pegawai ikut ke kantor** | Hanya di luar jam kerja inti (jam 6-8 atau 15-18), acak, cooldown 40 menit | Anak kecil (tinggi 2/3 pegawai, kaus merah, tanpa peci) berlari mengitari meja rapat: path melingkar tetap lewat… | jarang | 80s | 5 | tolak |
 | **+** | **Mahasiswa magang kebingungan** | Jam 8-12, acak tiap ~15 menit. Cooldown 25 menit | Mahasiswa berjaket almamater (warna kuning/hijau, pal baru) berdiri di depan filing kabinet memegang setumpuk map | sedang | 60s | 5 | mahal |
 |  | **Pel lantai, awas licin** | Acak 1x per 12 menit, hanya jam 7-9 atau 15-16, atau langsung setelah… | Magang berjalan menyusuri LANE_DOWN kiri ke kanan dengan kecepatan 0,6x, tangan memegang gagang pel (garis 1x14 px… | sedang | 35s | 5 | mahal |

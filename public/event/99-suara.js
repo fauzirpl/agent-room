@@ -12,7 +12,7 @@
    Event boleh menimpanya lewat medan `sfx` di definisinya sendiri; yang
    begitu sengaja TIDAK ikut di daftar ini supaya tidak ditulis dua kali.
 
-   339 event di sini, 0 pakai `sfx` sendiri, dari 339 yang terdaftar. */
+   341 event di sini, 0 pakai `sfx` sendiri, dari 341 yang terdaftar. */
 daftarSuaraEvent({
   'tegangan-turun-lampu-redup':             ['nada', 200, 0.15],
   'ups-beep-baterai':                       'bip',
@@ -59,6 +59,8 @@ daftarSuaraEvent({
   'tegukan-terakhir-tinggal-ampas':         'denting',
   'sisa-teh-disiram-ke-pot':                'guyur',
   'gorengan-di-meja-rapat':                 'kursi',
+  'dus-ekspedisi-datang':                   'gedebuk',
+  'senam-jumat':                            ['nada', 440, 0.06],
   'ojol-datang-bawa-pesanan':               'kursi',
   'tukang-bakso-lewat':                     'ketuk',
   'pedagang-gelar-dagangan':                'langkah',

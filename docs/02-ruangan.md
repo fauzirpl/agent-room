@@ -556,27 +556,57 @@ keluarga dengan pintu WC (`1.03.01.01.014`).
 
 ### Musola pojok — perabot, bukan ruangan berpintu
 
-Ruangan ketiga sengaja **bukan** bukaan berdinding seperti WC/gudang:
-lahan yang sudah dilebarkan dua kali dipakai dulu untuk gudang, dan sisa
-margin kanannya (x640..672, 32px yang tidak dipakai kusen gudang) cukup
-untuk perabot lantai — jadi dimanfaatkan apa adanya, tanpa dinding baru dan
-tanpa pintu ketiga. `MUSOLA` di kepala `room.js`: rak kecil menempel dinding
-(mukena, peci, sarung terlipat) di atas sajadah bercorak lengkung mihrab
-sederhana yang tergelar di lantai, x644..670 y120..162.
+Ruangan ketiga sengaja **bukan** bukaan berdinding seperti WC/gudang: tidak
+ada dinding baru, tidak ada daun pintu, tidak ada fase memudar masuk/keluar.
+`MUSOLA` di kepala `room.js` — **x582..670 y172..248**, karpet hijau selebar
+satu shaf dengan **tiga sajadah** berjajar (lengkung mihrab menghadap atas),
+rak mukena (mukena, peci, sarung, kitab, sajadah cadangan) dan rak sandal
+berdiri di tepi atasnya.
+
+**Kenapa pindah dari margin kanan gudang.** Versi pertamanya 26x42 di
+x644..670 y120..162 — sisa bidang dinding di kanan kusen gudang, dan lebarnya
+memang tidak bisa lebih dari 30 px: kusen gudang (x608..640) mentok di kiri,
+tepi dunia (`W = 672`) di kanan. Yang benar-benar luas dan benar-benar kosong
+ada di **lantai pojok kanan bawah**, dan tempat itu diukur dengan sapuan yang
+sama seperti bukaan ruang kadis (`PROPS` + `drawFloor` + seluruh
+`gambarProp`/`gambarDinding`/`gambarLantai`/`gambarAtas` registri event, umur
+0..14 detik tiap 0,02): kotak yang dipakai sekarang = **nol piksel** milik
+perabot lama. Batasnya lajur jalan semua, bukan selera: atas `LANE_UP` (164,
+lajur pulang ke `PINTU_X`), bawah `LANE_DOWN` (252), kiri panel kanan sekat
+pantri (`PANTRI.x1` 574) + 8 px, kanan tepi dunia. Pita yang sama di ujung
+KIRI sudah lama dipakai karpet meja rapat — jadi ini bukan pola baru, cuma
+ujung kanannya yang sampai kemarin dibiarkan kosong.
+
+Karpet & sajadahnya digambar di **`drawFloor`** (`gambarKarpetMusola`), persis
+seperti karpet meja rapat: yang berdiri atau lewat di atasnya menutupinya,
+bukan tertutup olehnya. Yang tersisa sebagai prop ber-`sortY` cuma dua rak
+tadi — tingginya sengaja 10..14 px dengan puncak y172, satu piksel pun tidak
+sampai menutupi badan orang yang melintas di lajur pulang (garis kaki 164,
+badan digambar ke atas dari situ).
 
 Karena tidak ada daun pintu, tidak ada fase memudar seperti WC/gudang:
-standby yang mampir (`keMusola`/`tickMusola`/`selesaiMusola`, 6% tiap
+standby yang mampir (`keMusola`/`tickMusola`/`selesaiMusola`, 8% tiap
 memilih tujuan mondar-mandir, 6–12 detik) tetap kelihatan, cuma berdiri
-diam di atas sajadah menghadap dinding. Isyarat "sedang sholat"-nya pose
-bergantian tiap 2 detik (diam → hormat → jongkok, berulang) — pose yang
-sudah ada (dipakai apel pagi & penghindar kucing), bukan pose baru.
+diam di atas sajadah menghadap kiblat (arah `'up'`). Isyarat "sedang
+sholat"-nya pose bergantian tiap 2 detik (diam → hormat → jongkok, berulang)
+— pose yang sudah ada (dipakai apel pagi & penghindar kucing), bukan pose
+baru.
+
+**Penghuninya jamak.** Sejak muat satu shaf, `musolaKeadaan.penghuni` adalah
+ARRAY, bukan satu orang: `musolaTempati()` memberi slot bebas pertama (x598,
+622, 646 — garis kaki 228) dan `musolaLepas()` mengembalikannya, dipanggil
+juga dari `destroy()` di `class Agent` supaya pegawai yang pamit di tengah
+sholat tidak mengunci sajadah selamanya. Kartu inventarisnya ikut: kondisinya
+`DIPAKAI 2/3`, isinya daftar nama yang sedang sholat.
 
 `istirahat-sholat-dzuhur` (gelombang 2 lanjutan, jam 12–12.30 dan
 15.15–15.45) ikut diarahkan ke sini: dulu pegawainya cuma mengucap "Duluan
 ya, titip meja" lalu menghilang dari konsep (`MOD.hening` berkedip mewakili
 kantor yang mengosong), sekarang dia beneran jalan ke musola dan berpose
-sholat di sana selama event berjalan — `MOD.hening` dan pegawai kedua yang
-"ngopi sambil menunggu" (`E.data.kopi`) tidak berubah.
+sholat di sana selama event berjalan. Sejak shaf-nya muat bertiga, detik ke-8
+satu orang lagi menyusul ke sajadah sebelahnya kalau slotnya masih ada dan
+masih ada yang bisa dipinjam — `MOD.hening` dan pegawai yang "ngopi sambil
+menunggu" (`E.data.kopi`) tidak berubah.
 
 ### Satpam berpatroli
 
@@ -635,6 +665,33 @@ pernah dipanggil dari `class Agent` dasarnya. Peran `'satpam'` sendiri cuma
 kulit — kartu pegawai membolehkan siapa pun (termasuk sesi nyata) memilihnya
 dari dropdown jabatan seperti peran lain, tapi memilihnya cuma mengganti
 seragam, tidak menyalakan `tickSatpam()` sama sekali.
+
+### Dua event lagi dari sisa katalog: dus ekspedisi, senam Jumat
+
+- **Dus ekspedisi datang** (`dus-ekspedisi-datang`) — tiga dus jatuh
+  berurutan (gravitasi sungguhan, `vy += 400*dt`) di depan bukaan ruang
+  kadis, lalu dua pegawai mengangkutnya ke dekat lemari arsip (jalannya
+  melambat, `a.laju = 0.65`, sambil membawa `'kardus'` — bawaan yang sudah
+  ada, bukan baru). Guncangan layar tiap dus mendarat pakai `MOD.getar`
+  yang sudah dipakai genset, bukan mekanisme baru. Rancangan aslinya minta
+  tumpukannya **permanen** (masuk `PROPS`, bertambah tinggi tiap kali
+  kejadian ini terjadi lagi); itu dipangkas ke versi sekali pakai — event
+  ini menggambar tumpukannya sendiri lewat `gambarProp`, dan hilang begitu
+  event selesai, bukan menetap di ruangan. Permanen berarti state `RUANGAN.*`
+  baru sekaligus entri `PROPS` baru yang ikut sapuan golden z-order, untuk
+  satu hiasan yang jatuhnya cuma sesekali — tidak sepadan.
+- **Senam Jumat** (`senam-jumat`) — satu-satunya "barisan" selain apel pagi
+  yang mengumpulkan seluruh penghuni menganggur, tapi sengaja tidak memakai
+  `FORMASI_APEL` milik apel (formasi sendiri, grid 3 kolom di lantai dekat
+  meja kerja). Kalah duluan kalau apel kebetulan masih berjalan (`syarat`
+  memeriksa `!apel`, variabel global yang sama dipakai `tickApel()`) —
+  "apel yang menang" kalau keduanya jatuh bersamaan, sama seperti disebut di
+  rapat rancangannya. Interlock "tool call nyata memberangkatkan orangnya
+  duluan" tidak perlu dibangun khusus: `handle()` memanggil `goTo()` yang
+  menimpa `path` siapa pun, jadi otomatis berlaku untuk event apa saja,
+  bukan cuma ini. Naik-turun badannya (`a.y = a.slotY + sin(a.phase*5)*amp`)
+  dan lengan bergantiannya (pose `'tepuk'`, sudah ada) keduanya pose/posisi
+  yang sudah ada — tidak ada pose baru untuk event ini.
 
 ## Kartu inventaris barang & zoom perabot
 

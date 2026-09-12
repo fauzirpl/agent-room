@@ -61,12 +61,21 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   nyata tidak pernah ke sana) tapi rupanya sengaja beda: daun metal dengan
   strip hazard kuning-hitam dan gembok gantung, bukan plang huruf. Standby
   mampir 8% tiap memilih tujuan, pulangnya bawa kardus. Bisa diklik.
-- **Musola pojok.** Bukan ruangan berpintu seperti WC/gudang — sisa margin
-  kanan gudang (x640..672) dipakai apa adanya sebagai perabot lantai: rak
-  kecil (mukena, peci, sarung terlipat) di atas sajadah tergelar. Standby
-  mampir 6% tiap memilih tujuan, berpose sholat (diam/hormat/jongkok
-  bergantian) beberapa detik tanpa memudar. `istirahat-sholat-dzuhur` ikut
-  diarahkan ke sini, bukan sekadar mengucap kalimat lalu menghilang konsep.
+- **Musola pojok, selebar satu shaf.** Bukan ruangan berpintu seperti
+  WC/gudang, dan bukan lagi nempel dinding: tempatnya sekarang pojok kanan
+  lantai (x582..670 y172..248), di pita yang sama dengan karpet meja rapat
+  dan sebelah sekat pantri — satu-satunya bidang yang benar-benar luas dan,
+  menurut sapuan piksel seluruh perabot + registri event, benar-benar kosong.
+  Isinya karpet hijau dengan **tiga sajadah berjajar**, rak mukena (mukena,
+  peci, sarung, kitab, sajadah cadangan) dan rak sandal. Karpetnya digambar
+  di lantai seperti karpet meja rapat, jadi yang lewat menutupinya; raknya
+  sengaja pendek supaya tidak pernah menutupi orang yang jalan ke pintu
+  keluar. Penghuninya jadi **jamak**: tiga orang bisa sholat bareng, kartu
+  inventarisnya menyebut `DIPAKAI 2/3` beserta namanya. Standby mampir 8%
+  tiap memilih tujuan, berpose sholat (diam/hormat/jongkok bergantian)
+  beberapa detik tanpa memudar; `istirahat-sholat-dzuhur` diarahkan ke sini
+  juga, dan sejak muat bertiga satu orang lagi menyusul ke sajadah sebelahnya
+  di detik ke-8.
 - **Satpam berpatroli.** Beda bentuk dari WC/gudang/musola: bukan sekali
   jalan-tunggu-pulang, tapi keliling berurutan lewat lima titik yang sudah
   ada (ambang WC, ambang gudang, depan ruang kadis, depan pantri, dekat pintu
@@ -77,6 +86,12 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   diundi sejak lahir — giliran pertama siapa saja, lalu dia didahulukan lagi
   tiap putaran berikutnya, sama seperti arsiparis didahulukan urusan notulen.
   Sesi nyata tidak pernah dipaksa berpatroli.
+- **Dua event lagi dari sisa katalog.** Dus ekspedisi datang: tiga dus jatuh
+  berurutan (gravitasi sungguhan) di depan ruang kadis, dua pegawai
+  mengangkutnya ke dekat lemari arsip — tumpukannya sekali pakai, hilang
+  begitu event selesai, bukan perabot permanen. Senam Jumat: pagi Jumat
+  07-08, seluruh penghuni menganggur berbaris grid dan senam bersama, kalah
+  duluan kalau apel pagi kebetulan sedang berjalan.
 
 ### Diubah
 

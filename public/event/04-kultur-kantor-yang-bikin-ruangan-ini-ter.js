@@ -252,6 +252,121 @@ daftarEvent(
   sortY: 202,
 },
 
+/* Dus kiriman ekspedisi jatuh berurutan di depan bukaan ruang kadis, lalu
+   diangkut dua orang ke dekat lemari arsip. Rancangan aslinya minta
+   tumpukannya PERMANEN (masuk PROPS, bertambah tinggi tiap kejadian); itu
+   dipangkas ke versi sekali pakai (digambar event ini sendiri, hilang begitu
+   event selesai) — permanen berarti RUANGAN.* baru + entri PROPS baru +
+   ikut sapuan golden z-order untuk satu hiasan yang jatuhnya cuma sesekali.
+   Guncangan layarnya pakai MOD.getar yang sudah ada (dipakai genset), bukan
+   mekanisme baru. */
+{
+  id: 'dus-ekspedisi-datang',
+  kelas: 'latar', bobot: B.sedang, cooldown: 1500, durasi: 26,
+  syarat: (S) => S.jam >= 9 && S.jam < 15 && S.orang.filter(bisaDipinjam).length >= 2,
+  perluAktor: true,
+  // y: negatif = masih di udara, 0 = mendarat. mulai: jeda sebelum dus ke-i
+  // mulai jatuh, supaya jatuhnya berurutan bukan serentak.
+  mulai(E) {
+    E.data.dus = [0, 1, 2].map((i) => ({ y: -20, vy: 0, jatuh: false, mulai: i * 0.4, jatuhPada: null }));
+  },
+  tick(E, dt) {
+    let getar = 0;
+    E.data.dus.forEach((d) => {
+      if (!d.jatuh && E.umur >= d.mulai) {
+        d.vy += 400 * dt;
+        d.y += d.vy * dt;
+        if (d.y >= 0) {
+          d.y = 0; d.jatuh = true; d.jatuhPada = E.umur;
+          for (let i = 0; i < 10; i++) spawn('dust', 440, 206);
+        }
+      }
+      if (d.jatuhPada != null) getar = Math.max(getar, Math.max(0, 1 - (E.umur - d.jatuhPada) * 8));
+    });
+    MOD.getar = getar;
+    // Ketiga dus sudah mendarat: dua orang mengangkutnya sekaligus ke arsip.
+    if (!E.data.orang && E.data.dus.every((d) => d.jatuh)) {
+      const dua = pinjamAktor(E, 2);
+      if (dua.length < 2) { E.selesaiCepat = true; return; }
+      E.data.orang = dua;
+      for (const a of dua) {
+        a.doingEvent = 'mengangkut dus ekspedisi';
+        a.bawa = 'kardus';
+        a.laju = 0.65;              // berat, jalannya melambat
+        a.goToXY(90, 150, 'up');
+      }
+    }
+    if (E.data.orang && !E.data.sampai && E.data.orang.every((a) => a.diam)) {
+      E.data.sampai = true;
+      E.data.dusPindah = true;      // tumpukan lama di depan kadis lenyap, muncul di arsip
+      E.data.lapSampai = E.umur + 0.8;
+      for (const a of E.data.orang) { a.bawa = null; a.laju = 1; a.pose = 'angkat'; }   // usap dahi
+    }
+    if (E.data.lapSampai && E.umur > E.data.lapSampai) {
+      E.data.lapSampai = 0;
+      for (const a of E.data.orang) a.pose = null;
+    }
+  },
+  gambarProp(E) {
+    if (!E.data.dusPindah) {
+      E.data.dus.forEach((d, i) => { if (d.jatuh || d.y > -20) box3(440 + i * 3, 206 + d.y, 12, 7, 2, '#b98d5e'); });
+    } else {
+      box3(88, 150, 12, 18, 2, '#b98d5e');
+    }
+  },
+  sortY: 206,
+},
+
+/* Senam pagi Jumat: satu-satunya "barisan" selain apel yang mengumpulkan
+   seluruh penghuni menganggur, tapi sengaja tidak memakai FORMASI_APEL milik
+   apel (itu punya aturannya sendiri: dikunci sekali sehari lewat
+   localStorage, jalan walau ?event=0). Ini event acak biasa yang kalah
+   duluan kalau apel kebetulan masih berjalan (syarat `!apel`) — apel yang
+   menang, sama seperti disebut di rapat. Interlock "tool call nyata
+   memberangkatkan" tidak perlu dibangun: handle() memanggil goTo() yang
+   menimpa path siapa pun, jadi otomatis berlaku untuk event apa saja. */
+{
+  id: 'senam-jumat',
+  kelas: 'panggung', bobot: B.jarang, cooldown: 72000, durasi: 70,
+  syarat: (S) => !apel && new Date().getDay() === 5 && S.jam >= 7 && S.jam < 8,
+  perluAktor: true,
+  mulai(E, S) {
+    const orang = S.orang.filter(bisaDipinjam);
+    if (!orang.length) { E.selesaiCepat = true; return; }
+    const [instruktur, ...peserta] = orang;
+    E.data.instruktur = instruktur;
+    E.data.orang = [];
+    const taruh = (a, x, y) => {
+      a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+      a.doingEvent = 'senam jumat';
+      a.pose = 'tepuk';            // lengan naik-turun bergantian, sudah ada
+      a.goToXY(x, y, 'down');
+      E.data.orang.push(a);
+    };
+    taruh(instruktur, 246, 254);
+    peserta.forEach((a, i) => {
+      const kolom = i % 3, baris = (i / 3) | 0;
+      taruh(a, 172 + kolom * 26, 280 + baris * 20);
+    });
+  },
+  tick(E) {
+    const orang = E.data.orang.filter((a) => a.eventKerja === E);
+    if (!orang.length) { E.selesaiCepat = true; return; }
+    for (const a of orang) {
+      if (!a.diam) continue;
+      if (a.slotY == null) a.slotY = a.y;   // posisi mendarat, dicatat sekali
+      const amp = a === E.data.instruktur ? 4 : 2;   // instruktur gerakannya lebih besar
+      a.y = a.slotY + Math.sin(a.phase * 5) * amp;
+    }
+  },
+  selesai(E) {
+    for (const a of (E.data.orang || [])) {
+      a.pose = null;
+      if (a.slotY != null) { a.y = a.slotY; a.slotY = null; }
+    }
+  },
+},
+
 {
   id: 'ojol-datang-bawa-pesanan',
   babak: { istirahat: 2.5, apel: 0 },   // pengali bobot per babak hari kerja (S.babak)
