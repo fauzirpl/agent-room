@@ -204,6 +204,22 @@ const GUDANG_LAMA_MIN = 5000, GUDANG_LAMA_MAX = 11000;   // ambil ATK lebih cepa
 const GUDANG_BUKA_MS = 900, GUDANG_PUDAR_MS = 400;
 const gudangTerisi = () => !!gudangKeadaan.penghuni && gudangKeadaan.penghuni.tugasGudang !== 'pergi';
 
+/* Musola pojok — BUKAN ruangan berpintu seperti WC/gudang, sengaja: sisa
+   margin kanan gudang (x640..672, 32px yang tidak dipakai kusen) dimanfaatkan
+   apa adanya sebagai perabot lantai (rak kecil + sajadah tergelar), tanpa
+   dinding baru dan tanpa memudar masuk/keluar — orangnya kelihatan terus,
+   cuma diam menghadap dinding beberapa detik. Rutinitasnya tetap sekelas
+   WC/gudang (class Standby, bukan event acak), dan `istirahat-sholat-dzuhur`
+   (public/event/20-...) diarahkan ke sini juga, bukan sekadar mengucap
+   kalimat lalu menghilang konsep. */
+const MUSOLA = {
+  x: 644, y: 120, w: 26, h: 42,        // dasar y162: rak (y120..132) + sajadah (y144..162)
+  titikX: 657, titikY: 153,            // berdiri di atas sajadah, menghadap dinding ('up')
+};
+const musolaKeadaan = { penghuni: null, kunjungan: 0 };   // tidak ada bukaSampai: tidak ada daun pintu
+const MUSOLA_PELUANG = 0.06;
+const MUSOLA_LAMA_MIN = 6000, MUSOLA_LAMA_MAX = 12000;
+
 /* Perabot pengisi ruang kosong. Letaknya TIDAK ditebak: diambil dari peta
    keterisian ruangan — piksel dinding+lantai polos dibandingkan dengan
    piksel semua PROPS, lalu ditumpangi 65.280 rute route() yang sungguhan
@@ -2259,6 +2275,29 @@ function drawDusGudang() {
   r(gx - 8, 106, 7, 1, '#d9cba8');
   r(gx + 2, 109, 6, 4, '#b98d5e');
   r(gx + 2, 109, 6, 1, '#d9cba8');
+}
+
+// Musola pojok: rak kecil (mukena, peci, sarung terlipat) menempel dinding
+// di atas sajadah yang tergelar di lantai — lihat komentar MUSOLA.
+function drawMusola() {
+  const { x, y, w, h } = MUSOLA;
+  r(x + 3, y + 7, 10, 6, '#f2ede0');                    // mukena terlipat
+  r(x + 3, y + 7, 10, 1, '#ffffff');
+  r(x + 5, y + 9, 6, 2, '#b06ea0');                      // renda ungu
+  r(x + w - 8, y + 8, 5, 5, '#20242c');                  // peci hitam
+  r(x + w - 8, y + 8, 5, 1, '#3a3f45');
+  r(x + 2, y + 13, w - 4, 2, '#8a6844');                 // papan rak
+  r(x + 4, y + 16, 10, 6, '#3e6b4f');                     // sarung kotak-kotak
+  for (let i = 0; i < 3; i++) r(x + 4 + i * 3, y + 17, 1, 4, '#2c5c38');
+  // sajadah tergelar, corak lengkung mihrab sederhana
+  const sy = y + h - 18;
+  r(x + 1, sy, w - 2, 18, '#7a2020');
+  r(x + 1, sy, w - 2, 2, '#c9a03a');
+  r(x + 1, sy + 16, w - 2, 2, '#c9a03a');
+  for (let i = 0; i < 6; i++) {
+    const iw = 6 - Math.abs(i - 2);
+    r(x + w / 2 - iw / 2, sy + 3 + i, iw, 1, '#c9a03a');
+  }
 }
 
 /* ========================================================== ruang kadis ===
@@ -4324,6 +4363,7 @@ const PROPS = [
   { sortY: 214, station: null,     draw: drawSanitizer },
   { sortY: 348, station: null,     draw: drawPenghancur },
   { sortY: 333, station: null,     draw: drawKursiTambahan },
+  { sortY: MUSOLA.y + MUSOLA.h, station: null, draw: drawMusola },
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -6661,6 +6701,7 @@ class Standby extends Agent {
     if (this.tugasWC) { this.tickWC(); return; }
     if (this.tugasKursi) { this.tickKursi(); return; }
     if (this.tugasGudang) { this.tickGudang(); return; }
+    if (this.tugasMusola) { this.tickMusola(); return; }
     // eventKerja: sedang dipinjam event acak / apel pagi — jangan mondar-mandir
     // di tengah adegan; lepaskanAktor() mengosongkannya lagi begitu selesai.
     if (!this.eventKerja && !this.path.length && now > this.nextMove) {
@@ -6682,6 +6723,9 @@ class Standby extends Agent {
       } else if (u >= WC_PELUANG + FOTOKOPI_PELUANG
           && u < WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG
           && !gudangKeadaan.penghuni) this.keGudang();
+      else if (u >= WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG
+          && u < WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG + MUSOLA_PELUANG
+          && !musolaKeadaan.penghuni) this.keMusola();
       else this.goTo(MAMPIR[(Math.random() * MAMPIR.length) | 0]);
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
@@ -6794,6 +6838,45 @@ class Standby extends Agent {
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
   }
+  /* Musola: tidak ada daun pintu, jadi tidak ada fase memudar seperti WC/
+     gudang — begitu sampai di atas sajadah dia cuma diam menghadap dinding
+     beberapa detik, pose berganti tiap 2 detik (diam -> hormat -> jongkok,
+     berulang) sebagai isyarat "sedang sholat" tanpa perlu pose baru khusus. */
+  keMusola() {
+    musolaKeadaan.penghuni = this;
+    musolaKeadaan.kunjungan++;
+    this.tugasMusola = 'pergi';
+    this.adaTugas = true;
+    this.betah = true;
+    this.doingEvent = 'sholat sebentar';
+    this.goToXY(MUSOLA.titikX, MUSOLA.titikY, 'up');
+  }
+  tickMusola() {
+    if (this.eventKerja) { this.selesaiMusola(false); return; }
+    if (this.tugasMusola === 'pergi') {
+      if (!this.path.length) {
+        this.tugasMusola = 'sholat';
+        this.musolaT = now;
+        this.musolaSampai = now + MUSOLA_LAMA_MIN + Math.random() * (MUSOLA_LAMA_MAX - MUSOLA_LAMA_MIN);
+      }
+    } else if (this.tugasMusola === 'sholat') {
+      if (now > this.musolaSampai) { this.pose = null; this.selesaiMusola(true); return; }
+      const fase = Math.floor((now - this.musolaT) / 2000) % 3;
+      this.pose = fase === 1 ? 'hormat' : fase === 2 ? 'jongkok' : null;
+    }
+  }
+  selesaiMusola(lanjut) {
+    this.tugasMusola = '';
+    this.adaTugas = false;
+    this.pose = null;
+    if (this.eventKerja) this.betahAsli = false;
+    else { this.betah = false; this.doingEvent = ''; }
+    if (musolaKeadaan.penghuni === this) musolaKeadaan.penghuni = null;
+    if (lanjut) {
+      this.goTo(MAMPIR[(Math.random() * MAMPIR.length) | 0]);
+      this.nextMove = now + 11000 + Math.random() * 15000;
+    }
+  }
   /* Kursi kurang: kantor padat lama (ramaiSejak), kursi jauh terakhir diseret
      ke celah kosong baris meja kerja (KURSI_TAMBAHAN) supaya pegawai yang
      kelebihan tetap dapat tempat berdiri yang jelas, bukan berimpit. Kembali
@@ -6867,6 +6950,7 @@ class Standby extends Agent {
     if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
     if (wcKeadaan.penghuni === this) wcKeadaan.penghuni = null;   // ...dan tidak boleh mengunci WC
     if (gudangKeadaan.penghuni === this) gudangKeadaan.penghuni = null;   // ...atau gudang
+    if (musolaKeadaan.penghuni === this) musolaKeadaan.penghuni = null;   // ...atau musola
     if (petugasKursi === this) {
       // dihapus jagaPopulasi() persis waktu menyeret: batalkan, jangan sampai
       // kursinya lenyap dari meja rapat tanpa pernah muncul di baris meja kerja.
@@ -9308,6 +9392,14 @@ function daftarBarang() {
           ['dipakai', (gudangKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
         ];
       } },
+    { id: 'musola', nama: 'Musola Pojok', kode: '3.05.01.04.021', nup: 4, tahun: 2013,
+      lokasi: 'sisa margin kanan gudang, bentang pilar kedua', kotak: k(MUSOLA.x, MUSOLA.y, MUSOLA.w, MUSOLA.h),
+      uraian: 'rak kecil (mukena, peci, sarung terlipat) di atas sajadah tergelar',
+      kondisi: () => ['B', musolaKeadaan.penghuni ? 'DIPAKAI' : 'KOSONG'],
+      isi: () => [
+        musolaKeadaan.penghuni ? ['sedang dipakai', esc(namaPendek(musolaKeadaan.penghuni))] : ['sedang dipakai', '—'],
+        ['dipakai', (musolaKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
+      ] },
     { id: 'arsip', nama: 'Lemari Arsip Kayu', kode: '3.05.01.04.003', nup: 17, tahun: 2012,
       lokasi: 'dinding utara', kotak: k(24, 28, 60, 92), stasiun: 'read', stiker: 'arsip',
       uraian: 'rak terbuka berisi ordner warna-warni dan tumpukan map',

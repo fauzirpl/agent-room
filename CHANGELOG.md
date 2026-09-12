@@ -61,6 +61,12 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   nyata tidak pernah ke sana) tapi rupanya sengaja beda: daun metal dengan
   strip hazard kuning-hitam dan gembok gantung, bukan plang huruf. Standby
   mampir 8% tiap memilih tujuan, pulangnya bawa kardus. Bisa diklik.
+- **Musola pojok.** Bukan ruangan berpintu seperti WC/gudang — sisa margin
+  kanan gudang (x640..672) dipakai apa adanya sebagai perabot lantai: rak
+  kecil (mukena, peci, sarung terlipat) di atas sajadah tergelar. Standby
+  mampir 6% tiap memilih tujuan, berpose sholat (diam/hormat/jongkok
+  bergantian) beberapa detik tanpa memudar. `istirahat-sholat-dzuhur` ikut
+  diarahkan ke sini, bukan sekadar mengucap kalimat lalu menghilang konsep.
 
 ### Diubah
 

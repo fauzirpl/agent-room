@@ -554,6 +554,30 @@ ulang dari `drawBawaan`, bukan bawaan baru). Bisa diklik seperti semua
 perabot lain: zoom + kartu inventaris, kode BMN `1.03.01.01.019` satu
 keluarga dengan pintu WC (`1.03.01.01.014`).
 
+### Musola pojok — perabot, bukan ruangan berpintu
+
+Ruangan ketiga sengaja **bukan** bukaan berdinding seperti WC/gudang:
+lahan yang sudah dilebarkan dua kali dipakai dulu untuk gudang, dan sisa
+margin kanannya (x640..672, 32px yang tidak dipakai kusen gudang) cukup
+untuk perabot lantai — jadi dimanfaatkan apa adanya, tanpa dinding baru dan
+tanpa pintu ketiga. `MUSOLA` di kepala `room.js`: rak kecil menempel dinding
+(mukena, peci, sarung terlipat) di atas sajadah bercorak lengkung mihrab
+sederhana yang tergelar di lantai, x644..670 y120..162.
+
+Karena tidak ada daun pintu, tidak ada fase memudar seperti WC/gudang:
+standby yang mampir (`keMusola`/`tickMusola`/`selesaiMusola`, 6% tiap
+memilih tujuan mondar-mandir, 6–12 detik) tetap kelihatan, cuma berdiri
+diam di atas sajadah menghadap dinding. Isyarat "sedang sholat"-nya pose
+bergantian tiap 2 detik (diam → hormat → jongkok, berulang) — pose yang
+sudah ada (dipakai apel pagi & penghindar kucing), bukan pose baru.
+
+`istirahat-sholat-dzuhur` (gelombang 2 lanjutan, jam 12–12.30 dan
+15.15–15.45) ikut diarahkan ke sini: dulu pegawainya cuma mengucap "Duluan
+ya, titip meja" lalu menghilang dari konsep (`MOD.hening` berkedip mewakili
+kantor yang mengosong), sekarang dia beneran jalan ke musola dan berpose
+sholat di sana selama event berjalan — `MOD.hening` dan pegawai kedua yang
+"ngopi sambil menunggu" (`E.data.kopi`) tidak berubah.
+
 ## Kartu inventaris barang & zoom perabot
 
 Semua perabot bisa diklik. Kamera membidik barangnya — rasanya sama dengan
