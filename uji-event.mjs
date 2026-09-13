@@ -491,8 +491,18 @@ export function buatSatuOrang(ctx, jenis) {
     path: [],
     busyUntil: 0,
     // dibedakan tiap orang supaya pinjamAktor() (urut arrivedAt, paling lama
-    // diam didahulukan) deterministik, bukan tabrakan nilai sama
-    arrivedAt: msBeku - idOrangPalsu * 60000,
+    // diam didahulukan) deterministik, bukan tabrakan nilai sama.
+    //
+    // SEBASIS `now` room.js (performance.now(): milidetik sejak halaman
+    // dimuat), BUKAN epoch msBeku, dan lastEvent WAJIB ada — constructor Agent
+    // asli memasang keduanya = now. Dulu arrivedAt ber-epoch (±1,7e12) dan
+    // lastEvent tidak ada, jadi saringan "sudah diam 12 detik" milik
+    // merenung-depan-kipas (`now - Math.max(o.lastEvent, o.arrivedAt)`)
+    // jadi NaN dan tidak pernah benar: eventnya terbaca mati di audit
+    // nyalakanEvent(), padahal di ruangan sungguhan menyala. Negatif = orang
+    // ini sudah diam semenit per urutan sebelum `now` sandbox mana pun.
+    arrivedAt: -idOrangPalsu * 60000,
+    lastEvent: -idOrangPalsu * 60000,
     adaTugas: false,
     betahAsli: false,
     eventKerja: null,
@@ -780,6 +790,85 @@ export function ujiSatuEvent(ctx, def, pristine) {
   return { id: def.id, def, syarat, smoke, temuan, gagal: temuan.gagal.length > 0 };
 }
 
+/* ------------------------------------------------- gerbang perluAktor asli --- *
+ * Smoke di atas memanggil mulai()/tick()/selesai() LANGSUNG, jadi tidak pernah
+ * lewat gerbang di nyalakanEvent(): `def.perluAktor && !E.aktor.length` tepat
+ * sesudah mulai() → batal, cooldown 20 s. Event yang baru meminjam pemerannya
+ * di tick() karenanya tidak pernah menyala di ruangan sungguhan sementara
+ * smoke-nya hijau. Sudah dua kali ketahuan begitu: dus-ekspedisi-datang dan
+ * bocor-baru-di-atas-arsip.
+ *
+ * ujiBisaHidup() menyalakan satu event lewat nyalakanEvent() ASLI di
+ * serangkaian suasana dan mengembalikan salah satu dari tiga status:
+ *   'hidup'        menyala di sedikitnya satu suasana yang syarat()-nya benar
+ *   'mati'         syarat() pernah benar, tapi tidak sekali pun menyala
+ *   'takTernilai'  syarat() tidak pernah benar — fixture belum bisa membuatnya
+ *
+ * Suasananya sengaja lebih kaya dari JAM_MATRIKS: ada jam 10 dan 16
+ * (dus-ekspedisi-datang butuh 9..15, matahari-silau-monitor 15,5..17), dan
+ * varian "stasiun terisi" yang menaruh satu pegawai BEKERJA di tiap stasiun
+ * tool — pemeranStasiun() cuma meminjam dari S.bekerja di stasiun itu, dan
+ * fixture biasa menaruh semua yang bekerja di 'think' — plus satu penganggur
+ * di MEJA_POJOK (wifi-sudut-lemah). Tanpa varian itu enam event pemeranStasiun
+ * cuma bisa dilaporkan tak ternilai, bukan dibuktikan hidup. */
+const JAM_GERBANG = [3, 8, 10, 12, 16, 17, 20, 23];
+const STASIUN_TOOL = ['read', 'search', 'web', 'edit', 'server'];
+
+function suasanaGerbang(ctx, pristine, { jam, cuaca, stasiun }) {
+  resetRuangan(ctx, pristine);
+  const S = buatS(ctx, { jam, hujan: cuaca.hujan, petir: cuaca.petir, ramai: true });
+  if (!stasiun) return S;
+  const { STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y } = ctx.__jembatan__;
+  for (const st of STASIUN_TOOL) {
+    const o = buatSatuOrang(ctx, 'kerja');
+    o.station = st;
+    o.x = STATIONS[st].x; o.y = STATIONS[st].y;
+    o.face = o.hadap = STATIONS[st].face;
+    S.orang.push(o);
+  }
+  const pojok = MEJA_KERJA_X.indexOf(Math.max(...MEJA_KERJA_X));
+  const diMeja = S.orang.find((o) => o.station === 'think' && o.state === 'idle');
+  diMeja.slotIdx = pojok;
+  diMeja.x = MEJA_KERJA_X[pojok]; diMeja.y = MEJA_KERJA_Y;
+  // turunan S dihitung ulang persis seperti potretRuangan()
+  S.standby = S.orang.length;
+  S.nganggur = S.orang.filter(ctx.bisaDipinjam);
+  S.bekerja = S.orang.filter((o) => o.state === 'work');
+  S.stasiunAktif = new Set(S.bekerja.map((o) => o.station));
+  return S;
+}
+
+export function ujiBisaHidup(ctx, pristine, def, { percobaan = 3 } = {}) {
+  const { eventHidup, cooldownSampai } = ctx.__jembatan__;
+  let syaratBenar = 0, hasil = null;
+  cari:
+  for (const stasiun of [false, true]) {
+    for (const jam of JAM_GERBANG) {
+      for (const cuaca of HUJAN_MATRIKS) {
+        // diulang: sebagian syarat() dan mulai() memakai Math.random()
+        for (let i = 0; i < percobaan; i++) {
+          const S = suasanaGerbang(ctx, pristine, { jam, cuaca, stasiun });
+          let benar = false;
+          try { benar = def.syarat ? !!def.syarat(S) : true; } catch (e) { benar = false; }
+          if (!benar) continue;
+          syaratBenar++;
+          eventHidup.length = 0; cooldownSampai.clear();
+          const hidup = ctx.nyalakanEvent(def);
+          const E = eventHidup.find((x) => x.def === def);
+          if (E) ctx.matikanEvent(E, true);
+          eventHidup.length = 0; cooldownSampai.clear();
+          if (hidup) {
+            hasil = { status: 'hidup', syaratBenar, suasana: `jam ${jam}, ${cuaca.label}${stasiun ? ', stasiun terisi' : ''}` };
+            break cari;
+          }
+        }
+      }
+    }
+  }
+  resetRuangan(ctx, pristine);
+  return hasil || { status: syaratBenar ? 'mati' : 'takTernilai', syaratBenar };
+}
+
 /* ------------------------------------------------------------ penjadwal --- *
  * Aturan bentrok/panggung/aktor diuji lewat fungsi ASLI room.js — bentrok(),
  * nyalakanEvent(), matikanEvent(), pinjamAktor(), lepaskanAktor(),
@@ -884,6 +973,55 @@ export function ujiPenjadwal(ctx, pristine) {
     harus(ctx.nyalakanEvent(A) === true, 'dengan pemain tersedia seharusnya jalan');
     harus(eventHidup[0].aktor.length === 1, 'seharusnya meminjam tepat 1 aktor');
     ctx.matikanEvent(eventHidup[0], true);
+  });
+
+  /* Kontrol untuk penilai di bawahnya. Tanpa ini, ujiBisaHidup() yang diam-diam
+     selalu menjawab 'hidup' (misalnya karena suasananya tidak pernah membuat
+     syarat benar lalu jatuh ke lapis tanpa-syarat yang salah) akan membuat uji
+     registri hijau selamanya. */
+  uji('kontrol gerbang perluAktor: pinjam di tick() tertangkap, pinjam di mulai() lolos', () => {
+    bersih();
+    const nilai = (d) => ujiBisaHidup(ctx, pristine, d, { percobaan: 1 }).status;
+    const TELAT = { id: 'uji-pinjam-telat', kelas: 'latar', durasi: 5, perluAktor: true,
+      mulai(E) { E.data.jeda = 1; }, tick(E) { if (!E.aktor.length) ctx.pinjamAktor(E, 1); } };
+    const TEPAT = { id: 'uji-pinjam-tepat', kelas: 'latar', durasi: 5, perluAktor: true,
+      mulai(E) { ctx.pinjamAktor(E, 1); } };
+    const STASIUN = { id: 'uji-pinjam-stasiun', kelas: 'latar', durasi: 5, perluAktor: true,
+      syarat: (S) => S.stasiunAktif.has('edit'), mulai(E) { ctx.pemeranStasiun(E, 'edit'); } };
+    const MUSTAHIL = { id: 'uji-syarat-mustahil', kelas: 'latar', durasi: 5, perluAktor: true,
+      syarat: () => false, mulai(E) { ctx.pinjamAktor(E, 1); } };
+    harus(nilai(TELAT) === 'mati', `event yang meminjam di tick() seharusnya 'mati', dapat '${nilai(TELAT)}'`);
+    harus(nilai(TEPAT) === 'hidup', `event yang meminjam di mulai() seharusnya 'hidup', dapat '${nilai(TEPAT)}'`);
+    harus(nilai(STASIUN) === 'hidup', 'varian "stasiun terisi" hilang: pemeranStasiun() tidak pernah dapat pegawai bekerja');
+    harus(nilai(MUSTAHIL) === 'takTernilai', `syarat yang tidak pernah benar seharusnya 'takTernilai', dapat '${nilai(MUSTAHIL)}'`);
+    harus(eventHidup.length === 0, 'penilai meninggalkan event di eventHidup');
+  });
+
+  /* Dua lapis. Lapis pertama: suasana yang membuat syarat() benar, lalu
+     nyalakanEvent() asli. Lapis kedua, untuk yang syaratnya tidak bisa dibuat
+     fixture (tanggal Lebaran, RUANGAN.emberIsi >= 88, toolCount, rapatAktif):
+     syarat dilewati persis seperti ?event=<id> lalu dinyalakan lagi — gerbang
+     perluAktor tidak peduli syarat, jadi event yang meminjam di tick() tetap
+     'mati' di sini. Kalau suatu hari mulai() sebuah event SAH butuh keadaan
+     yang dijamin syarat()-nya, tambahkan keadaan itu ke suasanaGerbang(),
+     jangan dikecualikan. */
+  uji('tiap event perluAktor di registri benar-benar bisa menyala lewat nyalakanEvent() asli', () => {
+    const mati = [];
+    let hidup = 0, lewatPaksa = 0;
+    for (const d of EVENT_ACAK) {
+      if (d.perluAktor !== true) continue;
+      let h = ujiBisaHidup(ctx, pristine, d);
+      if (h.status === 'takTernilai') {
+        h = ujiBisaHidup(ctx, pristine, { ...d, syarat: undefined }, { percobaan: 2 });
+        if (h.status === 'hidup') { lewatPaksa++; continue; }
+        mati.push(`${d.id} (syarat tak bisa dibuat benar, dan tanpa syarat pun tidak menyala)`);
+        continue;
+      }
+      if (h.status === 'hidup') hidup++;
+      else mati.push(`${d.id} (syarat benar ${h.syaratBenar}×, tidak sekali pun menyala)`);
+    }
+    harus(hidup + lewatPaksa > 0, 'tidak ada satu pun event perluAktor yang dinilai');
+    harus(mati.length === 0, 'batal di gerbang perluAktor — pinjam pemeran di mulai(), bukan di tick(): ' + mati.join('; '));
   });
 
   uji('aktor yang dipinjam satu event tidak bisa dipinjam event lain; yang bekerja tidak pernah', () => {

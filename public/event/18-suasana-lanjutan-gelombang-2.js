@@ -83,7 +83,10 @@ daftarEvent(
   },
   tick(E, dt, S) {
     const a = E.data.a;
-    if (!a) return;
+    // E.data.a itu potret. Yang sudah direbut tool call sungguhan tidak boleh
+    // dibekukan 10 detik, apalagi dipasangi state 'work' + busyUntil palsu di
+    // detik 11 — itu menimpa jatah kerja tool call-nya sendiri.
+    if (!masihMain(E, a)) return;
     if (a.diam && !E.data.diam) { E.data.diam = true; a.bekuSampai = now + 10000; a.pose = 'diam'; }
     if (E.data.diam) {
       for (const o of S.orang) {
