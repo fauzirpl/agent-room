@@ -489,5 +489,32 @@ console.log(tebal('\nPrinter memakai kertas'));
   ok('tool call di stasiun lain tidak memakai kertas', RP.kertasPrinter === 19, `sisa ${RP.kertasPrinter}`);
 }
 
+/* ------------------------------------------------ pemakaian stasiun --- */
+console.log(tebal('\nPemakaian stasiun: perabot aus karena kerja sungguhan'));
+{
+  const U = muatKonteks();
+  const HU = U.__jembatan__;
+  HU.setNow(1_000_000);                              // now=0 bawaan sandbox = selalu "masih cooldown"
+  const { PEMAKAIAN_STASIUN, pakaiStasiun } = U.pemakaianRujukan();
+  const nyasar = Object.entries(PEMAKAIAN_STASIUN).filter(([, q]) => !HU.eventById.has(q.event)).map(([st, q]) => `${st}: ${q.event}`);
+  ok('tiap pemicu menunjuk event yang terdaftar', nyasar.length === 0, nyasar.join(', ') || Object.keys(PEMAKAIAN_STASIUN).join(', '));
+  const hidup = (id) => HU.eventHidup.some((e) => e.def.id === id);
+  const live = Date.now() + 60000;
+  let seq = 0;
+  const call = (tool, ts) => U.handle({ id: ++seq, ts, kind: 'pre', session: 'uji-pakai', tool, label: 'uji', ok: true, cwd: 'proyek-uji' });
+  const { tiap, event } = PEMAKAIAN_STASIUN.search;
+  for (let i = 0; i < tiap - 1; i++) call('Grep', live + i);
+  ok(`${tiap - 1} Grep: ${event} belum menyala`, !hidup(event) && pakaiStasiun.search === tiap - 1, `hitungan ${pakaiStasiun.search}`);
+  for (let i = 0; i < 5; i++) call('Grep', 1000 + i);
+  ok('event lama yang diputar ulang saat tersambung tidak dihitung', pakaiStasiun.search === tiap - 1, `hitungan ${pakaiStasiun.search}`);
+  call('Grep', live + 100);
+  ok(`Grep ke-${tiap}: ${event} menyala, hitungannya kembali nol`, hidup(event) && pakaiStasiun.search === 0, `hitungan ${pakaiStasiun.search}`);
+  for (let i = 0; i < tiap + 3; i++) call('Grep', live + 200 + i);
+  ok('pemicu yang ditolak (event-nya masih hidup) tidak membuang hitungan',
+    pakaiStasiun.search === tiap + 3 && HU.eventHidup.filter((e) => e.def.id === event).length === 1, `hitungan ${pakaiStasiun.search}`);
+  call('Read', live + 500);
+  ok('tiap stasiun dihitung sendiri', pakaiStasiun.read === 1 && pakaiStasiun.search === tiap + 3);
+}
+
 console.log('\n' + (gagal ? merah(`GAGAL ${gagal}`) + ` · lulus ${lulus}` : hijau(`LULUS ${lulus} pemeriksaan`)));
 process.exit(gagal ? 1 : 0);

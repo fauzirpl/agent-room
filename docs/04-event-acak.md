@@ -91,6 +91,10 @@ Akibatnya event yang **syaratnya menunggu bekas hilang** (`!RUANGAN.piala`,
 `labelPatch < 10`) wajib punya jalan pulang: masa pakai di `BEKAS_MASA`, atau
 event lain yang mengembalikan bekasnya. Tanpa itu event-nya menyala sekali lalu
 mati selamanya — `uji-bekas.mjs` merah dan menyebut field serta event-nya.
+Event juga bisa dipicu **pemakaian sungguhan**, bukan dadu: daftarkan di
+`PEMAKAIAN_STASIUN` (`room.js`) bersama stasiun dan jumlah tool call-nya.
+`picuEvent` menyalakannya tanpa memanggil `syarat()`, jadi `mulai()` event itu
+harus aman dinyalakan kapan saja.
 
 Objek `S` yang diterima `syarat()`/`mulai()`/`tick()` — potret ruangan dari
 `potretRuangan()` — sejak ini membawa **fakta sesi**, bukan cuma jam, lampu,

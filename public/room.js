@@ -10423,6 +10423,8 @@ function handle(ev) {
       if (p.station !== st) p.goTo(st);
       else if (!p.path.length) p.state = 'work';
       p.say(esc(v) + (o ? ' <b>' + esc(o) + '</b>' : ''));
+      // sesudah goTo: event yang dipicu (laci-arsip-macet) mencari pelakunya lewat station
+      if (ev.ts > PRINTER_SEJAK) catatPemakaianStasiun(st);   // perabot aus karena kerja sungguhan
       // dua tool yang menahan sesinya sampai kamu menjawab membawa isi
       // pertanyaan/rencananya sendiri — itu yang naik ke modal
       if (ev.tanya) kabarMasuk(ev, a, ev.tanya.jenis === 'rencana' ? 'rencana' : 'tanya');
@@ -14124,6 +14126,38 @@ function pakaiPrinter() {
   RUANGAN.toner = Math.max(0, Math.round((RUANGAN.toner - PRINTER_TONER_PER_LEMBAR) * 1000) / 1000);
   return true;
 }
+
+/* Pemakaian stasiun: perabot yang aus karena KERJA SUNGGUHAN, bukan karena
+   dadu. Pola yang sama dengan hentakkanStempel (25 hentakan -> tinta kering)
+   dan pakaiPrinter (kertas habis -> stok-kertas-habis): tiap tool call nyata
+   yang jatuh ke stasiun menambah hitungannya, dan begitu mencapai `tiap`,
+   event yang cocok dipicu. Sesi yang seharian nge-grep membuat laci filing
+   macet; yang sibuk git membuat rak server kepanasan.
+
+   picuEvent TANPA abaikanCooldown dan tanpa syarat(): sesi yang sangat sibuk
+   tidak membuat event yang sama menyala beruntun, dan mulai() event di sini
+   memang aman dinyalakan kapan saja. Kalau pemicunya ditolak (cooldown,
+   bentrok, masih hidup, tidak ada pemeran), hitungannya TIDAK direset —
+   dicoba lagi di call berikutnya, jadi hutangnya tidak hilang. Event lama
+   yang diputar ulang server saat halaman tersambung tidak dihitung
+   (PRINTER_SEJAK, sama seperti printer). Hitungannya hidup per halaman. */
+const PEMAKAIAN_STASIUN = {
+  search: { tiap: 30, event: 'laci-arsip-macet' },       // laci filing dibuka-tutup puluhan kali
+  read:   { tiap: 40, event: 'arsip-hilang-satu-map' },  // makin sering dibaca, makin mungkin ada yang salah taruh
+  server: { tiap: 20, event: 'rak-server-kepanasan' },   // perintah git beruntun (stationFor: segmenGit)
+  rapat:  { tiap: 12, event: 'tumpahan-kopi-rapat' },    // delegasi panjang, kopinya keburu tumpah
+};
+const pakaiStasiun = Object.create(null);   // stasiun -> call nyata sejak pemicu terakhir
+// Dipanggil handle() tiap tool call nyata. Nama event yang dipicu, atau null.
+function catatPemakaianStasiun(st) {
+  const p = PEMAKAIAN_STASIUN[st];
+  if (!p) return null;
+  pakaiStasiun[st] = (pakaiStasiun[st] || 0) + 1;
+  if (pakaiStasiun[st] < p.tiap || eventHidup.some((e) => e.def.id === p.event) || !picuEvent(p.event)) return null;
+  pakaiStasiun[st] = 0;
+  return p.event;
+}
+function pemakaianRujukan() { return { PEMAKAIAN_STASIUN, pakaiStasiun }; }
 
 /* ------------------------------------------------- buku riwayat kantor ---
    Sejak bekas bertahan saat muat ulang, kantor punya riwayat — tapi riwayat

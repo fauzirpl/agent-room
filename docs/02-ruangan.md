@@ -774,6 +774,17 @@ kemudian ada yang bangun mengambil rim. Server memutar ulang sampai 60 event
 terakhir tiap halaman tersambung; call yang lebih tua dari halaman itu sudah
 dicetak halaman sebelumnya, jadi tidak memakai kertas dua kali.
 
+Printer bukan satu-satunya yang aus karena kerja sungguhan. `PEMAKAIAN_STASIUN`
+di `room.js` menghitung tool call nyata per stasiun dan memicu event yang cocok
+begitu hitungannya penuh: **30 Grep** membuat laci filing kabinet macet, **40
+Read** membuat satu map arsip hilang dan dicari, **20 perintah git** membuat rak
+server kepanasan, **12 delegasi** (Task/Agent) di meja rapat membuat kopinya
+tumpah — melengkapi yang sudah lama ada, tinta stempel yang kering tiap 25
+hentakan Edit. Pemicunya tetap menghormati cooldown; kalau ditolak (cooldown,
+event-nya masih jalan, tidak ada yang bisa dipinjam), hitungannya tidak dibuang
+dan dicoba lagi di call berikutnya. Event yang diputar ulang server saat
+halaman tersambung tidak dihitung.
+
 Masa pakainya bisa dilihat. Buku riwayat 📜 dibuka dengan bagian **Sedang
 menua**: tiap bekas bermasa pakai yang sedang berjalan, sudah berapa hari, dan
 kapan hilang sendiri — yang paling dekat habis di atas ("Kartu inspeksi APAR ·

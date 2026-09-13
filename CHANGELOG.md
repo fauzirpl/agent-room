@@ -145,6 +145,12 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   menumpuk di kanan pintu kalau sudah sesak, tertulis di kartu inventaris
   gudang. Begitu isinya empat, tim penghapusan BMN datang membawa berita acara
   dan mengangkutnya keluar satu per satu.
+- **Perabot aus karena kerja sesi sungguhan.** Tiga puluh Grep membuat laci
+  filing kabinet macet, dua puluh perintah git membuat rak server kepanasan,
+  delegasi panjang di meja rapat membuat kopinya tumpah, dan arsip yang dibaca
+  terus-menerus kehilangan satu map — seperti tinta stempel yang sudah lama
+  kering tiap 25 hentakan. Pemicunya menghormati cooldown dan tidak menghitung
+  event lama yang diputar ulang saat halaman tersambung.
 - **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
   keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
   stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang
