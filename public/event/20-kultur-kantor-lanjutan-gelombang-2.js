@@ -387,26 +387,10 @@ daftarEvent(
   syarat: (S) => (S.jam > 12 && S.jam < 12.5) || (S.jam > 15.25 && S.jam < 15.75),
   mulai(E, S) {
     const a = S.orang.find((o) => bisaDipinjam(o));
-    if (!a) return;
-    a.say('Duluan ya, titip meja');
-    // Sejak musola ada (public/room.js, sisa margin kanan gudang): dia
-    // beneran jalan ke sana, bukan sekadar mengucap lalu menghilang konsep.
-    // Dipinjam manual (bukan pinjamAktor) karena cuma satu orang tertentu
-    // yang dipilih di atas, sama seperti pemeranDekat.
-    a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
-    a.doingEvent = 'sholat dzuhur';
-    a.goToXY(MUSOLA.titikX, MUSOLA.titikY, 'up');
-    E.data.a = a;
+    if (a) a.say('Duluan ya, titip meja');
   },
   tick(E) {
     MOD.hening = Math.sin(E.umur * 0.3) > 0.3;
-    // Pose sholat: pola sama seperti musola-nya sendiri (keMusola/tickMusola
-    // di class Standby) — diam -> hormat -> jongkok berulang tiap 2 detik,
-    // isyarat "sedang sholat" tanpa pose baru khusus.
-    if (E.data.a && E.data.a.diam) {
-      const fase = Math.floor(E.umur / 2) % 3;
-      E.data.a.pose = fase === 1 ? 'hormat' : fase === 2 ? 'jongkok' : null;
-    }
     if (!E.data.kopi && E.umur > 5) {
       const a = pinjamAktor(E, 1, (o) => o.station !== 'idle');
       if (a.length) { E.data.kopi = a[0]; E.data.kopi.goTo('idle'); }

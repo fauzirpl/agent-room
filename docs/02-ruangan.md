@@ -554,63 +554,54 @@ ulang dari `drawBawaan`, bukan bawaan baru). Bisa diklik seperti semua
 perabot lain: zoom + kartu inventaris, kode BMN `1.03.01.01.019` satu
 keluarga dengan pintu WC (`1.03.01.01.014`).
 
-### Musola pojok — perabot, bukan ruangan berpintu
+### Pojok baca ASN — perabot, bukan ruangan berpintu
 
-Ruangan ketiga sengaja **bukan** bukaan berdinding seperti WC/gudang: tidak
-ada dinding baru, tidak ada daun pintu, tidak ada fase memudar masuk/keluar.
-`MUSOLA` di kepala `room.js` — **x582..670 y172..248**, karpet hijau selebar
-satu shaf dengan **tiga sajadah** berjajar (lengkung mihrab menghadap atas),
-rak mukena (mukena, peci, sarung, kitab, sajadah cadangan) dan rak sandal
-berdiri di tepi atasnya.
+Sudut literasi di **pojok kanan lantai** (`BACA` di kepala `room.js`,
+x582..670 y172..248), sebelah sekat pantri: rak buku rendah dua susun, rak
+koran & majalah di sebelahnya, karpet anyaman biru, meja lesehan rendah, dan
+**tiga bantal duduk** berjajar. Sengaja **bukan** bukaan berdinding seperti
+WC/gudang — tidak ada dinding baru, tidak ada daun pintu, tidak ada fase
+memudar masuk/keluar.
 
-**Kenapa pindah dari margin kanan gudang.** Versi pertamanya 26x42 di
-x644..670 y120..162 — sisa bidang dinding di kanan kusen gudang, dan lebarnya
-memang tidak bisa lebih dari 30 px: kusen gudang (x608..640) mentok di kiri,
-tepi dunia (`W = 672`) di kanan. Yang benar-benar luas dan benar-benar kosong
-ada di **lantai pojok kanan bawah**, dan tempat itu diukur dengan sapuan yang
-sama seperti bukaan ruang kadis (`PROPS` + `drawFloor` + seluruh
-`gambarProp`/`gambarDinding`/`gambarLantai`/`gambarAtas` registri event, umur
-0..14 detik tiap 0,02): kotak yang dipakai sekarang = **nol piksel** milik
-perabot lama. Batasnya lajur jalan semua, bukan selera: atas `LANE_UP` (164,
-lajur pulang ke `PINTU_X`), bawah `LANE_DOWN` (252), kiri panel kanan sekat
-pantri (`PANTRI.x1` 574) + 8 px, kanan tepi dunia. Pita yang sama di ujung
-KIRI sudah lama dipakai karpet meja rapat — jadi ini bukan pola baru, cuma
-ujung kanannya yang sampai kemarin dibiarkan kosong.
+**Letaknya tidak ditebak.** Kotak itu disapu dengan cara yang sama seperti
+bukaan ruang kadis (`PROPS` + `drawFloor` + seluruh `gambarProp`/
+`gambarDinding`/`gambarLantai`/`gambarAtas` registri event, umur 0..14 detik
+tiap 0,02): **nol piksel** milik perabot lama. Batasnya lajur jalan semua,
+bukan selera: atas `LANE_UP` (164, lajur pulang ke `PINTU_X`), bawah
+`LANE_DOWN` (252), kiri panel kanan sekat pantri (`PANTRI.x1` 574) + 8 px,
+kanan tepi dunia (`W` 672). Pita yang sama di ujung KIRI sudah lama dipakai
+karpet meja rapat — jadi ini bukan pola baru, cuma ujung kanannya yang
+sampai kemarin dibiarkan kosong.
 
-Karpet & sajadahnya digambar di **`drawFloor`** (`gambarKarpetMusola`), persis
-seperti karpet meja rapat: yang berdiri atau lewat di atasnya menutupinya,
-bukan tertutup olehnya. Yang tersisa sebagai prop ber-`sortY` cuma dua rak
-tadi — tingginya sengaja 10..14 px dengan puncak y172, satu piksel pun tidak
-sampai menutupi badan orang yang melintas di lajur pulang (garis kaki 164,
-badan digambar ke atas dari situ).
+Karpet, meja lesehan, dan bantalnya digambar di **`drawFloor`**
+(`gambarKarpetBaca`), persis seperti karpet meja rapat: yang duduk atau lewat
+di atasnya menutupinya, bukan tertutup olehnya. Yang tersisa sebagai prop
+ber-`sortY` cuma dua raknya — dan **tingginya sengaja cuma 12..14 px** dengan
+puncak y172. Bukan selera juga: garis kaki lajur pulang 164 dan badan yang
+lewat digambar KE ATAS dari situ, jadi lemari buku setinggi orang akan
+memakan kaki tiap pegawai yang berjalan ke pintu keluar. Rak rendah juga yang
+benar untuk sudut lesehan — bisa dijangkau sambil duduk.
 
-Karena tidak ada daun pintu, tidak ada fase memudar seperti WC/gudang:
-standby yang mampir (`keMusola`/`tickMusola`/`selesaiMusola`, 8% tiap
-memilih tujuan mondar-mandir, 6–12 detik) tetap kelihatan, cuma berdiri
-diam di atas sajadah menghadap kiblat (arah `'up'`). Isyarat "sedang
-sholat"-nya pose bergantian tiap 2 detik (diam → hormat → jongkok, berulang)
-— pose yang sudah ada (dipakai apel pagi & penghindar kucing), bukan pose
-baru.
+Standby yang mampir (`keBaca`/`tickBaca`/`selesaiBaca`, 8% tiap memilih
+tujuan mondar-mandir, 8–16 detik) duduk lesehan dengan buku di pangkuan:
+pose `'dudukLantai'` + `bawa 'buku'`, dua-duanya pola yang sudah ada, bukan
+pose baru. Tiap 7 detik badannya tegak sedetik — isyarat ganti halaman.
+Pulangnya **bukunya ikut dibawa ke meja** (`bawaSampai` 9 detik), pola yang
+sama dengan kardus ATK dari gudang: yang ditinggal rutinitas ini bukan cuma
+ingatan, tapi barang.
 
-**Penghuninya jamak.** Sejak muat satu shaf, `musolaKeadaan.penghuni` adalah
-ARRAY, bukan satu orang: `musolaTempati()` memberi slot bebas pertama (x598,
-622, 646 — garis kaki 228) dan `musolaLepas()` mengembalikannya, dipanggil
-juga dari `destroy()` di `class Agent` supaya pegawai yang pamit di tengah
-sholat tidak mengunci sajadah selamanya. Kartu inventarisnya ikut: kondisinya
-`DIPAKAI 2/3`, isinya daftar nama yang sedang sholat.
-
-`istirahat-sholat-dzuhur` (gelombang 2 lanjutan, jam 12–12.30 dan
-15.15–15.45) ikut diarahkan ke sini: dulu pegawainya cuma mengucap "Duluan
-ya, titip meja" lalu menghilang dari konsep (`MOD.hening` berkedip mewakili
-kantor yang mengosong), sekarang dia beneran jalan ke musola dan berpose
-sholat di sana selama event berjalan. Sejak shaf-nya muat bertiga, detik ke-8
-satu orang lagi menyusul ke sajadah sebelahnya kalau slotnya masih ada dan
-masih ada yang bisa dipinjam — `MOD.hening` dan pegawai yang "ngopi sambil
-menunggu" (`E.data.kopi`) tidak berubah.
+**Penghuninya jamak.** `bacaKeadaan.penghuni` adalah ARRAY, bukan satu orang:
+`bacaTempati()` memberi bantal bebas pertama (x598, 622, 646 — garis kaki
+228) dan `bacaLepas()` mengembalikannya, dipanggil juga dari `destroy()` di
+`class Agent` supaya pegawai yang pamit di tengah baca tidak mengunci
+bantalnya selamanya. Kartu inventarisnya ikut: kondisinya `DIPAKAI 2/3`,
+isinya daftar nama yang sedang membaca plus jumlah lembar kliping yang sudah
+dijilid (`RUANGAN.arsipKlipingLembar`, angka yang sudah ada — pojok baca
+membacakannya, tidak menambah state baru).
 
 ### Satpam berpatroli
 
-WC, gudang, dan musola di atas semuanya rutinitas "jalan ke satu titik,
+WC, gudang, dan pojok baca di atas semuanya rutinitas "jalan ke satu titik,
 tunggu, pulang" — begitu tiba, dia diam di situ sampai waktunya habis, lalu
 balik kanan. Satpam sengaja dibuat **beda bentuknya**, bukan cuma beda kulit:
 dia keliling **berurutan** lewat beberapa titik sekaligus (`SATPAM_RUTE`,
@@ -619,7 +610,7 @@ dideklarasikan dekat `class Standby` di `room.js`, sesudah
 seolah menyorotkan senter), baru lanjut ke titik berikutnya — dan pulang ke
 pos jaga sesudah titik terakhir. Rutinitasnya sendiri (`mulaiSatpam`/
 `tickSatpam`/`selesaiSatpam`, dekat `destroy()` milik `class Standby`)
-sekelas WC/gudang/musola/kursi/notulen: bukan `daftarEvent()`, tidak lewat
+sekelas WC/gudang/baca/kursi/notulen: bukan `daftarEvent()`, tidak lewat
 penjadwal, tidak masuk log — jalan sendiri tiap ±4 menit (`SATPAM_JEDA_MS`,
 `window.SATPAM_UJI_MS` mempercepatnya di uji, pola yang sama dengan
 `jedaNotulen()`).

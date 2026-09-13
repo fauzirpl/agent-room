@@ -204,21 +204,67 @@ const GUDANG_LAMA_MIN = 5000, GUDANG_LAMA_MAX = 11000;   // ambil ATK lebih cepa
 const GUDANG_BUKA_MS = 900, GUDANG_PUDAR_MS = 400;
 const gudangTerisi = () => !!gudangKeadaan.penghuni && gudangKeadaan.penghuni.tugasGudang !== 'pergi';
 
-/* Musola pojok — BUKAN ruangan berpintu seperti WC/gudang, sengaja: sisa
-   margin kanan gudang (x640..672, 32px yang tidak dipakai kusen) dimanfaatkan
-   apa adanya sebagai perabot lantai (rak kecil + sajadah tergelar), tanpa
-   dinding baru dan tanpa memudar masuk/keluar — orangnya kelihatan terus,
-   cuma diam menghadap dinding beberapa detik. Rutinitasnya tetap sekelas
-   WC/gudang (class Standby, bukan event acak), dan `istirahat-sholat-dzuhur`
-   (public/event/20-...) diarahkan ke sini juga, bukan sekadar mengucap
-   kalimat lalu menghilang konsep. */
-const MUSOLA = {
-  x: 644, y: 120, w: 26, h: 42,        // dasar y162: rak (y120..132) + sajadah (y144..162)
-  titikX: 657, titikY: 153,            // berdiri di atas sajadah, menghadap dinding ('up')
+/* Pojok baca ASN — sudut literasi di pojok kanan lantai. BUKAN ruangan
+   berpintu seperti WC/gudang: tidak ada dinding baru, tidak ada daun pintu,
+   tidak ada fase memudar masuk/keluar. Yang mampir kelihatan terus, cuma
+   duduk lesehan membaca beberapa detik lalu balik ke mejanya sambil membawa
+   bukunya. Rutinitasnya sekelas WC/gudang (class Standby, bukan event acak).
+
+   LETAKNYA TIDAK DITEBAK. Kotak x582..670 y172..248 disapu dengan cara yang
+   sama seperti bukaan ruang kadis (PROPS + drawFloor + seluruh gambarProp/
+   gambarDinding/gambarLantai/gambarAtas registri event, umur 0..14 dtk tiap
+   0,02): NOL piksel milik perabot lama. Batas-batasnya lajur jalan semua,
+   bukan selera:
+   - atas y=172: LANE_UP (164) lajur pulang; yang jalan ke pintu keluar
+     (PINTU_X = W+20) menyusurinya sampai lewat tepi kanan dunia. Garis kaki
+     mereka 164 dan badannya digambar KE ATAS dari situ, jadi apa pun yang
+     puncaknya di bawah 164 tidak pernah menutupi mereka — makanya kedua rak
+     di sini dibuat PENDEK (12..14 px, puncak y172, garis kaki y186), bukan
+     lemari buku setinggi orang;
+   - bawah y=248: LANE_DOWN (252), lajur depan meja rapat;
+   - kiri x=582: panel kanan sekat pantri (PANTRI.x1 = 574) + 8 px;
+   - kanan x=670: tepi dunia W=672.
+   Pita yang sama di sebelah KIRI dipakai karpet meja rapat (drawFloor,
+   x152..340 y176..252) — jadi ini bukan pola baru, cuma ujung kanan pita
+   yang sampai sekarang dibiarkan kosong.
+
+   Penghuninya JAMAK: tiga bantal duduk berjajar, tiga orang bisa baca bareng.
+   Jadi bacaKeadaan.penghuni sebuah ARRAY, bukan satu orang — pola slot yang
+   sama seperti slot stasiun, cuma jauh lebih kecil. */
+const BACA = {
+  x: 582, y: 172, w: 88, h: 76,
+  alas: { x: 584, y: 188, w: 84, h: 56 },   // karpet baca, digambar di drawFloor
+  slot: [598, 622, 646],                    // x tiga bantal duduk; garis kaki semuanya titikY
+  titikY: 228,                              // duduk lesehan menghadap rak ('up')
 };
-const musolaKeadaan = { penghuni: null, kunjungan: 0 };   // tidak ada bukaSampai: tidak ada daun pintu
-const MUSOLA_PELUANG = 0.06;
-const MUSOLA_LAMA_MIN = 6000, MUSOLA_LAMA_MAX = 12000;
+BACA.titikX = BACA.slot[1];                 // bantal tengah: tujuan bawaan
+// penghuni: daftar yang sedang duduk membaca, urutannya = urutan slot dipegang.
+// Tidak ada bukaSampai seperti wcKeadaan/gudangKeadaan: tidak ada daun pintu.
+const bacaKeadaan = { penghuni: [], kunjungan: 0 };
+const BACA_PELUANG = 0.08;            // tiap kali standby memilih tujuan (WC 10%, gudang 8%)
+const BACA_LAMA_MIN = 8000, BACA_LAMA_MAX = 16000;   // lebih lama dari ambil ATK: namanya juga baca
+// Slot bebas pertama, dari kiri. -1 = ketiga bantal terisi.
+function bacaSlotBebas() {
+  for (let i = 0; i < BACA.slot.length; i++) {
+    if (!bacaKeadaan.penghuni.some((o) => o && o.bacaSlot === i)) return i;
+  }
+  return -1;
+}
+// Menempati slot bebas pertama; null = penuh. Yang sudah memegang slot tidak
+// mengambil slot kedua, jadi pemanggilnya boleh memanggil dua kali.
+function bacaTempati(orang) {
+  if (bacaKeadaan.penghuni.includes(orang)) return { x: BACA.slot[orang.bacaSlot], y: BACA.titikY };
+  const i = bacaSlotBebas();
+  if (i < 0) return null;
+  orang.bacaSlot = i;
+  bacaKeadaan.penghuni.push(orang);
+  return { x: BACA.slot[i], y: BACA.titikY };
+}
+function bacaLepas(orang) {
+  const i = bacaKeadaan.penghuni.indexOf(orang);
+  if (i >= 0) bacaKeadaan.penghuni.splice(i, 1);
+  orang.bacaSlot = -1;
+}
 
 /* Perabot pengisi ruang kosong. Letaknya TIDAK ditebak: diambil dari peta
    keterisian ruangan — piksel dinding+lantai polos dibandingkan dengan
@@ -1497,6 +1543,11 @@ function drawFloor() {
     r(x, 252, 2, 3, '#d9c9a8');
   }
 
+  // Karpet pojok baca: ujung KANAN pita yang sama dengan karpet meja rapat di
+  // atas, dan alasannya sama juga — yang duduk atau lewat di atasnya harus
+  // menutupinya. Lihat komentar BACA di kepala berkas.
+  gambarKarpetBaca();
+
   // Lembaran yang jatuh dan belum dipungut. Digambar di lantai, jadi pegawai
   // yang lewat menutupinya — bukan mengambang di atas semua orang.
   for (const k of RUANGAN.kertasLantai) {
@@ -2277,27 +2328,101 @@ function drawDusGudang() {
   r(gx + 2, 109, 6, 1, '#d9cba8');
 }
 
-// Musola pojok: rak kecil (mukena, peci, sarung terlipat) menempel dinding
-// di atas sajadah yang tergelar di lantai — lihat komentar MUSOLA.
-function drawMusola() {
-  const { x, y, w, h } = MUSOLA;
-  r(x + 3, y + 7, 10, 6, '#f2ede0');                    // mukena terlipat
-  r(x + 3, y + 7, 10, 1, '#ffffff');
-  r(x + 5, y + 9, 6, 2, '#b06ea0');                      // renda ungu
-  r(x + w - 8, y + 8, 5, 5, '#20242c');                  // peci hitam
-  r(x + w - 8, y + 8, 5, 1, '#3a3f45');
-  r(x + 2, y + 13, w - 4, 2, '#8a6844');                 // papan rak
-  r(x + 4, y + 16, 10, 6, '#3e6b4f');                     // sarung kotak-kotak
-  for (let i = 0; i < 3; i++) r(x + 4 + i * 3, y + 17, 1, 4, '#2c5c38');
-  // sajadah tergelar, corak lengkung mihrab sederhana
-  const sy = y + h - 18;
-  r(x + 1, sy, w - 2, 18, '#7a2020');
-  r(x + 1, sy, w - 2, 2, '#c9a03a');
-  r(x + 1, sy + 16, w - 2, 2, '#c9a03a');
-  for (let i = 0; i < 6; i++) {
-    const iw = 6 - Math.abs(i - 2);
-    r(x + w / 2 - iw / 2, sy + 3 + i, iw, 1, '#c9a03a');
+/* Pojok baca, PERABOTNYA saja: dua rak pendek yang berdiri di tepi atas pita
+   (garis kaki y186) — rak buku di kiri, rak koran & majalah di kanan. Karpet,
+   meja lesehan, dan bantal duduknya BUKAN di sini tapi di drawFloor
+   (gambarKarpetBaca), persis seperti karpet meja rapat: yang melintas harus
+   menutupinya, bukan tertutup olehnya.
+
+   Kenapa rak RENDAH (12..14 px, puncak y172) dan bukan lemari buku setinggi
+   orang: garis kaki lajur pulang y164, dan badan yang lewat digambar KE ATAS
+   dari situ (baris 134..164). Lemari setinggi 30 px akan memakan kaki setiap
+   pegawai yang berjalan ke pintu keluar. Rak rendah juga yang benar untuk
+   sudut lesehan — bisa dijangkau sambil duduk. Lihat komentar BACA. */
+function drawPojokBaca() {
+  // --- rak buku x584..630: papan atas, dua susun punggung buku warna-warni
+  r(584, 172, 2, 14, '#6b4f34');                           // tiang kiri
+  r(628, 172, 2, 14, '#6b4f34');                           // tiang kanan
+  r(584, 172, 46, 2, '#a5825a');                           // papan atas
+  r(584, 180, 46, 2, '#8a6844');                           // papan tengah
+  r(584, 185, 46, 1, '#6b4f34');                           // papan bawah menapak lantai
+  const punggung = ['#7a2020', '#2f4f7a', '#3e6b4f', '#c9a03a', '#6b3b6b', '#a35a2a'];
+  for (let i = 0; i < 14; i++) {
+    const x = 587 + i * 3;
+    if (x > 626) break;
+    const atas = punggung[i % punggung.length];
+    if (i === 5) {                                         // satu buku dicabut separuh, ikut miring
+      r(x, 175, 2, 5, sh(atas, 0.75));
+    } else {
+      r(x, 174, 2, 6, atas);
+      r(x, 175, 2, 1, sh(atas, 1.35));                     // garis judul di punggung
+    }
+    const bawah = punggung[(i + 3) % punggung.length];
+    r(x, 182, 2, 3, bawah);
+    r(x, 182, 2, 1, sh(bawah, 1.35));
   }
+  // --- rak koran x638..668: tongkat penjepit, koran menggantung + majalah
+  r(638, 174, 2, 12, '#6b4f34');
+  r(666, 174, 2, 12, '#6b4f34');
+  r(638, 176, 30, 1, '#8a6844');
+  r(641, 177, 12, 8, P.paper);                             // koran terlipat
+  r(641, 177, 12, 1, '#b9c0ca');
+  for (let i = 0; i < 3; i++) r(642, 179 + i * 2, 10, 1, '#b9c0ca');   // baris teks
+  r(656, 177, 9, 8, '#3565b0');                            // majalah, sampul biru
+  r(656, 177, 9, 1, '#c8d8f0');
+  r(657, 180, 7, 3, '#e8c04a');                            // foto sampulnya
+}
+
+/* Karpet pojok baca: alas anyaman + meja lesehan + tiga bantal duduk,
+   digambar di LANTAI (dipanggil drawFloor) supaya siapa pun yang duduk atau
+   lewat menutupinya — pola yang sama dengan karpet meja rapat di pita yang
+   sama, ujung kiri. */
+function gambarKarpetBaca() {
+  const A = BACA.alas;
+  r(A.x, A.y, A.w, A.h, '#2f4a6b');                        // tepi karpet, biru tua
+  r(A.x + 2, A.y + 2, A.w - 4, A.h - 4, '#3d5f85');
+  r(A.x + 2, A.y + 2, A.w - 4, 1, '#d9c9a8');              // lis krem atas & bawah
+  r(A.x + 2, A.y + A.h - 3, A.w - 4, 1, '#d9c9a8');
+  for (let x = A.x + 6; x < A.x + A.w - 6; x += 8) {       // motif anyaman
+    r(x, A.y + 8, 4, 1, sh('#3d5f85', 1.18));
+    r(x + 2, A.y + A.h - 12, 4, 1, sh('#3d5f85', 1.18));
+  }
+  // meja lesehan rendah, dilihat dari atas: daun kayu + tumpukan bacaan
+  r(592, 196, 68, 14, '#8a6844');
+  r(592, 196, 68, 2, '#a5825a');
+  r(592, 208, 68, 2, '#6b4f34');
+  r(600, 199, 12, 7, P.paper);                             // koran kebuka
+  r(600, 199, 12, 1, '#b9c0ca');
+  r(606, 199, 1, 7, '#b9c0ca');
+  r(620, 200, 10, 5, '#7a2020');                           // dua buku ditumpuk
+  r(620, 200, 10, 1, '#a83a3a');
+  r(622, 203, 10, 4, '#2f4f7a');
+  r(640, 200, 5, 6, '#f2f0e6');                            // gelas air
+  r(640, 200, 5, 1, '#c9b07a');
+  // dua buku tergeletak di karpet, sudut kiri bawah: yang dibaca kemarin dan
+  // belum dikembalikan ke rak — sekaligus mengisi sudut karpet yang tidak
+  // pernah ditempati bantal
+  r(587, 232, 9, 6, '#3e6b4f');
+  r(587, 232, 9, 1, '#5d8f6c');
+  r(589, 236, 9, 6, '#7a2020');
+  r(589, 236, 9, 1, '#a83a3a');
+  r(596, 237, 2, 4, P.paper);                              // potongan halaman
+  // Bantal digeser NAIK sampai garis kaki (228) jatuh di dalamnya, bukan di
+  // bawahnya: yang tersisa di bawah badan cuma 4 px tepi bantal, jadi orangnya
+  // kebaca DUDUK DI ATAS bantal — bukan berdiri di depannya.
+  for (const cx of BACA.slot) bantalBaca(cx, 220);
+}
+
+// Satu bantal duduk lesehan: kotak bersudut tumpul, jahitan silang di tengah.
+// Digambar SEBELUM orangnya (lapisan lantai), jadi yang duduk menutupi
+// separuh atasnya — itu yang bikin dia kebaca "diduduki", bukan "ditaruh".
+function bantalBaca(cx, y) {
+  const w = 18, h = 12, x = cx - w / 2;
+  r(x + 1, y, w - 2, h, '#6b3b3b');
+  r(x, y + 2, w, h - 4, '#6b3b3b');
+  r(x + 2, y + 1, w - 4, h - 3, '#8a4a4a');
+  r(x + w / 2 - 1, y + h / 2 - 1, 2, 2, '#6b3b3b');        // jahitan tengah
+  r(x + 1, y + h - 1, w - 2, 1, '#4a2a2a');                // bayangan kontak
 }
 
 /* ========================================================== ruang kadis ===
@@ -4363,7 +4488,10 @@ const PROPS = [
   { sortY: 214, station: null,     draw: drawSanitizer },
   { sortY: 348, station: null,     draw: drawPenghancur },
   { sortY: 333, station: null,     draw: drawKursiTambahan },
-  { sortY: MUSOLA.y + MUSOLA.h, station: null, draw: drawMusola },
+  // sortY 186 = garis kaki KEDUA RAK, bukan tepi bawah kotak pojok baca (248):
+  // karpet, meja lesehan, dan bantalnya ada di drawFloor, yang tersisa di sini
+  // cuma dua rak pendek yang berdiri di tepi atas pita.
+  { sortY: 186, station: null, draw: drawPojokBaca },
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -5230,6 +5358,10 @@ function drawBawaan(a, x, yb) {
     case 'map-kuning':r(bx, yb - 13, 8, 6, '#c9a03a'); r(bx + 1, yb - 11, 6, 1, P.paper); break;
     case 'amplop-coklat': r(bx, yb - 12, 7, 5, '#a37b4e'); r(bx, yb - 12, 7, 1, '#c9a97a'); break;
     case 'koper':     r(bx, yb - 12, 6, 5, '#4a3626'); r(bx + 1, yb - 13, 4, 1, '#6b4a2e'); break;
+    // buku pinjaman pojok baca (keBaca di class Standby): sampul gelap,
+    // potongan halaman putih di sisi luar — beda dari 'kertas' yang lembaran
+    // lepas dan dari 'map' yang berwarna terang
+    case 'buku':      r(bx, yb - 13, 7, 7, '#2f4f7a'); r(bx + 5, yb - 12, 2, 5, '#f2f0e6'); r(bx + 1, yb - 12, 3, 1, '#c9a03a'); break;
     // senter satpam berpatroli (lihat SATPAM_RUTE dekat class Standby):
     // badan gelap, lensa terang di ujung -- satu-satunya penanda barang
     // yang dibutuhkan, seragamnya sendiri sudah beda warna.
@@ -6498,6 +6630,7 @@ class Agent {
 
   destroy() {
     lepaskanAktor(this);                   // event tidak boleh memegang hantu
+    bacaLepas(this);                       // bantal pojok baca tidak boleh dipegang hantu
     batalkanPengingat(this);               // lonceng tidak boleh berbunyi untuk hantu
     // judul tab dihitung dari `agents`; pemanggil baru menghapusnya SESUDAH
     // destroy() kembali, jadi hitung ulangnya ditunda satu putaran
@@ -6726,7 +6859,7 @@ class Standby extends Agent {
     if (this.tugasWC) { this.tickWC(); return; }
     if (this.tugasKursi) { this.tickKursi(); return; }
     if (this.tugasGudang) { this.tickGudang(); return; }
-    if (this.tugasMusola) { this.tickMusola(); return; }
+    if (this.tugasBaca) { this.tickBaca(); return; }
     // eventKerja: sedang dipinjam event acak / apel pagi — jangan mondar-mandir
     // di tengah adegan; lepaskanAktor() mengosongkannya lagi begitu selesai.
     if (!this.eventKerja && !this.path.length && now > this.nextMove) {
@@ -6749,8 +6882,8 @@ class Standby extends Agent {
           && u < WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG
           && !gudangKeadaan.penghuni) this.keGudang();
       else if (u >= WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG
-          && u < WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG + MUSOLA_PELUANG
-          && !musolaKeadaan.penghuni) this.keMusola();
+          && u < WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG + BACA_PELUANG
+          && bacaSlotBebas() >= 0) this.keBaca();   // bukan "kosong": bantalnya ada tiga
       else this.goTo(MAMPIR[(Math.random() * MAMPIR.length) | 0]);
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
@@ -6863,44 +6996,53 @@ class Standby extends Agent {
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
   }
-  /* Musola: tidak ada daun pintu, jadi tidak ada fase memudar seperti WC/
-     gudang — begitu sampai di atas sajadah dia cuma diam menghadap dinding
-     beberapa detik, pose berganti tiap 2 detik (diam -> hormat -> jongkok,
-     berulang) sebagai isyarat "sedang sholat" tanpa perlu pose baru khusus. */
-  keMusola() {
-    musolaKeadaan.penghuni = this;
-    musolaKeadaan.kunjungan++;
-    this.tugasMusola = 'pergi';
+  /* Pojok baca: tidak ada daun pintu, jadi tidak ada fase memudar seperti
+     WC/gudang — begitu sampai di bantalnya dia duduk lesehan, buku di
+     pangkuan (pose 'dudukLantai' + bawa 'buku', dua-duanya sudah ada), dan
+     sesekali menegakkan badan sebentar seperti orang yang baru selesai satu
+     halaman. Pulangnya bukunya dibawa ke meja — pola yang sama dengan kardus
+     ATK dari gudang: yang ditinggal rutinitas ini bukan cuma ingatan, tapi
+     barang. Tujuannya BUKAN satu titik tetap: bacaTempati() memberi bantal
+     bebas pertama, jadi yang datang belakangan duduk di sebelahnya. */
+  keBaca() {
+    const t = bacaTempati(this);
+    if (!t) return;                     // ketiga bantal terisi — mampir ke tempat lain saja
+    bacaKeadaan.kunjungan++;
+    this.tugasBaca = 'pergi';
     this.adaTugas = true;
     this.betah = true;
-    this.doingEvent = 'sholat sebentar';
-    this.goToXY(MUSOLA.titikX, MUSOLA.titikY, 'up');
+    this.doingEvent = 'baca sebentar di pojok baca';
+    this.goToXY(t.x, t.y, 'up');
   }
-  tickMusola() {
-    if (this.eventKerja) { this.selesaiMusola(false); return; }
-    if (this.tugasMusola === 'pergi') {
+  tickBaca() {
+    if (this.eventKerja) { this.selesaiBaca(false); return; }
+    if (this.tugasBaca === 'pergi') {
       if (!this.path.length) {
-        this.tugasMusola = 'sholat';
-        this.musolaT = now;
-        this.musolaSampai = now + MUSOLA_LAMA_MIN + Math.random() * (MUSOLA_LAMA_MAX - MUSOLA_LAMA_MIN);
+        this.tugasBaca = 'baca';
+        this.bacaT = now;
+        this.bacaSampai = now + BACA_LAMA_MIN + Math.random() * (BACA_LAMA_MAX - BACA_LAMA_MIN);
+        this.bawa = 'buku';
+        this.bawaSampai = now + 60000;   // dipegang selama duduk; selesaiBaca yang memperpanjang
       }
-    } else if (this.tugasMusola === 'sholat') {
-      if (now > this.musolaSampai) { this.pose = null; this.selesaiMusola(true); return; }
-      const fase = Math.floor((now - this.musolaT) / 2000) % 3;
-      this.pose = fase === 1 ? 'hormat' : fase === 2 ? 'jongkok' : null;
+    } else if (this.tugasBaca === 'baca') {
+      if (now > this.bacaSampai) { this.pose = null; this.selesaiBaca(true); return; }
+      // 6 dtk membungkuk ke buku, 1 dtk menegakkan badan: ganti halaman
+      this.pose = (now - this.bacaT) % 7000 < 6000 ? 'dudukLantai' : null;
     }
   }
-  selesaiMusola(lanjut) {
-    this.tugasMusola = '';
+  selesaiBaca(lanjut) {
+    this.tugasBaca = '';
     this.adaTugas = false;
     this.pose = null;
     if (this.eventKerja) this.betahAsli = false;
     else { this.betah = false; this.doingEvent = ''; }
-    if (musolaKeadaan.penghuni === this) musolaKeadaan.penghuni = null;
+    bacaLepas(this);
     if (lanjut) {
+      this.bawa = 'buku';               // dibawa ke meja dulu, baru hilang
+      this.bawaSampai = now + 9000;
       this.goTo(MAMPIR[(Math.random() * MAMPIR.length) | 0]);
       this.nextMove = now + 11000 + Math.random() * 15000;
-    }
+    } else { this.bawa = null; this.bawaSampai = 0; }
   }
   /* Kursi kurang: kantor padat lama (ramaiSejak), kursi jauh terakhir diseret
      ke celah kosong baris meja kerja (KURSI_TAMBAHAN) supaya pegawai yang
@@ -6971,7 +7113,7 @@ class Standby extends Agent {
       this.nextMove = now + 11000 + Math.random() * 15000;
     }
   }
-  /* Satpam berpatroli. Beda dari WC/gudang/musola/kursi/notulen di atas:
+  /* Satpam berpatroli. Beda dari WC/gudang/pojok baca/kursi/notulen di atas:
      bukan satu tujuan lalu pulang, tapi KELILING beberapa titik berurutan
      (SATPAM_RUTE, dideklarasikan di bawah class ini persis seperti
      NOTULEN_X dkk.) — singgah sebentar (pose 'nunjuk', menyorotkan senter)
@@ -7033,7 +7175,6 @@ class Standby extends Agent {
     if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
     if (wcKeadaan.penghuni === this) wcKeadaan.penghuni = null;   // ...dan tidak boleh mengunci WC
     if (gudangKeadaan.penghuni === this) gudangKeadaan.penghuni = null;   // ...atau gudang
-    if (musolaKeadaan.penghuni === this) musolaKeadaan.penghuni = null;   // ...atau musola
     if (petugasSatpam === this) petugasSatpam = null;      // ...atau putaran keliling
     if (petugasKursi === this) {
       // dihapus jagaPopulasi() persis waktu menyeret: batalkan, jangan sampai
@@ -7073,7 +7214,7 @@ function calonPetugasNotulen() {
   return bisa.find((b) => b.peran === 'arsiparis') || bisa.find((b) => !b.path.length) || bisa[0] || null;
 }
 
-/* Satpam berpatroli — rutinitas standby lagi, sekelas WC/gudang/musola/kursi/
+/* Satpam berpatroli — rutinitas standby lagi, sekelas WC/gudang/baca/kursi/
    notulen di atas: bukan event acak (tidak lewat penjadwal, tidak masuk log),
    cuma jalan sendiri di class Standby. BEDANYA dari keempat rutinitas itu:
    bukan satu tujuan-tunggu-pulang, tapi KELILING berurutan lewat beberapa
@@ -9512,13 +9653,19 @@ function daftarBarang() {
           ['dipakai', (gudangKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
         ];
       } },
-    { id: 'musola', nama: 'Musola Pojok', kode: '3.05.01.04.021', nup: 4, tahun: 2013,
-      lokasi: 'sisa margin kanan gudang, bentang pilar kedua', kotak: k(MUSOLA.x, MUSOLA.y, MUSOLA.w, MUSOLA.h),
-      uraian: 'rak kecil (mukena, peci, sarung terlipat) di atas sajadah tergelar',
-      kondisi: () => ['B', musolaKeadaan.penghuni ? 'DIPAKAI' : 'KOSONG'],
+    { id: 'baca', nama: 'Pojok Baca ASN', kode: '3.05.01.04.022', nup: 4, tahun: 2013,
+      lokasi: 'pojok kanan lantai, sebelah sekat pantri', kotak: k(BACA.x, BACA.y, BACA.w, BACA.h),
+      uraian: 'rak buku rendah & rak koran, karpet anyaman, meja lesehan, tiga bantal duduk',
+      kondisi: () => ['B', bacaKeadaan.penghuni.length
+        ? 'DIPAKAI ' + bacaKeadaan.penghuni.length + '/' + BACA.slot.length
+        : 'KOSONG'],
       isi: () => [
-        musolaKeadaan.penghuni ? ['sedang dipakai', esc(namaPendek(musolaKeadaan.penghuni))] : ['sedang dipakai', '—'],
-        ['dipakai', (musolaKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
+        ['sedang membaca', bacaKeadaan.penghuni.length
+          ? bacaKeadaan.penghuni.map((o) => esc(namaPendek(o))).join(', ')
+          : '—'],
+        ['kapasitas', BACA.slot.length + ' bantal duduk'],
+        ['kliping dijilid', (RUANGAN.arsipKlipingLembar || 0) + ' lembar'],
+        ['dipakai', (bacaKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
       ] },
     { id: 'arsip', nama: 'Lemari Arsip Kayu', kode: '3.05.01.04.003', nup: 17, tahun: 2012,
       lokasi: 'dinding utara', kotak: k(24, 28, 60, 92), stasiun: 'read', stiker: 'arsip',

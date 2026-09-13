@@ -61,22 +61,20 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   nyata tidak pernah ke sana) tapi rupanya sengaja beda: daun metal dengan
   strip hazard kuning-hitam dan gembok gantung, bukan plang huruf. Standby
   mampir 8% tiap memilih tujuan, pulangnya bawa kardus. Bisa diklik.
-- **Musola pojok, selebar satu shaf.** Bukan ruangan berpintu seperti
-  WC/gudang, dan bukan lagi nempel dinding: tempatnya sekarang pojok kanan
-  lantai (x582..670 y172..248), di pita yang sama dengan karpet meja rapat
-  dan sebelah sekat pantri — satu-satunya bidang yang benar-benar luas dan,
-  menurut sapuan piksel seluruh perabot + registri event, benar-benar kosong.
-  Isinya karpet hijau dengan **tiga sajadah berjajar**, rak mukena (mukena,
-  peci, sarung, kitab, sajadah cadangan) dan rak sandal. Karpetnya digambar
-  di lantai seperti karpet meja rapat, jadi yang lewat menutupinya; raknya
-  sengaja pendek supaya tidak pernah menutupi orang yang jalan ke pintu
-  keluar. Penghuninya jadi **jamak**: tiga orang bisa sholat bareng, kartu
-  inventarisnya menyebut `DIPAKAI 2/3` beserta namanya. Standby mampir 8%
-  tiap memilih tujuan, berpose sholat (diam/hormat/jongkok bergantian)
-  beberapa detik tanpa memudar; `istirahat-sholat-dzuhur` diarahkan ke sini
-  juga, dan sejak muat bertiga satu orang lagi menyusul ke sajadah sebelahnya
-  di detik ke-8.
-- **Satpam berpatroli.** Beda bentuk dari WC/gudang/musola: bukan sekali
+- **Pojok baca ASN.** Sudut literasi di pojok kanan lantai (x582..670
+  y172..248), sebelah sekat pantri — satu-satunya bidang yang benar-benar
+  luas dan, menurut sapuan piksel seluruh perabot + registri event,
+  benar-benar kosong. Isinya rak buku rendah dua susun, rak koran & majalah,
+  karpet anyaman, meja lesehan, dan **tiga bantal duduk**: tiga orang bisa
+  baca bareng. Karpet & bantalnya digambar di lantai seperti karpet meja
+  rapat, jadi yang duduk/lewat menutupinya; raknya sengaja pendek supaya
+  tidak pernah memakan kaki orang yang jalan ke pintu keluar. Standby mampir
+  8% tiap memilih tujuan, duduk lesehan dengan buku di pangkuan 8–16 detik
+  (badannya tegak sedetik tiap 7 detik: ganti halaman), lalu **bukunya ikut
+  dibawa ke meja** — pola yang sama dengan kardus ATK dari gudang. Kartu
+  inventarisnya menyebut `DIPAKAI 2/3` beserta namanya dan jumlah lembar
+  kliping yang sudah dijilid.
+- **Satpam berpatroli.** Beda bentuk dari WC/gudang/pojok baca: bukan sekali
   jalan-tunggu-pulang, tapi keliling berurutan lewat lima titik yang sudah
   ada (ambang WC, ambang gudang, depan ruang kadis, depan pantri, dekat pintu
   keluar), singgah sebentar sambil menyorotkan senter di tiap satu, lalu
