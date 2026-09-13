@@ -147,6 +147,22 @@ function pantriRujukan() {
   };
 }
 
+/* Jendela baca kedua, pola yang sama: semua TITIK TUJUAN yang dikenal ruangan
+   ini, untuk sapu-ruang.mjs (alat pencari tempat kosong + lalu lintas).
+   `const` blok ini tidak jadi properti global vm, dan deklarasi fungsi
+   satu-satunya cara membacanya dari luar tanpa menyentuh __jembatan__ milik
+   uji-event.mjs. Isinya dibaca SAAT DIPANGGIL, jadi yang dideklarasikan jauh
+   di bawah (SATPAM_RUTE, POS_SATPAM) tetap sah di sini. */
+function ruangRujukan() {
+  return {
+    W, H, FLOOR_TOP, LANE_UP, LANE_DOWN, LANE_L, LANE_R, PINTU_X,
+    STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y, WC, GUDANG, BACA, FOTOKOPI_TITIK,
+    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE,
+    POS_SATPAM: typeof POS_SATPAM === 'undefined' ? null : POS_SATPAM,
+    route,
+  };
+}
+
 /* WC. Pintunya di pojok KIRI dinding belakang — cermin pintu kadis di pojok
    kanan. Letaknya bukan soal selera: x0..23 adalah satu-satunya bidang dinding
    yang masih kosong dari bawah papan nama sampai lantai. Disapu dengan cara
@@ -265,6 +281,19 @@ function bacaLepas(orang) {
   if (i >= 0) bacaKeadaan.penghuni.splice(i, 1);
   orang.bacaSlot = -1;
 }
+
+/* Pos satpam — meja jaga di pojok kanan bawah. Satpam yang berpatroli dulu
+   "pulang ke pos" ke STATIONS.idle (ruang tunggu) karena memang tidak ada pos;
+   sekarang ada. Tempatnya dicari `node sapu-ruang.mjs kosong 26 46 540 248 132
+   108`: satu-satunya calon di pojok itu x643..669 y276..322 — nol piksel perabot
+   lama, nol rute pegawai (43.056 rute route() antar 208 titik tujuan). Yang
+   mengepungnya: lajur memutar di bawah pojok baca (y244..275 sampai x651) dan
+   baji rute diagonal ke bantal pojok baca di kirinya. Titik berdirinya x658,
+   bukan x656 di tengah kotak: badan di x656 menyentuh kolom 651 lajur memutar.
+   Kursi di belakang (sortY 296) dan meja di depan (sortY 318) dua entri PROPS
+   terpisah supaya satpam yang berdiri di antaranya (garis kaki 298) tertutup
+   meja, tapi menutupi kursinya sendiri. */
+const POS_SATPAM = { x: 643, y: 276, w: 26, h: 46, titikX: 658, titikY: 298 };
 
 /* Perabot pengisi ruang kosong. Letaknya TIDAK ditebak: diambil dari peta
    keterisian ruangan — piksel dinding+lantai polos dibandingkan dengan
@@ -1381,6 +1410,39 @@ function bayangDinding() {
   ctx.imageSmoothingEnabled = false;
 }
 
+/* Panel MCB jalur timur — perlengkapan dinding PERMANEN (dulu cuma digambar
+   selama mcb-jalur-turun jalan, dan muncul-hilang begitu saja). Letaknya
+   dicari ulang dengan sapu-ruang.mjs: x=422 yang dipakai versi pertama
+   ternyata menumpuk dengan dekor tema RAMADAN (drawWall, x417..439 y53..85)
+   yang sapuan coretan waktu itu lewatkan. `kosong 18 22 380 20 292 90
+   --abaikan-lalu-lintas` memberi sisa dinding kiri pintu gudang, dan
+   `siapa 590 53 18 22 --halus` memastikannya: nol piksel, termasuk kelima
+   tema. Dekat pintu gudang juga masuk akal untuk panel listrik sayap timur. */
+const PANEL_MCB = { x: 592, y: 56, w: 14, h: 18, titikX: 599, titikY: 128 };
+function drawPanelMcb() {
+  const { x, y } = PANEL_MCB;
+  r(x, y, 14, 18, '#dfe2e6');
+  r(x, y, 14, 1, '#f2f4f6');
+  r(x, y + 17, 14, 1, '#b9bfc6');
+  r(x + 1, y + 2, 12, 14, '#c9cdd1');
+  r(x + 2, y + 3, 10, 1, '#8f979f');              // rel tuas
+  for (let i = 0; i < 3; i++) {
+    const tx = x + 3 + i * 4;
+    const jatuh = i === 1 && MOD.mcbTurun;
+    r(tx, y + 5 + (jatuh ? 3 : 0), 3, 5, jatuh ? '#c22b2b' : '#3a4048');
+    r(tx, y + 5 + (jatuh ? 3 : 0), 3, 1, jatuh ? '#e05a5a' : '#5a626c');
+  }
+  r(x + 2, y + 13, 10, 3, '#b0b6bd');             // label jalur
+  r(x + 3, y + 14, 8, 1, '#7d848c');
+  // Bekas: sesudah jalurnya pernah turun, ada yang menempel lakban kertas
+  // bertulisan tangan di bawah tuas — dan tidak pernah dicabut lagi.
+  if (RUANGAN.mcbTurunKali >= 1) {
+    r(x + 1, y + 11, 12, 2, '#e8d9a0');
+    r(x + 2, y + 11, 3, 1, '#8a7a4a');
+    r(x + 6, y + 11, 5, 1, '#8a7a4a');
+  }
+}
+
 function drawWall() {
   // Bidang cat, serat, jatuh cahaya, lis, plin, pilar: semuanya statis, jadi
   // satu lapisan bahan yang ditempel sekali (lihat dindingLapis()).
@@ -1490,6 +1552,7 @@ function drawWall() {
     r(420, 13, 5, 1, '#9aa1a6');
   }
 
+  drawPanelMcb();           // sisa dinding kiri pintu gudang — lihat PANEL_MCB
   gambarTemaDinding();      // dekor tema kalender (agustusan, korpri, ...) — di bawah neon
 
   // lampu neon TL gantung
@@ -2339,6 +2402,16 @@ function drawDusGudang() {
    dari situ (baris 134..164). Lemari setinggi 30 px akan memakan kaki setiap
    pegawai yang berjalan ke pintu keluar. Rak rendah juga yang benar untuk
    sudut lesehan — bisa dijangkau sambil duduk. Lihat komentar BACA. */
+// Koran di rak pojok baca masih edisi kemarin? Dibaca, tidak pernah ditulis:
+// yang menulis RUANGAN.koranTanggal cuma koran-pagi-di-rak-baca. Halaman yang
+// baru dibuka lewat jam 10 menganggap koran hari ini sudah dipasang orang
+// sebelum kita datang — kalau tidak, tiap muat ulang siang hari menampilkan
+// koran basi seharian padahal event paginya memang tidak mungkin jalan lagi.
+function koranBasi() {
+  if (RUANGAN.koranTanggal) return RUANGAN.koranTanggal !== new Date().toDateString();
+  return ambien().jam < 10;
+}
+
 function drawPojokBaca() {
   // --- rak buku x584..630: papan atas, dua susun punggung buku warna-warni
   r(584, 172, 2, 14, '#6b4f34');                           // tiang kiri
@@ -2365,7 +2438,7 @@ function drawPojokBaca() {
   r(638, 174, 2, 12, '#6b4f34');
   r(666, 174, 2, 12, '#6b4f34');
   r(638, 176, 30, 1, '#8a6844');
-  r(641, 177, 12, 8, P.paper);                             // koran terlipat
+  r(641, 177, 12, 8, koranBasi() ? '#e3d6a8' : P.paper);  // koran terlipat; kekuningan = edisi kemarin
   r(641, 177, 12, 1, '#b9c0ca');
   for (let i = 0; i < 3; i++) r(642, 179 + i * 2, 10, 1, '#b9c0ca');   // baris teks
   r(656, 177, 9, 8, '#3565b0');                            // majalah, sampul biru
@@ -2416,6 +2489,39 @@ function gambarKarpetBaca() {
 // Satu bantal duduk lesehan: kotak bersudut tumpul, jahitan silang di tengah.
 // Digambar SEBELUM orangnya (lapisan lantai), jadi yang duduk menutupi
 // separuh atasnya — itu yang bikin dia kebaca "diduduki", bukan "ditaruh".
+// Kursi lipat pos satpam, sandaran menghadap penonton: satpam berdiri di
+// depannya menghadap ruangan.
+function drawPosSatpamKursi() {
+  const x = POS_SATPAM.titikX - 6, y = 284;
+  r(x, y, 12, 3, '#3a4048');                                // sandaran
+  r(x + 1, y + 3, 1, 9, '#5a626c');
+  r(x + 10, y + 3, 1, 9, '#5a626c');
+  r(x, y + 8, 12, 3, '#4a525c');                            // dudukan
+}
+
+// Meja jaga: buku mutasi jaga terbuka, HT dengan antenanya, papan POS di
+// muka meja. Huruf 5 px — 4 px di kanvas segini jadi noda, bukan tulisan
+// (lihat catatan 'KUOTA' di public/event/29-gel4-b.js).
+function drawPosSatpam() {
+  const x = POS_SATPAM.x + 3, y = 302;
+  r(x, y, 23, 12, '#8a6844');                               // daun meja
+  r(x, y, 23, 2, '#a5825a');
+  r(x + 1, y + 12, 2, 4, '#6b4f34');                        // kaki
+  r(x + 20, y + 12, 2, 4, '#6b4f34');
+  r(x + 2, y + 3, 10, 6, P.paper);                          // buku mutasi jaga, terbuka
+  r(x + 7, y + 3, 1, 6, '#b9c0ca');
+  r(x + 3, y + 5, 3, 1, '#7d848c');
+  r(x + 9, y + 5, 2, 1, '#7d848c');
+  r(x + 15, y + 3, 3, 6, '#20242c');                        // HT
+  r(x + 16, y - 1, 1, 4, '#3a3f45');                        // antena
+  r(x + 15, y + 4, 3, 1, P.green);                          // lampu siaga
+  r(x + 4, y + 9, 14, 5, '#1c4e8a');                        // papan POS
+  ctx.fillStyle = '#fdf6ec';
+  ctx.font = '5px "Courier New", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('POS', x + 7, y + 12);
+}
+
 function bantalBaca(cx, y) {
   const w = 18, h = 12, x = cx - w / 2;
   r(x + 1, y, w - 2, h, '#6b3b3b');
@@ -3529,6 +3635,15 @@ function drawFotokopi() {
   r(x + w - 10, y + 8, 5, 2, dipakai ? '#7ee787' : '#2f5a3a');
   r(x + w - 4, y + 8, 2, 2, dipakai ? P.amber : '#6b5a2a');
   r(x + w, y + 14, 4, 2, '#b9bdb6');                   // baki keluaran
+  // Rim cadangan (RUANGAN.rimKertas, dari jatah-kuota-cair) ditumpuk di atas
+  // tutup mesin, x+20..x+32 y71..80 — kotak yang sapu-ruang.mjs nyatakan
+  // kosong; pengumpan dokumen sendiri berhenti di x+19.
+  for (let i = 0; i < Math.min(3, RUANGAN.rimKertas); i++) {
+    const ry = y - 3 - i * 3;
+    r(x + 20, ry, 12, 3, '#f2f0e6');
+    r(x + 20, ry, 12, 1, '#ffffff');
+    r(x + 23, ry + 1, 6, 1, i % 2 ? '#d9a33a' : '#7aa5e8');   // pita merek
+  }
   if (dipakai) {
     const k = (now / 900) % 1;
     const sx = x + 2 + Math.round(k * (w - 15));
@@ -4492,6 +4607,9 @@ const PROPS = [
   // karpet, meja lesehan, dan bantalnya ada di drawFloor, yang tersisa di sini
   // cuma dua rak pendek yang berdiri di tepi atas pita.
   { sortY: 186, station: null, draw: drawPojokBaca },
+  // Pos satpam: kursi DI BELAKANG garis kaki satpam (298), meja DI DEPANNYA.
+  { sortY: 296, station: null, draw: drawPosSatpamKursi },
+  { sortY: 318, station: null, draw: drawPosSatpam },
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -6820,6 +6938,18 @@ const MIN_DI_LAYAR = 4;
 // Variabel terpisah, bukan mengubah MIN_DI_LAYAR langsung, supaya nilai
 // aslinya tidak pernah hilang kalau event dibatalkan di tengah jalan.
 let minDiLayarTimpa = null;
+/* ?penganggur=N (0..10) — MODE UJI untuk event yang butuh banyak orang
+   menganggur (foto-bersama, senam-jumat, apel). Tanpa ini event besar cuma
+   bisa dicek lewat harness: ruangan yang sedang ramai sesi sungguhan jarang
+   punya empat orang yang bisa dipinjam sekaligus, jadi ?event=foto-bersama
+   langsung batal. Yang dijamin JUMLAH STANDBY minimal, bukan jumlah orang di
+   layar: sesi nyata yang sibuk tidak dihitung, karena Aturan 1 memang tidak
+   mengizinkan mereka dipinjam. Tanpa parameter nilainya 0 dan jagaPopulasi()
+   bekerja persis seperti sebelumnya. Pasangannya: ?event=<id>. */
+const PENGANGGUR_MIN = (() => {
+  const n = Number.parseInt(MODE_URL.get('penganggur'), 10);
+  return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : 0;
+})();
 // Standby yang dihapus manual dari panel (tombol "hapus") tidak boleh langsung
 // digantikan pengganti oleh jagaPopulasi — tiap penghapusan menurunkan syarat
 // minimalnya satu, seumur halaman ini terbuka. Reset otomatis kalau dimuat ulang.
@@ -6877,6 +7007,7 @@ class Standby extends Agent {
         // lembar keluar digambar drawFotokopi selama dia di situ, dan jam
         // menganggur Agent.update memulangkannya ke meja sesudah IDLE_AFTER.
         perabotBaru.lembarFotokopi += 2 + ((Math.random() * 18) | 0);
+        if (RUANGAN.rimKertas > 0 && Math.random() < 0.25) RUANGAN.rimKertas--;   // rim cadangan dibuka
         this.goToXY(FOTOKOPI_TITIK.x, FOTOKOPI_TITIK.y, 'up');
       } else if (u >= WC_PELUANG + FOTOKOPI_PELUANG
           && u < WC_PELUANG + FOTOKOPI_PELUANG + GUDANG_PELUANG
@@ -7118,7 +7249,7 @@ class Standby extends Agent {
      (SATPAM_RUTE, dideklarasikan di bawah class ini persis seperti
      NOTULEN_X dkk.) — singgah sebentar (pose 'nunjuk', menyorotkan senter)
      di tiap satu, baru lanjut ke titik berikutnya, dan balik ke pos jaga
-     (STATIONS.idle) sesudah titik terakhir. 'jalan' -> 'cek' berulang untuk
+     (POS_SATPAM, pojok kanan bawah) sesudah titik terakhir. 'jalan' -> 'cek' berulang untuk
      tiap titik, lalu 'pulang' sekali di akhir. */
   mulaiSatpam() {
     petugasSatpam = this;
@@ -7153,7 +7284,7 @@ class Standby extends Agent {
           this.goToXY(t.x, t.y, t.hadap);
         } else {
           this.tugasSatpam = 'pulang';
-          this.goTo('idle');           // pos jaga: stasiun yang sudah ada, bukan koordinat baru
+          this.goToXY(POS_SATPAM.titikX, POS_SATPAM.titikY, 'down');   // pos jaga sungguhan, menghadap ruangan
         }
       }
     } else if (this.tugasSatpam === 'pulang') {
@@ -7169,7 +7300,9 @@ class Standby extends Agent {
     else { this.betah = false; this.doingEvent = ''; }
     if (petugasSatpam === this) petugasSatpam = null;
     // this.peran TIDAK dikembalikan -- lihat komentar mulaiSatpam().
-    if (lanjut) this.nextMove = now + 11000 + Math.random() * 15000;
+    // Sampai di pos: berjaga dulu di mejanya sebelum ikut mondar-mandir lagi —
+    // satpam yang langsung pergi begitu tiba bukan sedang jaga pos.
+    if (lanjut) this.nextMove = now + 25000 + Math.random() * 20000;
   }
   destroy() {
     if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
@@ -7226,9 +7359,9 @@ function calonPetugasNotulen() {
    STATIONS.agent, supaya tidak berhimpit dengan sesi nyata yang sedang
    antre/bekerja tepat di depan pintu itu), depan pintu pantri (titik
    PANTRI_LUAR yang sama dipakai route() sendiri), dan mesin absen dekat
-   pintu keluar. Pos jaganya STATIONS.idle (ruang tunggu): sudah punya
-   slot/antre sendiri, jadi "kembali ke pos" cukup goTo('idle') seperti
-   standby lain yang sedang tidak bertugas. */
+   pintu keluar. Pos jaganya POS_SATPAM — meja jaga di pojok kanan bawah
+   (lihat komentarnya di kepala berkas). Dulu STATIONS.idle, ruang tunggu,
+   semata karena kantor ini belum punya pos. */
 const SATPAM_RUTE = [
   { x: ABSEN_X, y: ABSEN_Y, hadap: 'up' },                 // dekat pintu keluar & mesin absen
   { x: WC.titikX, y: WC.titikY, hadap: 'up' },             // ambang pintu WC
@@ -7254,7 +7387,7 @@ function calonPetugasSatpam() {
 // manual), tidak pernah negatif
 function jagaPopulasi() {
   const dasar = minDiLayarTimpa == null ? MIN_DI_LAYAR : minDiLayarTimpa;
-  const perlu = Math.max(0, dasar - standbyDihapus - agents.size);
+  const perlu = Math.max(PENGANGGUR_MIN, dasar - standbyDihapus - agents.size);
   while (standby.length > perlu) {
     const keluar = standby.pop();
     keluar.destroy();
@@ -9664,6 +9797,7 @@ function daftarBarang() {
           ? bacaKeadaan.penghuni.map((o) => esc(namaPendek(o))).join(', ')
           : '—'],
         ['kapasitas', BACA.slot.length + ' bantal duduk'],
+        ['koran di rak', koranBasi() ? 'edisi kemarin, belum diganti' : 'edisi hari ini'],
         ['kliping dijilid', (RUANGAN.arsipKlipingLembar || 0) + ' lembar'],
         ['dipakai', (bacaKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
       ] },
@@ -9820,7 +9954,8 @@ function daftarBarang() {
       lokasi: 'sayap timur', kotak: kk(FOTOKOPI),
       uraian: 'fotokopi besar dengan pengumpan dokumen; standby sesekali mampir ke sini',
       isi: () => { const a = fotokopiDipakai(); return [['dipakai', a ? esc(namaPendek(a)) : '—'],
-        ['lembar', perabotBaru.lembarFotokopi + ' sejak halaman dibuka']]; } },
+        ['lembar', perabotBaru.lembarFotokopi + ' sejak halaman dibuka'],
+        ['rim cadangan', RUANGAN.rimKertas ? RUANGAN.rimKertas + ' rim di atas mesin' : 'habis']]; } },
     { id: 'lemari-piala', nama: 'Lemari Piala & Penghargaan', kode: '3.05.01.04.011', nup: 1, tahun: 2016,
       lokasi: 'sayap timur', kotak: kk(LEMARI_PIALA),
       uraian: 'lemari kaca: piala, plakat, medali, piagam, dan foto bersama',
@@ -13301,6 +13436,7 @@ function daftarEvent(...defs) {
 const MOD = {
   lampu: 1,          // pengali intensitas neon
   neonMati: neonSemua(0),  // 0..1 per tabung (kiri 170, kanan 410, sayap timur 530); 1 = padam
+  mcbTurun: false,         // tuas tengah panel MCB jalur timur sedang turun (mcb-jalur-turun); tulis true saja
   kipas: 1,          // pengali kecepatan baling kipas berdiri
   layar: 1,          // pengali kecepatan animasi layar laptop
   layarPucat: 0,     // 0..1, layar laptop menuju mode tidur
@@ -13472,6 +13608,15 @@ const RUANGAN = {
   // menyetelnya langsung ke sasaran, jadi halaman yang dibuka jam 15.00
   // tidak pernah tampil bersih dulu.
   kusut: null,
+  /* Jejak gelombang 5 (public/event/39-...). Dulu digambar event itu sendiri
+     dan HILANG begitu eventnya selesai — penyimpangan yang sama tercatat di
+     tiga berkas event berbeda karena tidak ada tempat menyimpannya. Sekarang
+     hidup lebih lama dari eventnya, persis piagamDinding dan kesetAda. Sama
+     seperti semua field RUANGAN: sepanjang halaman terbuka, tidak disimpan
+     ke mana pun. */
+  mcbTurunKali: 0,         // berapa kali jalur timur turun & dinaikkan lagi; >=1 menempelkan lakban di panel
+  rimKertas: 0,            // 0..3 rim cadangan di atas mesin fotokopi: jatah-kuota-cair +2, dipakai yang memfotokopi
+  koranTanggal: null,      // toDateString() hari koran pojok baca terakhir diganti (koran-pagi-di-rak-baca); null = belum pernah
 };
 
 /* -------------------------------------------------------------- penjadwal */

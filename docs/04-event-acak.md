@@ -35,7 +35,7 @@ berisi delapan: empat memakai **pojok baca** yang baru (korannya diganti tiap
 pagi, bukunya didiskusikan sambil lesehan, ada yang ketiduran di atas bantal,
 raknya sesekali dilap) dan empat menuntaskan sisa katalog yang dulu divonis
 "mahal" karena menuntut mesin yang waktu itu belum ada — `mcb-jalur-turun`
-(panel MCB di bidang dinding kosong x422..436, dua tabung sisi timur padam
+(tuas panel MCB permanen di kiri pintu gudang turun, dua tabung sisi timur padam
 sampai ada yang menaikkannya lagi), `rapat-molor-kopi-masuk` (syaratnya
 membaca `rapatAktif` sungguhan, bukan menebak jam), `jatah-kuota-cair`
 (`bobot: 0` — dia cuma hidup sebagai `lanjutan` milik `kuota-fotokopi-habis`,
@@ -96,6 +96,10 @@ ruangan. Tiga aturan menjaga urutan itu:
 3. **Semuanya bisa dimatikan.** `?event=0` mematikan, `?event=<id>` memaksa satu
    event jalan berulang — tanpa itu event langka mustahil diuji. Beberapa id
    sekaligus boleh: `?event=kucing-kantor-mampir,gorengan-di-meja-rapat`.
+   Event yang butuh banyak orang menganggur (foto bersama, senam Jumat) tetap
+   batal kalau ruangannya sedang ramai sesi sungguhan; `?penganggur=N` (0..10)
+   menjamin minimal N pegawai standby — sesi nyata yang sibuk tidak dihitung,
+   Aturan 1 tetap berlaku. Contoh: `?event=foto-bersama&penganggur=6`.
 
 `mulai()` yang melempar akan **membatalkan** eventnya, bukan membiarkannya jalan
 setengah jadi — kalau tidak, `tick()`-nya ikut meledak tiap frame sampai

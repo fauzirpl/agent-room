@@ -84,12 +84,30 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   diundi sejak lahir — giliran pertama siapa saja, lalu dia didahulukan lagi
   tiap putaran berikutnya, sama seperti arsiparis didahulukan urusan notulen.
   Sesi nyata tidak pernah dipaksa berpatroli.
+- **Pos satpam.** Satpam yang selesai berkeliling sekarang pulang ke meja
+  jaga sungguhan di pojok kanan bawah (buku mutasi jaga, HT, papan POS, kursi
+  lipat) dan berjaga 25–45 detik menghadap ruangan — dulu dia "pulang ke pos"
+  ke ruang tunggu karena kantornya belum punya pos.
+- **Jejak event yang menetap.** Panel MCB jalur timur jadi perlengkapan dinding
+  permanen (tuasnya turun waktu jalurnya putus, dan sesudah pertama kali
+  dinaikkan ada lakban "sering turun" yang tidak pernah dicabut), rim kertas
+  dari jatah kuota menumpuk di atas mesin fotokopi sampai habis dipakai, dan
+  koran di rak pojok baca kekuningan sampai edisi hari ini dipasang. Dulu
+  ketiganya cuma kelihatan selama eventnya jalan. Panel MCB sekalian pindah ke
+  kiri pintu gudang: tempat lamanya menumpuk dengan dekor tema ramadan.
+- **`sapu-ruang.mjs` — alat pencari tempat perabot.** Satu perintah untuk yang
+  selama ini ditulis ulang tiap kali menaruh perabot baru: siapa yang
+  menggambar dan siapa yang lewat di sebuah kotak (43 ribu rute `route()`
+  asli), peta ASCII-nya, dan calon kotak kosong di sebuah area.
+- **Mode uji `?penganggur=N`.** Menjamin minimal N pegawai standby, supaya
+  event yang butuh banyak orang menganggur (foto bersama, senam Jumat) bisa
+  dilihat langsung lewat `?event=<id>` walau ruangannya sedang ramai sesi.
 - **Delapan event lagi (gelombang 5).** Empat memakai pojok baca yang baru:
   koran pagi dipasang di raknya dan edisi kemarin dibuang ke tong pantri, dua
   orang lesehan mendiskusikan buku yang sama, satu ketiduran di atas bantal
   sesudah makan siang sampai dibangunkan, dan raknya sesekali dilap. Empat
   sisanya menuntaskan usulan rapat yang dulu divonis "mahal": **MCB satu
-  jalur turun** (panel MCB di bidang dinding kosong sebelah rak server, dua
+  jalur turun** (panel MCB di dinding kiri pintu gudang, dua
   tabung sisi timur padam sampai ada yang menaikkan tuasnya lagi), **rapat
   molor kopi masuk** (syaratnya membaca rapat sungguhan — ada rapat yang
   sudah lewat empat menit dengan tiga orang duduk), **jatah kuota cair**

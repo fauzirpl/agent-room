@@ -599,6 +599,61 @@ isinya daftar nama yang sedang membaca plus jumlah lembar kliping yang sudah
 dijilid (`RUANGAN.arsipKlipingLembar`, angka yang sudah ada — pojok baca
 membacakannya, tidak menambah state baru).
 
+Koran yang tergantung di raknya **kekuningan** kalau masih edisi kemarin, dan
+baru putih lagi sesudah `koran-pagi-di-rak-baca` memasang yang baru — lihat
+"Jejak event yang menetap" di bawah.
+
+### Jejak event yang menetap
+
+`RUANGAN` sejak awal tempat bekas yang hidup lebih lama dari eventnya (noda
+tinta, piagam, keset). Tapi tiga benda di gelombang event ke-5 sempat
+dipangkas jadi **digambar event itu sendiri** — muncul selama eventnya jalan,
+lalu hilang — karena tidak ada tempat menyimpannya di luar `room.js`.
+Sekarang ketiganya menetap:
+
+| Jejak | Ditulis oleh | Digambar di | Hilangnya |
+|---|---|---|---|
+| panel MCB jalur timur | — (perlengkapan dinding permanen, `PANEL_MCB`) | `drawPanelMcb()` di `drawWall` | tidak pernah; tuasnya turun lewat `MOD.mcbTurun` |
+| lakban "sering turun" di panel | `mcb-jalur-turun` (`RUANGAN.mcbTurunKali++`) | `drawPanelMcb()` | tidak pernah dicabut |
+| rim kertas cadangan di atas mesin fotokopi | `jatah-kuota-cair` (+2, maks 3) | `drawFotokopi()` | dipakai orang yang memfotokopi (25% per kunjungan) |
+| koran di rak pojok baca | `koran-pagi-di-rak-baca` (`RUANGAN.koranTanggal`) | `drawPojokBaca()` lewat `koranBasi()` | kekuningan lagi besok paginya |
+
+Panel MCB-nya **pindah** dari x422 ke dinding kiri pintu gudang (x592..606
+y56..74): tempat lama ternyata menumpuk dengan dekor tema ramadan yang sapuan
+coretan waktu itu lewatkan. `koranBasi()` sengaja cuma membaca: halaman yang
+dibuka lewat jam 10 menganggap koran hari ini sudah dipasang orang sebelum
+kita datang — kalau tidak, tiap muat ulang siang hari menampilkan koran basi
+seharian padahal event paginya tidak mungkin jalan lagi. Semua field ini,
+seperti `RUANGAN` lain, hidup selama halaman terbuka dan tidak disimpan ke
+mana pun.
+
+### Alat sapu ruangan
+
+Setiap perabot di ruangan ini ditaruh dengan cara yang sama: sapuan piksel atas
+semua yang digambar (`drawWall` di kelima tema, `drawFloor`, `PROPS`, seluruh
+hook gambar registri event di banyak cuplikan umur) ditambah rute pegawai yang
+sungguhan. Dulu sapuan itu ditulis ulang sekali pakai tiap kali. Sekarang satu
+perintah:
+
+```bash
+node sapu-ruang.mjs siapa 590 53 18 22 --halus      # siapa yang menggambar / lewat di kotak ini
+node sapu-ruang.mjs peta 610 240 62 90              # peta ASCII: huruf = pemilik piksel, ~ = badan orang lewat
+node sapu-ruang.mjs kosong 26 46 540 248 132 108    # calon kotak 26x46 yang bebas di area itu
+```
+
+Lalu lintasnya dihitung dengan `route()` yang **asli** antar semua titik tujuan
+yang dikenal (slot stasiun, meja kerja, WC, gudang, fotokopi, bantal pojok baca,
+mesin absen, pintu keluar, rute & pos satpam) plus setiap `goToXY(<angka>,
+<angka>)` literal di `public/event/*.js` — 43 ribu rute, badan orang 11 px lebar
+dari 30 px di atas garis kaki. Titiknya dibaca lewat `ruangRujukan()` di
+`room.js`, jadi tujuan baru ikut tersapu tanpa mengubah alatnya. Untuk
+perlengkapan dinding pakai `--abaikan-lalu-lintas`: orang yang lewat di depan
+dinding tidak tertutup panel di belakangnya. `gambarAtas` sengaja tidak
+dihitung kecuali `--atas` — isinya cahaya yang memang harus lewat.
+
+Sapuan pertama alat ini langsung menemukan satu kesalahan lama: panel MCB
+gelombang 5 menumpuk dengan dekor tema ramadan.
+
 ### Satpam berpatroli
 
 WC, gudang, dan pojok baca di atas semuanya rutinitas "jalan ke satu titik,
@@ -615,9 +670,15 @@ penjadwal, tidak masuk log — jalan sendiri tiap ±4 menit (`SATPAM_JEDA_MS`,
 `window.SATPAM_UJI_MS` mempercepatnya di uji, pola yang sama dengan
 `jedaNotulen()`).
 
-Titik-titiknya **bukan geometri baru** — dunia `W = 672` tidak dilebarkan lagi
-untuk fitur ini, dan tidak ada perabot "pos jaga" baru digambar. Yang
-dipinjam semuanya sudah ada untuk keperluan lain:
+Titik-titik kelilingnya **bukan geometri baru** — dunia `W = 672` tidak
+dilebarkan untuk fitur ini, dan semuanya dipinjam dari yang sudah ada. Yang
+BARU cuma satu, dan datang belakangan: **pos jaganya** (`POS_SATPAM`). Versi
+pertama memulangkan satpam ke ruang tunggu semata karena kantor ini belum
+punya pos; sekarang ada meja jaga di pojok kanan bawah (x643..669 y276..322 —
+buku mutasi jaga, HT, papan POS, kursi lipat). Tempatnya dicari dengan
+`sapu-ruang.mjs` (lihat "Alat sapu ruangan" di bawah): satu-satunya calon di
+pojok itu yang bebas piksel dan bebas rute. Sampai di pos, satpam berjaga
+25–45 detik menghadap ruangan sebelum ikut mondar-mandir lagi.
 
 | Titik | Koordinat | Dipinjam dari |
 |---|---|---|
@@ -626,7 +687,7 @@ dipinjam semuanya sudah ada untuk keperluan lain:
 | ambang pintu gudang | `GUDANG.titikX, GUDANG.titikY` (624,116) | `keGudang()` |
 | depan ruang kadis | `STATIONS.agent.x, 152` (452,152) | ambang `agent` — y digeser dari 140 ke 152 supaya tidak berhimpit dengan sesi nyata yang sedang antre/bekerja tepat di depan pintu |
 | depan pintu pantri | `PANTRI_LUAR, PANTRI.ambang` (500,272) | titik hinge yang sudah dipakai `route()` sendiri buat menembus sekat pantri |
-| pos jaga (pulang) | `goTo('idle')` | `STATIONS.idle` — ruang tunggu, sudah punya slot/antre sendiri |
+| pos jaga (pulang) | `POS_SATPAM.titikX, POS_SATPAM.titikY` (658,298) | meja jaga baru — dulu `goTo('idle')`, ruang tunggu |
 
 Perannya (`satpam` di `JABATAN`: peci, kumis, seragam khaki-coklat sendiri,
 kerudung `#4a3c1f` buat yang jenis kelaminnya perempuan — lihat "Persona

@@ -12,7 +12,7 @@
 | `hook.mjs` | forwarder cadangan kalau `curl` tidak ada |
 | `install.mjs` | pasang/lepas hook di `settings.json` |
 | `public/room.js` | mesin render canvas + mesin event acak |
-| `public/event/` | 337 event acak terpasang, dipecah per tema; urutan muatnya di `manifest.json` (disambung server jadi satu `/event-acak.js`, dimuat sesudah `room.js`; angka dari `node uji-katalog.mjs`) |
+| `public/event/` | 349 event acak terpasang, dipecah per tema; urutan muatnya di `manifest.json` (disambung server jadi satu `/event-acak.js`, dimuat sesudah `room.js`; angka dari `node uji-katalog.mjs`) |
 | `uji-event.mjs`, `uji-zorder.mjs` + `uji-zorder.golden.json`, `uji-tenggat.mjs`, `uji-arah.mjs`, `uji-katalog.mjs` | harness uji headless: event (syarat/mulai/tick/selesai/gambar*/lanjutan/penjadwal), z-order `frame()` vs golden, tenggat `pada()` (lint pola tenggat bergerak + akibat yang dijanjikan benar-benar terjadi), arah hadap penonton (event tidak boleh menulis `hadap` ke orang yang bukan pemerannya — pakai `menoleh()`/`mendongak()`), papan skor katalog |
 | `uji-ulang.mjs` + `uji-ulang.fixture.jsonl`, `buat-fixture.mjs` | putar ulang satu hari buku agenda sungguhan (tersamar) ke `frame()`/`handle()` asli, memeriksa invarian sepanjang hari; `buat-fixture.mjs` yang membuat fixture-nya, lengkap dengan pagar privasi |
 | `uji-sisip.mjs` + `uji-sisip.golden.json`, `uji-seragam.mjs`, `uji-pagu.mjs`, `uji-pegawai.mjs` | bukaan ruang kadis (sapuan piksel + batas keras), jarak warna rompi kantor cabang, pagu anggaran token, dan formasi pegawai tetap |
@@ -43,9 +43,10 @@
 | `nama.json`, `suara.json`, `.agent-room-suara-kunci`, `suara/` | daftar nama pilihanmu, setelan suara ucap, kunci OpenRouter, dan cache klip. Semuanya lahir dari panel ⚙️, semuanya data lokal dan diabaikan `.gitignore`; rancangannya di [docs/07-suara-nama.md](07-suara-nama.md) |
 | `selaras-katalog.mjs` | menyelaraskan tanda `**+**` dan angka "N sudah jadi kode" di `EVENT-ACAK.md` dengan registri sungguhan; `--periksa` ikut di `npm test` supaya katalognya tidak pernah lagi basi diam-diam |
 | `selaras-suara.mjs` | menerjemahkan kolom `suara` di `event-acak.json` (catatan desain rapat) jadi peta "id event → resep efek suara" di `public/event/99-suara.js`; `--periksa` ikut di `npm test` supaya event baru tidak pernah lahir bisu. Rancangannya di [docs/08-suara-event.md](08-suara-event.md) |
+| `sapu-ruang.mjs` | **alat pencari tempat perabot**, bukan uji: siapa yang menggambar dan siapa yang lewat di sebuah kotak dunia (`siapa`), peta ASCII pemilik piksel + badan orang lewat (`peta`), dan calon kotak kosong di sebuah area (`kosong`). Sapuannya sama dengan uji-sisip (drawWall di kelima tema, drawFloor, PROPS, hook gambar event di banyak cuplikan umur) ditambah lalu lintas dari `route()` asli antar semua titik tujuan yang dibaca lewat `ruangRujukan()`. Rinciannya di [docs/02](02-ruangan.md#alat-sapu-ruangan) |
 | `public/index.html`, `public/style.css` | rangka halaman + panel |
 | `EVENT-ACAK.md`, `event-acak.json` | katalog rancangan 373 event, hasil rapat desain |
-| `narasi-event.json` | 337 kalimat yang dibacakan waktu tiap event menyala — satu kalimat, sudut pandang orang pertama, dari orang yang mengalami kejadiannya. Dibaca `narasiEvent()` di server; halaman cuma mengirim id event. Ditulis tangan, dijaga `uji-suara.mjs` kasus 21 |
+| `narasi-event.json` | 349 kalimat yang dibacakan waktu tiap event menyala — satu kalimat, sudut pandang orang pertama, dari orang yang mengalami kejadiannya. Dibaca `narasiEvent()` di server; halaman cuma mengirim id event. Ditulis tangan, dijaga `uji-suara.mjs` kasus 21 |
 
 Server cuma bind ke localhost dan nyimpen 400 event terakhir di memori.
 Lalu lintas keluar ada tiga, dan cuma yang pertama hidup secara bawaan: cek

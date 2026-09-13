@@ -23,19 +23,20 @@
 
    EMPAT SISANYA dari katalog rancangan (event-acak.json), dan tiga di
    antaranya divonis "mahal" di rapat karena menuntut mesin yang waktu itu
-   belum ada. Sekarang ada semua, dan ketiganya dipangkas di tempat yang sama:
-   benda yang menurut rancangan harus PERMANEN digambar event ini sendiri dan
-   hilang begitu eventnya selesai. Alasannya sama dengan `dus-kiriman-datang`
-   di berkas 04: prop permanen berarti `RUANGAN.*` baru + entri `PROPS` baru +
-   ikut golden z-order, untuk benda yang munculnya sesekali.
+   belum ada. Sekarang ada semua. Versi pertama berkas ini masih memangkas
+   benda yang menurut rancangan harus PERMANEN jadi digambar event sendiri dan
+   hilang begitu eventnya selesai; sesudahnya ketiga benda itu dipindah ke
+   room.js sebagai jejak yang menetap (PANEL_MCB, RUANGAN.rimKertas,
+   RUANGAN.koranTanggal), jadi event di sini tinggal MENULIS keadaannya.
 
    * `mcb-jalur-turun` (vonis "layak", kerumitan 3) — rancangan menaruh panel
-     MCB di x=414 y=76. Kolom itu SEKARANG TIDAK KOSONG: sapuan piksel
-     (PROPS + drawWall keempat tema + seluruh hook gambar registri event)
-     memberikannya ke rangka luar rak PC server (`drawServer`, sampai x=418)
-     dan ke ekor `kabel-lan-lepas` di x=417. Persegi kosong terdekat yang
-     muat 18x22 mulai di x=420, jadi panelnya berdiri di 422..436 y74..92 —
-     nol piksel milik perabot lama.
+     MCB di x=414 y=76; kolom itu kini milik rangka rak PC server. Versi
+     pertama pindah ke x=422 — dan ternyata menumpuk dengan dekor tema
+     RAMADAN yang sapuan coretan waktu itu lewatkan. Sapuan ulang dengan
+     sapu-ruang.mjs memberi dinding kiri pintu gudang; panelnya sekarang
+     perlengkapan PERMANEN di room.js (PANEL_MCB), event ini cuma menurunkan
+     tuasnya (MOD.mcbTurun) dan, sesudah dinaikkan, menambah
+     RUANGAN.mcbTurunKali — lakban "sering turun" yang tidak pernah dicabut.
    * `rapat-molor-kopi-masuk` — `rapatAktif` (room.js) yang dulu belum ada
      sekarang menyimpan `sejak` dan `anggota`, jadi "rapat yang sudah lewat
      empat menit dengan tiga orang duduk" bisa ditanyakan apa adanya.
@@ -83,6 +84,7 @@ daftarEvent(
       E.data.tahap = 1;
       E.data.lanjutPada = E.umur + 3;    // tenggat disimpan SEKALI, lihat catatan pada() di berkas 29
       a.say('koran hari ini sudah datang');
+      RUANGAN.koranTanggal = new Date().toDateString();   // koran di rak berhenti kekuningan (koranBasi di room.js)
       for (let i = 0; i < 3; i++) spawn('paper', 654, 184);
       a.bawa = 'kertas';                 // edisi kemarin, dicabut dari jepitan
     } else if (E.data.tahap === 1 && E.umur > E.data.lanjutPada) {
@@ -247,13 +249,13 @@ daftarEvent(
     /* Ditulis tiap frame selama turun, dan TIDAK pernah ditulis `0` waktu
        sudah naik: MOD direset tiap frame, jadi menulis nol cuma akan
        membanting tabung yang sedang ditahan padam event tetangga. */
-    if (E.data.turun) { MOD.neonMati[1] = 1; MOD.neonMati[2] = 1; }
+    if (E.data.turun) { MOD.neonMati[1] = 1; MOD.neonMati[2] = 1; MOD.mcbTurun = true; }
     pada(E, 2.5, () => {
-      const a = pemeranDekat(E, 428, 164, 260);
+      const a = pemeranDekat(E, PANEL_MCB.titikX, 164, 260);
       if (!a) return;                              // tidak ada yang bisa dipinjam: jalurnya baru pulih waktu durasinya habis
       E.data.a = a;
       a.doingEvent = 'menaikkan MCB jalur timur';
-      a.goToXY(428, 152, 'up');
+      a.goToXY(PANEL_MCB.titikX, PANEL_MCB.titikY, 'up');   // di bawah panel, kiri pintu gudang
     });
     const a = masihMain(E, E.data.a) ? E.data.a : null;
     if (a && a.diam && E.data.turun) {
@@ -261,31 +263,13 @@ daftarEvent(
       a.pose = 'angkat';
       if (E.umur > E.data.raihPada) {
         E.data.turun = false;
+        RUANGAN.mcbTurunKali++;                    // lakbannya ditempel sekarang, dan menetap
         a.pose = null;
         a.say('cuma MCB jalur timur, bukan mati lampu');
         E.data.bubarPada = E.umur + 3;
       }
     }
     if (E.data.bubarPada && E.umur > E.data.bubarPada) E.selesaiCepat = true;
-  },
-  /* Panel 14x18 di x422..436 y74..92 — persegi kosong yang diverifikasi
-     sapuan piksel (lihat kepala berkas). Tiga tuas; yang tengah turun 3 px
-     dan merah selama jalurnya mati. */
-  gambarDinding(E) {
-    const x = 422, y = 74;
-    r(x, y, 14, 18, '#dfe2e6');
-    r(x, y, 14, 1, '#f2f4f6');
-    r(x, y + 17, 14, 1, '#b9bfc6');
-    r(x + 1, y + 2, 12, 14, '#c9cdd1');
-    r(x + 2, y + 3, 10, 1, '#8f979f');              // rel tuas
-    for (let i = 0; i < 3; i++) {
-      const tx = x + 3 + i * 4;
-      const jatuh = i === 1 && E.data.turun;
-      r(tx, y + 5 + (jatuh ? 3 : 0), 3, 5, jatuh ? '#c22b2b' : '#3a4048');
-      r(tx, y + 5 + (jatuh ? 3 : 0), 3, 1, jatuh ? '#e05a5a' : '#5a626c');
-    }
-    r(x + 2, y + 13, 10, 3, '#b0b6bd');             // label jalur
-    r(x + 3, y + 14, 8, 1, '#7d848c');
   },
   selesai(E) { if (E.data.a) E.data.a.pose = null; },
 },
@@ -389,7 +373,8 @@ daftarEvent(
       E.data.tahap = 3;
       E.data.lanjutPada = E.umur + 5;
       a.bawa = null;
-      a.pose = 'jongkok';                          // menaruh rim di laci bawah mesin
+      a.pose = 'jongkok';                          // menaruh rim di atas mesin
+      RUANGAN.rimKertas = Math.min(3, (RUANGAN.rimKertas || 0) + 2);   // digambar drawFotokopi, dipakai yang memfotokopi
       a.say('jatahnya turun, sudah bisa dipakai lagi');
       for (let i = 0; i < 3; i++) spawn('paper', FOTOKOPI_TITIK.x, FOTOKOPI_TITIK.y - 20);
     } else if (E.data.tahap === 3 && E.umur > E.data.lanjutPada) {
@@ -397,16 +382,6 @@ daftarEvent(
       E.selesaiCepat = true;
     }
   },
-  // Rim kertas yang sudah ditaruh di sebelah mesin, selama eventnya masih jalan.
-  gambarProp(E) {
-    if ((E.data.tahap || 0) < 3) return;
-    const x = FOTOKOPI_TITIK.x + 10, y = 126;
-    r(x, y, 10, 6, '#f2f0e6');
-    r(x, y, 10, 1, '#ffffff');
-    r(x, y + 3, 10, 1, '#c9cdd1');
-    r(x + 2, y + 1, 6, 1, '#7aa5e8');              // pita merek
-  },
-  sortY: 134,
   selesai(E) { if (E.data.a) { E.data.a.pose = null; E.data.a.bawa = null; E.data.a.bawaSampai = 0; } },
 },
 
