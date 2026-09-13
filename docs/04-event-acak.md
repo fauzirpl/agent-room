@@ -142,6 +142,24 @@ pemeran pun dibatalkan dengan cooldown 20 detik. Jadi pemeran wajib dipinjam
 melanggarnya — meminjam pengangkut sesudah dusnya mendarat — dan akibatnya
 tidak pernah menyala sama sekali, padahal smoke `uji-event.mjs` hijau: smoke
 memanggil `mulai`/`tick`/`selesai` langsung, tidak lewat gerbang itu.
+`bocor-baru-di-atas-arsip` ternyata punya bug yang sama (ember baru dipinjam
+sesudah tetes ketiga).
+
+Sekarang gerbang itu diuji permanen di bagian penjadwal `uji-event.mjs`
+(`ujiBisaHidup`): tiap event `perluAktor` dinyalakan lewat `nyalakanEvent()`
+asli di suasana yang membuat `syarat()`-nya benar, termasuk varian dengan
+pegawai yang **bekerja** di tiap stasiun tool (untuk `pemeranStasiun()`) dan
+penganggur di meja pojok. Kalau syaratnya tidak bisa dibuat fixture (tanggal
+Lebaran, isi ember AC, `toolCount`), syaratnya dilewati seperti `?event=<id>`,
+dan event itu tetap wajib menyala. Kontrol positifnya adalah event sintetis yang
+sengaja meminjam di `tick()`: event itu harus tertangkap.
+
+Penilai itu cuma sejujur *fixture*-nya. Audit pertamanya sempat memvonis
+`merenung-depan-kipas` mati, padahal eventnya sehat. Orang palsu tidak punya
+`lastEvent`, dan `arrivedAt`-nya berbasis epoch, bukan `now` room.js
+(`performance.now()`), sehingga saringan "sudah diam 12 detik" menjadi `NaN`.
+Orang palsu sekarang memakai kedua medan itu sebasis `now`, sama seperti
+constructor `Agent`.
 
 #### Aturan 1 punya jebakan yang tidak kelihatan
 

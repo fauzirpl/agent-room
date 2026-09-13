@@ -147,7 +147,17 @@ daftarEvent(
   kelas: 'latar', bobot: B.jarang, cooldown: 2700, durasi: 60,
   syarat: () => CUACA.hujan > 0.6,
   perluAktor: true,
-  mulai(E) { E.data.jeda = 0; },
+  /* SAMPAI VERSI INI EVENT INI TIDAK PERNAH BISA JALAN — kelas bug yang sama
+     dengan dus-ekspedisi-datang. Pemerannya baru dipinjam di tick() sesudah
+     tetes ketiga, sedangkan nyalakanEvent() memeriksa perluAktor TEPAT sesudah
+     mulai() dan membatalkan event yang pulang tanpa pemeran (cooldown 20 dtk).
+     Sekarang arsiparisnya dipinjam di mulai() dan langsung mendatangi lemari
+     arsip; embernya tetap baru ditaruh sesudah tetes ketiga, jadi dia sempat
+     berdiri menengadah memastikan bocornya dulu. */
+  mulai(E) {
+    E.data.jeda = 0;
+    E.data.a = pemeran(E, ['arsiparis']);
+  },
   tick(E, dt) {
     E.data.jeda -= dt;
     if (!E.data.beres && E.data.jeda <= 0) {
@@ -155,13 +165,19 @@ daftarEvent(
       const p = spawn('drip', 96, 30);
       if (p) { p.dasar = 136; p.onDrip = () => { E.data.tetes = (E.data.tetes || 0) + 1; }; }
     }
-    if (E.data.tetes >= 3 && !E.data.beres && !E.aktor.length) {
-      const a = pemeran(E, ['arsiparis']);
-      if (a) { a.doingEvent = 'menaruh ember di arsip'; a.goToXY(54, 152, 'up'); }
-    }
-    const a = E.aktor[0];
-    if (a && a.diam && !E.data.beres) {
+    if (E.data.beres) return;
+    // Direbut tool call sungguhan sebelum embernya tertaruh: yang direbut tidak
+    // disuruh apa-apa lagi; pinjam orang lain yang bebas dan suruh dia jalan.
+    if (!masihMain(E, E.data.a)) { E.data.a = pemeran(E, ['arsiparis']); E.data.jalan = false; }
+    const a = E.data.a;
+    if (!masihMain(E, a)) return;
+    if (!E.data.jalan) {
+      E.data.jalan = true;
+      a.doingEvent = 'melihat bocor di arsip';
+      a.goToXY(54, 152, 'up');
+    } else if (a.diam && E.data.tetes >= 3) {
       E.data.beres = true;
+      a.doingEvent = 'menaruh ember di arsip';
       a.say('atapnya bocor lagi di sini');
       RUANGAN.emberArsip = true;
     }
