@@ -804,6 +804,8 @@ body {
 .riwayat-baris { display: flex; gap: 8px; padding: 2px 0; font-size: 10.5px; line-height: 1.45; color: var(--tinta); }
 .riwayat-baris .jam { flex: none; width: 36px; color: var(--tinta-pudar); font-variant-numeric: tabular-nums; }
 .riwayat-baris.mulai .teks { color: var(--emas-tua); font-style: italic; }
+/* tanggal di baris 'riwayat' kartu inventaris barang (perbaruiKartuBarang) */
+.kib-tgl { color: var(--tinta-pudar); white-space: nowrap; }
 
 .stat-cache { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--khaki-tua); }
 .stat-cache .kk { flex: none; color: var(--tinta-pudar); font-size: 9.5px; letter-spacing: .04em; width: 78px; }

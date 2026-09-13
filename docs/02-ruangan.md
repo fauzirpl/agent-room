@@ -711,6 +711,13 @@ maksimum 300 entri; entri pembuka "mulai dicatat" selalu dipertahankan supaya
 riwayatnya — kantor yang dibuka bersih tidak punya masa lalu. Dijaga
 `uji-bekas.mjs` bagian "Buku riwayat".
 
+Kartu inventaris barang ikut membacanya: barang yang menanggung bekas (meja
+rapat → noda kopi & kursi rusak, printer → toner & kertas, lemari piala →
+piala, fotokopi → rim cadangan, dan seterusnya — `RIWAYAT_BARANG` di
+`room.js`) mendapat baris **riwayat** terakhir di kartunya, lengkap dengan
+tanggal dan jamnya. Stiker inventaris sengaja tidak: entrinya tidak menyimpan
+barang mana yang ditempeli.
+
 ### Alat sapu ruangan
 
 Setiap perabot di ruangan ini ditaruh dengan cara yang sama: sapuan piksel atas

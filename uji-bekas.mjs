@@ -197,6 +197,14 @@ console.log(tebal('\nBuku riwayat'));
   const buku4 = H2.riwayatRujukan().riwayatKantor;
   ok('?ruangan=baru mengosongkan riwayat juga', buku4.length === 1 && /bersih/.test(buku4[0].teks)
     && H2.localStorage.getItem(H2.bekasRujukan().BEKAS_KUNCI) === null, buku4.map((r) => r.teks).join(' | '));
+  // kartu inventaris membaca buku riwayat
+  ok('riwayatBarang: kartu meja rapat membaca entri kursi rusak terbaru',
+    G.riwayatBarang('rapat') && G.riwayatBarang('rapat').teks === 'Kursi rapat yang rusak diganti',
+    G.riwayatBarang('rapat') ? G.riwayatBarang('rapat').teks : 'null');
+  ok('riwayatBarang: barang tanpa entri & barang tanpa peta = null',
+    G.riwayatBarang('dispenser') === null && G.riwayatBarang('jam') === null && G.riwayatBarang('tidak-ada') === null);
+  ok('riwayatBarang: kartu printer ikut isi ulang toner', G.riwayatBarang('printer')
+    && /Toner printer diganti/.test(G.riwayatBarang('printer').teks));
   ok('jelaskanPerubahan murni: potret sama = nol kalimat',
     G.jelaskanPerubahan({ piala: true, nodaMeja: [] }, { piala: true, nodaMeja: [] }).length === 0);
 }

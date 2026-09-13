@@ -129,6 +129,8 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   Dicatat otomatis dari bekas yang disimpan — tidak ada event yang perlu
   diubah — dan stok yang cuma berkurang sengaja tidak ikut supaya bukunya
   tetap riwayat, bukan log. `?ruangan=baru` mengosongkan riwayatnya juga.
+  Kartu inventaris barang membacanya juga: klik meja rapat dan kartunya
+  menyebut kapan kursi rusaknya terakhir diganti.
 - **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
   keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
   stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang

@@ -10234,6 +10234,14 @@ function perbaruiKartuBarang() {
   }
   if (b.stiker) baris.push(['stiker BMN', RUANGAN.stikerTertempel.has(b.stiker) ? 'tertempel' : 'belum ditempel']);
   if (b.isi) for (const [kk, vv] of b.isi()) baris.push([esc(kk), vv]);
+  // Baris terakhir: kapan bekas barang ini terakhir berubah, dari buku riwayat 📜.
+  const rb = riwayatBarang(b.id);
+  if (rb) {
+    const tg = new Date(rb.t);
+    baris.push(['riwayat', esc(rb.teks) + ' <span class="kib-tgl">· '
+      + esc(tg.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })) + ' '
+      + esc(tg.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })) + '</span>']);
+  }
   el.innerHTML = baris.map(([kk, vv]) => '<span class="kk">' + kk + '</span><span class="vv">' + vv + '</span>').join('');
 }
 
@@ -14059,6 +14067,28 @@ function mulaiRuanganTersimpan(bersih) {
   riwayatDasar = JSON.parse(riwayatDasarTeks).isi;
 }
 function riwayatRujukan() { return { RIWAYAT_KUNCI, RIWAYAT_MAKS, riwayatKantor }; }
+
+/* Kartu inventaris membaca buku riwayat: barang mana menanggung bekas mana.
+   Kunci = id di daftarBarang(), nilai = field BEKAS_FIELD yang bekasnya
+   memang menempel di barang itu. Barang yang tidak ada di sini tidak dapat
+   baris riwayat — bukan lupa: noda plafon, retak lantai, lakban panel MCB,
+   dan piagam dinding tidak punya kartu sendiri. Stiker inventaris sengaja
+   tidak dipetakan: entri riwayatnya tidak menyimpan barang MANA yang
+   ditempeli, jadi menaruhnya di semua kartu berarti berbohong. */
+const RIWAYAT_BARANG = {
+  'papan-nama': ['spanduk'], arsip: ['arsipPenuh', 'dusTambahanArsip'], bagan: ['baganKotak'],
+  printer: ['toner', 'kertasPrinter'], stempel: ['nodaMeja'], 'foto-kanan': ['fotoMiring'],
+  apar: ['kartuAPAR'], server: ['labelPatch', 'kabelRapi'], kadis: ['plangBaru', 'kesetAda'],
+  rapat: ['nodaKopi', 'kursiRusak', 'karpetCerah'], 'buku-tamu': ['bukuTamu'],
+  dispenser: ['gelasDispenser'], fotokopi: ['rimKertas'], 'lemari-piala': ['piala'], baca: ['koranTanggal'],
+};
+// Entri riwayat terbaru untuk satu barang, atau null.
+function riwayatBarang(id) {
+  const k = RIWAYAT_BARANG[id];
+  if (!k) return null;
+  for (let i = riwayatKantor.length - 1; i >= 0; i--) if (k.includes(riwayatKantor[i].k)) return riwayatKantor[i];
+  return null;
+}
 
 mulaiRuanganTersimpan(MODE_URL.get('ruangan') === 'baru');
 setInterval(simpanBekasRuangan, 15000);
