@@ -152,7 +152,10 @@ pegawai yang **bekerja** di tiap stasiun tool (untuk `pemeranStasiun()`) dan
 penganggur di meja pojok. Kalau syaratnya tidak bisa dibuat fixture (tanggal
 Lebaran, isi ember AC, `toolCount`), syaratnya dilewati seperti `?event=<id>`,
 dan event itu tetap wajib menyala. Kontrol positifnya adalah event sintetis yang
-sengaja meminjam di `tick()`: event itu harus tertangkap.
+sengaja meminjam di `tick()`: event itu harus tertangkap. Varian suasana ketiga
+("bekas jatuh tempo & gudang sesak") mengisi keadaan `RUANGAN` yang dijamin
+syarat dua event di `public/event/42` — tanpa bekas yang jatuh tempo atau
+gudang yang berisi, `mulai()` keduanya memang sah berhenti tanpa pemeran.
 
 Penilai itu cuma sejujur *fixture*-nya. Audit pertamanya sempat memvonis
 `merenung-depan-kipas` mati, padahal eventnya sehat. Orang palsu tidak punya

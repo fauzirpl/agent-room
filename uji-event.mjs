@@ -810,13 +810,28 @@ export function ujiSatuEvent(ctx, def, pristine) {
  * tool — pemeranStasiun() cuma meminjam dari S.bekerja di stasiun itu, dan
  * fixture biasa menaruh semua yang bekerja di 'think' — plus satu penganggur
  * di MEJA_POJOK (wifi-sudut-lemah). Tanpa varian itu enam event pemeranStasiun
- * cuma bisa dilaporkan tak ternilai, bukan dibuktikan hidup. */
+ * cuma bisa dilaporkan tak ternilai, bukan dibuktikan hidup.
+ *
+ * Varian ketiga, "bekas jatuh tempo & gudang sesak", mengisi keadaan RUANGAN
+ * yang dijamin syarat() dua event public/event/42 dan tidak pernah dibuat
+ * fixture biasa (resetRuangan mengembalikan RUANGAN ke bawaan): satu bekas
+ * bermasa pakai yang sudah lewat masanya (bekasJatuhTempo) dan empat barang
+ * bekas di gudang (simpanKeGudang). Tanpa itu keduanya — yang mulai()-nya SAH
+ * berhenti kalau tidak ada yang dibereskan — cuma bisa dilaporkan mati. Varian
+ * ini dicoba paling akhir, jadi event yang sudah hidup di varian lain tidak
+ * pernah melihatnya. */
 const JAM_GERBANG = [3, 8, 10, 12, 16, 17, 20, 23];
 const STASIUN_TOOL = ['read', 'search', 'web', 'edit', 'server'];
+const VARIAN_GERBANG = [{ stasiun: false }, { stasiun: true }, { stasiun: false, bekas: true }];
 
-function suasanaGerbang(ctx, pristine, { jam, cuaca, stasiun }) {
+function suasanaGerbang(ctx, pristine, { jam, cuaca, stasiun, bekas }) {
   resetRuangan(ctx, pristine);
   const S = buatS(ctx, { jam, hujan: cuaca.hujan, petir: cuaca.petir, ramai: true });
+  if (bekas) {
+    ctx.__jembatan__.RUANGAN.kesetAda = true;
+    ctx.bekasMasaRujukan().bekasSejak.kesetAda = Date.now() - 400 * 86400000;
+    for (const j of ['keset', 'piala', 'kursi', 'plang']) ctx.simpanKeGudang(j);
+  }
   if (!stasiun) return S;
   const { STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y } = ctx.__jembatan__;
   for (const st of STASIUN_TOOL) {
@@ -842,12 +857,12 @@ export function ujiBisaHidup(ctx, pristine, def, { percobaan = 3 } = {}) {
   const { eventHidup, cooldownSampai } = ctx.__jembatan__;
   let syaratBenar = 0, hasil = null;
   cari:
-  for (const stasiun of [false, true]) {
+  for (const { stasiun, bekas } of VARIAN_GERBANG) {
     for (const jam of JAM_GERBANG) {
       for (const cuaca of HUJAN_MATRIKS) {
         // diulang: sebagian syarat() dan mulai() memakai Math.random()
         for (let i = 0; i < percobaan; i++) {
-          const S = suasanaGerbang(ctx, pristine, { jam, cuaca, stasiun });
+          const S = suasanaGerbang(ctx, pristine, { jam, cuaca, stasiun, bekas });
           let benar = false;
           try { benar = def.syarat ? !!def.syarat(S) : true; } catch (e) { benar = false; }
           if (!benar) continue;
@@ -858,7 +873,7 @@ export function ujiBisaHidup(ctx, pristine, def, { percobaan = 3 } = {}) {
           if (E) ctx.matikanEvent(E, true);
           eventHidup.length = 0; cooldownSampai.clear();
           if (hidup) {
-            hasil = { status: 'hidup', syaratBenar, suasana: `jam ${jam}, ${cuaca.label}${stasiun ? ', stasiun terisi' : ''}` };
+            hasil = { status: 'hidup', syaratBenar, suasana: `jam ${jam}, ${cuaca.label}${stasiun ? ', stasiun terisi' : ''}${bekas ? ', bekas jatuh tempo & gudang sesak' : ''}` };
             break cari;
           }
         }
