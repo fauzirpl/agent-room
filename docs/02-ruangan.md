@@ -740,7 +740,7 @@ event yang menunggunya bisa menyala lagi:
 | stiker inventaris di semua barang | 60 hari | Stiker inventaris lama dicabut, menunggu pendataan berikutnya |
 | plang baru ruang kadis | 90 hari | Nomenklatur berubah lagi — plang baru diturunkan, plang lama dipasang dulu |
 | keset depan pintu kadis | 21 hari | Keset depan pintu kadis sudah tipis, dibuang |
-| piala voli | 60 hari | Piala voli dibawa ke ruang sekretariat |
+| piala voli | 60 hari | Piala voli dipindah ke gudang |
 | bagan struktur penuh tempelan (2 kotak) | 45 hari | Bagan struktur organisasi dicetak ulang |
 | buku tamu penuh (10 baris) | 3 hari | Buku tamu penuh, diganti buku yang baru |
 | huruf papan nama yang copot | 14 hari | Huruf papan nama dipasang lengkap lagi |
@@ -779,8 +779,21 @@ menua**: tiap bekas bermasa pakai yang sedang berjalan, sudah berapa hari, dan
 kapan hilang sendiri — yang paling dekat habis di atas ("Kartu inspeksi APAR ·
 sudah 29 hari, habis besok"). Kartu inventaris barangnya mendapat baris **masa
 pakai** yang sama: klik lemari piala dan kartunya menyebut kapan pialanya
-dibawa ke sekretariat. Tanggal yang belum sempat tercatat ditulis "belum
+dipindah ke gudang. Tanggal yang belum sempat tercatat ditulis "belum
 diketahui", bukan ditebak (`bekasMenua()` di `room.js`).
+
+Dan yang habis masanya **dibereskan orang, bukan lenyap**. Begitu masa pakainya
+lewat, bekasnya *jatuh tempo* selama 12 jam (`BEKAS_TENGGANG_MS`) — di buku
+riwayat tertulis "sudah habis, menunggu dibereskan" — dan event
+**bekas-habis-masa-pakai** (`public/event/42-masa-pakai-habis.js`) boleh datang:
+seorang pegawai menggulung keset lalu membawanya ke gudang, mencabut kartu
+inspeksi APAR, menurunkan piala ke dalam boks, melepas plang baru ruang kadis,
+mengganti buku tamu yang penuh. Barang yang dibawa pergi diantar ke gudang ATK.
+Satu barang per kejadian, yang paling lama lewat lebih dulu. Baru kalau tidak
+ada yang sempat — halaman ditutup sepanjang tenggang, atau tidak ada pegawai
+yang menganggur — bekasnya dikembalikan diam-diam seperti sebelumnya. Foto
+miring dan karpet yang kusam lagi sengaja tetap diam-diam: tidak ada orang yang
+"memudarkan karpet".
 
 ### Alat sapu ruangan
 

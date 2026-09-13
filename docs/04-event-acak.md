@@ -4,7 +4,7 @@
 
 ## Event acak
 
-Selain yang dipicu tool call, ruangan punya **358 kejadian yang muncul
+Selain yang dipicu tool call, ruangan punya **359 kejadian yang muncul
 sendiri** (angka dihitung otomatis: `node uji-katalog.mjs`): UPS berbunyi,
 kalender disobek, kabel LAN longgar, gorengan naik ke
 meja rapat, kucing tidur di karpet, tamu salah alamat, sirene lewat di jalan

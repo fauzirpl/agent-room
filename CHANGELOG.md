@@ -135,6 +135,11 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   pakai dan sedang berjalan — keset, kartu APAR, piala, plang ruang kadis —
   sudah berapa hari dan kapan hilang sendiri. Kartu inventaris barangnya
   menyebut hal yang sama di baris "masa pakai".
+- **Barang yang habis masa pakainya dibereskan orang.** Keset yang sudah tipis
+  tidak lagi lenyap dari lantai: seorang pegawai datang menggulungnya lalu
+  membawanya ke gudang. Begitu juga kartu APAR yang kedaluwarsa, piala yang
+  dipindah, plang yang diturunkan, buku tamu yang penuh. Kalau dua belas jam
+  tidak ada yang sempat (halamannya ditutup), baru dikembalikan diam-diam.
 - **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
   keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
   stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang

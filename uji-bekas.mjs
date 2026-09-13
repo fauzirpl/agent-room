@@ -25,6 +25,7 @@
 // localStorage tiruan uji-event.mjs hidup per konteks, jadi teksnya dibawa
 // menyeberang dengan tangan — persis yang dilakukan peramban antara dua muat.
 
+import vm from 'node:vm';
 import { muatKonteks } from './uji-event.mjs';
 
 const warna = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
@@ -221,7 +222,7 @@ console.log(tebal('\nMasa pakai: tidak ada event yang menyala sekali lalu mati s
   const ser = (v) => JSON.stringify(v && typeof v.has === 'function' ? [...v] : v);
   const J = muatKonteks();
   const RJ = J.__jembatan__.RUANGAN;
-  const { BEKAS_MASA, HARI_MS } = J.bekasMasaRujukan();
+  const { BEKAS_MASA, HARI_MS, BEKAS_TENGGANG_MS: TENGGANG } = J.bekasMasaRujukan();
   const sejak = () => J.bekasMasaRujukan().bekasSejak;
   const { BEKAS_FIELD: FIELD } = J.bekasRujukan();
   const awal = {};
@@ -294,10 +295,12 @@ console.log(tebal('\nMasa pakai: tidak ada event yang menyala sekali lalu mati s
     const masa = BEKAS_MASA[k].hari * HARI_MS;
     if (J.kedaluwarsakanBekas(T0).includes(k)) salah.push(k + ': habis tanpa tanggal');
     if (J.kedaluwarsakanBekas(T0 + masa - 1).includes(k)) salah.push(k + ': habis sebelum masanya');
-    if (!J.kedaluwarsakanBekas(T0 + masa).includes(k)) salah.push(k + ': tidak habis tepat di masanya');
+    if (!J.bekasJatuhTempo(T0 + masa).includes(k)) salah.push(k + ': tidak jatuh tempo tepat di masanya');
+    if (J.kedaluwarsakanBekas(T0 + masa + TENGGANG - 1).includes(k)) salah.push(k + ': lenyap sebelum tenggangnya habis');
+    if (!J.kedaluwarsakanBekas(T0 + masa + TENGGANG).includes(k)) salah.push(k + ': tidak dikembalikan sesudah tenggang');
     if (ser(RJ[k]) !== awal[k]) salah.push(`${k}: jadi ${ser(RJ[k])}, bukan bawaan ${awal[k]}`);
   }
-  ok('bekas bertahan sebelum masanya, kembali ke bawaan tepat di masanya', salah.length === 0,
+  ok('bertahan sebelum masanya, jatuh tempo di masanya, kembali sesudah tenggang', salah.length === 0,
     salah.join('; ') || `${bermasa.length} bekas`);
   ok('Set yang dikembalikan tetap Set', typeof RJ.stikerTertempel.has === 'function' && RJ.stikerTertempel.size === 0);
   RJ.labelPatch = 4; sejak().labelPatch = 0;
@@ -349,7 +352,7 @@ console.log(tebal('\nMasa pakai: tidak ada event yang menyala sekali lalu mati s
     M.pulihkanBekasRuangan(L.localStorage.getItem(BEKAS_KUNCI));
     ok('muat ulang: tanggalnya kembali dan masa pakainya berjalan terus',
       M.bekasMasaRujukan().bekasSejak.kesetAda === 5000 && !M.kedaluwarsakanBekas(5000 + 20 * HARI_MS).length
-      && M.kedaluwarsakanBekas(5000 + 21 * HARI_MS).includes('kesetAda') && M.__jembatan__.RUANGAN.kesetAda === false);
+      && M.kedaluwarsakanBekas(5000 + 21 * HARI_MS + TENGGANG).includes('kesetAda') && M.__jembatan__.RUANGAN.kesetAda === false);
     ok('sesudah dipulihkan, simpan tanpa perubahan tidak menulis', (() => {
       const N = muatKonteks(); N.pulihkanBekasRuangan(L.localStorage.getItem(BEKAS_KUNCI)); return N.simpanBekasRuangan() === false;
     })());
@@ -386,11 +389,45 @@ console.log(tebal('\nSedang menua: masa pakai yang terlihat'));
   ok('keset: sudah 5 hari, habis 16 hari lagi', keset && keset.umurHari === 5 && keset.sisaHari === 16
     && Q.teksSisaMasa(keset) === 'habis 16 hari lagi' && Q.teksUmurBekas(keset) === 'sudah 5 hari',
     keset ? `${Q.teksUmurBekas(keset)}, ${Q.teksSisaMasa(keset)}` : 'tidak ada');
-  ok('kartu APAR yang tinggal kurang dari sehari: "habis besok"', Q.teksSisaMasa(m[0]) === 'habis besok', Q.teksSisaMasa(m[0]));
+  ok('kartu APAR yang tinggal kurang dari sehari: "habis hari ini"', Q.teksSisaMasa(m[0]) === 'habis hari ini', Q.teksSisaMasa(m[0]));
+  ok('satu setengah hari lagi: "habis besok"', Q.teksSisaMasa({ sisaMs: 1.5 * HARI_MS, sisaHari: 2 }) === 'habis besok');
   ok('tanggal belum diketahui tidak ditebak', m[2].sisaHari === null && Q.teksSisaMasa(m[2]) === 'masa pakai belum diketahui'
     && Q.teksUmurBekas(m[2]) === '');
-  ok('lewat masanya tapi belum sempat dikembalikan: "habis hari ini", bukan angka negatif',
-    Q.teksSisaMasa(Q.bekasMenua(T0 + 40 * HARI_MS).find((x) => x.k === 'kesetAda')) === 'habis hari ini');
+  ok('lewat masanya tapi belum dikembalikan: "menunggu dibereskan", bukan angka negatif',
+    Q.teksSisaMasa(Q.bekasMenua(T0 + 40 * HARI_MS).find((x) => x.k === 'kesetAda')) === 'sudah habis, menunggu dibereskan');
+}
+
+/* ----------------------------------------------------- jatuh tempo --- */
+console.log(tebal('\nJatuh tempo: masa pakai yang habis dibereskan orang, bukan lenyap'));
+{
+  const V = muatKonteks();
+  const RV = V.__jembatan__.RUANGAN;
+  const { HARI_MS, BEKAS_MASA } = V.bekasMasaRujukan();
+  const sj = () => V.bekasMasaRujukan().bekasSejak;
+  const T0 = 1_000_000_000_000;
+  ok('kantor bersih: tidak ada yang jatuh tempo', V.bekasJatuhTempo(T0).length === 0);
+  RV.kesetAda = true; sj().kesetAda = T0 - 21.2 * HARI_MS;      // lewat 0,2 hari
+  RV.piala = true; sj().piala = T0 - 60.4 * HARI_MS;            // lewat 0,4 hari: paling lama
+  RV.kartuAPAR = true; sj().kartuAPAR = T0 - 10 * HARI_MS;      // belum
+  RV.bukuTamu = 10;                                             // penuh tapi tanggalnya belum diketahui
+  const tempo = V.bekasJatuhTempo(T0);
+  ok('jatuh tempo: yang paling lama lewat di depan, yang belum & tak bertanggal tidak ikut',
+    tempo.join() === 'piala,kesetAda', tempo.join());
+  ok('kembalikanBekas: mengembalikan yang aktif, menolak yang sudah bawaan & yang tidak bermasa',
+    V.kembalikanBekas('kesetAda') === true && RV.kesetAda === false
+    && V.kembalikanBekas('kesetAda') === false && V.kembalikanBekas('nodaPlafon') === false);
+
+  const ev = V.__jembatan__.eventById.get('bekas-habis-masa-pakai');
+  ok('event bekas-habis-masa-pakai terpasang', Boolean(ev));
+  let adegan = [];
+  try { adegan = new vm.Script('Object.keys(ADEGAN_HABIS)').runInContext(V); } catch { /* dicek di bawah */ }
+  const nyasar = adegan.filter((k) => !(k in BEKAS_MASA));
+  ok('tiap adegan di event 42 menunjuk bekas bermasa pakai', adegan.length > 0 && nyasar.length === 0,
+    nyasar.length ? 'nyasar: ' + nyasar.join(', ') : `${adegan.length} adegan: ${adegan.join(', ')}`);
+  RV.piala = false; RV.bukuTamu = 0;
+  let lempar = null, bisa = true;
+  try { bisa = ev ? ev.syarat({ jam: 10, kerjaJam: true, orang: [], nganggur: [] }) : true; } catch (e) { lempar = e; }
+  ok('tidak ada yang jatuh tempo: event-nya tidak bisa menyala', !lempar && !bisa, lempar ? lempar.message : '');
 }
 
 /* --------------------------------------------------------- printer --- */

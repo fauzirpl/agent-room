@@ -13962,6 +13962,12 @@ function bekasRujukan() { return { BEKAS_KUNCI, BEKAS_VERSI, BEKAS_FIELD }; }
    event harus punya masa pakai di sini ATAU jalan pulang yang terdaftar di
    ujinya. */
 const HARI_MS = 86400000;
+// Masa pakai habis bukan berarti langsung lenyap: selama tenggang ini bekasnya
+// "jatuh tempo" (bekasJatuhTempo) dan event bekas-habis-masa-pakai
+// (public/event/42) boleh datang membereskannya di depan penonton — keset
+// digulung ke gudang, kartu APAR dicabut. Lewat tenggang, atau halaman memang
+// ditutup sepanjang itu, baru dikembalikan diam-diam oleh kedaluwarsakanBekas.
+const BEKAS_TENGGANG_MS = 12 * 3600000;
 const BEKAS_MASA = {
   kartuAPAR:       { hari: 30, aktif: (v) => v === true },      // kartu inspeksi habis masa berlakunya
   kabelRapi:       { hari: 14, aktif: (v) => v === true },      // perangkat baru dicolok, kusut lagi
@@ -13985,14 +13991,29 @@ function kedaluwarsakanBekas(waktu) {
     if (!BEKAS_MASA[k].aktif(RUANGAN[k])) continue;
     // simpanan lama tanpa tanggal: jamnya mulai sekarang, bukan lenyap mendadak
     if (!Number.isFinite(bekasSejak[k])) { bekasSejak[k] = t; continue; }
-    if (t - bekasSejak[k] < BEKAS_MASA[k].hari * HARI_MS) continue;
-    const v = JSON.parse(BEKAS_BAWAAN[k]);
-    RUANGAN[k] = BEKAS_JENIS[k] === 'set' ? new Set(v) : v;
+    if (t - bekasSejak[k] < BEKAS_MASA[k].hari * HARI_MS + BEKAS_TENGGANG_MS) continue;
+    kembalikanBekas(k);
     habis.push(k);
   }
   return habis;
 }
-function bekasMasaRujukan() { return { BEKAS_MASA, HARI_MS, bekasSejak, BEKAS_MASA_NAMA }; }
+// Satu bekas bermasa kembali ke nilai bawaannya. true = memang ada yang dikembalikan.
+function kembalikanBekas(k) {
+  if (!(k in BEKAS_MASA) || !BEKAS_MASA[k].aktif(RUANGAN[k])) return false;
+  const v = JSON.parse(BEKAS_BAWAAN[k]);
+  RUANGAN[k] = BEKAS_JENIS[k] === 'set' ? new Set(v) : v;
+  return true;
+}
+// Bekas yang masa pakainya sudah habis tapi belum dikembalikan (masih dalam
+// tenggang), yang paling lama lewat di depan. `waktu` cuma untuk uji.
+function bekasJatuhTempo(waktu) {
+  const t = Number.isFinite(waktu) ? waktu : Date.now();
+  const tempo = (k) => bekasSejak[k] + BEKAS_MASA[k].hari * HARI_MS;
+  return Object.keys(BEKAS_MASA)
+    .filter((k) => BEKAS_MASA[k].aktif(RUANGAN[k]) && Number.isFinite(bekasSejak[k]) && t >= tempo(k))
+    .sort((a, b) => tempo(a) - tempo(b));
+}
+function bekasMasaRujukan() { return { BEKAS_MASA, HARI_MS, BEKAS_TENGGANG_MS, bekasSejak, BEKAS_MASA_NAMA }; }
 
 /* Masa pakai yang terlihat. Masa pakai berjalan dalam hari sungguhan, jadi
    tanpa ini tidak ada yang tahu keset itu tinggal dua minggu atau kartu APAR
@@ -14018,15 +14039,18 @@ function bekasMenua(waktu) {
     hasil.push({
       k, nama: BEKAS_MASA_NAMA[k] || k, sejak, masaHari: BEKAS_MASA[k].hari,
       umurHari: sejak == null ? null : Math.max(0, Math.floor((t - sejak) / HARI_MS)),
+      sisaMs: sejak == null ? null : sejak + BEKAS_MASA[k].hari * HARI_MS - t,
       sisaHari: sejak == null ? null : Math.max(0, Math.ceil((sejak + BEKAS_MASA[k].hari * HARI_MS - t) / HARI_MS)),
     });
   }
-  return hasil.sort((a, b) => (a.sisaHari ?? Infinity) - (b.sisaHari ?? Infinity));
+  return hasil.sort((a, b) => (a.sisaMs ?? Infinity) - (b.sisaMs ?? Infinity));
 }
 function teksSisaMasa(m) {
-  if (m.sisaHari == null) return 'masa pakai belum diketahui';
-  if (m.sisaHari <= 0) return 'habis hari ini';
-  return m.sisaHari === 1 ? 'habis besok' : `habis ${m.sisaHari} hari lagi`;
+  if (m.sisaMs == null) return 'masa pakai belum diketahui';
+  if (m.sisaMs <= 0) return 'sudah habis, menunggu dibereskan';
+  if (m.sisaMs < HARI_MS) return 'habis hari ini';
+  if (m.sisaMs < 2 * HARI_MS) return 'habis besok';
+  return `habis ${m.sisaHari} hari lagi`;
 }
 function teksUmurBekas(m) {
   if (m.umurHari == null) return '';
@@ -14096,7 +14120,7 @@ const RIWAYAT_NYALA = {                // boolean false -> true
 const RIWAYAT_PADAM = {                // boolean true -> false yang memang berarti
   arsipPenuh: 'Lemari arsip dirapikan, dus tambahannya diangkut',
   // kembali ke bawaan karena masa pakainya habis (BEKAS_MASA)
-  piala: 'Piala voli dibawa ke ruang sekretariat — lemarinya menunggu piala berikutnya',
+  piala: 'Piala voli dipindah ke gudang — lemarinya menunggu piala berikutnya',
   kesetAda: 'Keset depan pintu kadis sudah tipis, dibuang',
   plangBaru: 'Nomenklatur berubah lagi — plang baru ruang kadis diturunkan, plang lama dipasang dulu',
   karpetCerah: 'Karpet meja rapat kusam lagi',
