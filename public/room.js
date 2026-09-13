@@ -10242,6 +10242,13 @@ function perbaruiKartuBarang() {
       + esc(tg.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })) + ' '
       + esc(tg.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })) + '</span>']);
   }
+  // masa pakai bekas barang ini yang sedang berjalan (BEKAS_MASA)
+  const bm = RIWAYAT_BARANG[b.id];
+  if (bm) {
+    for (const m of bekasMenua()) {
+      if (bm.includes(m.k)) baris.push(['masa pakai', esc(m.nama) + ' <span class="kib-tgl">· ' + esc(teksSisaMasa(m)) + '</span>']);
+    }
+  }
   el.innerHTML = baris.map(([kk, vv]) => '<span class="kk">' + kk + '</span><span class="vv">' + vv + '</span>').join('');
 }
 
@@ -12212,6 +12219,16 @@ function riwayatGambar() {
     + '<span class="kk">dicatat sejak</span><span class="vv">' + esc(tglRiwayat(pertama.t)) + '</span>'
     + '<span class="kk">kejadian</span><span class="vv">' + (riwayatKantor.length - 1) + ' dalam ' + hari + ' hari</span>'
     + '</div>'];
+  // bekas yang punya masa pakai dan sedang berjalan: kapan hilang sendiri
+  const menua = bekasMenua();
+  if (menua.length) {
+    blok.push('<h3 class="riwayat-tanggal">Sedang menua</h3>');
+    for (const m of menua) {
+      blok.push('<div class="riwayat-baris menua"><span class="teks">' + esc(m.nama)
+        + ' <span class="kib-tgl">· ' + esc([teksUmurBekas(m), teksSisaMasa(m)].filter(Boolean).join(', '))
+        + '</span></span></div>');
+    }
+  }
   let hariBaris = '';
   for (const r of [...riwayatKantor].reverse()) {
     const tg = tglRiwayat(r.t);
@@ -13975,7 +13992,46 @@ function kedaluwarsakanBekas(waktu) {
   }
   return habis;
 }
-function bekasMasaRujukan() { return { BEKAS_MASA, HARI_MS, bekasSejak }; }
+function bekasMasaRujukan() { return { BEKAS_MASA, HARI_MS, bekasSejak, BEKAS_MASA_NAMA }; }
+
+/* Masa pakai yang terlihat. Masa pakai berjalan dalam hari sungguhan, jadi
+   tanpa ini tidak ada yang tahu keset itu tinggal dua minggu atau kartu APAR
+   besok dicabut. Dibaca bagian "Sedang menua" di buku riwayat 📜
+   (riwayatGambar) dan baris "masa pakai" di kartu inventaris barangnya. */
+const BEKAS_MASA_NAMA = {
+  kartuAPAR: 'Kartu inspeksi APAR', kabelRapi: 'Kabel rak server yang dirapikan',
+  labelPatch: 'Label patch panel yang lengkap', stikerTertempel: 'Stiker inventaris di semua barang',
+  plangBaru: 'Plang baru ruang kadis', kesetAda: 'Keset depan pintu kadis', piala: 'Piala voli',
+  baganKotak: 'Tempelan di bagan struktur', bukuTamu: 'Buku tamu yang sudah penuh',
+  spanduk: 'Huruf papan nama yang copot', catMengelupas: 'Cat dinding yang mengelupas',
+  fotoMiring: 'Foto pejabat yang miring', karpetCerah: 'Karpet rapat yang cerah sesudah dijemur',
+};
+// Bekas bermasa yang sedang aktif, yang paling dekat habis di depan. Tanggal
+// yang belum diketahui (belum sempat dicatat) = null, ditaruh paling belakang
+// dan tidak ditebak. `waktu` cuma untuk uji.
+function bekasMenua(waktu) {
+  const t = Number.isFinite(waktu) ? waktu : Date.now();
+  const hasil = [];
+  for (const k in BEKAS_MASA) {
+    if (!BEKAS_MASA[k].aktif(RUANGAN[k])) continue;
+    const sejak = Number.isFinite(bekasSejak[k]) ? bekasSejak[k] : null;
+    hasil.push({
+      k, nama: BEKAS_MASA_NAMA[k] || k, sejak, masaHari: BEKAS_MASA[k].hari,
+      umurHari: sejak == null ? null : Math.max(0, Math.floor((t - sejak) / HARI_MS)),
+      sisaHari: sejak == null ? null : Math.max(0, Math.ceil((sejak + BEKAS_MASA[k].hari * HARI_MS - t) / HARI_MS)),
+    });
+  }
+  return hasil.sort((a, b) => (a.sisaHari ?? Infinity) - (b.sisaHari ?? Infinity));
+}
+function teksSisaMasa(m) {
+  if (m.sisaHari == null) return 'masa pakai belum diketahui';
+  if (m.sisaHari <= 0) return 'habis hari ini';
+  return m.sisaHari === 1 ? 'habis besok' : `habis ${m.sisaHari} hari lagi`;
+}
+function teksUmurBekas(m) {
+  if (m.umurHari == null) return '';
+  return m.umurHari < 1 ? 'sejak hari ini' : `sudah ${m.umurHari} hari`;
+}
 
 /* Stok printer yang tidak pernah berkurang. RUANGAN.toner dan kertasPrinter
    dideklarasikan, diisi ulang dua event (printer-toner-dikocok bersyarat

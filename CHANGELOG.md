@@ -131,6 +131,10 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   tetap riwayat, bukan log. `?ruangan=baru` mengosongkan riwayatnya juga.
   Kartu inventaris barang membacanya juga: klik meja rapat dan kartunya
   menyebut kapan kursi rusaknya terakhir diganti.
+- **Sedang menua.** Buku riwayat 📜 dibuka dengan daftar bekas yang punya masa
+  pakai dan sedang berjalan — keset, kartu APAR, piala, plang ruang kadis —
+  sudah berapa hari dan kapan hilang sendiri. Kartu inventaris barangnya
+  menyebut hal yang sama di baris "masa pakai".
 - **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
   keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
   stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang

@@ -363,6 +363,36 @@ console.log(tebal('\nMasa pakai: tidak ada event yang menyala sekali lalu mati s
   }
 }
 
+/* ---------------------------------------------------- sedang menua --- */
+console.log(tebal('\nSedang menua: masa pakai yang terlihat'));
+{
+  const Q = muatKonteks();
+  const RQ = Q.__jembatan__.RUANGAN;
+  const { BEKAS_MASA, HARI_MS, BEKAS_MASA_NAMA } = Q.bekasMasaRujukan();
+  const sj = () => Q.bekasMasaRujukan().bekasSejak;
+  const tanpaNama = Object.keys(BEKAS_MASA).filter((k) => !BEKAS_MASA_NAMA || !BEKAS_MASA_NAMA[k]);
+  ok('tiap bekas bermasa punya nama untuk manusia', tanpaNama.length === 0, tanpaNama.join(', '));
+  ok('kantor bersih: tidak ada yang sedang menua', Q.bekasMenua(1).length === 0);
+
+  const T0 = 1_000_000_000_000;
+  RQ.kesetAda = true; sj().kesetAda = T0;
+  RQ.kartuAPAR = true; sj().kartuAPAR = T0 - 24 * HARI_MS;
+  RQ.piala = true; delete sj().piala;
+  RQ.labelPatch = 4;                                   // belum jenuh: bukan bekas bermasa yang aktif
+  const m = Q.bekasMenua(T0 + 5.2 * HARI_MS);
+  ok('yang paling dekat habis di depan, tanggal tak dikenal paling belakang',
+    m.map((x) => x.k).join() === 'kartuAPAR,kesetAda,piala', m.map((x) => x.k).join());
+  const keset = m.find((x) => x.k === 'kesetAda');
+  ok('keset: sudah 5 hari, habis 16 hari lagi', keset && keset.umurHari === 5 && keset.sisaHari === 16
+    && Q.teksSisaMasa(keset) === 'habis 16 hari lagi' && Q.teksUmurBekas(keset) === 'sudah 5 hari',
+    keset ? `${Q.teksUmurBekas(keset)}, ${Q.teksSisaMasa(keset)}` : 'tidak ada');
+  ok('kartu APAR yang tinggal kurang dari sehari: "habis besok"', Q.teksSisaMasa(m[0]) === 'habis besok', Q.teksSisaMasa(m[0]));
+  ok('tanggal belum diketahui tidak ditebak', m[2].sisaHari === null && Q.teksSisaMasa(m[2]) === 'masa pakai belum diketahui'
+    && Q.teksUmurBekas(m[2]) === '');
+  ok('lewat masanya tapi belum sempat dikembalikan: "habis hari ini", bukan angka negatif',
+    Q.teksSisaMasa(Q.bekasMenua(T0 + 40 * HARI_MS).find((x) => x.k === 'kesetAda')) === 'habis hari ini');
+}
+
 /* --------------------------------------------------------- printer --- */
 console.log(tebal('\nPrinter memakai kertas'));
 {

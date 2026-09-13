@@ -774,6 +774,14 @@ kemudian ada yang bangun mengambil rim. Server memutar ulang sampai 60 event
 terakhir tiap halaman tersambung; call yang lebih tua dari halaman itu sudah
 dicetak halaman sebelumnya, jadi tidak memakai kertas dua kali.
 
+Masa pakainya bisa dilihat. Buku riwayat 📜 dibuka dengan bagian **Sedang
+menua**: tiap bekas bermasa pakai yang sedang berjalan, sudah berapa hari, dan
+kapan hilang sendiri — yang paling dekat habis di atas ("Kartu inspeksi APAR ·
+sudah 29 hari, habis besok"). Kartu inventaris barangnya mendapat baris **masa
+pakai** yang sama: klik lemari piala dan kartunya menyebut kapan pialanya
+dibawa ke sekretariat. Tanggal yang belum sempat tercatat ditulis "belum
+diketahui", bukan ditebak (`bekasMenua()` di `room.js`).
+
 ### Alat sapu ruangan
 
 Setiap perabot di ruangan ini ditaruh dengan cara yang sama: sapuan piksel atas
