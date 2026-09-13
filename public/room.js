@@ -157,7 +157,7 @@ function ruangRujukan() {
   return {
     W, H, FLOOR_TOP, LANE_UP, LANE_DOWN, LANE_L, LANE_R, PINTU_X,
     STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y, WC, GUDANG, BACA, FOTOKOPI_TITIK,
-    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE,
+    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE, PANEL_MCB, FOTOKOPI,
     POS_SATPAM: typeof POS_SATPAM === 'undefined' ? null : POS_SATPAM,
     route,
   };
@@ -13618,6 +13618,99 @@ const RUANGAN = {
   rimKertas: 0,            // 0..3 rim cadangan di atas mesin fotokopi: jatah-kuota-cair +2, dipakai yang memfotokopi
   koranTanggal: null,      // toDateString() hari koran pojok baca terakhir diganti (koran-pagi-di-rak-baca); null = belum pernah
 };
+
+/* ------------------------------------------ bekas yang bertahan muat ulang ---
+   RUANGAN sejak awal tempat bekas yang hidup lebih lama dari eventnya — tapi
+   cuma sepanjang halaman terbuka. Muat ulang, dan kantornya bersih lagi,
+   seperti dicat ulang tiap kali pintunya dibuka. Blok ini menyimpan BEKAS
+   PERMANEN ke localStorage dan memulihkannya saat halaman dimuat, jadi ruangan
+   pelan-pelan menua dari hari ke hari.
+
+   DAFTAR PUTIH, bukan seluruh RUANGAN. Yang disimpan cuma bekas yang memang
+   tidak punya jam — noda, piagam, keset, label, dus tambahan, stok yang habis
+   lalu diisi ulang. Keadaan sesaat SENGAJA tidak ikut: kursi yang sedang
+   diseret, laci yang sedang terbuka, kucing yang sedang tidur, kurva kusut
+   harian, tema kalender yang dievaluasi ulang tiap hari. Memulihkannya membuat
+   ruangan terbangun dalam keadaan yang tidak masuk akal — kursi rapat kurang
+   satu padahal tidak ada yang sedang memegangnya.
+
+   Kapan menulis: tiap 15 detik (setInterval) dan saat halaman ditutup
+   (pagehide), cuma kalau isinya berubah. SENGAJA bukan dari tickRuangan():
+   harness uji menjalankan frame() ribuan kali dengan localStorage tiruan,
+   sedangkan setInterval dan pagehide di sandbox memang tidak pernah jalan —
+   jadi tidak ada uji yang diam-diam mewarisi bekas uji sebelumnya.
+
+   Memulihkan tidak pernah melempar: JSON rusak, versi lain, atau field yang
+   tipenya berubah DILEWATI per field. Bekas yang hilang sebagian lebih baik
+   daripada halaman yang gagal dimuat.
+
+   ?ruangan=baru melupakan semua bekas yang tersimpan (kantor mulai bersih);
+   lupakanBekasRuangan() di konsol melakukan hal yang sama tanpa muat ulang.
+   Dijaga uji-bekas.mjs. */
+const BEKAS_KUNCI = 'ruanganBekas';
+const BEKAS_VERSI = 1;
+const BEKAS_FIELD = [
+  // bekas kejadian
+  'nodaMeja', 'nodaPlafon', 'retakExtra', 'nodaKopi', 'catMengelupas', 'fotoMiring',
+  'kursiRusak', 'spanduk', 'edaran', 'stikerTertempel', 'labelPatch', 'kabelRapi',
+  'kartuAPAR', 'plangBaru', 'kesetAda', 'piala', 'piagamDinding', 'karpetCerah',
+  'baganKotak', 'bukuTamu', 'arsipPenuh', 'dusTambahanArsip', 'mcbTurunKali', 'koranTanggal',
+  // stok yang habis lalu diisi ulang event
+  'toner', 'kertasPrinter', 'gelasDispenser', 'rimKertas',
+];
+const jenisBekas = (v) => (v instanceof Set ? 'set' : Array.isArray(v) ? 'array' : v === null ? 'kosong' : typeof v);
+const BEKAS_JENIS = {};                // jenis nilai bawaan, pembanding saat memulihkan
+for (const k of BEKAS_FIELD) BEKAS_JENIS[k] = jenisBekas(RUANGAN[k]);
+let bekasTerakhir = '';                // teks yang terakhir ditulis/dipulihkan; sama = tidak ditulis ulang
+
+function potretBekas() {
+  const isi = {};
+  for (const k of BEKAS_FIELD) isi[k] = RUANGAN[k] instanceof Set ? [...RUANGAN[k]] : RUANGAN[k];
+  return JSON.stringify({ v: BEKAS_VERSI, isi });
+}
+// true = benar-benar menulis; false = tidak ada yang berubah sejak tulisan terakhir
+function simpanBekasRuangan() {
+  let teks;
+  try { teks = potretBekas(); } catch { return false; }
+  if (teks === bekasTerakhir) return false;
+  bekasTerakhir = teks;
+  ingatan.tulis(BEKAS_KUNCI, teks);
+  return true;
+}
+// Mengembalikan jumlah field yang dipulihkan.
+function pulihkanBekasRuangan(teks) {
+  if (!teks) return 0;
+  let data;
+  try { data = JSON.parse(teks); } catch { return 0; }
+  if (!data || data.v !== BEKAS_VERSI || !data.isi || typeof data.isi !== 'object') return 0;
+  let n = 0;
+  for (const k of BEKAS_FIELD) {
+    if (!Object.prototype.hasOwnProperty.call(data.isi, k)) continue;
+    const v = data.isi[k], harap = BEKAS_JENIS[k];
+    if (harap === 'set') {
+      if (Array.isArray(v)) { RUANGAN[k] = new Set(v); n++; }
+      continue;
+    }
+    const jenis = Array.isArray(v) ? 'array' : v === null ? 'kosong' : typeof v;
+    // bawaan null (spanduk, koranTanggal) boleh diisi objek/teks; sisanya harus sejenis
+    const cocok = jenis === harap || (harap === 'kosong' && (jenis === 'object' || jenis === 'string'));
+    if (!cocok || (jenis === 'number' && !Number.isFinite(v))) continue;
+    RUANGAN[k] = v;
+    n++;
+  }
+  bekasTerakhir = potretBekas();
+  return n;
+}
+function lupakanBekasRuangan() {
+  try { localStorage.removeItem(BEKAS_KUNCI); } catch { /* tidak ada yang bisa dilupakan */ }
+  bekasTerakhir = '';
+}
+// jendela baca uji-bekas.mjs — pola yang sama dengan pantriRujukan()
+function bekasRujukan() { return { BEKAS_KUNCI, BEKAS_VERSI, BEKAS_FIELD }; }
+if (MODE_URL.get('ruangan') === 'baru') lupakanBekasRuangan();
+else pulihkanBekasRuangan(ingatan.baca(BEKAS_KUNCI, ''));
+setInterval(simpanBekasRuangan, 15000);
+if (typeof addEventListener === 'function') addEventListener('pagehide', simpanBekasRuangan);
 
 /* -------------------------------------------------------------- penjadwal */
 const eventHidup = [];

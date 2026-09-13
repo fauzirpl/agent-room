@@ -164,6 +164,16 @@ jobs:
       - name: Uji sekat pantri
         run: node uji-pantri.mjs
 
+      # Perabot yang ditaruh lewat sapuan piksel (pojok baca, pos satpam, panel
+      # MCB, rim kertas) tetap berdiri di tempat yang kosong: satu sapuan
+      # sapu-ruang.mjs atas semua kotaknya, dengan kontrol negatif & positif.
+      - name: Uji tempat perabot
+        run: node uji-tempat.mjs
+
+      # Bekas di ruangan bertahan saat muat ulang — dan hanya bekas.
+      - name: Uji bekas ruangan
+        run: node uji-bekas.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

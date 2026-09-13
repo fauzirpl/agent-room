@@ -4,7 +4,7 @@
 
 ## Event acak
 
-Selain yang dipicu tool call, ruangan punya **349 kejadian yang muncul
+Selain yang dipicu tool call, ruangan punya **352 kejadian yang muncul
 sendiri** (angka dihitung otomatis: `node uji-katalog.mjs`): UPS berbunyi,
 kalender disobek, kabel LAN longgar, gorengan naik ke
 meja rapat, kucing tidur di karpet, tamu salah alamat, sirene lewat di jalan
@@ -42,6 +42,16 @@ membaca `rapatAktif` sungguhan, bukan menebak jam), `jatah-kuota-cair`
 supaya kertas tidak pernah datang sebelum ada yang kehabisan), dan
 `foto-bersama` (selalu menyusul `penghargaan-zona-integritas`).
 
+Tiga event berikutnya (`public/event/40-pos-satpam.js`) memakai **pos satpam**:
+tamu yang lapor ke pos lalu diputar balik ke loket depan, petugas ronda malam
+yang titip laporan di buku mutasi pagi-pagi, dan penjaga pos yang ketiduran
+sampai HT-nya berbunyi. Penjaganya pegawai sungguhan (`pemeran(E,
+['satpam'])` — standby berperan satpam kalau sudah ada, siapa pun yang
+menganggur kalau belum), tamunya orang luar yang masuk dari tepi kanan di
+pojok yang sama. Ketiganya bentrok dengan `satpam-patroli`, yang satpamnya
+orang luar: dua satpam di satu ruangan membuat yang satu tampak seperti
+penyusup.
+
 Cara kerjanya: satu registri berbobot, satu penjadwal berjeda 18–45 detik,
 cooldown per event. Bentuk satu definisi:
 
@@ -65,6 +75,11 @@ lebih lama dari eventnya — noda tinta di meja stempel, kartu inspeksi di APAR,
 label yang akhirnya tertempel di patch panel, kabel yang sudah dirapikan.
 Ruangan yang menyimpan jejak kejadian tadi terasa dihuni; yang selalu kembali
 bersih terasa seperti demo.
+Bekas yang memang permanen (daftar putih `BEKAS_FIELD` di `room.js`: noda,
+piagam, keset, label, dus tambahan arsip, stok yang diisi ulang) sekarang juga
+**bertahan saat halaman dimuat ulang** lewat `localStorage` — keadaan sesaat
+sengaja tidak ikut. `?ruangan=baru` untuk mulai dari kantor bersih; rinciannya
+di [docs/02](02-ruangan.md#bekas-yang-bertahan-muat-ulang).
 
 Objek `S` yang diterima `syarat()`/`mulai()`/`tick()` — potret ruangan dari
 `potretRuangan()` — sejak ini membawa **fakta sesi**, bukan cuma jam, lampu,
@@ -104,6 +119,14 @@ ruangan. Tiga aturan menjaga urutan itu:
 `mulai()` yang melempar akan **membatalkan** eventnya, bukan membiarkannya jalan
 setengah jadi — kalau tidak, `tick()`-nya ikut meledak tiap frame sampai
 durasinya habis.
+
+Gerbang yang sama menunggu event `perluAktor`: `nyalakanEvent()` memeriksanya
+**tepat sesudah `mulai()`**, dan event yang pulang dari `mulai()` tanpa satu
+pemeran pun dibatalkan dengan cooldown 20 detik. Jadi pemeran wajib dipinjam
+**di `mulai()`**, bukan belakangan di `tick()`. `dus-ekspedisi-datang` pernah
+melanggarnya — meminjam pengangkut sesudah dusnya mendarat — dan akibatnya
+tidak pernah menyala sama sekali, padahal smoke `uji-event.mjs` hijau: smoke
+memanggil `mulai`/`tick`/`selesai` langsung, tidak lewat gerbang itu.
 
 #### Aturan 1 punya jebakan yang tidak kelihatan
 

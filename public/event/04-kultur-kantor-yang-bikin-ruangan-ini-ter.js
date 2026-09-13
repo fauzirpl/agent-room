@@ -253,21 +253,55 @@ daftarEvent(
 },
 
 /* Dus kiriman ekspedisi jatuh berurutan di depan bukaan ruang kadis, lalu
-   diangkut dua orang ke dekat lemari arsip. Rancangan aslinya minta
-   tumpukannya PERMANEN (masuk PROPS, bertambah tinggi tiap kejadian); itu
-   dipangkas ke versi sekali pakai (digambar event ini sendiri, hilang begitu
-   event selesai) — permanen berarti RUANGAN.* baru + entri PROPS baru +
-   ikut sapuan golden z-order untuk satu hiasan yang jatuhnya cuma sesekali.
+   diangkut dua orang ke depan lemari arsip. Rancangan aslinya minta
+   tumpukannya PERMANEN; versi pertama memangkasnya jadi sekali pakai (digambar
+   event ini sendiri, hilang begitu event selesai) karena permanen dikira
+   butuh RUANGAN.* baru + entri PROPS baru + golden z-order.
+
+   Ternyata tidak butuh apa pun yang baru: "dus menetap di depan lemari arsip"
+   SUDAH ADA — RUANGAN.dusTambahanArsip (0..2), digambar drawArsip() di
+   x30..50 dan x54..74 y106..122, dan dipakai kurir (berkas 21) serta
+   dus-arsip-ditumpuk (berkas 20) dengan cara yang sama. Jadi dusnya sekarang
+   diantar ke titik itu dan menambah bekas yang sudah ada; gambar tumpukan
+   sementara di (88,150) dibuang. Lantai di (88,150) sendiri memang tidak
+   pantas ditumpuki: sapu-ruang.mjs memperlihatkannya sebagai lajur yang
+   dilewati hampir semua rute ke lemari arsip. Syaratnya ikut kurir: kalau
+   dua dus tambahan sudah berdiri, tidak ada tempat untuk yang ketiga.
    Guncangan layarnya pakai MOD.getar yang sudah ada (dipakai genset), bukan
    mekanisme baru. */
 {
   id: 'dus-ekspedisi-datang',
-  kelas: 'latar', bobot: B.sedang, cooldown: 1500, durasi: 26,
-  syarat: (S) => S.jam >= 9 && S.jam < 15 && S.orang.filter(bisaDipinjam).length >= 2,
+  /* SAMPAI VERSI INI EVENT INI TIDAK PERNAH BISA JALAN. Ia memasang perluAktor
+     tapi baru meminjam pengangkutnya di tick(), sesudah dusnya mendarat —
+     sedangkan nyalakanEvent() memeriksa perluAktor TEPAT sesudah mulai() dan
+     membatalkan event yang pulang dari mulai() tanpa satu pemeran pun. Hasilnya
+     batal dengan cooldown 20 detik, setiap kali, walau tujuh orang menganggur.
+     Smoke uji-event tidak melewati gerbang itu (mulai/tick/selesai dipanggil
+     langsung), jadi hijau. Sekarang dua pengangkut dipinjam di mulai() dan
+     mendatangi tumpukannya dulu — yang juga membuat adegannya masuk akal:
+     orang datang karena mendengar dus berjatuhan, baru mengangkutnya.
+
+     durasi 45, bukan 26: diukur dari rute terjauh — penganggur di pos satpam
+     ke tumpukan (±350 px, 52 px/dtk) lalu mengangkut ke lemari arsip (±480 px,
+     laju 0,65 = 34 px/dtk) = ±21 dtk + jatuh 1,5 + usap dahi. Dengan 26,
+     pengangkut dari pojok jauh dibubarkan durasi sebelum sampai, dan bekas dus
+     tambahannya tidak pernah tertulis. */
+  kelas: 'latar', bobot: B.sedang, cooldown: 1500, durasi: 45,
+  syarat: (S) => S.jam >= 9 && S.jam < 15 && S.orang.filter(bisaDipinjam).length >= 2
+    && RUANGAN.dusTambahanArsip < 2,
   perluAktor: true,
   // y: negatif = masih di udara, 0 = mendarat. mulai: jeda sebelum dus ke-i
   // mulai jatuh, supaya jatuhnya berurutan bukan serentak.
   mulai(E) {
+    const dua = pinjamAktor(E, 2);
+    if (dua.length < 2) { E.selesaiCepat = true; return; }   // satu orang tidak mengangkut tiga dus
+    E.data.orang = dua;
+    // Berdiri di lajur atas tepat di atas tumpukan (x440..458 y206), menghadap
+    // ke bawah: di lajur tidak ada perabot, dan sofa tamu mulai x398 di y218.
+    dua.forEach((a, i) => {
+      a.doingEvent = 'menghampiri dus ekspedisi';
+      a.goToXY(436 + i * 22, 176, 'down');
+    });
     E.data.dus = [0, 1, 2].map((i) => ({ y: -20, vy: 0, jatuh: false, mulai: i * 0.4, jatuhPada: null }));
   },
   tick(E, dt) {
@@ -283,38 +317,50 @@ daftarEvent(
       }
       if (d.jatuhPada != null) getar = Math.max(getar, Math.max(0, 1 - (E.umur - d.jatuhPada) * 8));
     });
-    MOD.getar = getar;
-    // Ketiga dus sudah mendarat: dua orang mengangkutnya sekaligus ke arsip.
-    if (!E.data.orang && E.data.dus.every((d) => d.jatuh)) {
-      const dua = pinjamAktor(E, 2);
-      if (dua.length < 2) { E.selesaiCepat = true; return; }
-      E.data.orang = dua;
-      for (const a of dua) {
+    if (getar > 0) MOD.getar = getar;
+    // Pemeran yang direbut tool call sungguhan tidak disuruh apa pun lagi.
+    const orang = yangMasihMain(E, E.data.orang);
+    if (orang.length < 2 && !E.data.sampai) {
+      for (const a of orang) { a.bawa = null; a.laju = 1; }
+      E.selesaiCepat = true;
+      return;
+    }
+    // Keduanya sudah berdiri di atas tumpukan dan ketiga dus mendarat: angkut.
+    if (!E.data.angkut && E.data.dus.every((d) => d.jatuh) && orang.every((a) => a.diam)) {
+      E.data.angkut = true;
+      orang.forEach((a, i) => {
         a.doingEvent = 'mengangkut dus ekspedisi';
         a.bawa = 'kardus';
         a.laju = 0.65;              // berat, jalannya melambat
-        a.goToXY(90, 150, 'up');
-      }
+        // di depan dua slot dus tambahan drawArsip (x30..50 dan x54..74), garis
+        // kaki y138 = STATIONS.read.y, sama seperti yang bekerja di lemari arsip
+        a.goToXY(40 + i * 24, 138, 'up');
+      });
     }
-    if (E.data.orang && !E.data.sampai && E.data.orang.every((a) => a.diam)) {
+    if (E.data.angkut && !E.data.sampai && orang.every((a) => a.diam)) {
       E.data.sampai = true;
-      E.data.dusPindah = true;      // tumpukan lama di depan kadis lenyap, muncul di arsip
+      // ...dan menetap di depan lemari arsip sebagai bekas yang sudah ada
+      RUANGAN.dusTambahanArsip = Math.min(2, RUANGAN.dusTambahanArsip + 1);
+      RUANGAN.arsipPenuh = true;
       E.data.lapSampai = E.umur + 0.8;
-      for (const a of E.data.orang) { a.bawa = null; a.laju = 1; a.pose = 'angkat'; }   // usap dahi
+      for (const a of orang) { a.bawa = null; a.laju = 1; a.pose = 'angkat'; }   // usap dahi
     }
     if (E.data.lapSampai && E.umur > E.data.lapSampai) {
       E.data.lapSampai = 0;
-      for (const a of E.data.orang) a.pose = null;
+      for (const a of orang) a.pose = null;
+      E.selesaiCepat = true;
     }
   },
   gambarProp(E) {
-    if (!E.data.dusPindah) {
-      E.data.dus.forEach((d, i) => { if (d.jatuh || d.y > -20) box3(440 + i * 3, 206 + d.y, 12, 7, 2, '#b98d5e'); });
-    } else {
-      box3(88, 150, 12, 18, 2, '#b98d5e');
-    }
+    // Dus di tumpukan digambar sampai diangkat; sesudahnya drawArsip() yang
+    // menggambar dus tambahannya, dan terus menggambarnya sesudah event mati.
+    if (E.data.angkut) return;
+    E.data.dus.forEach((d, i) => { if (d.jatuh || d.y > -20) box3(440 + i * 3, 206 + d.y, 12, 7, 2, '#b98d5e'); });
   },
   sortY: 206,
+  selesai(E) {
+    for (const a of (E.data.orang || [])) { a.bawa = null; a.laju = 1; a.pose = null; }
+  },
 },
 
 /* Senam pagi Jumat: satu-satunya "barisan" selain apel yang mengumpulkan

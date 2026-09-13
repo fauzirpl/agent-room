@@ -617,15 +617,47 @@ Sekarang ketiganya menetap:
 | lakban "sering turun" di panel | `mcb-jalur-turun` (`RUANGAN.mcbTurunKali++`) | `drawPanelMcb()` | tidak pernah dicabut |
 | rim kertas cadangan di atas mesin fotokopi | `jatah-kuota-cair` (+2, maks 3) | `drawFotokopi()` | dipakai orang yang memfotokopi (25% per kunjungan) |
 | koran di rak pojok baca | `koran-pagi-di-rak-baca` (`RUANGAN.koranTanggal`) | `drawPojokBaca()` lewat `koranBasi()` | kekuningan lagi besok paginya |
+| dus ekspedisi di depan lemari arsip | `dus-ekspedisi-datang` (`RUANGAN.dusTambahanArsip`, bekas yang sudah dipakai kurir) | `drawArsip()` | dirapikan event arsip (`arsipPenuh` kembali `false`) |
 
 Panel MCB-nya **pindah** dari x422 ke dinding kiri pintu gudang (x592..606
 y56..74): tempat lama ternyata menumpuk dengan dekor tema ramadan yang sapuan
 coretan waktu itu lewatkan. `koranBasi()` sengaja cuma membaca: halaman yang
 dibuka lewat jam 10 menganggap koran hari ini sudah dipasang orang sebelum
 kita datang — kalau tidak, tiap muat ulang siang hari menampilkan koran basi
-seharian padahal event paginya tidak mungkin jalan lagi. Semua field ini,
-seperti `RUANGAN` lain, hidup selama halaman terbuka dan tidak disimpan ke
-mana pun.
+seharian padahal event paginya tidak mungkin jalan lagi.
+
+Dus ekspedisi sengaja **tidak** diberi tumpukan baru: "dus menetap di depan
+lemari arsip" sudah ada sebagai `RUANGAN.dusTambahanArsip`, dipakai kurir dan
+`dus-arsip-ditumpuk`. Pengangkutnya sekarang mengantar ke titik itu (x40 dan
+x64, garis kaki y138). Lantai tempat tumpukan sementara dulu digambar (88,150)
+memang tidak layak ditumpuki: `sapu-ruang.mjs` memperlihatkannya sebagai lajur
+yang dilewati hampir semua rute ke lemari arsip.
+
+### Bekas yang bertahan muat ulang
+
+Semua bekas di atas — dan bekas lama seperti noda tinta, piagam, keset, huruf
+papan nama yang copot — dulu cuma hidup selama halaman terbuka. Muat ulang, dan
+kantornya bersih lagi. Sekarang daftar putih `BEKAS_FIELD` di `room.js`
+disimpan ke `localStorage` (kunci `ruanganBekas`, berversi) dan dipulihkan saat
+halaman dimuat, jadi ruangannya pelan-pelan menua dari hari ke hari.
+
+Yang ikut hanya **bekas yang tidak punya jam** — noda, retak, piagam, piala,
+keset, stiker, label patch panel, edaran, kursi rusak, dus tambahan arsip,
+lakban panel MCB, tanggal koran — plus **stok yang habis lalu diisi ulang**
+event (toner, kertas printer, gelas dispenser, rim kertas). Keadaan sesaat
+sengaja tidak ikut: kursi yang sedang diseret ke baris meja kerja, laci yang
+sedang terbuka, kucing yang sedang tidur, kurva kusut harian, tema kalender.
+Memulihkan yang begitu membuat ruangan terbangun dalam keadaan yang tidak masuk
+akal — kursi rapat kurang satu padahal tidak ada yang sedang memegangnya.
+
+Tulisannya tiap 15 detik dan saat halaman ditutup (`pagehide`), cuma kalau
+isinya berubah — sengaja **bukan** dari `tickRuangan()`: harness uji
+menjalankan `frame()` ribuan kali dengan `localStorage` tiruan, sedangkan
+`setInterval`/`pagehide` di sandbox tidak pernah jalan, jadi tidak ada uji yang
+diam-diam mewarisi bekas uji lain. Memulihkan tidak pernah melempar: JSON
+rusak, versi lain, atau field yang tipenya berubah dilewati per field.
+`?ruangan=baru` mulai dari kantor bersih; `lupakanBekasRuangan()` di konsol
+melakukan hal yang sama tanpa muat ulang. Dijaga `uji-bekas.mjs`.
 
 ### Alat sapu ruangan
 
@@ -654,6 +686,18 @@ dihitung kecuali `--atas` — isinya cahaya yang memang harus lewat.
 Sapuan pertama alat ini langsung menemukan satu kesalahan lama: panel MCB
 gelombang 5 menumpuk dengan dekor tema ramadan.
 
+Supaya kesalahan kelas itu tidak lagi bergantung pada kebetulan ada yang
+menjalankan alatnya, `uji-tempat.mjs` (ikut `npm test`) menyapu kotak panel
+MCB, rim kertas, pos satpam, dan pojok baca sekaligus: pemilik pikselnya harus
+cuma perabot itu sendiri, dan untuk perabot lantai tidak boleh ada rute yang
+cuma **lewat** — rute yang sah berujung di dalam kotaknya. Kontrol negatifnya
+kotak panel MCB versi pertama, yang harus ketahuan menumpuk dekor ramadan.
+Menaruh perabot baru lewat `sapu-ruang.mjs`? Tambahkan barisnya di sana. Supaya
+bisa dibedakan, perabot bernama yang digambar **di dalam** `drawWall` /
+`drawFloor` (panel MCB, karpet pojok baca, pintu WC & gudang) disapu dengan
+namanya sendiri, dan kepemilikan piksel dicatat per sumber — dua penggambar di
+sel yang sama sama-sama tercatat.
+
 ### Satpam berpatroli
 
 WC, gudang, dan pojok baca di atas semuanya rutinitas "jalan ke satu titik,
@@ -678,7 +722,10 @@ punya pos; sekarang ada meja jaga di pojok kanan bawah (x643..669 y276..322 —
 buku mutasi jaga, HT, papan POS, kursi lipat). Tempatnya dicari dengan
 `sapu-ruang.mjs` (lihat "Alat sapu ruangan" di bawah): satu-satunya calon di
 pojok itu yang bebas piksel dan bebas rute. Sampai di pos, satpam berjaga
-25–45 detik menghadap ruangan sebelum ikut mondar-mandir lagi.
+25–45 detik menghadap ruangan sebelum ikut mondar-mandir lagi. Posnya
+punya tiga kejadian sendiri (`public/event/40-pos-satpam.js`): tamu yang
+lapor lalu diputar balik ke loket, laporan ronda malam di buku mutasi, dan
+penjaga yang ketiduran sampai HT-nya berbunyi.
 
 | Titik | Koordinat | Dipinjam dari |
 |---|---|---|

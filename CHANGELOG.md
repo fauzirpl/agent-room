@@ -102,6 +102,30 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 - **Mode uji `?penganggur=N`.** Menjamin minimal N pegawai standby, supaya
   event yang butuh banyak orang menganggur (foto bersama, senam Jumat) bisa
   dilihat langsung lewat `?event=<id>` walau ruangannya sedang ramai sesi.
+- **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
+  keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
+  stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang
+  bekas yang memang permanen disimpan di browser (daftar putih; keadaan sesaat
+  seperti kursi yang sedang diseret sengaja tidak ikut) dan ruangannya
+  pelan-pelan menua. `?ruangan=baru` untuk mulai dari kantor bersih.
+- **Tiga kejadian di pos satpam.** Tamu lapor ke pos dan diputar balik ke loket
+  depan, petugas ronda malam titip laporan di buku mutasi pagi-pagi, dan
+  penjaga pos ketiduran sampai HT-nya berbunyi.
+- **Dus ekspedisi menetap — dan untuk pertama kalinya benar-benar jalan.** Dus
+  yang diangkut ke lemari arsip sekarang tinggal di depan lemari (bekas
+  `dusTambahanArsip` yang sudah dipakai kurir), bukan hilang begitu kejadiannya
+  selesai. Waktu dikerjakan ketahuan event ini sejak lahir **tidak pernah bisa
+  menyala**: ia memasang `perluAktor` tapi baru meminjam pengangkutnya sesudah
+  dusnya mendarat, sedangkan penjadwal membatalkan event `perluAktor` yang
+  pulang dari `mulai()` tanpa pemeran — tiap kali, walau tujuh orang menganggur.
+  Sekarang dua pengangkut dipinjam di awal, menghampiri tumpukannya dulu, lalu
+  mengangkutnya; durasinya 45 detik supaya pengangkut dari pojok terjauh
+  sempat sampai.
+- **`uji-tempat.mjs` & `uji-bekas.mjs`.** Letak pojok baca, pos satpam, panel
+  MCB, dan rim kertas sekarang dijaga uji (bukan cuma komentar) — tabrakan
+  seperti panel MCB dengan dekor ramadan ketahuan sebelum di-commit; dan bekas
+  yang disimpan dijaga supaya kembali utuh, tidak pernah membawa keadaan
+  sesaat, dan tidak pernah menjatuhkan halaman kalau isinya rusak.
 - **Delapan event lagi (gelombang 5).** Empat memakai pojok baca yang baru:
   koran pagi dipasang di raknya dan edisi kemarin dibuang ke tong pantri, dua
   orang lesehan mendiskusikan buku yang sama, satu ketiduran di atas bantal
