@@ -140,6 +140,11 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   membawanya ke gudang. Begitu juga kartu APAR yang kedaluwarsa, piala yang
   dipindah, plang yang diturunkan, buku tamu yang penuh. Kalau dua belas jam
   tidak ada yang sempat (halamannya ditutup), baru dikembalikan diam-diam.
+- **Gudang ikut menua, dan penghapusan BMN.** Barang bekas yang diantar ke
+  gudang tersimpan: kelihatan di lantai gudang waktu pintunya terbuka,
+  menumpuk di kanan pintu kalau sudah sesak, tertulis di kartu inventaris
+  gudang. Begitu isinya empat, tim penghapusan BMN datang membawa berita acara
+  dan mengangkutnya keluar satu per satu.
 - **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
   keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
   stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang

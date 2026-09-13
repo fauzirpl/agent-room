@@ -251,6 +251,7 @@ console.log(tebal('\nMasa pakai: tidak ada event yang menyala sekali lalu mati s
     rimKertas: ['kertas-nyangkut-di-fotokopi', 'jatah-kuota-cair'],
     toner: ['pakaiPrinter()', 'printer-toner-dikocok'],
     kertasPrinter: ['pakaiPrinter()', 'stok-kertas-habis'],
+    isiGudang: ['simpanKeGudang()', 'penghapusan-bmn-gudang'],
   };
   const EVENTS = J.__jembatan__.EVENT_ACAK;
   const { eventById } = J.__jembatan__;
@@ -428,6 +429,37 @@ console.log(tebal('\nJatuh tempo: masa pakai yang habis dibereskan orang, bukan 
   let lempar = null, bisa = true;
   try { bisa = ev ? ev.syarat({ jam: 10, kerjaJam: true, orang: [], nganggur: [] }) : true; } catch (e) { lempar = e; }
   ok('tidak ada yang jatuh tempo: event-nya tidak bisa menyala', !lempar && !bisa, lempar ? lempar.message : '');
+}
+
+/* ---------------------------------------------------------- gudang --- */
+console.log(tebal('\nGudang: barang bekas menumpuk, lalu penghapusan BMN'));
+{
+  const G2 = muatKonteks();
+  const RG2 = G2.__jembatan__.RUANGAN;
+  const buku = () => G2.riwayatRujukan().riwayatKantor;
+  ok('isiGudang ikut daftar putih bekas', G2.bekasRujukan().BEKAS_FIELD.includes('isiGudang'));
+  ok('simpanKeGudang: jenis dikenal masuk, jenis asing ditolak',
+    G2.simpanKeGudang('keset') === true && G2.simpanKeGudang('kulkas') === false && RG2.isiGudang.length === 1);
+  G2.catatRiwayat(1000);
+  ok('buku riwayat menyebut barang yang masuk gudang', /^Keset lama disimpan di gudang \(1 barang bekas sekarang\)$/.test(buku().at(-1).teks),
+    buku().at(-1).teks);
+  for (let i = 0; i < 20; i++) G2.simpanKeGudang('kursi');
+  ok('gudang tidak menampung lebih dari batasnya', RG2.isiGudang.length === 8, `${RG2.isiGudang.length} barang`);
+  G2.catatRiwayat(2000);
+  RG2.isiGudang.splice(0);
+  G2.catatRiwayat(3000);
+  ok('penghapusan BMN tercatat sebagai satu kalimat', /^Penghapusan BMN: 8 barang bekas di gudang diangkut/.test(buku().at(-1).teks),
+    buku().at(-1).teks);
+  G2.simpanKeGudang('kursi'); G2.simpanKeGudang('kursi'); G2.simpanKeGudang('piala');
+  ok('kartu gudang meringkas isinya per jenis', G2.ringkasIsiGudang() === 'Kursi rapat rusak ×2, Piala voli', G2.ringkasIsiGudang());
+  const ev = G2.__jembatan__.eventById.get('penghapusan-bmn-gudang');
+  ok('event penghapusan-bmn-gudang terpasang', Boolean(ev));
+  let adegan = {};
+  try { adegan = new vm.Script('ADEGAN_HABIS').runInContext(G2); } catch { /* dicek di bawah */ }
+  const keGudang = Object.entries(adegan).filter(([, A]) => A.keGudang);
+  const tanpaJenis = keGudang.filter(([, A]) => !A.gudang || !G2.simpanKeGudang(A.gudang)).map(([k]) => k);
+  ok('tiap adegan yang membawa barang ke gudang menyimpannya dengan jenis yang dikenal', keGudang.length > 0 && tanpaJenis.length === 0,
+    tanpaJenis.join(', ') || keGudang.map(([k]) => k).join(', '));
 }
 
 /* --------------------------------------------------------- printer --- */

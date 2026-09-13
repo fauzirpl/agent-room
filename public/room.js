@@ -2358,6 +2358,10 @@ function drawPintuGudang() {
       r(dx + dw - 8, ry - 6, 6, 6, P.paper);                // rim kertas
       r(dx + dw - 8, ry - 6, 6, 1, '#c9c2ac');
     }
+    // barang bekas (isiGudang) bersandar di lantai gudang, di bawah rak terbawah;
+    // yang ke-4 dst. menumpuk di luar (drawDusGudang) dan diangkut lebih dulu
+    const adaDiGudang = Math.min(3, Math.max(0, RUANGAN.isiGudang.length - MOD.gudangDiangkut));
+    for (let i = 0; i < adaDiGudang; i++) gambarBarangBekas(RUANGAN.isiGudang[i].jenis, dx + 3 + i * 8, dy + dh - 1);
     glow(x + w / 2, y + 14, 15, '#ffe9b0', 0.24);
   } else {
     r(dx, dy, dw, dh, '#6a7060');                           // daun metal
@@ -2383,6 +2387,11 @@ function drawPintuGudang() {
 // yang di dalam membawanya masuk (dibongkar) sebelum dibawa keluar lagi
 // terisi (drawBawaan 'kardus').
 function drawDusGudang() {
+  // Gudang sesak: barang bekas ke-4 dst. menumpuk di kanan pintu, menunggu
+  // penghapusan BMN. Kotak x642..662 y100..113 kosong piksel & lalu lintas
+  // (node sapu-ruang.mjs siapa 642 100 20 13).
+  const luber = Math.min(4, Math.max(0, RUANGAN.isiGudang.length - MOD.gudangDiangkut - 3));
+  for (let i = 0; i < luber; i++) gambarBarangBekas(RUANGAN.isiGudang[3 + i].jenis, 643 + i * 5, 112);
   if (gudangTerisi()) return;
   const gx = GUDANG.x + GUDANG.w / 2;
   r(gx - 8, 106, 7, 5, '#b98d5e');
@@ -9930,6 +9939,7 @@ function daftarBarang() {
             : p ? ['sedang ke', esc(namaPendek(p))] : ['di dalam', '—'],
           ['gembok', gudangTerisi() ? 'terbuka' : 'tergantung terkunci'],
           ['dipakai', (gudangKeadaan.kunjungan || 0) + ' kali sejak halaman dibuka'],
+          ['barang bekas', RUANGAN.isiGudang.length ? esc(ringkasIsiGudang()) : '—'],
         ];
       } },
     { id: 'baca', nama: 'Pojok Baca ASN', kode: '3.05.01.04.022', nup: 4, tahun: 2013,
@@ -13659,6 +13669,7 @@ const MOD = {
   lampu: 1,          // pengali intensitas neon
   neonMati: neonSemua(0),  // 0..1 per tabung (kiri 170, kanan 410, sayap timur 530); 1 = padam
   mcbTurun: false,         // tuas tengah panel MCB jalur timur sedang turun (mcb-jalur-turun); tulis true saja
+  gudangDiangkut: 0,       // penghapusan-bmn-gudang: barang bekas yang sudah diangkut keluar, belum dihapus dari isiGudang
   kipas: 1,          // pengali kecepatan baling kipas berdiri
   layar: 1,          // pengali kecepatan animasi layar laptop
   layarPucat: 0,     // 0..1, layar laptop menuju mode tidur
@@ -13824,6 +13835,7 @@ const RUANGAN = {
   // Sesudah dijemur, karpet meja rapat tetap satu tingkat lebih cerah — bekas
   // yang sengaja hidup lebih lama dari eventnya (lihat drawFloor).
   karpetCerah: false,
+  isiGudang: [],           // {jenis, t} barang bekas yang dibawa ke gudang (simpanKeGudang), diangkut penghapusan BMN
   // Kekusutan harian, 0..1 — satu-satunya field RUANGAN yang berjalan
   // sendiri mengikuti jam, bukan bekas sebuah kejadian. Lihat blok
   // "kekusutan harian" di bawah. null = belum pernah di-tick; tick pertama
@@ -13876,7 +13888,7 @@ const BEKAS_FIELD = [
   'nodaMeja', 'nodaPlafon', 'retakExtra', 'nodaKopi', 'catMengelupas', 'fotoMiring',
   'kursiRusak', 'spanduk', 'edaran', 'stikerTertempel', 'labelPatch', 'kabelRapi',
   'kartuAPAR', 'plangBaru', 'kesetAda', 'piala', 'piagamDinding', 'karpetCerah',
-  'baganKotak', 'bukuTamu', 'arsipPenuh', 'dusTambahanArsip', 'mcbTurunKali', 'koranTanggal',
+  'baganKotak', 'bukuTamu', 'arsipPenuh', 'dusTambahanArsip', 'mcbTurunKali', 'koranTanggal', 'isiGudang',
   // stok yang habis lalu diisi ulang event
   'toner', 'kertasPrinter', 'gelasDispenser', 'rimKertas',
 ];
@@ -14013,6 +14025,43 @@ function bekasJatuhTempo(waktu) {
     .filter((k) => BEKAS_MASA[k].aktif(RUANGAN[k]) && Number.isFinite(bekasSejak[k]) && t >= tempo(k))
     .sort((a, b) => tempo(a) - tempo(b));
 }
+/* Gudang ikut menua. Barang yang dibawa pergi event — keset lama, piala,
+   plang yang diturunkan, buku tamu penuh (bekas-habis-masa-pakai), kursi
+   rapat rusak (kursi-rapat-rusak-diganti) — dulu lenyap di ambang pintu
+   gudang. Sekarang tersimpan sebagai bekas: kelihatan di lantai gudang waktu
+   pintunya terbuka, menumpuk di sebelah kanan pintu kalau sudah sesak, dan
+   tertulis di kartu inventaris gudang. penghapusan-bmn-gudang
+   (public/event/42) mengangkutnya keluar dengan berita acara. */
+const GUDANG_ISI_MAKS = 8;
+const BARANG_GUDANG = {
+  keset: 'Keset lama', piala: 'Piala voli', plang: 'Plang lama ruang kadis',
+  bukuTamu: 'Buku tamu yang penuh', kursi: 'Kursi rapat rusak',
+};
+// true = masuk; false = jenis tak dikenal atau gudangnya sudah sesak
+function simpanKeGudang(jenis) {
+  if (!(jenis in BARANG_GUDANG) || RUANGAN.isiGudang.length >= GUDANG_ISI_MAKS) return false;
+  RUANGAN.isiGudang.push({ jenis, t: Date.now() });
+  return true;
+}
+// "Kursi rapat rusak ×2, Piala voli" — urutan masuk
+function ringkasIsiGudang() {
+  const n = {};
+  for (const b of RUANGAN.isiGudang) n[b.jenis] = (n[b.jenis] || 0) + 1;
+  return Object.entries(n).map(([j, c]) => (BARANG_GUDANG[j] || j) + (c > 1 ? ' ×' + c : '')).join(', ');
+}
+// Barang bekas sekecil kotak rim kertas, garis kakinya yb. Dipakai lantai
+// gudang (drawPintuGudang) dan tumpukan di sebelah pintunya (drawDusGudang).
+function gambarBarangBekas(jenis, x, yb) {
+  switch (jenis) {
+    case 'keset': r(x, yb - 7, 3, 7, '#3f4a3a'); r(x, yb - 7, 3, 1, '#7a2020'); r(x, yb - 1, 3, 1, '#7a2020'); break;
+    case 'piala': r(x, yb - 2, 4, 2, '#6b4a2a'); r(x, yb - 6, 4, 4, '#e8c14a'); r(x + 1, yb - 7, 2, 1, '#fff3b0'); break;
+    case 'plang': r(x, yb - 8, 4, 8, '#8d5738'); r(x, yb - 8, 4, 1, '#c9a03a'); r(x + 1, yb - 6, 2, 1, '#e8e4d4'); break;
+    case 'bukuTamu': r(x, yb - 3, 4, 3, '#7a2020'); r(x, yb - 3, 4, 1, '#e8e4d4'); break;
+    case 'kursi': r(x, yb - 8, 4, 4, '#8b8f86'); r(x, yb - 4, 4, 1, '#6a6e66'); r(x, yb - 3, 1, 3, '#6a6e66'); r(x + 3, yb - 3, 1, 3, '#6a6e66'); break;
+    default: r(x, yb - 4, 4, 4, '#b98d5e'); r(x, yb - 4, 4, 1, '#d9cba8');
+  }
+}
+
 function bekasMasaRujukan() { return { BEKAS_MASA, HARI_MS, BEKAS_TENGGANG_MS, bekasSejak, BEKAS_MASA_NAMA }; }
 
 /* Masa pakai yang terlihat. Masa pakai berjalan dalam hari sungguhan, jadi
@@ -14197,6 +14246,17 @@ function jelaskanPerubahan(a, b) {
         else if (x && y && y.tempel !== x.tempel && y.tempel >= 0) catat(k, 'Huruf yang copot ditempel ulang — masih miring');
         break;
       case 'koranTanggal': if (y) catat(k, 'Koran hari ini dipasang di rak pojok baca'); break;
+      case 'isiGudang': {
+        const nx = pj(x), ny = pj(y);
+        if (ny > nx) {
+          const j = y[ny - 1] && y[ny - 1].jenis;
+          catat(k, `${BARANG_GUDANG[j] || 'Barang bekas'} disimpan di gudang (${ny} barang bekas sekarang)`);
+        } else if (ny < nx) {
+          catat(k, ny === 0 ? `Penghapusan BMN: ${nx} barang bekas di gudang diangkut, berita acaranya ditandatangani`
+            : `Barang bekas diangkut dari gudang (${ny} tersisa)`);
+        }
+        break;
+      }
       default: break;
     }
   }
@@ -14263,6 +14323,7 @@ const RIWAYAT_BARANG = {
   apar: ['kartuAPAR'], server: ['labelPatch', 'kabelRapi'], kadis: ['plangBaru', 'kesetAda'],
   rapat: ['nodaKopi', 'kursiRusak', 'karpetCerah'], 'buku-tamu': ['bukuTamu'],
   dispenser: ['gelasDispenser'], fotokopi: ['rimKertas'], 'lemari-piala': ['piala'], baca: ['koranTanggal'],
+  gudang: ['isiGudang'],
 };
 // Entri riwayat terbaru untuk satu barang, atau null.
 function riwayatBarang(id) {

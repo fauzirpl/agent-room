@@ -144,7 +144,12 @@ daftarEvent(
       for (let i = 0; i < 4; i++) spawn('dust', T.kx, 180);
       return;
     }
-    if (T.tahap === 'kembali') { T.dibawa = null; a.laju = 1; E.selesaiCepat = true; }
+    if (T.tahap === 'kembali') {
+      T.dibawa = null; a.laju = 1;
+      simpanKeGudang('kursi');                     // kursi rusaknya menunggu penghapusan BMN
+      gudangKeadaan.bukaSampai = now + 1200;
+      E.selesaiCepat = true;
+    }
   },
   // Kursi yang dijinjing digambar di ATAS segalanya: sortY tetap tidak bisa
   // mengikuti orang yang berjalan melintasi separuh ruangan.

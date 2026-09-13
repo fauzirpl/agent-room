@@ -795,6 +795,25 @@ yang menganggur — bekasnya dikembalikan diam-diam seperti sebelumnya. Foto
 miring dan karpet yang kusam lagi sengaja tetap diam-diam: tidak ada orang yang
 "memudarkan karpet".
 
+### Gudang yang ikut menua, dan penghapusan BMN
+
+Barang yang dibawa ke gudang — keset lama, piala, plang yang diturunkan, buku
+tamu yang penuh, kursi rapat yang rusak — dulu lenyap di ambang pintunya.
+Sekarang tersimpan (`RUANGAN.isiGudang`, ikut bertahan muat ulang, paling
+banyak 8): tiga yang pertama bersandar di lantai gudang dan kelihatan tiap
+pintunya terbuka, sisanya menumpuk di sebelah kanan pintu, dan kartu
+inventaris gudang menyebut isinya ("Kursi rapat rusak ×2, Piala voli"). Pintu
+gudang ikut terbuka sebentar tiap ada yang mengantar barang.
+
+Barang milik negara tidak boleh sekadar dibuang. Begitu isinya empat, event
+**penghapusan-bmn-gudang** bisa datang: petugas berseragam khaki masuk dari
+tepi kanan, seorang pegawai menyambutnya dengan papan berita acara dan
+menandatanganinya, lalu petugasnya bolak-balik mengangkut barang satu per satu
+dari pintu gudang ke luar — tumpukan di luar dulu, baru isi lantai gudang.
+Buku riwayat mencatatnya sekali: "Penghapusan BMN: 5 barang bekas di gudang
+diangkut, berita acaranya ditandatangani". Titik tumpukannya dipilih dengan
+`node sapu-ruang.mjs siapa 642 100 20 13`: nol piksel, nol lalu lintas.
+
 ### Alat sapu ruangan
 
 Setiap perabot di ruangan ini ditaruh dengan cara yang sama: sapuan piksel atas
