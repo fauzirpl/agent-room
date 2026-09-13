@@ -84,6 +84,21 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   diundi sejak lahir — giliran pertama siapa saja, lalu dia didahulukan lagi
   tiap putaran berikutnya, sama seperti arsiparis didahulukan urusan notulen.
   Sesi nyata tidak pernah dipaksa berpatroli.
+- **Delapan event lagi (gelombang 5).** Empat memakai pojok baca yang baru:
+  koran pagi dipasang di raknya dan edisi kemarin dibuang ke tong pantri, dua
+  orang lesehan mendiskusikan buku yang sama, satu ketiduran di atas bantal
+  sesudah makan siang sampai dibangunkan, dan raknya sesekali dilap. Empat
+  sisanya menuntaskan usulan rapat yang dulu divonis "mahal": **MCB satu
+  jalur turun** (panel MCB di bidang dinding kosong sebelah rak server, dua
+  tabung sisi timur padam sampai ada yang menaikkan tuasnya lagi), **rapat
+  molor kopi masuk** (syaratnya membaca rapat sungguhan — ada rapat yang
+  sudah lewat empat menit dengan tiga orang duduk), **jatah kuota cair**
+  (rim kertas diambil dari gudang; dia tidak ikut undian sama sekali, cuma
+  menyala sebagai lanjutan `kuota-fotokopi-habis`, jadi kertasnya tidak
+  pernah datang sebelum ada yang kehabisan), dan **foto bersama** (dua saf di
+  lantai depan meja rapat, juru fotonya berhitung, blitz sekejap — selalu
+  menyusul penghargaan zona integritas). Papan skor katalog naik 310 → 314
+  dari 373, total event terpasang 341 → 349.
 - **Dua event lagi dari sisa katalog.** Dus ekspedisi datang: tiga dus jatuh
   berurutan (gravitasi sungguhan) di depan ruang kadis, dua pegawai
   mengangkutnya ke dekat lemari arsip — tumpukannya sekali pakai, hilang

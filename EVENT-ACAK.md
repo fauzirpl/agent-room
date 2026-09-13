@@ -2,7 +2,7 @@
 
 Hasil rapat desain 12 sudut pandang, disaring kelayakannya terhadap kode nyata
 di [public/room.js](public/room.js). **373 event unik**, 346 di antaranya dinilai
-bisa dikerjakan, dan **310 sudah jadi kode** di [public/event/](public/event/)
+bisa dikerjakan, dan **314 sudah jadi kode** di [public/event/](public/event/)
 (dipecah per tema, urutannya di `manifest.json`) — ditandai **+** di katalog
 di bawah.
 
@@ -247,7 +247,7 @@ Listrik, AC, jaringan, rak server, printer — badan kantornya sendiri.
 | **+** | **Kedipan listrik PLN** | Acak, 1x per 8-20 menit, cooldown keras 6 menit | Overlay hitam sekanvas: globalAlpha 0 -> 0.72 dalam 2 frame, tahan 8 frame, turun ke 0 dalam 6 frame | sedang | 9s | 3 | catatan |
 | **+** | **Kipas menoleh** | Acak 1x per 4 menit, cooldown 2 menit. Wajib jalan kalau… | Kepala kipas menyapu cx 400 +-7 px dengan easing sin periode 7 detik | sering | 25s | 3 | catatan |
 | **+** | **Mati lampu, genset nyala** | Acak, peluang kecil tiap 90 detik. Cooldown 8 menit | Flag global `listrikMati=true`. drawAmbien menimpa seluruh kanvas rgba(6,10,20,.72) selama 4 detik | jarang | 9s | 3 | catatan |
-|  | **MCB satu jalur turun** | Acak tiap 2 menit peluang kecil. Cooldown 10 menit | Prop baru kecil: kotak panel MCB 14x18 px abu ('#dfe2e6') di dinding x=414,y=76, dengan tiga tuas 3x5 px | jarang | 22s | 3 | layak |
+| **+** | **MCB satu jalur turun** | Acak tiap 2 menit peluang kecil. Cooldown 10 menit | Prop baru kecil: kotak panel MCB 14x18 px abu ('#dfe2e6') di dinding x=414,y=76, dengan tiga tuas 3x5 px | jarang | 22s | 3 | layak |
 | **+** | **Neon sebelah mati** | Acak 1x per 15 menit, hanya kalau A.lampu > 0.3 (sore/malam) | Tabung kiri (cx=170) mati lewat 4 kedip acak (alpha 1 -> .2 -> 0 -> .6 -> 0 dalam 1,2 detik), lalu 0 selama 40… | sedang | 45s | 3 | catatan |
 | **+** | **Printer nyangkut kertas** | Acak, cooldown 7 menit, lebih sering kalau stasiun 'web' baru dipakai <30… | LED hijau printer (x=219, y=87) berubah merah tetap (tidak berkedip — kerusakan, bukan proses) | sedang | 12s | 3 | catatan |
 | **+** | **Rak server dibersihkan** | Acak tiap 4 menit peluang kecil, hanya jam 07.00–09.00 (sebelum jam pelayanan) | Semburan 'dust' padat (5 butir/detik) dari seluruh muka rak, menyebar ke kiri karena vx diperbesar | jarang | 35s | 3 | catatan |
@@ -466,7 +466,7 @@ Yang membuat kantor terasa kantor Indonesia: ojol, gorengan, arisan, ngobrol di 
 | **+** | **Payung basah di pojok** | Hanya saat atau sampai 2 menit setelah hujan-deras-jendela | Prop kecil sementara: payung terlipat berdiri disandarkan di dinding dekat tanaman pot (x=36, y=250) — batang 1x22… | sedang | 75s | 4 | mahal |
 |  | **Pel lantai** | Acak dengan jadwal: peluang jauh lebih besar pada 07:00-08:00 dan 15:30-16:30… | Pegawai kebersihan (pakai wearpack) menyeret ember pel dan mendorong kain pel: pita lantai basah selebar 20 px… | sedang | 50s | 4 | mahal |
 | **+** | **Petugas kebersihan mengepel** | Acak jam 07.00-08.00 dan 16.00-17.00, sekali per rentang | Petugas berseragam biru dengan gagang pel 1x14 px berjalan pelan menyusuri LANE_DOWN dari x=60 ke x=420 | sedang | 35s | 4 | mahal |
-|  | **Rapat molor, kopi masuk** | Ada entri rapatAktif dengan now - sejak > 5 menit DAN jumlah yang duduk >= 3 | Seorang penghuni yang tidak sedang bekerja (prioritas standby) mengambil gelas di dispenser (berdiri 2 detik, 3… | sedang | 20s | 4 | mahal |
+| **+** | **Rapat molor, kopi masuk** | Ada entri rapatAktif dengan now - sejak > 5 menit DAN jumlah yang duduk >= 3 | Seorang penghuni yang tidak sedang bekerja (prioritas standby) mengambil gelas di dispenser (berdiri 2 detik, 3… | sedang | 20s | 4 | mahal |
 | **+** | **Sales mesin fotokopi** | Jam 9-15, acak tiap ~12 menit. Cooldown 20 menit | Sales berkemeja putih + tas jinjing hitam masuk sampai tengah ruangan tanpa dipersilakan, membawa brosur mengkilap… | sedang | 55s | 4 | mahal |
 | **+** | **Satpam patroli** | Acak tiap ~6 menit, dan selalu sekali saat pergantian fase ke malam | Satpam seragam biru tua + topi (pal baru di JABATAN: main '#2b3f6b', head 'topi') masuk dari kiri di LANE_DOWN,… | sering | 40s | 4 | mahal |
 | **+** | **Senam Jumat pagi** | Bukan acak: hari Jumat, jam 07.00-08.00, sekali per hari, dan tidak boleh… | Semua penghuni berkumpul di karpet merah dalam formasi longgar (grid 3 kolom, jarak 26 px), badannya naik-turun 2… | jarang | 20s | 4 | mahal |
@@ -540,8 +540,8 @@ Tujuh belasan, Korpri, hari batik, ulang tahun, lebaran.
 | **+** | **Piala voli Antar-OPD dipajang** | Acak, peluang kecil, mengikuti event perayaan lain (mis | Piala kecil 6x9 px emas (mangkuk 6x4, batang 2x3, alas 4x2) diletakkan di atas lemari arsip (x=54, y=~118 di sisi… | langka | 16s | 3 | catatan |
 | **+** | **Tumpeng syukuran** | Acak 1x per 60 menit, jam 9-14, butuh >=3 pegawai di ruangan dan meja rapat… | Prop kerucut di tengah meja rapat: 12 baris trapesium '#f2c14e' yang menyempit ke atas (lebar 18 -> 2), puncak 2 px… | langka | 45s | 3 | catatan |
 | **+** | **Buka puasa bersama** | Hanya saat ramadan-siang-sunyi aktif dan jam mencapai 17.45-18.15 | Meja rapat disulap: sembilan kotak takjil 6x4 px '#d9b46a' berjajar di sepanjang meja, tiga gelas teh 3x5 px… | jarang | 100s | 4 | mahal |
-|  | **Foto bersama** | Acak 1x per 60-120 menit, minimal 4 penghuni, atau selalu setelah event… | Semua penghuni berbaris dua saf rapat di karpet merah (saf depan y=240, belakang y=250, jarak 18 px) hadap 'down' | langka | 25s | 4 | mahal |
-|  | **Jatah kuota cair** | Hanya boleh jalan 2-4 menit setelah kuota-fotokopi-habis pernah terjadi,… | Caraka (sosok Standby berjalan sekali lewat) masuk dari tepi kiri di LANE_DOWN membawa rim kertas 10x6 px putih di… | jarang | 10s | 4 | mahal |
+| **+** | **Foto bersama** | Acak 1x per 60-120 menit, minimal 4 penghuni, atau selalu setelah event… | Semua penghuni berbaris dua saf rapat di karpet merah (saf depan y=240, belakang y=250, jarak 18 px) hadap 'down' | langka | 25s | 4 | mahal |
+| **+** | **Jatah kuota cair** | Hanya boleh jalan 2-4 menit setelah kuota-fotokopi-habis pernah terjadi,… | Caraka (sosok Standby berjalan sekali lewat) masuk dari tepi kiri di LANE_DOWN membawa rim kertas 10x6 px putih di… | jarang | 10s | 4 | mahal |
 | **+** | **Nasi kotak datang** | Bukan acak murni: hanya kalau >=3 kursi meja rapat terisi terus-menerus… | Caraka masuk dari pintu kadis membawa tiga kotak putih 9x5 px bertumpuk, berjalan ke ujung kanan meja rapat dan… | sedang | 34s | 4 | mahal |
 | **+** | **Wartawan motret di depan X-Banner** | Jam 9-15, acak per ~25 menit. Cooldown 40 menit | Wartawan berompi cokelat dengan kamera 6x4 px + lensa masuk, berdiri di LANE_DOWN menghadap X-banner ZONA INTEGRITAS | jarang | 45s | 4 | mahal |
 | **+** | **Halal Bihalal** | Hari pertama masuk kerja setelah Idulfitri (tanggal dari konfigurasi), jam… | Dekorasi: dua ketupat 7x7 px anyaman hijau '#4f8a56' digantung di kiri-kanan Garuda dengan benang 1 px, bergoyang… | langka | 120s | 5 | mahal |

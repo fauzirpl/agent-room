@@ -86,6 +86,11 @@ daftarEvent(
     'fotokopi-kilat', 'numpang-print', 'printer-nge-jam',
     'kasi-panggil-magang-fotokopi',
   ],
+  /* Satu-satunya jalan masuk `jatah-kuota-cair` (berkas 39): kertasnya tidak
+     boleh datang sebelum ada yang kehabisan, jadi event itu bobotnya 0 dan
+     cuma hidup dari sini. Peluang 0,6 — jatah yang cair di hari yang sama
+     itu keberuntungan, bukan aturan. */
+  lanjutan: [{ id: 'jatah-kuota-cair', peluang: 0.6 }],
   /* Minimal dua orang yang bisa dipinjam: yang kena getahnya dan seorang
      pengantre. Satu orang saja di depan mesin cuma orang bengong.
 

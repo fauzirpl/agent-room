@@ -103,6 +103,8 @@ daftarEvent(
 {
   id: 'penghargaan-zona-integritas',
   kelas: 'panggung', bobot: B.langka, cooldown: 5400, durasi: 35,
+  // Piagam yang baru diterima tanpa foto bersama itu bukan kantor dinas.
+  lanjutan: [{ id: 'foto-bersama', peluang: 1 }],
   perluAktor: true,
   syarat: (S) => S.orang.filter((o) => bisaDipinjam(o)).length >= 4 && S.jam > 9 && S.jam < 15,
   mulai(E, S) {

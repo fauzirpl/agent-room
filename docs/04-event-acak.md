@@ -4,7 +4,7 @@
 
 ## Event acak
 
-Selain yang dipicu tool call, ruangan punya **337 kejadian yang muncul
+Selain yang dipicu tool call, ruangan punya **349 kejadian yang muncul
 sendiri** (angka dihitung otomatis: `node uji-katalog.mjs`): UPS berbunyi,
 kalender disobek, kabel LAN longgar, gorengan naik ke
 meja rapat, kucing tidur di karpet, tamu salah alamat, sirene lewat di jalan
@@ -29,6 +29,18 @@ singlet merah-putih dengan barbel — dan pegawai yang menyebutnya cukup bilang
 `33-tamu-tenar-dasar.js`; ringkasnya: balon kata di ruangan ini milik kita,
 jadi menempelkannya ke orang yang benar-benar ada adalah batas yang tidak
 dilewati — dan siluet lebih tahan lama daripada nama.
+
+Gelombang terakhir (`public/event/39-gel5-pojok-baca-dan-sisa-katalog.js`)
+berisi delapan: empat memakai **pojok baca** yang baru (korannya diganti tiap
+pagi, bukunya didiskusikan sambil lesehan, ada yang ketiduran di atas bantal,
+raknya sesekali dilap) dan empat menuntaskan sisa katalog yang dulu divonis
+"mahal" karena menuntut mesin yang waktu itu belum ada — `mcb-jalur-turun`
+(panel MCB di bidang dinding kosong x422..436, dua tabung sisi timur padam
+sampai ada yang menaikkannya lagi), `rapat-molor-kopi-masuk` (syaratnya
+membaca `rapatAktif` sungguhan, bukan menebak jam), `jatah-kuota-cair`
+(`bobot: 0` — dia cuma hidup sebagai `lanjutan` milik `kuota-fotokopi-habis`,
+supaya kertas tidak pernah datang sebelum ada yang kehabisan), dan
+`foto-bersama` (selalu menyusul `penghargaan-zona-integritas`).
 
 Cara kerjanya: satu registri berbobot, satu penjadwal berjeda 18–45 detik,
 cooldown per event. Bentuk satu definisi:
