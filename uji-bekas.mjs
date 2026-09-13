@@ -134,5 +134,72 @@ console.log(tebal('\nMelupakan, dan harness lain tidak mewarisi apa pun'));
     lempar ? 'tickRuangan melempar: ' + lempar.message : 'setInterval/pagehide di sandbox memang tidak pernah jalan');
 }
 
+/* ---------------------------------------------------- buku riwayat --- */
+console.log(tebal('\nBuku riwayat'));
+{
+  for (const nama of ['catatRiwayat', 'jelaskanPerubahan', 'mulaiRuanganTersimpan', 'riwayatRujukan']) {
+    if (typeof muatKonteks()[nama] !== 'function') { ok(`fungsi ${nama}() ada di room.js`, false); }
+  }
+  const G = muatKonteks();
+  const RG = G.__jembatan__.RUANGAN;
+  const { RIWAYAT_KUNCI, RIWAYAT_MAKS } = G.riwayatRujukan();
+  const buku = () => G.riwayatRujukan().riwayatKantor;
+  ok('halaman baru: buku dibuka dengan satu entri pembuka', buku().length === 1 && buku()[0].k === 'mulai',
+    buku().map((r) => r.teks).join(' | '));
+  ok('tanpa perubahan tidak ada yang dicatat', G.catatRiwayat(1000) === 0);
+
+  RG.piala = true;
+  RG.kursiRusak.add(1);
+  RG.nodaPlafon.push({ x: 40, w: 12 });
+  RG.toner = 0.2;                                     // stok BERKURANG: tidak dicatat
+  const n = G.catatRiwayat(2000);
+  const teks = buku().map((r) => r.teks).join(' | ');
+  ok('tiga bekas baru jadi tiga entri, toner yang berkurang tidak', n === 3
+    && /Piala/.test(teks) && /Kursi rapat rusak/.test(teks) && /plafon/.test(teks) && !/Toner/.test(teks), teks);
+  ok('entri bertanggal dengan waktu kejadian', buku().slice(1).every((r) => r.t === 2000));
+  RG.toner = 1;
+  ok('stok yang DIISI ULANG dicatat', G.catatRiwayat(3000) === 1 && /Toner printer diganti/.test(buku().at(-1).teks));
+  RG.kursiRusak.delete(1);
+  ok('bekas yang hilang dicatat dengan kalimatnya sendiri', G.catatRiwayat(4000) === 1
+    && buku().at(-1).teks === 'Kursi rapat yang rusak diganti', buku().at(-1).teks);
+  const tersimpan = (() => { try { return JSON.parse(G.localStorage.getItem(RIWAYAT_KUNCI)); } catch { return null; } })();
+  ok('riwayat ikut tersimpan', Array.isArray(tersimpan) && tersimpan.length === buku().length,
+    `${tersimpan ? tersimpan.length : 0} entri`);
+
+  // halaman berikutnya: bekas & riwayat dibawa menyeberang seperti peramban
+  G.simpanBekasRuangan();
+  const H2 = muatKonteks();
+  H2.localStorage.setItem(G.bekasRujukan().BEKAS_KUNCI, G.localStorage.getItem(G.bekasRujukan().BEKAS_KUNCI));
+  H2.localStorage.setItem(RIWAYAT_KUNCI, G.localStorage.getItem(RIWAYAT_KUNCI));
+  H2.mulaiRuanganTersimpan(false);
+  const buku2 = H2.riwayatRujukan().riwayatKantor;
+  ok('muat ulang: riwayat lama kembali utuh', buku2.length === buku().length && buku2[0].k === 'mulai');
+  ok('muat ulang: bekas yang DIPULIHKAN tidak dicatat sebagai kejadian baru', H2.catatRiwayat(5000) === 0,
+    'piala sudah ada sejak halaman sebelumnya');
+
+  // batas ukuran: entri pembuka tidak pernah ikut terbuang
+  for (let i = 0; i < RIWAYAT_MAKS + 40; i++) {
+    H2.__jembatan__.RUANGAN.fotoMiring = i % 2 ? 0 : 0.09;
+    H2.catatRiwayat(6000 + i);
+  }
+  const buku3 = H2.riwayatRujukan().riwayatKantor;
+  ok(`tidak pernah lebih dari ${RIWAYAT_MAKS} entri, pembuka tetap di depan`,
+    buku3.length === RIWAYAT_MAKS && buku3[0].k === 'mulai', `${buku3.length} entri, pertama: ${buku3[0].teks}`);
+
+  // rusak & bersih
+  const I = muatKonteks();
+  I.localStorage.setItem(RIWAYAT_KUNCI, '{bukan json');
+  let lempar = null;
+  try { I.mulaiRuanganTersimpan(false); } catch (e) { lempar = e; }
+  ok('riwayat tersimpan yang rusak tidak menjatuhkan halaman', !lempar && I.riwayatRujukan().riwayatKantor.length === 1,
+    lempar ? lempar.message : 'buku dibuka baru');
+  H2.mulaiRuanganTersimpan(true);
+  const buku4 = H2.riwayatRujukan().riwayatKantor;
+  ok('?ruangan=baru mengosongkan riwayat juga', buku4.length === 1 && /bersih/.test(buku4[0].teks)
+    && H2.localStorage.getItem(H2.bekasRujukan().BEKAS_KUNCI) === null, buku4.map((r) => r.teks).join(' | '));
+  ok('jelaskanPerubahan murni: potret sama = nol kalimat',
+    G.jelaskanPerubahan({ piala: true, nodaMeja: [] }, { piala: true, nodaMeja: [] }).length === 0);
+}
+
 console.log('\n' + (gagal ? merah(`GAGAL ${gagal}`) + ` · lulus ${lulus}` : hijau(`LULUS ${lulus} pemeriksaan`)));
 process.exit(gagal ? 1 : 0);

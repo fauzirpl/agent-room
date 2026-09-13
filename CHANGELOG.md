@@ -102,6 +102,12 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 - **Mode uji `?penganggur=N`.** Menjamin minimal N pegawai standby, supaya
   event yang butuh banyak orang menganggur (foto bersama, senam Jumat) bisa
   dilihat langsung lewat `?event=<id>` walau ruangannya sedang ramai sesi.
+- **Buku riwayat kantor (📜).** Kapan tiap bekas di ruangan muncul atau hilang,
+  bertanggal, dikelompokkan per hari seperti buku register: piala dipajang,
+  kursi rapat rusak lagi satu, MCB turun untuk kedua kalinya, toner diganti.
+  Dicatat otomatis dari bekas yang disimpan — tidak ada event yang perlu
+  diubah — dan stok yang cuma berkurang sengaja tidak ikut supaya bukunya
+  tetap riwayat, bukan log. `?ruangan=baru` mengosongkan riwayatnya juga.
 - **Bekas di kantor bertahan saat halaman dimuat ulang.** Noda tinta, piagam,
   keset, huruf papan nama yang copot, dus tambahan arsip, lakban panel MCB,
   stok toner & kertas — dulu kantor bersih lagi tiap kali di-refresh, sekarang

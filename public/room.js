@@ -4702,6 +4702,19 @@ const JABATAN = [
     padanan: 'Trust & Safety',
     tugas: 'berkeliling memeriksa tiap pintu dan sudut kantor secara berkala, lalu kembali ke pos jaga',
     pal: { main: '#5c4a2e', pants: '#2e2a20', skin: '#d9a273', hair: '#1d1712', head: 'peci', jilbab: '#4a3c1f', kumis: true } },
+  /* Pramubakti SENGAJA tidak masuk PERAN_STANDBY juga -- alasan sama persis
+     dengan satpam di atas: array itu sudah penuh 4 slot (= MIN_DI_LAYAR),
+     jadi entri keenam di sana cuma bikin perannya nyaris tidak pernah
+     kepilih. Polanya IDENTIK: setPeran('pramubakti') dinamis atas standby
+     menganggur mana pun (blok PRAMUBAKTI_RUTE dekat class Standby, sesudah
+     SATPAM_RUTE), giliran pertama siapa saja, sesudah itu dia didahulukan
+     lagi tiap giliran berikutnya (calonPetugasPramubakti). Tetap didaftar di
+     JABATAN karena setPeran() & seragam harian keduanya bergantung ke situ
+     (butuh entri pal lengkap termasuk jilbab -- lihat uji-jk.mjs). */
+  { id: 'pramubakti', nama: 'Pramubakti', singkat: 'OB',
+    padanan: 'Workplace Experience',
+    tugas: 'berkeliling merapikan sudut pantri secara berkala, dari meja saji sampai tong sampah',
+    pal: { main: '#2f6f7a', pants: '#22343a', skin: '#d9a273', hair: '#1d1712', head: 'hair', jilbab: '#1f5c66' } },
 ];
 
 const JABATAN_ID = new Map(JABATAN.map((j) => [j.id, j]));
@@ -6986,6 +6999,18 @@ class Standby extends Agent {
       if (!satpamBerikutnya) satpamBerikutnya = now + jedaSatpam();   // jam mulai berjalan begitu standby pertama lahir
       else if (now > satpamBerikutnya && calonPetugasSatpam() === this) { this.mulaiSatpam(); return; }
     }
+    if (this.tugasPramubakti) { this.tickPramubakti(); return; }
+    if (!petugasPramubakti) {
+      // Beda dari gerbang satpam di atas (jam buta): pramubakti digerbangi
+      // KEBUTUHAN, dan RUANGAN.kusut naik-turun terus (bukan cuma naik
+      // seperti RUANGAN.notulen), jadi jamnya wajib direset kalau
+      // kebutuhannya sempat hilang lagi sebelum giliran jalan -- tanpa itu
+      // dia bisa berangkat merapikan pantri yang sudah rapi sendiri.
+      if (perluPramubakti()) {
+        if (!pramubaktiBerikutnya) pramubaktiBerikutnya = now + jedaPramubakti();
+        else if (now > pramubaktiBerikutnya && calonPetugasPramubakti() === this) { this.mulaiPramubakti(); return; }
+      } else pramubaktiBerikutnya = 0;
+    }
     if (this.tugasWC) { this.tickWC(); return; }
     if (this.tugasKursi) { this.tickKursi(); return; }
     if (this.tugasGudang) { this.tickGudang(); return; }
@@ -7304,11 +7329,75 @@ class Standby extends Agent {
     // satpam yang langsung pergi begitu tiba bukan sedang jaga pos.
     if (lanjut) this.nextMove = now + 25000 + Math.random() * 20000;
   }
+  /* Pramubakti merapikan pantri. Bentuknya SENGAJA disalin dari
+     mulaiSatpam/tickSatpam/selesaiSatpam di atas -- 'jalan' -> 'rapikan'
+     berulang tiap titik PRAMUBAKTI_RUTE, lalu 'pulang' sekali di akhir --
+     bedanya cuma dua: putarannya digerbangi KEBUTUHAN (perluPramubakti(),
+     bukan jam buta seperti satpam), dan singgahnya bukan cuma berpose
+     (pose 'lap', dipinjam dari jumat-bersih -- room.js tidak menambah pose
+     baru), tapi menutup dengan SATU akibat nyata di ruangan (lihat
+     selesaiPramubakti). */
+  mulaiPramubakti() {
+    petugasPramubakti = this;
+    pramubaktiBerikutnya = now + jedaPramubakti();
+    if (this.peran !== 'pramubakti') this.setPeran('pramubakti');   // menempel: giliran berikutnya dia didahulukan lagi
+    this.tugasPramubakti = 'jalan';
+    this.pramubaktiIdx = 0;
+    this.bawa = 'lap';
+    this.adaTugas = true;
+    this.betah = true;
+    this.doingEvent = 'merapikan pantri';
+    const t = PRAMUBAKTI_RUTE[0];
+    this.goToXY(t.x, t.y, t.hadap);
+  }
+  tickPramubakti() {
+    // pagar yang sama seperti tickSatpam: direbut event acak di tengah jalan
+    // membatalkan seluruh putaran, bukan melanjutkannya dari titik terakhir.
+    if (this.eventKerja) { this.selesaiPramubakti(false); return; }
+    if (this.tugasPramubakti === 'jalan') {
+      if (!this.path.length) {
+        this.tugasPramubakti = 'rapikan';
+        this.pose = 'lap';
+        this.pramubaktiT = now + PRAMUBAKTI_RAPI_MS_MIN + Math.random() * (PRAMUBAKTI_RAPI_MS_MAX - PRAMUBAKTI_RAPI_MS_MIN);
+      }
+    } else if (this.tugasPramubakti === 'rapikan') {
+      if (now > this.pramubaktiT) {
+        this.pose = null;
+        this.pramubaktiIdx++;
+        if (this.pramubaktiIdx < PRAMUBAKTI_RUTE.length) {
+          const t = PRAMUBAKTI_RUTE[this.pramubaktiIdx];
+          this.tugasPramubakti = 'jalan';
+          this.goToXY(t.x, t.y, t.hadap);
+        } else {
+          // Klaim kecil, bukan bersih seluruh ruangan: cuma sudut pantri yang
+          // barusan dirapikan, sepadan dengan ob-ngepel-lantai (0.6) tapi
+          // lebih ringan lagi karena lajurnya jauh lebih pendek.
+          bereskanKusut(PRAMUBAKTI_SISA);
+          this.tugasPramubakti = 'pulang';
+          this.goToXY(PANTRI_LUAR, PANTRI.ambang, 'left');   // "pos"-nya: titik tunggu depan pintu, bukan geometri baru
+        }
+      }
+    } else if (this.tugasPramubakti === 'pulang') {
+      if (!this.path.length) this.selesaiPramubakti(true);
+    }
+  }
+  selesaiPramubakti(lanjut) {
+    this.tugasPramubakti = '';
+    this.pose = null;
+    this.adaTugas = false;
+    this.bawa = null;
+    if (this.eventKerja) this.betahAsli = false;
+    else { this.betah = false; this.doingEvent = ''; }
+    if (petugasPramubakti === this) petugasPramubakti = null;
+    // this.peran TIDAK dikembalikan -- lihat komentar mulaiSatpam().
+    if (lanjut) this.nextMove = now + 11000 + Math.random() * 15000;
+  }
   destroy() {
     if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
     if (wcKeadaan.penghuni === this) wcKeadaan.penghuni = null;   // ...dan tidak boleh mengunci WC
     if (gudangKeadaan.penghuni === this) gudangKeadaan.penghuni = null;   // ...atau gudang
     if (petugasSatpam === this) petugasSatpam = null;      // ...atau putaran keliling
+    if (petugasPramubakti === this) petugasPramubakti = null;   // ...atau putaran pantri
     if (petugasKursi === this) {
       // dihapus jagaPopulasi() persis waktu menyeret: batalkan, jangan sampai
       // kursinya lenyap dari meja rapat tanpa pernah muncul di baris meja kerja.
@@ -7381,6 +7470,63 @@ function calonPetugasSatpam() {
   // arsiparis di calonPetugasNotulen() di atas.
   const bisa = standby.filter((b) => bisaDipinjam(b));
   return bisa.find((b) => b.peran === 'satpam') || bisa.find((b) => !b.path.length) || bisa[0] || null;
+}
+
+/* Pramubakti merapikan pantri — rutinitas standby lagi, sekelas satpam di
+   atas: bukan event acak (tidak lewat penjadwal, tidak masuk log), cuma
+   jalan sendiri di class Standby. Sama seperti satpam, TIDAK ADA geometri
+   baru: tiga titik singgahnya dipinjam dari koordinat yang sudah dipakai
+   berulang kali di public/event/*.js (dispenser pantry, tong sampah, meja
+   saji tempat lap digantung — lihat mis. tanaman-layu-disiram, galon-habis-
+   diganti, dan 27-serba-kecil.js), dan "pos"-nya PANTRI_LUAR — titik tunggu
+   depan pintu yang sudah ada, dipakai ulang persis seperti satpam memakai
+   ulang STATIONS.idle.
+
+   YANG SENGAJA TIDAK DISENTUH: RUANGAN.gelasDispenser dan RUANGAN.tongPenuh.
+   Keduanya kelihatan seperti sasaran paling jelas buat OB ("isi ulang
+   gelas", "kosongkan tong"), tapi keduanya SUDAH masing-masing punya adegan
+   sendiri lengkap dengan pemeran & dialog (galon-habis-diganti + tukang-
+   galon-datang untuk gelas; tong-sampah-penuh untuk tong — ketiganya
+   daftarEvent() di public/event/*.js). Menambah penulis ketiga atas field
+   yang sama TANPA bentrokDengan (rutinitas Standby ini tidak lewat
+   penjadwal, jadi tidak bisa ikut mekanisme bentrokDengan sama sekali) cuma
+   akan membuat pramubakti diam-diam menghabisi syarat ambang event-event itu
+   (RUANGAN.gelasDispenser <= 3 dkk.) sebelum sempat terpilih — adegan yang
+   sudah ada malah jadi nyaris tidak pernah muncul lagi. Yang disentuh
+   gantinya RUANGAN.kusut lewat bereskanKusut(), satu-satunya field yang
+   memang dirancang punya banyak penulis sekaligus (jumat-bersih, ob-ngepel-
+   lantai, rombongan-pembersih, dan sekarang ini) — lihat komentar
+   "kekusutan harian" di dekat bereskanKusut().
+
+   TIDAK ADA bentrokDengan dengan ob-ngepel-lantai (petugas kebersihan luar
+   yang mengepel lajur bawah, public/event/22): bentrokDengan cuma berlaku
+   ANTAR daftarEvent(), dan rutinitas ini bukan salah satunya — persis
+   satpam yang juga tidak pernah masuk bentrokDengan siapa pun, walau
+   satpam-patroli (versi tamu/daftarEvent-nya) masuk ke banyak daftar orang
+   lain. Kedua petugas ini juga tidak benar-benar berebut tempat: ob-ngepel-
+   lantai berhenti SEBELUM sekat pantri (x sampai pantriX(404), PANTRI_LUAR),
+   sedangkan PRAMUBAKTI_RUTE seluruhnya di DALAM pantri (x mulai pantriX(424))
+   — beda rupa (wearpack biru + pel + papan licin vs seragam pramubakti +
+   lap), beda petak lantai, jadi tidak pernah terbaca sebagai "dua OB". */
+const PRAMUBAKTI_RUTE = [
+  { x: pantriX(424), y: 280, hadap: 'up' },   // meja saji, tempat lap digantung (27-serba-kecil.js)
+  { x: pantriX(439), y: 270, hadap: 'up' },   // tong sampah (tong-sampah-penuh, galon-habis-diganti)
+  { x: pantriX(466), y: 256, hadap: 'up' },   // sudut dispenser (tanaman-layu-disiram, galon-habis-diganti)
+];
+const PRAMUBAKTI_RAPI_MS_MIN = 1600, PRAMUBAKTI_RAPI_MS_MAX = 3000;   // lama "merapikan" tiap titik
+const PRAMUBAKTI_JEDA_MS = 300000;   // jeda coba lagi sesudah kebutuhan muncul (5 menit)
+const PRAMUBAKTI_AMBANG = 0.35;      // RUANGAN.kusut di atas ini = "pantri mulai berantakan"
+const PRAMUBAKTI_SISA = 0.85;        // bereskanKusut(): klaim kecil, cuma sudut pantri
+let pramubaktiBerikutnya = 0;        // now-timestamp percobaan berikutnya; 0 = jam belum jalan
+let petugasPramubakti = null;        // standby yang sedang merapikan, null = tidak ada yang jalan
+// window.PRAMUBAKTI_UJI_MS mempercepat jedanya (uji) — sama pola dengan jedaSatpam()
+const jedaPramubakti = () => (typeof window !== 'undefined' && window.PRAMUBAKTI_UJI_MS) || PRAMUBAKTI_JEDA_MS;
+const perluPramubakti = () => kusutKini() > PRAMUBAKTI_AMBANG;
+function calonPetugasPramubakti() {
+  // pola yang sama dengan calonPetugasSatpam(): siapa pun yang menganggur,
+  // yang perannya SUDAH 'pramubakti' didahulukan.
+  const bisa = standby.filter((b) => bisaDipinjam(b));
+  return bisa.find((b) => b.peran === 'pramubakti') || bisa.find((b) => !b.path.length) || bisa[0] || null;
 }
 
 // standby = penambal, jumlahnya selalu (4 - sesi nyata - yang sudah dihapus
@@ -12036,6 +12182,56 @@ klipingBtn.onclick = () => {
 document.getElementById('klipingTutup').onclick = klipingTutupDialog;
 dlgKliping.onclick = (e) => { if (e.target === dlgKliping) klipingTutupDialog(); };
 
+/* ------------------------------------------------- buku riwayat kantor ---
+   Modal 📜: membacakan riwayatKantor (blok "buku riwayat kantor" sesudah
+   RUANGAN) sebagai buku register — dikelompokkan per hari, yang terbaru di
+   atas. Pola modalnya sama persis dengan arsip kliping di atas. Datanya lokal,
+   jadi tidak ada fetch: yang baru terjadi dicatat dulu (catatRiwayat) supaya
+   kejadian tiga detik terakhir tidak ketinggalan waktu modalnya dibuka. */
+const dlgRiwayat = document.getElementById('dlgRiwayat');
+const riwayatBadan = document.getElementById('riwayatBadan');
+const riwayatBtn = document.getElementById('riwayatBtn');
+const tglRiwayat = (t) => new Date(t).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const jamRiwayat = (t) => new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+function riwayatGambar() {
+  catatRiwayat();
+  if (!riwayatKantor.length) { riwayatBadan.innerHTML = '<p class="stat-ket">belum ada yang tercatat.</p>'; return; }
+  const pertama = riwayatKantor[0];
+  const hari = Math.max(1, Math.ceil((Date.now() - pertama.t) / 86400000));
+  const blok = ['<div class="kartu-info">'
+    + '<span class="kk">dicatat sejak</span><span class="vv">' + esc(tglRiwayat(pertama.t)) + '</span>'
+    + '<span class="kk">kejadian</span><span class="vv">' + (riwayatKantor.length - 1) + ' dalam ' + hari + ' hari</span>'
+    + '</div>'];
+  let hariBaris = '';
+  for (const r of [...riwayatKantor].reverse()) {
+    const tg = tglRiwayat(r.t);
+    if (tg !== hariBaris) { blok.push('<h3 class="riwayat-tanggal">' + esc(tg) + '</h3>'); hariBaris = tg; }
+    blok.push('<div class="riwayat-baris' + (r.k === 'mulai' ? ' mulai' : '') + '">'
+      + '<span class="jam">' + esc(jamRiwayat(r.t)) + '</span><span class="teks">' + esc(r.teks) + '</span></div>');
+  }
+  // <code>, bukan <b>: modal ini berkelas .stat, dan `.stat b` itu angka HUD
+  // 18px — <b> di sini tampil sebesar judul (sama seperti catatan di papan SKP).
+  blok.push('<p class="stat-ket">Riwayat ini hidup di peramban ini saja, bersama bekas ruangannya. '
+    + 'Buka dengan <code>?ruangan=baru</code> untuk mengosongkan keduanya.</p>');
+  riwayatBadan.innerHTML = blok.join('');
+}
+
+function riwayatTutupDialog() {
+  dlgRiwayat.hidden = true;
+  document.removeEventListener('keydown', riwayatTombol);
+}
+function riwayatTombol(e) { if (e.key === 'Escape') { e.preventDefault(); riwayatTutupDialog(); } }
+
+riwayatBtn.onclick = () => {
+  if (!dlgRiwayat.hidden) { riwayatTutupDialog(); return; }
+  riwayatGambar();
+  dlgRiwayat.hidden = false;
+  document.addEventListener('keydown', riwayatTombol);
+};
+document.getElementById('riwayatTutup').onclick = riwayatTutupDialog;
+dlgRiwayat.onclick = (e) => { if (e.target === dlgRiwayat) riwayatTutupDialog(); };
+
 /* ------------------------------------------------------ papan informasi ---
    Dibuka dengan mengklik X-banner di ruangan (klikBanner), sesudah kameranya
    sampai (tickBanner). Tidak ada tombolnya di bilah panggung: bannernya
@@ -13707,10 +13903,169 @@ function lupakanBekasRuangan() {
 }
 // jendela baca uji-bekas.mjs — pola yang sama dengan pantriRujukan()
 function bekasRujukan() { return { BEKAS_KUNCI, BEKAS_VERSI, BEKAS_FIELD }; }
-if (MODE_URL.get('ruangan') === 'baru') lupakanBekasRuangan();
-else pulihkanBekasRuangan(ingatan.baca(BEKAS_KUNCI, ''));
+
+/* ------------------------------------------------- buku riwayat kantor ---
+   Sejak bekas bertahan saat muat ulang, kantor punya riwayat — tapi riwayat
+   yang tidak tercatat di mana pun: piagamnya ada di dinding, kapan datangnya
+   tidak ada yang tahu. Blok ini mencatatnya, bertanggal, dan modal 📜
+   (riwayatGambar) membacakannya sebagai buku register.
+
+   TIDAK ADA EVENT YANG MENULIS KE SINI. Tiap 3 detik potret bekas
+   (potretBekas, daftar putih yang sama dengan penyimpanan) dibandingkan
+   dengan potret sebelumnya, dan jelaskanPerubahan() menerjemahkan bedanya
+   jadi kalimat. Satu tempat, jadi event baru yang menulis bekas lama
+   (RUANGAN.piala = true) otomatis tercatat tanpa tahu buku ini ada — dan
+   352 event tidak perlu diubah satu pun.
+
+   Yang dicatat: bekas yang MUNCUL atau HILANG (piala dipajang, kursi rusak
+   lagi satu, retak ditambal) dan stok yang DIISI ULANG. Stok yang berkurang
+   sengaja tidak dicatat: gelas dispenser berkurang tiap ada yang ngopi, dan
+   buku yang isinya "gelas berkurang satu" empat puluh kali sehari bukan
+   riwayat, itu log. Bekas yang DIPULIHKAN saat halaman dimuat juga tidak
+   dicatat sebagai kejadian: potret dasarnya diambil sesudah pemulihan.
+
+   Disimpan di localStorage terpisah (ruanganRiwayat), maksimum RIWAYAT_MAKS
+   entri — entri pembuka ("mulai dicatat") selalu dipertahankan supaya
+   "dicatat sejak" tidak ikut bergeser. ?ruangan=baru mengosongkan bekas DAN
+   riwayatnya: kantor yang dibuka bersih tidak punya masa lalu. Dijaga
+   uji-bekas.mjs bagian "Buku riwayat". */
+const RIWAYAT_KUNCI = 'ruanganRiwayat';
+const RIWAYAT_MAKS = 300;
+let riwayatKantor = [];                // {t: Date.now(), k: field atau 'mulai', teks}
+let riwayatDasar = null;               // isi potret bekas yang terakhir sudah dibandingkan
+let riwayatDasarTeks = '';
+
+const RIWAYAT_NYALA = {                // boolean false -> true
+  piala: 'Piala voli dipajang di atas lemari arsip',
+  piagamDinding: 'Piagam Zona Integritas digantung di dinding',
+  kesetAda: 'Keset baru dipasang di depan pintu kadis',
+  plangBaru: 'Plang nama ruang kadis diganti yang baru',
+  karpetCerah: 'Karpet meja rapat dijemur — warnanya jadi lebih cerah',
+  kartuAPAR: 'Kartu inspeksi digantung di APAR',
+  kabelRapi: 'Kabel di rak server dirapikan',
+  arsipPenuh: 'Lemari arsip kepenuhan, map mulai menyembul',
+};
+const RIWAYAT_PADAM = {                // boolean true -> false yang memang berarti
+  arsipPenuh: 'Lemari arsip dirapikan, dus tambahannya diangkut',
+};
+const RIWAYAT_DAFTAR = {               // array & Set: [bertambah, berkurang]
+  nodaMeja: ['Noda tinta baru di meja stempel', 'Meja stempel dibersihkan'],
+  nodaPlafon: ['Rembesan hujan meninggalkan noda baru di plafon', 'Noda di plafon dicat ulang'],
+  retakExtra: ['Retak baru muncul di lantai', 'Retak di lantai ditambal'],
+  nodaKopi: ['Kopi tumpah di meja rapat, nodanya tertinggal', 'Noda kopi di meja rapat dibersihkan'],
+  edaran: ['Surat edaran baru ditempel', 'Surat edaran lama dicabut'],
+  kursiRusak: ['Kursi rapat rusak lagi satu', 'Kursi rapat yang rusak diganti'],
+  stikerTertempel: ['Stiker inventaris ditempel di satu barang lagi', 'Stiker inventaris dicabut'],
+};
+const RIWAYAT_ISI_ULANG = {            // stok: yang dicatat cuma isi ulangnya
+  toner: 'Toner printer diganti',
+  kertasPrinter: 'Kertas printer diisi ulang',
+  gelasDispenser: 'Gelas kertas dispenser diisi ulang',
+  rimKertas: 'Rim kertas cadangan datang di mesin fotokopi',
+};
+
+// Beda dua isi potret bekas -> [{k, teks}]. Fungsi murni: dipakai catatRiwayat
+// dan uji-bekas.mjs, tidak membaca RUANGAN.
+function jelaskanPerubahan(a, b) {
+  const hasil = [];
+  const catat = (k, teks) => hasil.push({ k, teks });
+  const pj = (v) => (Array.isArray(v) ? v.length : 0);
+  for (const k of BEKAS_FIELD) {
+    const x = a ? a[k] : undefined, y = b ? b[k] : undefined;
+    if (JSON.stringify(x) === JSON.stringify(y)) continue;
+    if (k in RIWAYAT_NYALA || k in RIWAYAT_PADAM) {
+      if (!x && y && RIWAYAT_NYALA[k]) catat(k, RIWAYAT_NYALA[k]);
+      else if (x && !y && RIWAYAT_PADAM[k]) catat(k, RIWAYAT_PADAM[k]);
+      continue;
+    }
+    if (k in RIWAYAT_DAFTAR) {
+      const [naik, turun] = RIWAYAT_DAFTAR[k];
+      if (pj(y) > pj(x)) catat(k, naik + (pj(y) > 1 ? ` (${pj(y)} sekarang)` : ''));
+      else if (pj(y) < pj(x)) catat(k, turun);
+      else if (k === 'edaran') catat(k, 'Surat edaran di papan diganti yang baru');
+      continue;
+    }
+    if (k in RIWAYAT_ISI_ULANG) {
+      if (Number(y) > Number(x)) catat(k, RIWAYAT_ISI_ULANG[k] + (k === 'rimKertas' ? ` (${y} rim)` : ''));
+      continue;
+    }
+    switch (k) {
+      case 'labelPatch': if (y > x) catat(k, `Label patch panel bertambah — ${y} label sekarang`); break;
+      case 'baganKotak': if (y > x) catat(k, 'Kotak baru ditambahkan di bagan struktur organisasi'); break;
+      case 'bukuTamu': if (y > x) catat(k, `Tamu menandatangani buku tamu (baris ke-${y})`); break;
+      case 'dusTambahanArsip': if (y > x) catat(k, `Dus bertambah di depan lemari arsip (${y} dus)`); break;
+      case 'mcbTurunKali': if (y > x) catat(k, `MCB jalur timur turun lalu dinaikkan lagi (ke-${y} kalinya)`); break;
+      case 'catMengelupas':
+        if (!(x > 0.02) && y > 0.02) catat(k, 'Cat dinding mulai mengelupas');
+        else if (x > 0.02 && !(y > 0.02)) catat(k, 'Bagian dinding yang mengelupas ditutup');
+        break;
+      case 'fotoMiring':
+        if (!x && y) catat(k, 'Foto pejabat kesenggol, jadi miring');
+        else if (x && !y) catat(k, 'Foto pejabat diluruskan lagi');
+        break;
+      case 'spanduk':
+        if (!x && y) catat(k, 'Satu huruf papan nama DINAS AI KLOD copot');
+        else if (x && !y) catat(k, 'Huruf papan nama dipasang lengkap lagi');
+        else if (x && y && y.tempel !== x.tempel && y.tempel >= 0) catat(k, 'Huruf yang copot ditempel ulang — masih miring');
+        break;
+      case 'koranTanggal': if (y) catat(k, 'Koran hari ini dipasang di rak pojok baca'); break;
+      default: break;
+    }
+  }
+  return hasil;
+}
+
+function bacaRiwayat(teks) {
+  let data;
+  try { data = JSON.parse(teks); } catch { return []; }
+  if (!Array.isArray(data)) return [];
+  return data.filter((r) => r && Number.isFinite(r.t) && typeof r.teks === 'string' && typeof r.k === 'string')
+    .slice(-RIWAYAT_MAKS);
+}
+function tulisRiwayat() { ingatan.tulis(RIWAYAT_KUNCI, JSON.stringify(riwayatKantor)); }
+
+// Mengembalikan jumlah entri baru. `waktu` cuma untuk uji; bawaannya Date.now().
+function catatRiwayat(waktu) {
+  if (!riwayatDasar) return 0;
+  let teks, kini;
+  try { teks = potretBekas(); } catch { return 0; }
+  if (teks === riwayatDasarTeks) return 0;
+  try { kini = JSON.parse(teks).isi; } catch { return 0; }
+  const baru = jelaskanPerubahan(riwayatDasar, kini);
+  riwayatDasar = kini;
+  riwayatDasarTeks = teks;
+  if (!baru.length) return 0;
+  const t = Number.isFinite(waktu) ? waktu : Date.now();
+  for (const b of baru) riwayatKantor.push({ t, k: b.k, teks: b.teks });
+  // entri pembuka dipertahankan: yang dibuang yang tertua SESUDAHNYA
+  if (riwayatKantor.length > RIWAYAT_MAKS) riwayatKantor.splice(1, riwayatKantor.length - RIWAYAT_MAKS);
+  tulisRiwayat();
+  return baru.length;
+}
+
+// Dipanggil sekali saat halaman dimuat (dan oleh uji-bekas.mjs).
+function mulaiRuanganTersimpan(bersih) {
+  if (bersih) {
+    lupakanBekasRuangan();
+    try { localStorage.removeItem(RIWAYAT_KUNCI); } catch { /* tidak ada yang bisa dilupakan */ }
+    riwayatKantor = [{ t: Date.now(), k: 'mulai', teks: 'Kantor dibuka bersih — bekas & riwayat lama dikosongkan' }];
+  } else {
+    pulihkanBekasRuangan(ingatan.baca(BEKAS_KUNCI, ''));
+    riwayatKantor = bacaRiwayat(ingatan.baca(RIWAYAT_KUNCI, ''));
+    if (!riwayatKantor.length) riwayatKantor = [{ t: Date.now(), k: 'mulai', teks: 'Buku riwayat kantor mulai dicatat' }];
+  }
+  tulisRiwayat();
+  riwayatDasarTeks = potretBekas();
+  riwayatDasar = JSON.parse(riwayatDasarTeks).isi;
+}
+function riwayatRujukan() { return { RIWAYAT_KUNCI, RIWAYAT_MAKS, riwayatKantor }; }
+
+mulaiRuanganTersimpan(MODE_URL.get('ruangan') === 'baru');
 setInterval(simpanBekasRuangan, 15000);
-if (typeof addEventListener === 'function') addEventListener('pagehide', simpanBekasRuangan);
+setInterval(catatRiwayat, 3000);
+if (typeof addEventListener === 'function') {
+  addEventListener('pagehide', () => { catatRiwayat(); simpanBekasRuangan(); });
+}
 
 /* -------------------------------------------------------------- penjadwal */
 const eventHidup = [];

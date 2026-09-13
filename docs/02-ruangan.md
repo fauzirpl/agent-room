@@ -659,6 +659,32 @@ rusak, versi lain, atau field yang tipenya berubah dilewati per field.
 `?ruangan=baru` mulai dari kantor bersih; `lupakanBekasRuangan()` di konsol
 melakukan hal yang sama tanpa muat ulang. Dijaga `uji-bekas.mjs`.
 
+### Buku riwayat kantor
+
+Sejak bekas bertahan saat muat ulang, kantor punya riwayat — piagamnya ada di
+dinding, tapi kapan datangnya tidak tercatat di mana pun. Tombol **📜** di bilah
+panggung membuka **buku riwayat kantor**: tiap bekas yang muncul atau hilang,
+bertanggal, dikelompokkan per hari seperti buku register. "Piala voli dipajang
+di atas lemari arsip", "Kursi rapat rusak lagi satu (3 sekarang)", "MCB jalur
+timur turun lalu dinaikkan lagi (ke-2 kalinya)".
+
+**Tidak ada event yang menulis ke buku ini.** Tiap 3 detik potret bekas — daftar
+putih `BEKAS_FIELD` yang sama dengan penyimpanan — dibandingkan dengan potret
+sebelumnya, dan `jelaskanPerubahan()` menerjemahkan bedanya jadi kalimat. Satu
+tempat, jadi event baru yang menulis bekas lama otomatis tercatat tanpa tahu
+buku ini ada, dan 352 event yang sudah terpasang tidak perlu diubah satu pun.
+
+Yang dicatat: bekas yang **muncul atau hilang**, dan stok yang **diisi ulang**
+(toner diganti, rim kertas datang). Stok yang berkurang sengaja tidak — gelas
+dispenser berkurang tiap ada yang ngopi, dan buku yang isinya "gelas berkurang
+satu" empat puluh kali sehari bukan riwayat, itu log. Bekas yang **dipulihkan**
+saat halaman dimuat juga tidak dicatat sebagai kejadian: potret dasarnya diambil
+sesudah pemulihan. Disimpan terpisah di `localStorage` (`ruanganRiwayat`),
+maksimum 300 entri; entri pembuka "mulai dicatat" selalu dipertahankan supaya
+"dicatat sejak" tidak ikut bergeser. `?ruangan=baru` mengosongkan bekas **dan**
+riwayatnya — kantor yang dibuka bersih tidak punya masa lalu. Dijaga
+`uji-bekas.mjs` bagian "Buku riwayat".
+
 ### Alat sapu ruangan
 
 Setiap perabot di ruangan ini ditaruh dengan cara yang sama: sapuan piksel atas
@@ -764,6 +790,81 @@ pernah dipanggil dari `class Agent` dasarnya. Peran `'satpam'` sendiri cuma
 kulit — kartu pegawai membolehkan siapa pun (termasuk sesi nyata) memilihnya
 dari dropdown jabatan seperti peran lain, tapi memilihnya cuma mengganti
 seragam, tidak menyalakan `tickSatpam()` sama sekali.
+
+### Pramubakti merapikan pantri
+
+Keluhannya: "ada pos satpam tapi tidak ada satpamnya, ada pantri tapi tidak
+ada OB-nya". Satpam sudah dibereskan di atas; bagian OB-nya dikerjakan
+dengan **pola yang sama persis**, disalin baris demi baris dari
+`mulaiSatpam`/`tickSatpam`/`selesaiSatpam` jadi `mulaiPramubakti`/
+`tickPramubakti`/`selesaiPramubakti` (dekat `destroy()` milik `class
+Standby`, sesudah blok satpam) — bukan `daftarEvent()`, tidak lewat
+penjadwal, tidak masuk log, keliling berurutan lewat beberapa titik lalu
+pulang.
+
+Ada dua beda dari satpam:
+
+1. **Gerbangnya kebutuhan, bukan jam buta.** Satpam berpatroli tiap
+   `SATPAM_JEDA_MS` apa pun keadaannya; pramubakti cuma berangkat kalau
+   `perluPramubakti()` — `RUANGAN.kusut > PRAMUBAKTI_AMBANG` (0.35) — benar.
+   Karena `RUANGAN.kusut` naik-turun terus (beda dari `RUANGAN.notulen` yang
+   cuma naik sampai dibereskan), jam tunggunya (`pramubaktiBerikutnya`)
+   sengaja direset ke 0 kalau kebutuhannya sempat hilang lagi sebelum
+   gilirannya tiba — tanpa itu dia bisa berangkat merapikan pantri yang
+   sudah rapi sendiri.
+2. **Singgahnya bukan cuma berpose, tapi menutup dengan satu akibat nyata**:
+   `bereskanKusut(0.85)` sesudah titik terakhir — klaim kecil (dibanding
+   `ob-ngepel-lantai` 0.6 atau `jumat-bersih` 0.1), sepadan dengan lajurnya
+   yang jauh lebih pendek dari keduanya.
+
+Titik-titiknya (`PRAMUBAKTI_RUTE`, dekat `calonPetugasSatpam()`) juga bukan
+geometri baru:
+
+| Titik | Koordinat | Dipinjam dari |
+|---|---|---|
+| meja saji pantri | `pantriX(424), 280` | tempat lap digantung, `27-serba-kecil.js` |
+| tong sampah | `pantriX(439), 270` | `tong-sampah-penuh`, `galon-habis-diganti` |
+| sudut dispenser | `pantriX(466), 256` | `tanaman-layu-disiram`, `galon-habis-diganti` |
+| pos (pulang) | `PANTRI_LUAR, PANTRI.ambang` | titik tunggu depan pintu pantri — sama yang dipakai `route()` sendiri, dan sama yang jadi salah satu checkpoint satpam |
+
+Perannya (`pramubakti` di `JABATAN`, singkat `OB`, padanan `Workplace
+Experience`) **sengaja tidak** masuk `PERAN_STANDBY` — alasannya identik
+dengan satpam: array itu sudah penuh 4 slot (= `MIN_DI_LAYAR`), jadi entri
+keenam nyaris tidak pernah kepilih. Giliran pertama jatuh ke standby
+menganggur mana pun, `mulaiPramubakti()` memanggil `setPeran('pramubakti')`,
+lalu `calonPetugasPramubakti()` mendahulukannya lagi tiap giliran
+berikutnya — pola yang sama dengan arsiparis di `calonPetugasNotulen()` dan
+satpam di `calonPetugasSatpam()`.
+
+**Kenapa bukan `RUANGAN.gelasDispenser`/`RUANGAN.tongPenuh`.** Keduanya
+kelihatan seperti sasaran OB paling jelas ("isi ulang gelas", "kosongkan
+tong"), tapi keduanya sudah masing-masing punya adegan sendiri lengkap
+dengan pemeran & dialog — `galon-habis-diganti` + `tukang-galon-datang`
+untuk gelas, `tong-sampah-penuh` untuk tong (ketiganya `daftarEvent()`).
+Menambah penulis ketiga atas field yang sama tanpa `bentrokDengan` (rutinitas
+`class Standby` ini tidak lewat penjadwal, jadi tidak bisa ikut mekanisme
+`bentrokDengan` sama sekali) cuma akan membuat pramubakti diam-diam
+menghabisi syarat ambang kedua event itu sebelum sempat terpilih — adegan
+yang sudah ada jadi nyaris tidak pernah muncul lagi. Yang disentuh gantinya
+`RUANGAN.kusut` lewat `bereskanKusut()`, satu-satunya field yang memang
+dirancang punya banyak penulis sekaligus (`jumat-bersih`, `ob-ngepel-lantai`,
+`rombongan-pembersih`, dan sekarang pramubakti).
+
+**Kenapa tidak ada `bentrokDengan` dengan `ob-ngepel-lantai`** (petugas
+kebersihan luar yang mengepel lajur bawah, `public/event/22`) — dua alasan.
+Mekanis: `bentrokDengan` cuma berlaku antar `daftarEvent()`, dan rutinitas
+pramubakti bukan salah satunya, persis satpam yang juga tidak pernah masuk
+`bentrokDengan` siapa pun walau `satpam-patroli` (versi tamu/`daftarEvent`-
+nya) masuk ke banyak daftar orang lain. Tata letak: `ob-ngepel-lantai`
+berhenti **sebelum** sekat pantri (`x` sampai `pantriX(404)`, `PANTRI_LUAR`),
+sedangkan `PRAMUBAKTI_RUTE` seluruhnya **di dalam** pantri (`x` mulai
+`pantriX(424)`) — beda rupa (wearpack biru + pel + papan licin, lawan
+seragam pramubakti + lap), beda petak lantai, jadi tidak pernah terbaca
+sebagai "dua OB" di layar yang sama.
+
+Sesi nyata juga tidak pernah dipaksa merapikan pantri — sama seperti satpam,
+rutinitasnya seluruhnya hidup di `class Standby` dan memilih peran
+`'pramubakti'` dari kartu pegawai cuma mengganti seragam.
 
 ### Dua event lagi dari sisa katalog: dus ekspedisi, senam Jumat
 

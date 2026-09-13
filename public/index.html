@@ -25,6 +25,7 @@
       <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
       <button id="statsBtn" class="ghost" title="statistik token">📊</button>
       <button id="klipingBtn" class="ghost" title="arsip kliping mingguan">🗃️</button>
+      <button id="riwayatBtn" class="ghost" title="buku riwayat kantor">📜</button>
       <button id="mejaBtn" class="ghost" title="meja disposisi">📚</button>
     </div>
   </section>
@@ -132,6 +133,18 @@
       <button type="button" id="klipingTutup" title="tutup (Esc)">✕</button>
     </header>
     <div class="kbr-badan" id="klipingBadan"></div>
+  </div>
+</div>
+<!-- Buku riwayat kantor: kapan tiap bekas di ruangan muncul atau hilang,
+     bertanggal. Dicatat room.js (catatRiwayat) dari potret bekas yang
+     disimpan, dibacakan riwayatGambar. -->
+<div class="dlg-latar" id="dlgRiwayat" hidden>
+  <div class="dlg stat" role="dialog" aria-modal="true" aria-labelledby="riwayatJudul">
+    <header class="dlg-kepala">
+      <b id="riwayatJudul">Buku riwayat kantor</b>
+      <button type="button" id="riwayatTutup" title="tutup (Esc)">✕</button>
+    </header>
+    <div class="kbr-badan" id="riwayatBadan"></div>
   </div>
 </div>
 <!-- Papan informasi aplikasi. Dibukanya BUKAN dari tombol bilah panggung tapi
