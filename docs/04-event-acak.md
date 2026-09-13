@@ -4,7 +4,7 @@
 
 ## Event acak
 
-Selain yang dipicu tool call, ruangan punya **352 kejadian yang muncul
+Selain yang dipicu tool call, ruangan punya **358 kejadian yang muncul
 sendiri** (angka dihitung otomatis: `node uji-katalog.mjs`): UPS berbunyi,
 kalender disobek, kabel LAN longgar, gorengan naik ke
 meja rapat, kucing tidur di karpet, tamu salah alamat, sirene lewat di jalan
@@ -51,6 +51,13 @@ menganggur kalau belum), tamunya orang luar yang masuk dari tepi kanan di
 pojok yang sama. Ketiganya bentrok dengan `satpam-patroli`, yang satpamnya
 orang luar: dua satpam di satu ruangan membuat yang satu tampak seperti
 penyusup.
+
+Enam lagi (`public/event/41-perbaikan-dan-perabot.js`): empat **perbaikan
+berkala** untuk bekas yang sejak bekas bertahan muat ulang hanya bisa bertambah
+— noda plafon, retak lantai, noda kopi, kursi rapat rusak — satu bekas per
+kejadian dan tidak pernah sampai bersih total, plus papan kinerja yang
+dievaluasi dan kertas nyangkut di mesin fotokopi sayap timur. Rinciannya di
+[docs/02](02-ruangan.md#perbaikan-berkala).
 
 Cara kerjanya: satu registri berbobot, satu penjadwal berjeda 18–45 detik,
 cooldown per event. Bentuk satu definisi:

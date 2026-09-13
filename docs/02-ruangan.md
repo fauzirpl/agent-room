@@ -659,6 +659,32 @@ rusak, versi lain, atau field yang tipenya berubah dilewati per field.
 `?ruangan=baru` mulai dari kantor bersih; `lupakanBekasRuangan()` di konsol
 melakukan hal yang sama tanpa muat ulang. Dijaga `uji-bekas.mjs`.
 
+### Perbaikan berkala
+
+Sejak bekas bertahan saat muat ulang, empat bekas hanya bisa **bertambah**:
+noda plafon (maks 3), retak lantai (maks 6), noda kopi di taplak meja rapat
+(tanpa batas sama sekali), dan kursi rapat yang rusak. Tidak ada satu baris
+kode pun yang pernah menguranginya — dulu tidak apa-apa karena semuanya lenyap
+tiap halaman dimuat ulang. Tanpa penyeimbang, kantornya jadi gedung
+terbengkalai dalam beberapa minggu.
+
+Empat event di `public/event/41-perbaikan-dan-perabot.js` penyeimbangnya: tukang
+naik tangga lipat di depan lemari arsip dan mengecat satu noda plafon; kursi
+pengganti diambil dari gudang lalu yang rusak dibawa balik; ubin retak yang
+tertua ditambal; noda kopi di taplak dilap lalu lapnya dibilas di pantri.
+**Satu bekas per kejadian, jarang, dan tidak pernah sampai bersih total** —
+retak baru ditambal kalau sudah dua, noda kopi dicuci kalau sudah dua. Kantor
+yang direnovasi tiap minggu sama tidak meyakinkannya dengan yang tidak pernah
+diperbaiki. Buku riwayat mencatat perbaikannya sendiri ("Retak di lantai
+ditambal") karena ia membaca bekas, bukan event.
+
+Dua event lain di berkas yang sama untuk perabot yang selama ini cuma bisa
+dipandang: **papan kinerja dievaluasi** (atasan menunjuk batang tertinggi —
+stasiun yang paling banyak dipakai sesi sungguhan hari ini — dan pendengarnya
+garuk tengkuk karena garis target 80% belum tercapai), dan **kertas nyangkut di
+mesin fotokopi** sayap timur (laci ditarik, kertas kusut dicabut, lalu diisi
+dari rim cadangan di atas mesin kalau ada).
+
 ### Buku riwayat kantor
 
 Sejak bekas bertahan saat muat ulang, kantor punya riwayat — piagamnya ada di

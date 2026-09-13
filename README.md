@@ -56,7 +56,7 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   berkas apa yang disunting, apa yang gagal, siapa yang masih menunggu
   paraf. Dirangkum dari buku agenda yang memang sudah ada: tanpa model
   bahasa, tanpa jaringan keluar
-- 352 event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat) —
+- 358 event acak (kucing lewat, UPS berbunyi, gorengan naik ke meja rapat) —
   angka dihitung otomatis: `node uji-katalog.mjs`
 - Cuaca sungguhan di jendela + siklus siang–malam
 - Ruangan mengusut sepanjang hari: pagi meja rapi, menjelang pulang penuh
@@ -113,7 +113,7 @@ Tanpa dependency — cuma butuh Node dan `curl`. Alasan di balik tiap
 keputusan desain (kenapa `curl` bukan Node, kenapa hujan bukan event acak,
 kenapa perintah shell dipecah dua meja, dst.) ada di **[DESIGN.md](DESIGN.md)**.
 Katalog rancangan 373 event acak ada di **[EVENT-ACAK.md](EVENT-ACAK.md)**
-(314 di antaranya sudah jadi kode; total 352 event terpasang, sisanya gelombang
+(314 di antaranya sudah jadi kode; total 358 event terpasang, sisanya gelombang
 *tamu tenar* yang ditambahkan di luar rancangan — papan skor:
 `node uji-katalog.mjs`).
 
@@ -168,7 +168,7 @@ removes it, `--coba` only shows what would be run).
   hours — which files were edited, what failed, who is still waiting on a
   human. Stitched from the activity log the office already keeps: no language
   model, no outbound network
-- 352 random ambient events (a cat wanders in, the UPS beeps, someone brings
+- 358 random ambient events (a cat wanders in, the UPS beeps, someone brings
   fried snacks to the meeting table) — counted automatically by `node uji-katalog.mjs`
 - Real weather in the window, synced to actual conditions, plus a day/night cycle
 - A sound notification when a session finishes, and optional lofi office
@@ -217,7 +217,7 @@ Zero dependencies — just Node and `curl`. The reasoning behind every design
 choice (why `curl` instead of Node, why rain isn't a random event, why shell
 commands split across two desks, etc.) lives in **[DESIGN.md](DESIGN.md)**
 (Indonesian only, for now). The design catalog of all 373 random events is in
-**[EVENT-ACAK.md](EVENT-ACAK.md)** (314 of them are implemented; 352 events
+**[EVENT-ACAK.md](EVENT-ACAK.md)** (314 of them are implemented; 358 events
 are wired up in total, the rest being a *famous guests* wave added outside the
 catalog — scoreboard: `node uji-katalog.mjs`).
 

@@ -113,6 +113,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 - **Mode uji `?penganggur=N`.** Menjamin minimal N pegawai standby, supaya
   event yang butuh banyak orang menganggur (foto bersama, senam Jumat) bisa
   dilihat langsung lewat `?event=<id>` walau ruangannya sedang ramai sesi.
+- **Perbaikan berkala.** Bekas yang sejak bisa bertahan muat ulang hanya bisa
+  bertambah sekarang ada yang memperbaikinya: tukang mengecat noda plafon dari
+  atas tangga, kursi rapat yang rusak diganti kursi dari gudang, ubin retak
+  ditambal, noda kopi di taplak dilap. Satu bekas per kejadian, jarang, dan
+  tidak pernah sampai bersih total — kantornya tetap menua, cuma tidak jadi
+  gedung terbengkalai. Buku riwayat mencatat perbaikannya.
+- **Papan kinerja dan mesin fotokopi punya kejadian sendiri.** Atasan
+  mengevaluasi papan kinerja (batang tertingginya dibaca dari tool call
+  sungguhan, target 80%-nya belum tercapai), dan kertas nyangkut di mesin
+  fotokopi sayap timur dicabut lalu lacinya diisi dari rim cadangan.
 - **Buku riwayat kantor (📜).** Kapan tiap bekas di ruangan muncul atau hilang,
   bertanggal, dikelompokkan per hari seperti buku register: piala dipajang,
   kursi rapat rusak lagi satu, MCB turun untuk kedua kalinya, toner diganti.
