@@ -88,6 +88,17 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   jaga sungguhan di pojok kanan bawah (buku mutasi jaga, HT, papan POS, kursi
   lipat) dan berjaga 25–45 detik menghadap ruangan — dulu dia "pulang ke pos"
   ke ruang tunggu karena kantornya belum punya pos.
+- **Pramubakti merapikan pantri.** Pasangan satpam di atas: pola kodenya
+  disalin persis (rutinitas `class Standby`, bukan `daftarEvent()`, sengaja
+  di luar daftar peran standby yang diundi) tapi geraknya beda — bukan jam
+  buta, melainkan digerbangi kebutuhan (`RUANGAN.kusut` di atas ambang), dan
+  keliling tiga titik yang sudah ada di dalam pantri (meja saji, tong
+  sampah, sudut dispenser) sebelum pulang ke titik tunggu depan pintu
+  pantri. Sengaja **tidak** menyentuh `RUANGAN.gelasDispenser`/`tongPenuh` —
+  keduanya sudah punya adegan sendiri lengkap dengan pemeran & dialog; yang
+  disentuh gantinya `RUANGAN.kusut` lewat `bereskanKusut()`, klaim kecil yang
+  sepadan dengan lajurnya yang pendek. Tidak ada ruangan, dinding, atau
+  perabot baru; sesi nyata tidak pernah dipaksa merapikan pantri.
 - **Jejak event yang menetap.** Panel MCB jalur timur jadi perlengkapan dinding
   permanen (tuasnya turun waktu jalurnya putus, dan sesudah pertama kali
   dinaikkan ada lakban "sering turun" yang tidak pernah dicabut), rim kertas
