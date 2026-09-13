@@ -87,6 +87,10 @@ piagam, keset, label, dus tambahan arsip, stok yang diisi ulang) sekarang juga
 **bertahan saat halaman dimuat ulang** lewat `localStorage` — keadaan sesaat
 sengaja tidak ikut. `?ruangan=baru` untuk mulai dari kantor bersih; rinciannya
 di [docs/02](02-ruangan.md#bekas-yang-bertahan-muat-ulang).
+Akibatnya event yang **syaratnya menunggu bekas hilang** (`!RUANGAN.piala`,
+`labelPatch < 10`) wajib punya jalan pulang: masa pakai di `BEKAS_MASA`, atau
+event lain yang mengembalikan bekasnya. Tanpa itu event-nya menyala sekali lalu
+mati selamanya — `uji-bekas.mjs` merah dan menyebut field serta event-nya.
 
 Objek `S` yang diterima `syarat()`/`mulai()`/`tick()` — potret ruangan dari
 `potretRuangan()` — sejak ini membawa **fakta sesi**, bukan cuma jam, lampu,

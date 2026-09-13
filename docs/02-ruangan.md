@@ -718,6 +718,62 @@ piala, fotokopi → rim cadangan, dan seterusnya — `RIWAYAT_BARANG` di
 tanggal dan jamnya. Stiker inventaris sengaja tidak: entrinya tidak menyimpan
 barang mana yang ditempeli.
 
+### Masa pakai bekas, dan printer yang akhirnya memakai kertas
+
+Bekas yang bertahan muat ulang ternyata diam-diam mematikan event. "Piala voli
+dipajang" hanya menyala kalau belum ada piala, "keset baru dipasang" kalau
+belum ada keset, "patch panel dilabeli" berhenti di label ke-10, "APAR
+diperiksa" menunggu kartu inspeksinya belum tergantung. Dulu muat ulang
+mengembalikan semuanya, jadi besoknya event itu datang lagi. Sejak bekasnya
+disimpan, event itu menyala **sekali, lalu tidak pernah lagi**.
+
+Sekarang tiap bekas seperti itu punya **masa pakai** dalam hari sungguhan
+(`BEKAS_MASA` di `room.js`), dihitung dari kapan nilainya terakhir berubah —
+tanggalnya ikut disimpan. Lewat masanya, bekasnya kembali ke keadaan bawaan dan
+event yang menunggunya bisa menyala lagi:
+
+| Bekas | Masa pakai | Di buku riwayat |
+|---|---|---|
+| kartu inspeksi APAR | 30 hari | Kartu inspeksi APAR habis masa berlakunya, dicabut |
+| kabel rak server dirapikan | 14 hari | Kabel di rak server kusut lagi |
+| label patch panel lengkap (10) | 30 hari | Patch panel ditata ulang, label lamanya dicopot |
+| stiker inventaris di semua barang | 60 hari | Stiker inventaris lama dicabut, menunggu pendataan berikutnya |
+| plang baru ruang kadis | 90 hari | Nomenklatur berubah lagi — plang baru diturunkan, plang lama dipasang dulu |
+| keset depan pintu kadis | 21 hari | Keset depan pintu kadis sudah tipis, dibuang |
+| piala voli | 60 hari | Piala voli dibawa ke ruang sekretariat |
+| bagan struktur penuh tempelan (2 kotak) | 45 hari | Bagan struktur organisasi dicetak ulang |
+| buku tamu penuh (10 baris) | 3 hari | Buku tamu penuh, diganti buku yang baru |
+| huruf papan nama yang copot | 14 hari | Huruf papan nama dipasang lengkap lagi |
+| cat dinding mengelupas | 30 hari | Bagian dinding yang mengelupas ditutup |
+| karpet rapat yang cerah sesudah dijemur | 14 hari | Karpet meja rapat kusam lagi |
+| foto pejabat miring | 1 hari | Foto pejabat diluruskan lagi |
+
+Foto miring ada di daftar karena satu kasus saja: halaman ditutup di tengah
+event, sebelum `selesai()` sempat meluruskannya. Kantor yang ditutup tiga
+minggu menemukan kesetnya sudah dibuang begitu dibuka lagi — dicatat pada saat
+halaman dibuka, bukan tanggal kira-kira. Simpanan lama yang belum punya tanggal
+mulai menghitung dari saat pertama dimuat, jadi tidak ada yang lenyap mendadak
+sesudah pembaruan.
+
+Bekas yang sudah punya jalan pulang lewat event (noda plafon, retak, noda kopi,
+kursi rusak, arsip penuh, gelas dispenser) tidak diberi masa. `uji-bekas.mjs`
+menjaga aturannya: setiap field `BEKAS_FIELD` yang dibaca `syarat()` suatu
+event harus punya masa pakai **atau** jalan pulang yang terdaftar di ujinya —
+event baru bersyarat `!RUANGAN.piagamDinding` langsung merah. Uji yang sama
+memeriksa bahwa event yang menunggu tiap bekas benar-benar bisa menyala lagi
+sesudah masanya habis, dan bahwa buku riwayat punya kalimat untuk kembalinya.
+
+Sambil memeriksa itu ketahuan dua event yang **tidak pernah menyala sendiri
+sejak dibuat**, bukan gara-gara penyimpanan: "toner printer dikocok" (bersyarat
+toner di bawah 90%) dan "stok kertas habis" (bersyarat kertas nol). Toner dan
+kertas printer dideklarasikan, diisi ulang, tampil di kartu inventaris — tapi
+tidak ada satu baris pun yang menguranginya. Sekarang tiap tool call sungguhan
+yang jatuh ke meja printer (stasiun `web`) mencetak selembar lewat
+`pakaiPrinter()`: kertas berkurang satu, toner 0,6%. Kira-kira dua puluh call
+kemudian ada yang bangun mengambil rim. Server memutar ulang sampai 60 event
+terakhir tiap halaman tersambung; call yang lebih tua dari halaman itu sudah
+dicetak halaman sebelumnya, jadi tidak memakai kertas dua kali.
+
 ### Alat sapu ruangan
 
 Setiap perabot di ruangan ini ditaruh dengan cara yang sama: sapuan piksel atas

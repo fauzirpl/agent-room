@@ -181,7 +181,7 @@ daftarEvent(
   tick(E) {
     const a = E.aktor[0];
     if (!a || !a.diam) return;
-    // satu label per 3 detik, dan labelnya TIDAK pernah hilang lagi
+    // satu label per 3 detik; labelnya bertahan sampai patch panel ditata ulang (BEKAS_MASA di room.js)
     const target = Math.min(10, Math.floor(E.umur / 3.2));
     while (RUANGAN.labelPatch < target) {
       RUANGAN.labelPatch++;

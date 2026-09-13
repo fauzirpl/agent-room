@@ -2164,7 +2164,7 @@ function drawServer(active) {
     r(332, 94 + ay, 6, 2, '#9aa1a6');
     r(338, 95 + ay, 4, 1, '#3a3f45');
     if (!ay) r(329, 118, 12, 2, '#2c3038');
-    if (RUANGAN.kartuAPAR) {                                 // kartu inspeksi, permanen
+    if (RUANGAN.kartuAPAR) {                                 // kartu inspeksi, sampai habis masa berlakunya
       r(341, 97 + ay, 1, 4, '#8b98a6');
       r(339, 101 + ay, 6, 8, '#e8cf6a');
       r(340, 103 + ay, 4, 1, '#8a6a1a');
@@ -10399,6 +10399,7 @@ function handle(ev) {
       p.lelahkan(STAMINA_CALL);            // tiap call menguras sedikit (kosmetik)
       p.perStasiun[st] = (p.perStasiun[st] || 0) + 1;
       tapakStasiun[st] = (tapakStasiun[st] || 0) + 1;   // kartu inventaris: lintas sesi, sejak halaman dibuka
+      if (st === 'web' && ev.ts > PRINTER_SEJAK) pakaiPrinter();   // meja printer: selembar per call
       p.riwayat.push({ ts: ev.ts, v, o, ok: true });
       if (p.riwayat.length > 30) p.riwayat.shift();
       // kalau masih di jalan, biarkan jalan dulu — arrive() yang nyalakan mode kerja
@@ -13734,7 +13735,7 @@ const RUANGAN = {
   emberDiangkat: false,
   nodaPlafon: [],          // {x,y} bercak rembes air, permanen
   retakExtra: [],          // {gx,gy} retakan tambahan, maks 6, permanen
-  toner: 1,                // 0..1, sisa toner printer
+  toner: 1,                // 0..1, sisa toner printer; berkurang tiap call di meja printer (pakaiPrinter)
   kabinetSlot: -1,         // meja kerja yang laptopnya digotong ke pojok (wifi lemah)
   // Baterai jam habis: sudutnya dibekukan di sini, bukan di MOD, karena harus
   // tetap beku LEWAT durasi eventnya sendiri kalau tidak ada yang membetulkan
@@ -13757,7 +13758,7 @@ const RUANGAN = {
   antre: 10,               // nomor antrean loket saat ini
   edaran: [],              // {miring, kusam} surat edaran yang ditempel, maks 4
   plangBaru: false,        // plang nama ruang kadis sudah diganti
-  kertasPrinter: 20,       // stok kertas; 0 = habis
+  kertasPrinter: 20,       // stok kertas; 0 = habis; selembar per call di meja printer (pakaiPrinter)
   propLantai: [],          // {x, y, jenis, sampai} benda kecil menetap di lantai
   gagalBeruntun: [],       // timestamp Date.now() tool call gagal 60 detik terakhir
   inspeksiLog: [],         // timestamp Date.now() inspektorat-mendadak pernah jalan
@@ -13768,8 +13769,8 @@ const RUANGAN = {
   kipasArah: 0,            // -1/0/1, arah kepala kipas berdiri; bertahan sampai direbut lagi
   gordenKanan: 6,          // lebar gorden kanan jendela, px; direset tiap pagi di tickRuangan
   sampahLantai: [],        // {x,y,jenis} daun/kertas kecil menetap di lantai, dipungut siapa saja
-  kesetAda: false,         // keset baru terpasang di depan pintu kadis, permanen sekali sesi
-  spanduk: null,           // {huruf} indeks huruf yang lepas dari papan nama DINAS AI KLOD, permanen
+  kesetAda: false,         // keset baru terpasang di depan pintu kadis, sampai tipis (BEKAS_MASA)
+  spanduk: null,           // {huruf} indeks huruf yang lepas dari papan nama DINAS AI KLOD, sampai masa pakainya habis
   geserKursi: [],          // offset px per slot kursi rapat (0..6), berdecit lalu diluruskan
   kursiBerderit: 0,        // penanda "sudah ada satu decitan" 20 detik terakhir (Date.now())
   kucingAda: false,        // entitas kucing kantor sedang di ruangan (event kucing-kantor)
@@ -13781,7 +13782,7 @@ const RUANGAN = {
   // kelihatan di baris meja kerja" — sebentar keduanya true bersamaan.
   kursiDipinjam: -1,
   kursiTambahanAda: false,
-  piala: false,            // piala voli terpajang di atas lemari arsip, permanen
+  piala: false,            // piala voli terpajang di atas lemari arsip, sampai masa pakainya habis
   piagamDinding: false,    // piagam zona integritas tergantung di dinding, permanen
   laciTerbuka: -1,         // laci filing yang sedang dibuka (arsiparis mengajari magang)
   tumpukanMap: [],         // {x,y,sisa} tumpukan map sementara (rangkap tiga dkk)
@@ -13865,17 +13866,23 @@ const BEKAS_FIELD = [
 const jenisBekas = (v) => (v instanceof Set ? 'set' : Array.isArray(v) ? 'array' : v === null ? 'kosong' : typeof v);
 const BEKAS_JENIS = {};                // jenis nilai bawaan, pembanding saat memulihkan
 for (const k of BEKAS_FIELD) BEKAS_JENIS[k] = jenisBekas(RUANGAN[k]);
+const BEKAS_BAWAAN = {};               // teks JSON nilai bawaan: tujuan bekas yang habis masa pakainya
+for (const k of BEKAS_FIELD) BEKAS_BAWAAN[k] = JSON.stringify(RUANGAN[k] instanceof Set ? [...RUANGAN[k]] : RUANGAN[k]);
 let bekasTerakhir = '';                // teks yang terakhir ditulis/dipulihkan; sama = tidak ditulis ulang
+let bekasSejak = {};                   // field -> Date.now() saat nilainya terakhir berubah (catatRiwayat)
 
-function potretBekas() {
+function isiBekas() {
   const isi = {};
   for (const k of BEKAS_FIELD) isi[k] = RUANGAN[k] instanceof Set ? [...RUANGAN[k]] : RUANGAN[k];
-  return JSON.stringify({ v: BEKAS_VERSI, isi });
+  return isi;
 }
+function potretBekas() { return JSON.stringify({ v: BEKAS_VERSI, isi: isiBekas() }); }
+// yang ditulis ke localStorage: potret + kapan tiap bekas terakhir berubah (masa pakai)
+function teksSimpanBekas() { return JSON.stringify({ v: BEKAS_VERSI, isi: isiBekas(), sejak: bekasSejak }); }
 // true = benar-benar menulis; false = tidak ada yang berubah sejak tulisan terakhir
 function simpanBekasRuangan() {
   let teks;
-  try { teks = potretBekas(); } catch { return false; }
+  try { teks = teksSimpanBekas(); } catch { return false; }
   if (teks === bekasTerakhir) return false;
   bekasTerakhir = teks;
   ingatan.tulis(BEKAS_KUNCI, teks);
@@ -13902,15 +13909,92 @@ function pulihkanBekasRuangan(teks) {
     RUANGAN[k] = v;
     n++;
   }
-  bekasTerakhir = potretBekas();
+  // tanggal yang rusak atau tidak ada = belum diketahui; kedaluwarsakanBekas() mulai menghitung
+  const sj = data.sejak && typeof data.sejak === 'object' ? data.sejak : {};
+  bekasSejak = {};
+  for (const k of BEKAS_FIELD) if (Number.isFinite(sj[k])) bekasSejak[k] = sj[k];
+  bekasTerakhir = teksSimpanBekas();
   return n;
 }
 function lupakanBekasRuangan() {
   try { localStorage.removeItem(BEKAS_KUNCI); } catch { /* tidak ada yang bisa dilupakan */ }
   bekasTerakhir = '';
+  bekasSejak = {};
 }
 // jendela baca uji-bekas.mjs — pola yang sama dengan pantriRujukan()
 function bekasRujukan() { return { BEKAS_KUNCI, BEKAS_VERSI, BEKAS_FIELD }; }
+
+/* ------------------------------------------------- masa pakai bekas ---
+   Bekas yang bertahan muat ulang ternyata diam-diam mematikan event.
+   "Piala voli dipajang" bersyarat !RUANGAN.piala, "keset baru dipasang"
+   bersyarat !RUANGAN.kesetAda, "patch panel dilabeli" berhenti di label
+   ke-10. Dulu muat ulang mengembalikan semuanya, jadi besok event itu datang
+   lagi; sejak bekasnya disimpan, event itu menyala SEKALI lalu tidak pernah
+   lagi, dan bekasnya diam di tempat selamanya.
+
+   Tiap bekas di sini punya masa pakai dalam hari sungguhan, dihitung dari
+   kapan nilainya terakhir berubah (bekasSejak, ikut disimpan). Lewat masanya
+   — dan hanya selagi aktif(v) — bekasnya kembali ke nilai bawaan, event yang
+   menunggunya bisa menyala lagi, dan buku riwayat mencatatnya dengan
+   kalimatnya sendiri ("Keset depan pintu kadis sudah tipis, dibuang") karena
+   ia membaca bekas, bukan siapa yang mengubahnya.
+
+   Bekas yang sudah punya jalan pulang lewat event (noda plafon, retak, noda
+   kopi, kursi rusak, arsip penuh, stok) tidak ada di sini. uji-bekas.mjs
+   memeriksa aturannya: tiap field BEKAS_FIELD yang dibaca syarat() suatu
+   event harus punya masa pakai di sini ATAU jalan pulang yang terdaftar di
+   ujinya. */
+const HARI_MS = 86400000;
+const BEKAS_MASA = {
+  kartuAPAR:       { hari: 30, aktif: (v) => v === true },      // kartu inspeksi habis masa berlakunya
+  kabelRapi:       { hari: 14, aktif: (v) => v === true },      // perangkat baru dicolok, kusut lagi
+  labelPatch:      { hari: 30, aktif: (v) => v >= 10 },         // patch panel ditata ulang
+  stikerTertempel: { hari: 60, aktif: (v) => v.size >= Object.keys(STIKER_TITIK).length },
+  plangBaru:       { hari: 90, aktif: (v) => v === true },      // nomenklatur berubah lagi
+  kesetAda:        { hari: 21, aktif: (v) => v === true },
+  piala:           { hari: 60, aktif: (v) => v === true },
+  baganKotak:      { hari: 45, aktif: (v) => v >= 2 },
+  bukuTamu:        { hari: 3,  aktif: (v) => v >= 10 },          // buku penuh, diganti yang baru
+  spanduk:         { hari: 14, aktif: (v) => v !== null },
+  catMengelupas:   { hari: 30, aktif: (v) => v > 0.02 },
+  fotoMiring:      { hari: 1,  aktif: (v) => v > 0 },            // tertinggal kalau halaman ditutup di tengah event
+  karpetCerah:     { hari: 14, aktif: (v) => v === true },
+};
+// Field yang habis masa pakainya dan dikembalikan ke bawaan. `waktu` cuma untuk uji.
+function kedaluwarsakanBekas(waktu) {
+  const t = Number.isFinite(waktu) ? waktu : Date.now();
+  const habis = [];
+  for (const k in BEKAS_MASA) {
+    if (!BEKAS_MASA[k].aktif(RUANGAN[k])) continue;
+    // simpanan lama tanpa tanggal: jamnya mulai sekarang, bukan lenyap mendadak
+    if (!Number.isFinite(bekasSejak[k])) { bekasSejak[k] = t; continue; }
+    if (t - bekasSejak[k] < BEKAS_MASA[k].hari * HARI_MS) continue;
+    const v = JSON.parse(BEKAS_BAWAAN[k]);
+    RUANGAN[k] = BEKAS_JENIS[k] === 'set' ? new Set(v) : v;
+    habis.push(k);
+  }
+  return habis;
+}
+function bekasMasaRujukan() { return { BEKAS_MASA, HARI_MS, bekasSejak }; }
+
+/* Stok printer yang tidak pernah berkurang. RUANGAN.toner dan kertasPrinter
+   dideklarasikan, diisi ulang dua event (printer-toner-dikocok bersyarat
+   toner < 0.9, stok-kertas-habis bersyarat kertasPrinter <= 0), tampil di
+   kartu inventaris, dicatat buku riwayat — tapi tidak satu baris pun yang
+   MENGURANGINYA, jadi kedua event itu tidak pernah menyala sendiri. Sekarang
+   tiap tool call sungguhan yang jatuh ke meja printer (stasiun web) mencetak
+   selembar lewat handle(). Server memutar ulang sampai 60 event terakhir tiap
+   halaman tersambung; yang stempel waktunya lebih tua dari halaman ini sudah
+   dicetak halaman sebelumnya, jadi dilewati (PRINTER_SEJAK). */
+const PRINTER_TONER_PER_LEMBAR = 0.006;
+const PRINTER_SEJAK = Date.now();
+// true = selembar tercetak; false = kertasnya habis
+function pakaiPrinter() {
+  if (!(RUANGAN.kertasPrinter > 0)) return false;
+  RUANGAN.kertasPrinter -= 1;
+  RUANGAN.toner = Math.max(0, Math.round((RUANGAN.toner - PRINTER_TONER_PER_LEMBAR) * 1000) / 1000);
+  return true;
+}
 
 /* ------------------------------------------------- buku riwayat kantor ---
    Sejak bekas bertahan saat muat ulang, kantor punya riwayat — tapi riwayat
@@ -13955,6 +14039,13 @@ const RIWAYAT_NYALA = {                // boolean false -> true
 };
 const RIWAYAT_PADAM = {                // boolean true -> false yang memang berarti
   arsipPenuh: 'Lemari arsip dirapikan, dus tambahannya diangkut',
+  // kembali ke bawaan karena masa pakainya habis (BEKAS_MASA)
+  piala: 'Piala voli dibawa ke ruang sekretariat — lemarinya menunggu piala berikutnya',
+  kesetAda: 'Keset depan pintu kadis sudah tipis, dibuang',
+  plangBaru: 'Nomenklatur berubah lagi — plang baru ruang kadis diturunkan, plang lama dipasang dulu',
+  karpetCerah: 'Karpet meja rapat kusam lagi',
+  kartuAPAR: 'Kartu inspeksi APAR habis masa berlakunya, dicabut',
+  kabelRapi: 'Kabel di rak server kusut lagi',
 };
 const RIWAYAT_DAFTAR = {               // array & Set: [bertambah, berkurang]
   nodaMeja: ['Noda tinta baru di meja stempel', 'Meja stempel dibersihkan'],
@@ -13963,7 +14054,7 @@ const RIWAYAT_DAFTAR = {               // array & Set: [bertambah, berkurang]
   nodaKopi: ['Kopi tumpah di meja rapat, nodanya tertinggal', 'Noda kopi di meja rapat dibersihkan'],
   edaran: ['Surat edaran baru ditempel', 'Surat edaran lama dicabut'],
   kursiRusak: ['Kursi rapat rusak lagi satu', 'Kursi rapat yang rusak diganti'],
-  stikerTertempel: ['Stiker inventaris ditempel di satu barang lagi', 'Stiker inventaris dicabut'],
+  stikerTertempel: ['Stiker inventaris ditempel di satu barang lagi', 'Stiker inventaris lama dicabut, menunggu pendataan berikutnya'],
 };
 const RIWAYAT_ISI_ULANG = {            // stok: yang dicatat cuma isi ulangnya
   toner: 'Toner printer diganti',
@@ -13998,9 +14089,18 @@ function jelaskanPerubahan(a, b) {
       continue;
     }
     switch (k) {
-      case 'labelPatch': if (y > x) catat(k, `Label patch panel bertambah — ${y} label sekarang`); break;
-      case 'baganKotak': if (y > x) catat(k, 'Kotak baru ditambahkan di bagan struktur organisasi'); break;
-      case 'bukuTamu': if (y > x) catat(k, `Tamu menandatangani buku tamu (baris ke-${y})`); break;
+      case 'labelPatch':
+        if (y > x) catat(k, `Label patch panel bertambah — ${y} label sekarang`);
+        else if (y < x) catat(k, 'Patch panel ditata ulang, label lamanya dicopot');
+        break;
+      case 'baganKotak':
+        if (y > x) catat(k, 'Kotak baru ditambahkan di bagan struktur organisasi');
+        else if (y < x) catat(k, 'Bagan struktur organisasi dicetak ulang, kotak tempelannya dilepas');
+        break;
+      case 'bukuTamu':
+        if (y > x) catat(k, `Tamu menandatangani buku tamu (baris ke-${y})`);
+        else if (y < x) catat(k, 'Buku tamu penuh, diganti buku yang baru');
+        break;
       case 'dusTambahanArsip': if (y > x) catat(k, `Dus bertambah di depan lemari arsip (${y} dus)`); break;
       case 'mcbTurunKali': if (y > x) catat(k, `MCB jalur timur turun lalu dinaikkan lagi (ke-${y} kalinya)`); break;
       case 'catMengelupas':
@@ -14039,11 +14139,13 @@ function catatRiwayat(waktu) {
   try { teks = potretBekas(); } catch { return 0; }
   if (teks === riwayatDasarTeks) return 0;
   try { kini = JSON.parse(teks).isi; } catch { return 0; }
+  const t = Number.isFinite(waktu) ? waktu : Date.now();
+  // masa pakai (BEKAS_MASA) dihitung dari sini: kapan tiap bekas terakhir berubah
+  for (const k of BEKAS_FIELD) if (JSON.stringify(riwayatDasar[k]) !== JSON.stringify(kini[k])) bekasSejak[k] = t;
   const baru = jelaskanPerubahan(riwayatDasar, kini);
   riwayatDasar = kini;
   riwayatDasarTeks = teks;
   if (!baru.length) return 0;
-  const t = Number.isFinite(waktu) ? waktu : Date.now();
   for (const b of baru) riwayatKantor.push({ t, k: b.k, teks: b.teks });
   // entri pembuka dipertahankan: yang dibuang yang tertua SESUDAHNYA
   if (riwayatKantor.length > RIWAYAT_MAKS) riwayatKantor.splice(1, riwayatKantor.length - RIWAYAT_MAKS);
@@ -14092,7 +14194,7 @@ function riwayatBarang(id) {
 
 mulaiRuanganTersimpan(MODE_URL.get('ruangan') === 'baru');
 setInterval(simpanBekasRuangan, 15000);
-setInterval(catatRiwayat, 3000);
+setInterval(() => { kedaluwarsakanBekas(); catatRiwayat(); }, 3000);
 if (typeof addEventListener === 'function') {
   addEventListener('pagehide', () => { catatRiwayat(); simpanBekasRuangan(); });
 }

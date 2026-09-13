@@ -15,6 +15,12 @@
 // Plus satu janji ke harness lain: menjalankan ruangan (tickRuangan) TIDAK
 // menulis ke localStorage, jadi tidak ada uji yang mewarisi bekas uji lain.
 //
+// Dan satu janji ke event: bekas yang disimpan tidak boleh membuat event yang
+// menunggu bekasnya hilang menyala sekali lalu mati selamanya. Tiap field yang
+// dibaca syarat() event harus punya masa pakai (BEKAS_MASA) atau jalan pulang
+// yang terdaftar di JALAN_PULANG di bawah. Printer ikut di sini karena toner &
+// kertasnya stok tersimpan yang dulu tidak pernah berkurang sama sekali.
+//
 // Dua konteks vm terpisah dipakai sebagai "sebelum" dan "sesudah" muat ulang.
 // localStorage tiruan uji-event.mjs hidup per konteks, jadi teksnya dibawa
 // menyeberang dengan tangan — persis yang dilakukan peramban antara dua muat.
@@ -207,6 +213,181 @@ console.log(tebal('\nBuku riwayat'));
     && /Toner printer diganti/.test(G.riwayatBarang('printer').teks));
   ok('jelaskanPerubahan murni: potret sama = nol kalimat',
     G.jelaskanPerubahan({ piala: true, nodaMeja: [] }, { piala: true, nodaMeja: [] }).length === 0);
+}
+
+/* ------------------------------------------------------ masa pakai --- */
+console.log(tebal('\nMasa pakai: tidak ada event yang menyala sekali lalu mati selamanya'));
+{
+  const ser = (v) => JSON.stringify(v && typeof v.has === 'function' ? [...v] : v);
+  const J = muatKonteks();
+  const RJ = J.__jembatan__.RUANGAN;
+  const { BEKAS_MASA, HARI_MS } = J.bekasMasaRujukan();
+  const sejak = () => J.bekasMasaRujukan().bekasSejak;
+  const { BEKAS_FIELD: FIELD } = J.bekasRujukan();
+  const awal = {};
+  for (const k of FIELD) awal[k] = ser(RJ[k]);
+
+  // nilai "jenuh": keadaan saat event penambahnya tidak bisa menyala lagi
+  const JENUH = {
+    kartuAPAR: true, kabelRapi: true, labelPatch: 10,
+    stikerTertempel: ['arsip', 'filing', 'stempel', 'server', 'kipas', 'tunggu', 'dus'],
+    plangBaru: true, kesetAda: true, piala: true, baganKotak: 2, bukuTamu: 10,
+    spanduk: { hilang: 3, tempel: -1 }, catMengelupas: 0.9, fotoMiring: 0.09, karpetCerah: true,
+  };
+  // Set milik realm vm: diisi di tempat, bukan diganti Set dari realm host
+  const pasang = (R, k) => {
+    if (Array.isArray(JENUH[k])) { R[k].clear(); for (const x of JENUH[k]) R[k].add(x); } else R[k] = JENUH[k];
+  };
+  // field yang dibaca syarat tapi dikembalikan event (atau fungsi room.js), bukan masa pakai
+  const JALAN_PULANG = {
+    nodaPlafon: ['tukang-cat-plafon', 'plafon-melendut-noda-air'],
+    retakExtra: ['ubin-retak-ditambal', 'ubin-retak-nambah'],
+    nodaKopi: ['tumpahan-kopi-rapat', 'noda-kopi-taplak-dibersihkan'],
+    kursiRusak: ['kursi-rapat-patah', 'kursi-rapat-rusak-diganti'],
+    arsipPenuh: ['lemari-arsip-kepenuhan', 'pemadatan-arsip'],
+    dusTambahanArsip: ['dus-arsip-ditumpuk', 'pemadatan-arsip'],
+    gelasDispenser: ['kopi-sachet-di-dispenser', 'galon-habis-diganti'],
+    rimKertas: ['kertas-nyangkut-di-fotokopi', 'jatah-kuota-cair'],
+    toner: ['pakaiPrinter()', 'printer-toner-dikocok'],
+    kertasPrinter: ['pakaiPrinter()', 'stok-kertas-habis'],
+  };
+  const EVENTS = J.__jembatan__.EVENT_ACAK;
+  const { eventById } = J.__jembatan__;
+  const sumber = (d) => Object.values(d).filter((f) => typeof f === 'function').map(String).join('\n');
+  const S_UJI = { jam: 9, kerjaJam: true, orang: [], nganggur: [], stasiunAktif: new Set(), luar: 0, gagalBeruntun: 0 };
+  const syaratOk = (d) => { try { return !!d.syarat(S_UJI); } catch { return false; } };
+
+  const bermasa = Object.keys(BEKAS_MASA);
+  const tanpaJenuh = bermasa.filter((k) => !FIELD.includes(k) || !(k in JENUH));
+  ok('tiap bekas bermasa ada di BEKAS_FIELD dan di tabel JENUH uji ini', tanpaJenuh.length === 0,
+    tanpaJenuh.join(', ') || `${bermasa.length} bekas`);
+
+  // field BEKAS_FIELD yang dibaca syarat() event mana saja
+  const pembaca = {};
+  for (const d of EVENTS) {
+    if (typeof d.syarat !== 'function') continue;
+    for (const m of String(d.syarat).matchAll(/RUANGAN\.(\w+)/g)) {
+      if (FIELD.includes(m[1])) (pembaca[m[1]] ||= new Set()).add(d.id);
+    }
+  }
+  const buntu = Object.keys(pembaca).filter((k) => !(k in BEKAS_MASA) && !(k in JALAN_PULANG))
+    .map((k) => `${k} (${[...pembaca[k]].join(', ')})`);
+  ok('tiap bekas yang dibaca syarat event punya masa pakai atau jalan pulang', buntu.length === 0,
+    buntu.join('; ') || `${Object.keys(pembaca).length} field dibaca syarat`);
+  const jalanPalsu = [];
+  for (const [k, ids] of Object.entries(JALAN_PULANG)) {
+    for (const id of ids) {
+      if (id.endsWith('()')) { if (typeof J[id.slice(0, -2)] !== 'function') jalanPalsu.push(`${k}: ${id} tidak ada`); continue; }
+      const d = eventById.get(id);
+      if (!d) jalanPalsu.push(`${k}: event ${id} tidak ada`);
+      else if (!sumber(d).includes('RUANGAN.' + k)) jalanPalsu.push(`${k}: ${id} tidak menyentuh RUANGAN.${k}`);
+    }
+  }
+  ok('jalan pulang yang terdaftar benar-benar ada dan menyentuh bekasnya', jalanPalsu.length === 0, jalanPalsu.join('; '));
+
+  // mekanik masa pakai, satu field per putaran
+  const T0 = 1_000_000_000_000;
+  const salah = [];
+  for (const k of bermasa) {
+    pasang(RJ, k);
+    delete sejak()[k];
+    const masa = BEKAS_MASA[k].hari * HARI_MS;
+    if (J.kedaluwarsakanBekas(T0).includes(k)) salah.push(k + ': habis tanpa tanggal');
+    if (J.kedaluwarsakanBekas(T0 + masa - 1).includes(k)) salah.push(k + ': habis sebelum masanya');
+    if (!J.kedaluwarsakanBekas(T0 + masa).includes(k)) salah.push(k + ': tidak habis tepat di masanya');
+    if (ser(RJ[k]) !== awal[k]) salah.push(`${k}: jadi ${ser(RJ[k])}, bukan bawaan ${awal[k]}`);
+  }
+  ok('bekas bertahan sebelum masanya, kembali ke bawaan tepat di masanya', salah.length === 0,
+    salah.join('; ') || `${bermasa.length} bekas`);
+  ok('Set yang dikembalikan tetap Set', typeof RJ.stikerTertempel.has === 'function' && RJ.stikerTertempel.size === 0);
+  RJ.labelPatch = 4; sejak().labelPatch = 0;
+  ok('bekas yang belum jenuh tidak pernah dikembalikan', !J.kedaluwarsakanBekas(T0 * 2).includes('labelPatch') && RJ.labelPatch === 4);
+  RJ.labelPatch = 0;
+
+  // event yang menunggu bekasnya hilang benar-benar bisa menyala lagi
+  const mati = [], hidup = [];
+  for (const k of bermasa) {
+    if (!pembaca[k]) continue;
+    const defs = [...pembaca[k]].map((id) => eventById.get(id));
+    pasang(RJ, k);
+    const sebelum = defs.map(syaratOk);
+    sejak()[k] = T0;
+    J.kedaluwarsakanBekas(T0 + 400 * HARI_MS);
+    const sesudah = defs.map(syaratOk);
+    const naik = defs.filter((d, i) => !sebelum[i] && sesudah[i]).map((d) => d.id);
+    if (naik.length) hidup.push(...naik); else mati.push(`${k} (${defs.map((d) => d.id).join(', ')})`);
+  }
+  ok('event yang menunggu bekas hilang bisa menyala lagi sesudah masanya', mati.length === 0,
+    mati.join('; ') || hidup.join(', '));
+
+  // buku riwayat punya kalimat untuk tiap bekas yang kembali
+  {
+    const K = muatKonteks();
+    const RK = K.__jembatan__.RUANGAN;
+    for (const k of bermasa) pasang(RK, k);
+    K.catatRiwayat(1000);
+    const habis = K.kedaluwarsakanBekas(1000 + 400 * HARI_MS);
+    const n0 = K.riwayatRujukan().riwayatKantor.length;
+    K.catatRiwayat(2000 + 400 * HARI_MS);
+    const entri = K.riwayatRujukan().riwayatKantor.slice(n0);
+    const bisu = bermasa.filter((k) => !entri.some((r) => r.k === k));
+    ok('semua bekas jenuh habis bersamaan sesudah 400 hari', habis.length === bermasa.length, `${habis.length}/${bermasa.length}`);
+    ok('tiap bekas yang kembali punya kalimat di buku riwayat', bisu.length === 0,
+      bisu.length ? 'bisu: ' + bisu.join(', ') : entri.map((r) => r.teks).slice(0, 3).join(' | ') + ' …');
+  }
+
+  // tanggalnya ikut tersimpan & dipulihkan
+  {
+    const L = muatKonteks();
+    L.__jembatan__.RUANGAN.kesetAda = true;
+    L.catatRiwayat(5000);
+    L.simpanBekasRuangan();
+    let d = null;
+    try { d = JSON.parse(L.localStorage.getItem(BEKAS_KUNCI)); } catch { /* dicek di bawah */ }
+    ok('tanggal bekas ikut tersimpan', d && d.sejak && d.sejak.kesetAda === 5000, d ? JSON.stringify(d.sejak) : 'kosong');
+    const M = muatKonteks();
+    M.pulihkanBekasRuangan(L.localStorage.getItem(BEKAS_KUNCI));
+    ok('muat ulang: tanggalnya kembali dan masa pakainya berjalan terus',
+      M.bekasMasaRujukan().bekasSejak.kesetAda === 5000 && !M.kedaluwarsakanBekas(5000 + 20 * HARI_MS).length
+      && M.kedaluwarsakanBekas(5000 + 21 * HARI_MS).includes('kesetAda') && M.__jembatan__.RUANGAN.kesetAda === false);
+    ok('sesudah dipulihkan, simpan tanpa perubahan tidak menulis', (() => {
+      const N = muatKonteks(); N.pulihkanBekasRuangan(L.localStorage.getItem(BEKAS_KUNCI)); return N.simpanBekasRuangan() === false;
+    })());
+
+    const O = muatKonteks();
+    O.pulihkanBekasRuangan(JSON.stringify({ v: 1, isi: { kesetAda: true }, sejak: { kesetAda: 'kemarin' } }));
+    const jauh = Date.now() + 999 * HARI_MS;
+    ok('simpanan lama / tanggal rusak: tidak ada yang lenyap mendadak',
+      O.kedaluwarsakanBekas(jauh).length === 0 && O.__jembatan__.RUANGAN.kesetAda === true
+      && O.bekasMasaRujukan().bekasSejak.kesetAda === jauh);
+  }
+}
+
+/* --------------------------------------------------------- printer --- */
+console.log(tebal('\nPrinter memakai kertas'));
+{
+  const P = muatKonteks();
+  const RP = P.__jembatan__.RUANGAN;
+  const EV = P.__jembatan__.eventById;
+  const bisa = (id) => { try { return !!EV.get(id).syarat({ jam: 9, kerjaJam: true, orang: [] }); } catch { return false; } };
+  ok('kertas & toner penuh: kedua event isi ulang belum bisa menyala', !bisa('stok-kertas-habis') && !bisa('printer-toner-dikocok'));
+  let n = 0;
+  for (let i = 0; i < 20; i++) if (P.pakaiPrinter()) n++;
+  ok('dua puluh lembar menghabiskan kertas', n === 20 && RP.kertasPrinter === 0, `${n} lembar, sisa ${RP.kertasPrinter}`);
+  ok('toner turun di bawah 90%: printer-toner-dikocok bisa menyala', RP.toner < 0.9 && bisa('printer-toner-dikocok'), `toner ${RP.toner}`);
+  ok('kertas habis: stok-kertas-habis bisa menyala, tidak ada yang tercetak lagi',
+    bisa('stok-kertas-habis') && P.pakaiPrinter() === false && RP.kertasPrinter === 0);
+
+  // lewat jalur sungguhan: handle() dengan tool call
+  RP.kertasPrinter = 20; RP.toner = 1;
+  const live = Date.now() + 60000;
+  const call = (id, ts, tool) => P.handle({ id, ts, kind: 'pre', session: 'uji-printer', tool, label: 'uji', ok: true, cwd: 'proyek-uji' });
+  call(1, live, 'WebFetch');
+  ok('tool call sungguhan di meja printer mencetak selembar', RP.kertasPrinter === 19 && RP.toner < 1, `sisa ${RP.kertasPrinter}`);
+  call(2, 1000, 'WebSearch');
+  ok('event lama yang diputar ulang saat tersambung tidak mencetak lagi', RP.kertasPrinter === 19, `sisa ${RP.kertasPrinter}`);
+  call(3, live + 1, 'Read');
+  ok('tool call di stasiun lain tidak memakai kertas', RP.kertasPrinter === 19, `sisa ${RP.kertasPrinter}`);
 }
 
 console.log('\n' + (gagal ? merah(`GAGAL ${gagal}`) + ` · lulus ${lulus}` : hijau(`LULUS ${lulus} pemeriksaan`)));

@@ -210,6 +210,20 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **Event yang menunggu bekas hilang tidak lagi menyala sekali lalu mati
+  selamanya.** Sejak bekas bertahan muat ulang, piala voli dipajang, keset
+  baru, plang nama ruang kadis, APAR diperiksa, patch panel dilabeli, stiker
+  inventaris, bagan struktur, buku tamu, dan huruf papan nama yang copot
+  menyala sekali lalu tidak pernah lagi — bekas yang mereka tunggu hilang tidak
+  pernah hilang. Tiap bekas itu sekarang punya masa pakai dalam hari sungguhan
+  (keset menipis sesudah 21 hari, kartu APAR kedaluwarsa sesudah 30), dan buku
+  riwayat mencatat kembalinya. `uji-bekas.mjs` merah kalau event baru menunggu
+  bekas yang tidak punya jalan pulang.
+- **Toner dan kertas printer akhirnya berkurang.** Tidak ada satu baris pun
+  yang menguranginya, jadi "toner printer dikocok" dan "stok kertas habis"
+  tidak pernah menyala sendiri sejak dibuat. Tiap tool call sungguhan di meja
+  printer sekarang mencetak selembar; event lama yang diputar ulang server saat
+  halaman tersambung tidak ikut mencetak.
 - **`teknisi-dipanggil-ke-kolong-meja` tidak lagi menyeret pegawai yang masih
   bekerja.** Tanpa teknisi, pemilik meja didorong ke daftar pemeran tanpa
   `bisaDipinjam()` — pelanggaran Aturan 1 yang ditangkap invarian J

@@ -359,8 +359,8 @@ daftarEvent(
    Catatan lama di sini bilang "warna karpet lebih cerah sisa sesi" tidak
    dikerjakan karena butuh RUANGAN.karpetCerah di room.js. Field itu SEKARANG
    ADA (dideklarasikan di RUANGAN, dibaca drawFloor lewat pengali sh()), jadi
-   bagian itu dipasang: sesudah dijemur karpetnya naik satu tingkat dan tidak
-   turun lagi — bekas yang sengaja hidup lebih lama dari eventnya, sekelas
+   bagian itu dipasang: sesudah dijemur karpetnya naik satu tingkat dan
+   bertahan dua minggu (BEKAS_MASA di room.js) — bekas yang sengaja hidup lebih lama dari eventnya, sekelas
    plang baru dan noda plafon. */
 {
   id: 'karpet-rapat-digulung-dijemur',
@@ -490,7 +490,7 @@ daftarEvent(
   },
   selesai(E) {
     for (const o of E.aktor) { o.pose = null; o.laju = 1; o.doingEvent = ''; }
-    // karpet yang sudah dijemur tetap lebih cerah sampai halaman dimuat ulang
+    // karpet yang sudah dijemur tetap lebih cerah sampai masa pakainya habis (BEKAS_MASA)
     RUANGAN.karpetCerah = true;
   },
 },
