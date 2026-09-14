@@ -4724,7 +4724,8 @@ const JABATAN = [
   { id: 'satpam', nama: 'Satuan Pengamanan', singkat: 'Satpam',
     padanan: 'Trust & Safety',
     tugas: 'berkeliling memeriksa tiap pintu dan sudut kantor secara berkala, lalu kembali ke pos jaga',
-    pal: { main: '#5c4a2e', pants: '#2e2a20', skin: '#d9a273', hair: '#1d1712', head: 'peci', jilbab: '#4a3c1f', kumis: true } },
+    // seragam: 'satpam' — kemeja khaki, topi pet, tidak ikut seragam harian (SERAGAM_PETUGAS)
+    pal: { main: '#d8c98a', pants: '#1b1d22', skin: '#d9a273', hair: '#1d1712', head: 'topi', jilbab: '#23262d', kumis: true, seragam: 'satpam' } },
   /* Pramubakti SENGAJA tidak masuk PERAN_STANDBY juga -- alasan sama persis
      dengan satpam di atas: array itu sudah penuh 4 slot (= MIN_DI_LAYAR),
      jadi entri keenam di sana cuma bikin perannya nyaris tidak pernah
@@ -4737,7 +4738,8 @@ const JABATAN = [
   { id: 'pramubakti', nama: 'Pramubakti', singkat: 'OB',
     padanan: 'Workplace Experience',
     tugas: 'berkeliling merapikan sudut pantri secara berkala, dari meja saji sampai tong sampah',
-    pal: { main: '#2f6f7a', pants: '#22343a', skin: '#d9a273', hair: '#1d1712', head: 'hair', jilbab: '#1f5c66' } },
+    // seragam: 'ob' — kemeja dua warna navy/abu, tidak ikut seragam harian (SERAGAM_PETUGAS)
+    pal: { main: '#8e939a', pants: '#18191c', skin: '#d9a273', hair: '#1d1712', head: 'hair', jilbab: '#1d2740', seragam: 'ob' } },
 ];
 
 const JABATAN_ID = new Map(JABATAN.map((j) => [j.id, j]));
@@ -4832,6 +4834,23 @@ const SERAGAM_BATIK_JUMAT = [
 // "bawahan Jumat" pada komentar blok ini.
 const CELANA_JUMAT = ['#3a2f22', '#39352f', '#2b2420', '#3a3226', '#302a3d'];
 
+/* Seragam petugas. Satpam dan OB tidak memakai seragam harian PNS: jabatannya
+   ber-pal.seragam, dan terapkanSeragamHarian() melewatinya, jadi warna
+   main/pants di JABATAN itulah seragam mereka setiap hari.
+     satpam — kemeja khaki pucat, celana & ikat pinggang hitam, tali bahu
+              hitam, papan nama hitam di dada kiri, tanda SATPAM di dada kanan,
+              lencana perak, tanda kesatuan merah di lengan pendek, topi pet
+              hitam bermonogram (kepala 'topi', drawHead).
+     ob     — kemeja dua warna: bahu, dada atas, dan lengan pendek navy, badan
+              abu, piping putih di sambungannya, plaket tertutup; celana hitam.
+   Detailnya digambar drawPerson(); jabatan tanpa pal.seragam memanggil
+   r() dengan urutan dan warna yang persis sama seperti sebelumnya. */
+const SERAGAM_PETUGAS = {
+  satpam: { tali: '#1b1d22', papanNama: '#15171b', tanda: '#f1eee2', lencana: '#cfd4da', emblem: '#b3261e' },
+  ob: { yoke: '#1d2740', piping: '#eef1f3' },
+};
+const TOPI_SATPAM = { isi: '#1f232b', tepi: '#0f1115', kilap: '#3a404b', lidah: '#121418', monogram: '#e6e6e0' };
+
 // Hari (0-6) yang terakhir diterapkan -- dicek ulang tiap poll (bukan cuma
 // sekali muat) supaya tab yang dibiarkan terbuka lewat tengah malam ikut
 // pindah seragam sendiri, seperti cekJadwalRaya di bawah.
@@ -4842,6 +4861,7 @@ function terapkanSeragamHarian() {
   if (hari === seragamHariTerpasang) return;
   seragamHariTerpasang = hari;
   for (const j of JABATAN) {
+    if (j.pal.seragam) continue;         // satpam & OB: seragam petugas sendiri tiap hari (SERAGAM_PETUGAS)
     const seragam = hari === 3 ? SERAGAM_BATIK_RABU
       : hari === 5 ? SERAGAM_BATIK_JUMAT[(Math.random() * SERAGAM_BATIK_JUMAT.length) | 0]
       : SERAGAM_PUTIH;
@@ -5005,6 +5025,19 @@ function drawHead(a, x, yDagu) {
       if (arah) { rm(0, yT + 2, 3, 1, kulit); rm(-1, yT + 3, 5, 4, kulit); rm(0, yT + 7, 3, 1, kulit); }
       else { r(x - 2, yT + 2, 4, 1, kulit); r(x - 3, yT + 3, 6, 4, kulit); r(x - 2, yT + 7, 4, 1, kulit); }
     }
+  } else if (kepala === 'topi') {
+    // topi pet satpam: puncak hitam dengan kilap, monogram perak di dahi, lidah
+    // topi menjorok ke depan (dari samping ke arah hadap), rambut cuma cambang
+    const T = TOPI_SATPAM;
+    r(x - 3, yT - 2, 6, 1, T.tepi);
+    r(x - 4, yT - 1, 8, 3, T.isi);
+    r(x - 4, yT - 1, 1, 3, T.tepi); r(x + 3, yT - 1, 1, 3, T.tepi);
+    r(x - 3, yT - 1, 3, 1, T.kilap);
+    if (back) r(x - 4, yT + 2, 8, 1, T.tepi);
+    else if (arah) { rm(-4, yT + 2, 7, 1, T.tepi); rm(3, yT + 2, 3, 1, T.lidah); rm(1, yT, 1, 1, T.monogram); }
+    else { r(x - 5, yT + 2, 10, 1, T.lidah); r(x - 1, yT, 2, 1, T.monogram); }
+    if (arah) rm(-4, yT + 3, 1, 2, rambut);
+    else { r(x - 4, yT + 3, 1, 2, rambut); r(x + 3, yT + 3, 1, 2, rambut); }
   } else if (kepala === 'peci') {
     // songkok: lebih tinggi dari tudung rambut, kilap di kiri-atas, pita di
     // tepi bawah. Melorot sedikit (peciMiring) lalu dirapikan lagi oleh event.
@@ -5186,7 +5219,9 @@ function drawPerson(a) {
   // a.alpha dipakai event: yang masuk ruang kadis memudar di ambang pintu,
   // bukan hilang mendadak. Dikalikan, bukan menimpa, supaya standby yang jadi
   // pemeran event tetap terbaca sebagai standby.
-  const alphaDasar = (a.standby ? 0.55 : 1) * (a.alpha == null ? 1 : a.alpha);
+  // Petugas tetap (satpam & OB) tidak dipudarkan: mereka bukan penambal, dan
+  // detail seragamnya di 28 px tidak terbaca pada alpha 0.55.
+  const alphaDasar = (a.standby && !a.tetap ? 0.55 : 1) * (a.alpha == null ? 1 : a.alpha);
   if (alphaDasar <= 0.01) return;
   ctx.globalAlpha = alphaDasar;
   // a.miring: sempoyongan sesaat (tersandung kabel) — offset badan, kaki tetap
@@ -5303,6 +5338,13 @@ function drawPerson(a) {
       r(x + 2, yb - 14, 1, 6, mainG);
       if (p.pattern) for (let i = 0; i < 5; i++) r(x - 3 + ((i * 3) % 6), yb - 14 + ((i * 5) % 6), 1, 1, p.pattern);
       else r(x - 1, yb - 15, 2, 1, sh(main, 0.62));
+      if (p.seragam === 'ob') {
+        const S = SERAGAM_PETUGAS.ob;
+        r(x - 3, yb - 15, 6, 1, S.yoke); r(x - 3, yb - 14, 6, 1, S.yoke);
+        r(x - 3, yb - 13, 6, 1, S.piping);
+      } else if (p.seragam === 'satpam') {
+        r(x - 1, yb - 15, 2, 1, SERAGAM_PETUGAS.satpam.tali);
+      }
       if (rc) {
         // Samping: badannya cuma 6 px (x-3..x+2) dan LENGAN DEKAT digambar
         // sesudah badan(), menutup 4 px tengahnya (x-2..x+1). Yang tersisa
@@ -5338,6 +5380,21 @@ function drawPerson(a) {
     } else {                                                           // lidah bahu PNS
       r(x - 4, yb - 15, 2, 1, sh(main, 0.62)); r(x + 2, yb - 15, 2, 1, sh(main, 0.62));
     }
+    if (p.seragam === 'ob') {
+      // kemeja dua warna: bahu & dada atas navy, piping putih, badan abu, plaket tertutup
+      const S = SERAGAM_PETUGAS.ob;
+      r(x - 4, yb - 15, 8, 1, S.yoke); r(x - 4, yb - 14, 8, 1, S.yoke);
+      r(x - 4, yb - 13, 8, 1, S.piping);
+      if (!back) { r(x - 1, yb - 15, 2, 1, sh(S.yoke, 0.7)); r(x, yb - 12, 1, 4, sh(main, 0.84)); }
+    } else if (p.seragam === 'satpam') {
+      // tali bahu hitam; di depan: papan nama, tanda SATPAM, lencana perak
+      const S = SERAGAM_PETUGAS.satpam;
+      r(x - 4, yb - 15, 2, 1, S.tali); r(x + 2, yb - 15, 2, 1, S.tali);
+      if (!back) {
+        r(x - 3, yb - 13, 2, 1, S.papanNama); r(x + 1, yb - 13, 2, 1, S.tanda);
+        r(x - 3, yb - 12, 1, 1, S.lencana);
+      }
+    }
     if (rc) {
       // Rompi tampak depan/belakang: dua pita vertikal 2 px di kolom TERLUAR
       // badan (x-4..x-3 dan x+2..x+3), garis tepi badan ikut jadi tepi rompi.
@@ -5362,20 +5419,31 @@ function drawPerson(a) {
   // depan badan (isyarat event harus tetap terbaca dari samping), satunya di
   // balik badan dan cuma nongol kalau ikut terangkat. Angka pose = offset y,
   // makin negatif makin terangkat; dari samping yang terangkat juga terjulur.
+  // Seragam petugas berlengan pendek (4 baris kain, bukan 6), lengan OB navy,
+  // lengan satpam bertanda kesatuan merah. Tanpa pal.seragam: kain = main,
+  // tepi = tm, teduh = mainG — panggilan r() persis sama seperti sebelumnya.
+  const lenganKain = p.seragam === 'ob' ? SERAGAM_PETUGAS.ob.yoke : main;
+  const lenganTepi = p.seragam === 'ob' ? garisTepi(lenganKain) : tm;
+  const lenganBaris = p.seragam ? 4 : 6;
   const lengan = (ax, luar, lift) => {
     const yA = yb - 15 + lift;
-    r(ax, yA - 1, 2, 1, tm);
-    r(luar, yA, 1, 8, tm);
-    r(ax, yA, 2, 6, main);
-    r(ax + 1, yA, 1, 6, mainG);
+    r(ax, yA - 1, 2, 1, lenganTepi);
+    r(luar, yA, 1, 8, lenganTepi);
+    r(ax, yA, 2, 6, lenganKain);
+    r(ax + 1, yA, 1, 6, p.seragam === 'ob' ? sh(lenganKain, 0.85) : mainG);
+    if (lenganBaris < 6) r(ax, yA + lenganBaris, 2, 6 - lenganBaris, kulit);
+    if (p.seragam === 'satpam') r(ax, yA + 1, 2, 1, SERAGAM_PETUGAS.satpam.emblem);
     r(ax, yA + 6, 2, 2, kulit);
     r(ax, yA + 8, 2, 1, tk);
   };
   const lenganSamping = (k, lift, warna) => {
     const yA = yb - 15 + lift;
-    rm(k, yA - 1, 2, 1, tm);
-    rm(k - 1, yA, 1, 8, tm); rm(k + 2, yA, 1, 8, tm);
-    rm(k, yA, 2, 6, warna);
+    const kain = p.seragam === 'ob' ? (warna === main ? lenganKain : sh(lenganKain, 0.85)) : warna;
+    rm(k, yA - 1, 2, 1, lenganTepi);
+    rm(k - 1, yA, 1, 8, lenganTepi); rm(k + 2, yA, 1, 8, lenganTepi);
+    rm(k, yA, 2, 6, kain);
+    if (lenganBaris < 6) rm(k, yA + lenganBaris, 2, 6 - lenganBaris, kulit);
+    if (p.seragam === 'satpam' && warna === main) rm(k, yA + 1, 2, 1, SERAGAM_PETUGAS.satpam.emblem);
     rm(k, yA + 6, 2, 2, kulit);
     rm(k, yA + 8, 2, 1, tk);
   };

@@ -8,6 +8,11 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Seragam satpam & OB.** Satpam memakai kemeja khaki, celana hitam, tali
+  bahu, papan nama, tanda SATPAM, lencana, tanda kesatuan merah di lengan, dan
+  topi pet hitam. OB memakai kemeja dua warna — bahu dan lengan navy, badan
+  abu, piping putih. Keduanya tidak ikut seragam harian PNS, dan petugas tetap
+  tidak lagi digambar pudar.
 - **Satpam dan OB tetap di ruangan.** Dulu keduanya cuma peran yang dipinjam
   standby penambal, jadi hilang begitu sesi nyata memenuhi ruangan. Sekarang
   satpam selalu berjaga di pos satpam dan OB selalu siaga di pantri, berapa

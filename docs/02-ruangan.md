@@ -1555,6 +1555,28 @@ cocok tanpa perlu membaca nama mesin. Chipnya sendiri tetap muncul selama sesi
 menyebut mesin, walau tabel warna kebetulan tidak punya jawaban — "ada atau
 tidak" tidak boleh bergantung pada warna.
 
+### Seragam satpam & OB
+
+Satpam dan OB **tidak ikut seragam harian** PNS (putih, batik Rabu, batik
+Jumat): jabatannya ber-`pal.seragam`, dan `terapkanSeragamHarian()`
+melewatinya, jadi mereka memakai seragam lapangannya sendiri setiap hari
+(`SERAGAM_PETUGAS` di `room.js`).
+
+- **Satpam** — kemeja khaki pucat, celana dan ikat pinggang hitam bergesper
+  emas, tali bahu hitam, papan nama hitam di dada kiri, tanda SATPAM di dada
+  kanan, lencana perak, tanda kesatuan merah di lengan pendek, dan **topi pet
+  hitam** bermonogram perak (jenis kepala baru `'topi'` di `drawHead()`, lidah
+  topinya menjorok ke arah hadap). Satpam perempuan tetap berjilbab.
+- **OB** — kemeja dua warna: bahu, dada atas, dan lengan pendek **navy**, badan
+  **abu**, **piping putih** di sambungannya, plaket kancing tertutup, celana
+  hitam.
+
+Detailnya cuma digambar kalau `pal.seragam` terisi; jabatan lain memanggil
+`r()` dengan urutan dan warna yang persis sama seperti sebelumnya, jadi golden
+`uji-zorder` dan hitungan piksel `uji-seragam` tidak bergeser. Petugas tetap
+juga tidak lagi dipudarkan seperti standby penambal — di alpha 0,55 detail
+seragam 28 px tidak terbaca.
+
 ## Suasana ikut jam
 
 Ruangan mengikuti jam di mesin penontonnya, digeser mulus antar patokan jam —
