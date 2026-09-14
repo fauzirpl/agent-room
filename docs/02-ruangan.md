@@ -1006,6 +1006,26 @@ Sesi nyata juga tidak pernah dipaksa merapikan pantri — sama seperti satpam,
 rutinitasnya seluruhnya hidup di `class Standby` dan memilih peran
 `'pramubakti'` dari kartu pegawai cuma mengganti seragam.
 
+### Satpam dan OB tetap
+
+Satpam dan pramubakti di atas dulu cuma **peran** yang ditempelkan ke pegawai
+standby yang kebetulan menganggur saat gilirannya tiba. Standby itu penambal:
+jumlahnya `MIN_DI_LAYAR` dikurangi sesi nyata, jadi di ruangan yang ramai sesi
+mereka habis — dan satpam serta OB ikut tidak pernah terlihat.
+
+Sekarang keduanya **pegawai tetap** (`Standby.tetap`, `pastikanPetugasTetap()`
+dipanggil `jagaPopulasi()`): lahir sekali, tidak pernah dibuang, dan tidak
+dihitung dalam jatah penambal. Satpam berjaga di pos satpam menghadap ruangan,
+OB siaga di meja saji pantri; sesekali keduanya menoleh. Mereka tidak ikut
+mondar-mandir standby (WC, gudang, pojok baca, kursi, notulen), dan `betah`
+selamanya, jadi jam menganggur tidak pernah memulangkan mereka ke meja kerja.
+Patroli keliling dan rapikan pantri jatuh ke mereka — kalau satpamnya sedang
+dipinjam event, patrolinya menunggu, tidak digantikan standby lain. Selesai
+patroli, dipinjam event, atau apa pun yang memindahkannya, mereka pulang ke
+posnya sendiri (`tickTetap()`). Di daftar kru mereka tertulis "tetap" tanpa
+tombol hapus, dan tidak ikut hitungan "+N standby". `?petugas=0` mematikannya.
+Dijaga `uji-petugas.mjs`.
+
 ### Dua event lagi dari sisa katalog: dus ekspedisi, senam Jumat
 
 - **Dus ekspedisi datang** (`dus-ekspedisi-datang`) — tiga dus jatuh

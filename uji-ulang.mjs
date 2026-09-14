@@ -613,7 +613,8 @@ function jalankan(opsi, fixture, alat) {
 
     // (E) ambang wadah
     naikkan('agents', H.agents.size, sesiUnik.size + 2);
-    naikkan('standby', H.standby.length, ada.MIN_DI_LAYAR ?? 4);
+    // satpam & OB tetap (Standby.tetap) di luar jatah MIN_DI_LAYAR — lihat uji-petugas.mjs
+    naikkan('standby', H.standby.filter((b) => !b.tetap).length, ada.MIN_DI_LAYAR ?? 4);
     // Dua penghitung, bukan satu: yang MENDUDUKI kursi (belum `keluar`) dibatasi
     // KURSI_TOTAL oleh kursiKosong(); peserta yang sudah bubar masih ada di
     // larik beberapa frame sambil berjalan ke pintu, jadi panjang lariknya

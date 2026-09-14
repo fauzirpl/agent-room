@@ -8,6 +8,12 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Satpam dan OB tetap di ruangan.** Dulu keduanya cuma peran yang dipinjam
+  standby penambal, jadi hilang begitu sesi nyata memenuhi ruangan. Sekarang
+  satpam selalu berjaga di pos satpam dan OB selalu siaga di pantri, berapa
+  pun sesinya; patroli dan rapikan pantri tetap mereka yang kerjakan, lalu
+  pulang ke posnya. Tidak ikut hitungan "+N standby" dan tidak bisa dihapus
+  dari daftar kru. `?petugas=0` mematikannya.
 - **Lagu kantor tiap hari kerja jam 10.** Satu lagu milik kantor ini sendiri,
   disetel Senin–Jumat jam 10 seperti Indonesia Raya disetel Selasa & Kamis.
   Ini satu-satunya bunyi di halaman yang datang dari berkas, bukan dari

@@ -6995,10 +6995,16 @@ let standbyDihapus = 0;
 const MAMPIR = ['think', 'think', 'think', 'server', 'read', 'search', 'web', 'rapat', 'idle'];
 
 class Standby extends Agent {
-  constructor(n) {
-    super('standby-' + n);
+  // tetap: '' untuk penambal biasa; 'satpam' / 'pramubakti' untuk petugas tetap
+  // (pastikanPetugasTetap) — tidak pernah dibuang jagaPopulasi, tidak dihitung
+  // dalam jatah MIN_DI_LAYAR, dan tidak ikut mondar-mandir (tickTetap).
+  constructor(n, tetap = '') {
+    super('standby-' + (tetap || n));
     this.standby = true;
-    this.setPeran(PERAN_STANDBY[n % PERAN_STANDBY.length]);
+    this.tetap = tetap;
+    this.setPeran(tetap || PERAN_STANDBY[n % PERAN_STANDBY.length]);
+    // jam menganggur Agent.update tidak boleh memulangkan petugas tetap ke meja kerja
+    this.betah = Boolean(tetap);
     this.nextMove = now + 3000 + Math.random() * 6000;
     this.el.remove();                   // tidak pernah bicara, tidak perlu balon
   }
@@ -7034,6 +7040,8 @@ class Standby extends Agent {
         else if (now > pramubaktiBerikutnya && calonPetugasPramubakti() === this) { this.mulaiPramubakti(); return; }
       } else pramubaktiBerikutnya = 0;
     }
+    // petugas tetap tidak ikut WC/kursi/gudang/pojok baca/mondar-mandir: jaga posnya
+    if (this.tetap) { this.tickTetap(); return; }
     if (this.tugasWC) { this.tickWC(); return; }
     if (this.tugasKursi) { this.tickKursi(); return; }
     if (this.tugasGudang) { this.tickGudang(); return; }
@@ -7344,8 +7352,8 @@ class Standby extends Agent {
     this.pose = null;
     this.adaTugas = false;
     this.bawa = null;
-    if (this.eventKerja) this.betahAsli = false;
-    else { this.betah = false; this.doingEvent = ''; }
+    if (this.eventKerja) this.betahAsli = Boolean(this.tetap);
+    else { this.betah = Boolean(this.tetap); this.doingEvent = ''; }
     if (petugasSatpam === this) petugasSatpam = null;
     // this.peran TIDAK dikembalikan -- lihat komentar mulaiSatpam().
     // Sampai di pos: berjaga dulu di mejanya sebelum ikut mondar-mandir lagi —
@@ -7409,11 +7417,31 @@ class Standby extends Agent {
     this.pose = null;
     this.adaTugas = false;
     this.bawa = null;
-    if (this.eventKerja) this.betahAsli = false;
-    else { this.betah = false; this.doingEvent = ''; }
+    if (this.eventKerja) this.betahAsli = Boolean(this.tetap);
+    else { this.betah = Boolean(this.tetap); this.doingEvent = ''; }
     if (petugasPramubakti === this) petugasPramubakti = null;
     // this.peran TIDAK dikembalikan -- lihat komentar mulaiSatpam().
     if (lanjut) this.nextMove = now + 11000 + Math.random() * 15000;
+  }
+  /* Petugas tetap: satpam berjaga di pos satpam, OB siaga di pantri. Kalau
+     tidak sedang di posnya (baru lahir dari tepi kiri, sesudah dipinjam
+     event, sesudah patroli atau rapikan pantri), dia pulang; sampai di pos dia
+     berjaga dan sesekali menoleh supaya tidak terbaca patung. Patroli dan
+     rapikan pantri tetap lewat mulaiSatpam/mulaiPramubakti di atas —
+     calonPetugasSatpam/calonPetugasPramubakti mendahulukannya. */
+  tickTetap() {
+    if (this.eventKerja || this.path.length) return;
+    const p = posTetap(this.tetap);
+    if (Math.hypot(this.x - p.x, this.y - p.y) > 3) {
+      this.doingEvent = p.kegiatan;
+      this.goToXY(p.x, p.y, p.hadap);
+      return;
+    }
+    this.betah = true;
+    if (now > this.nextMove) {
+      this.hadap = this.face = this.hadap === p.hadap ? p.lirik : p.hadap;
+      this.nextMove = now + 6000 + Math.random() * 9000;
+    }
   }
   destroy() {
     if (petugasNotulen === this) petugasNotulen = null;   // penambal yang pamit tidak boleh mengunci tugas
@@ -7455,7 +7483,7 @@ function calonPetugasNotulen() {
   // arsiparis boleh dipanggil walau sedang mondar-mandir (jalan santai MAMPIR
   // bukan pekerjaan); standby lain diambil kalau tidak ada arsiparis, yang
   // sedang berdiri diam didahulukan supaya tidak memotong langkah orang.
-  const bisa = standby.filter((b) => bisaDipinjam(b));
+  const bisa = standby.filter((b) => !b.tetap && bisaDipinjam(b));   // satpam & OB tetap tidak menulis notulen
   return bisa.find((b) => b.peran === 'arsiparis') || bisa.find((b) => !b.path.length) || bisa[0] || null;
 }
 
@@ -7491,6 +7519,11 @@ function calonPetugasSatpam() {
   // siapa pun yang sedang menganggur; yang perannya SUDAH 'satpam' (giliran
   // sebelumnya, lihat mulaiSatpam) didahulukan — pola yang sama dengan
   // arsiparis di calonPetugasNotulen() di atas.
+  // Satpam tetap selalu yang berpatroli. Sedang dipinjam event? Putarannya
+  // menunggu dia, tidak digantikan standby lain — dua satpam di ruangan yang
+  // sama membuat salah satunya tampak seperti tamu berseragam.
+  const tetap = standby.find((b) => b.tetap === 'satpam');
+  if (tetap) return bisaDipinjam(tetap) ? tetap : null;
   const bisa = standby.filter((b) => bisaDipinjam(b));
   return bisa.find((b) => b.peran === 'satpam') || bisa.find((b) => !b.path.length) || bisa[0] || null;
 }
@@ -7548,20 +7581,48 @@ const perluPramubakti = () => kusutKini() > PRAMUBAKTI_AMBANG;
 function calonPetugasPramubakti() {
   // pola yang sama dengan calonPetugasSatpam(): siapa pun yang menganggur,
   // yang perannya SUDAH 'pramubakti' didahulukan.
+  const tetap = standby.find((b) => b.tetap === 'pramubakti');
+  if (tetap) return bisaDipinjam(tetap) ? tetap : null;
   const bisa = standby.filter((b) => bisaDipinjam(b));
   return bisa.find((b) => b.peran === 'pramubakti') || bisa.find((b) => !b.path.length) || bisa[0] || null;
+}
+
+/* Petugas tetap. Keluhannya: "belum lihat ada NPC satpam dan OB, mau mereka
+   standby terus di ruangan". Dulu keduanya cuma peran yang ditempelkan ke
+   standby penambal yang kebetulan menganggur saat gilirannya tiba — dan
+   standby menyusut begitu sesi nyata bertambah (jagaPopulasi), jadi di
+   ruangan yang ramai sesi satpam & OB praktis tidak pernah ada. Sekarang
+   keduanya lahir sekali dan menetap: satpam di pos satpam, OB di pantri.
+   ?petugas=0 mematikannya. Dijaga uji-petugas.mjs. */
+const PETUGAS_TETAP = MODE_URL.get('petugas') === '0' ? [] : ['satpam', 'pramubakti'];
+// Dihitung saat dipakai: PRAMUBAKTI_RUTE dideklarasikan di bawah class Standby.
+function posTetap(jenis) {
+  if (jenis === 'satpam') {
+    return { x: POS_SATPAM.titikX, y: POS_SATPAM.titikY, hadap: 'down', lirik: 'left', kegiatan: 'jaga pos satpam' };
+  }
+  const t = PRAMUBAKTI_RUTE[0];                // meja saji pantri, tempat lap digantung
+  return { x: t.x, y: t.y, hadap: 'up', lirik: 'left', kegiatan: 'siaga di pantri' };
+}
+function pastikanPetugasTetap() {
+  for (const jenis of PETUGAS_TETAP) {
+    if (!standby.some((b) => b.tetap === jenis)) standby.push(new Standby(spawnIndex, jenis));
+  }
 }
 
 // standby = penambal, jumlahnya selalu (4 - sesi nyata - yang sudah dihapus
 // manual), tidak pernah negatif
 function jagaPopulasi() {
+  pastikanPetugasTetap();
   const dasar = minDiLayarTimpa == null ? MIN_DI_LAYAR : minDiLayarTimpa;
   const perlu = Math.max(PENGANGGUR_MIN, dasar - standbyDihapus - agents.size);
-  while (standby.length > perlu) {
-    const keluar = standby.pop();
-    keluar.destroy();
+  // petugas tetap tidak dihitung dan tidak pernah dibuang: jatah ini milik penambal saja
+  const penambal = () => standby.reduce((n, b) => n + (b.tetap ? 0 : 1), 0);
+  while (penambal() > perlu) {
+    let i = standby.length - 1;
+    while (standby[i].tetap) i--;
+    standby.splice(i, 1)[0].destroy();
   }
-  while (standby.length < perlu) standby.push(new Standby(spawnIndex));
+  while (penambal() < perlu) standby.push(new Standby(spawnIndex));
 }
 
 /* ------------------------------------------------------- hapus dari daftar --
@@ -7573,6 +7634,7 @@ function jagaPopulasi() {
    masih hidup dan mengirim event lagi, dia lapor diri lagi sebagai pegawai
    baru — bukan bug, itu memang bagaimana halaman ini mengenali sesi. */
 function hapusPegawai(a) {
+  if (a.tetap) return;                   // satpam & OB tetap tidak punya tombol hapus
   a.destroy();
   if (a.standby) {
     const i = standby.indexOf(a);
@@ -9404,6 +9466,11 @@ function renderCrew() {
     crewEl.appendChild(barisKru(p, 'crew-row sub', 'peserta', p.nama));
   }
   for (const b of standby) {
+    if (b.tetap) {
+      // petugas tetap: bukan sesi, bukan penambal, dan tidak bisa dihapus
+      crewEl.appendChild(barisKru(b, 'crew-row standby tetap', 'tetap', posTetap(b.tetap).kegiatan));
+      continue;
+    }
     const row = barisKru(b, 'crew-row standby', 'standby',
       (STATIONS[b.station] || {}).name || '');
     const bHapus = document.createElement('button');
@@ -9417,7 +9484,8 @@ function renderCrew() {
   // ruangan yang ramai tidak dibaca sebagai banyak sesi.
   statAgents.textContent = agents.size;
   const ket = document.getElementById('statAgentsKet');
-  if (ket) ket.textContent = standby.length ? 'sesi +' + standby.length + ' standby' : 'sesi';
+  const nPenambal = standby.reduce((n, b) => n + (b.tetap ? 0 : 1), 0);   // satpam & OB tetap tidak disebut "standby"
+  if (ket) ket.textContent = nPenambal ? 'sesi +' + nPenambal + ' standby' : 'sesi';
   if (MODE_KADIS) kadisGambar();   // ringkasan HP kepala dinas ikut tiap daftar digambar ulang
 }
 
