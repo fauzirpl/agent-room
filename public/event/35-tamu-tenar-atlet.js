@@ -379,7 +379,7 @@ daftarEvent(
       const n = TOKOH.ambilNomor();
       const a = E.data.a;
       if (masihMain(E, a)) a.say('nomornya tetap diambil ya, Pak — ' + esc(n));
-      spawn('ping', 218, 34);
+      spawn('ping', NOMOR_ANTRE.x + 8, NOMOR_ANTRE.y + 4);
       E.data.pulangPada = E.umur + 3.2;
     }
 

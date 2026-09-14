@@ -16,9 +16,14 @@
 // (orang yang memang berjalan KE perabot itu). Apa pun di luar daftar itu —
 // perabot lain, dekor tema, prop event, rute yang kebetulan lewat — gagal.
 //
-// Dua kontrol, supaya hijaunya berarti sesuatu:
+// Tiga kontrol, supaya hijaunya berarti sesuatu:
 //   * negatif: kotak panel MCB versi pertama (x422..436 y74..92) HARUS
 //     ketahuan menumpuk dekor tema ramadan — tabrakan yang dulu lolos;
+//   * negatif: tiga letak papan nomor antrean yang salah HARUS ketahuan —
+//     x210 y30 tertutup jendela (PROPS:drawWindow), x161 y32 menimpa jam
+//     dinding (drawWall: drawClock memakai ctx.arc, yang dulu tidak dicatat
+//     sapuan), x291 y32 di balik kusen ruang kadis (gambarSisipKadis, lapis
+//     yang dulu tidak disapu). Ketiganya dulu baru ketahuan dari mata penonton;
 //   * positif: satu kotak di tengah lajur atas HARUS dilintasi rute.
 //
 // Menambah perabot baru yang letaknya dicari dengan sapu-ruang.mjs? Tambahkan
@@ -67,11 +72,20 @@ const PERABOT = [
     pemilik: ['PROPS:drawPojokBaca', 'gambarKarpetBaca'],
     tujuanSah: ['pojok baca bantal'],
   },
+  {
+    nama: 'papan nomor antrean',
+    kotak: { x: G.NOMOR_ANTRE.x, y: G.NOMOR_ANTRE.y, w: G.NOMOR_ANTRE.w, h: G.NOMOR_ANTRE.h },
+    pemilik: ['PROPS:drawNomorAntre', 'bayangDinding'],   // bayangnya sendiri jatuh ke kanan-bawah
+    dinding: true,                           // di dinding, orang lewat di depannya
+  },
 ];
 const KONTROL_RAMADAN = { x: 422, y: 74, w: 14, h: 18 };
 const KONTROL_LAJUR = { x: 300, y: 150, w: 10, h: 10 };
+const KONTROL_JENDELA = { x: 210, y: 30, w: 16, h: 10 };
+const KONTROL_JAM = { x: 161, y: 32, w: 16, h: 10 };
+const KONTROL_KUSEN = { x: 291, y: 32, w: 16, h: 10 };
 
-const kotak = [...PERABOT.map((p) => p.kotak), KONTROL_RAMADAN, KONTROL_LAJUR];
+const kotak = [...PERABOT.map((p) => p.kotak), KONTROL_RAMADAN, KONTROL_LAJUR, KONTROL_JENDELA, KONTROL_JAM, KONTROL_KUSEN];
 const mulai = Date.now();
 const hasil = sapuRuangan({ kotak });
 console.log(tebal('\nSapuan'));
@@ -86,6 +100,18 @@ console.log(tebal('\nKontrol'));
     sumber.map((s) => s.nama).join(', ') || 'nol sumber — sapuannya buta tema');
   const { rute } = siapaDiKotak(hasil, PERABOT.length + 1);
   ok('positif: tengah lajur atas dilintasi rute', rute.length > 100, `${rute.length} rute`);
+  const jendela = siapaDiKotak(hasil, PERABOT.length + 2).sumber;
+  ok('negatif: kotak papan antrean versi lama tertutup jendela',
+    jendela.some((s) => s.nama === 'PROPS:drawWindow'),
+    jendela.map((s) => s.nama).join(', ') || 'nol sumber — sapuannya buta prop jendela');
+  const jam = siapaDiKotak(hasil, PERABOT.length + 3).sumber;
+  ok('negatif: letak kedua papan antrean menimpa jam dinding (ctx.arc tercatat)',
+    jam.some((s) => s.nama === 'drawWall'),
+    jam.map((s) => s.nama).join(', ') || 'nol sumber — sapuannya buta lingkaran');
+  const kusen = siapaDiKotak(hasil, PERABOT.length + 4).sumber;
+  ok('negatif: letak ketiga papan antrean di balik kusen ruang kadis',
+    kusen.some((s) => s.nama === 'gambarSisipKadis'),
+    kusen.map((s) => s.nama).join(', ') || 'nol sumber — lapis bukaan ruang kadis tidak disapu');
 }
 
 console.log(tebal('\nPerabot'));

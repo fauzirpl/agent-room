@@ -556,7 +556,7 @@ daftarEvent(
   },
   /* Ketupat digantung di bawah trio foto-Garuda-foto. Diverifikasi bersih:
      drawPortrait(268,6)/drawGaruda(300,6)/drawPortrait(320,6) tingginya 15 px
-     (berakhir y21), AC baru mulai x336, papan nomor antrean x210..226, cat
+     (berakhir y21), AC baru mulai x336, papan nomor antrean x233..249 y79..89, cat
      mengelupas x196..210. gambarDinding jalan SESUDAH drawWall, jadi
      ketupatnya menggantung di depan dinding, bukan tertimpa. */
   gambarDinding(E) {

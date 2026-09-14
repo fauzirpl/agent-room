@@ -157,7 +157,7 @@ function ruangRujukan() {
   return {
     W, H, FLOOR_TOP, LANE_UP, LANE_DOWN, LANE_L, LANE_R, PINTU_X,
     STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y, WC, GUDANG, BACA, FOTOKOPI_TITIK,
-    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE, PANEL_MCB, FOTOKOPI,
+    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE, PANEL_MCB, FOTOKOPI, NOMOR_ANTRE,
     POS_SATPAM: typeof POS_SATPAM === 'undefined' ? null : POS_SATPAM,
     route,
   };
@@ -1379,7 +1379,7 @@ function tabelBayangDinding() {
     { x: J.x - 8, y: J.y - 8, w: J.w + 16, h: J.h + 12 },          // ceruk jendela
     { x: 159, y: 45, w: 18,  h: 16 },                              // monitor CRT
     { x: 158, y: 54, w: 16,  h: 20 },                              // kalender dinding
-    { x: 210, y: 30, w: 16,  h: 10 },                              // papan nomor antre
+    { x: 233, y: 79, w: 16,  h: 10 },                              // papan nomor antre (NOMOR_ANTRE)
     { x: 336, y: 14, w: 38,  h: 13 },                              // AC split
     { x: 376, y: 16, w: 40,  h: 30 },                              // plakat nilai
     { x: 268, y: 6,  w: 14,  h: 16 },                              // foto pejabat kiri
@@ -3274,10 +3274,24 @@ function drawEdaran() {
   });
 }
 
-/* Papan nomor antrean loket — dinding di atas ruang tunggu, cukup jauh dari
-   APAR (330,94..118) dan dispenser (bx=244). */
+/* Papan nomor antrean loket — dinding polos di antara meja printer dan meja
+   stempel (loketnya: nomor-antrean-loket memanggil tamu ke stasiun 'edit'),
+   setinggi dada, di bawah jendela.
+
+   Letaknya sudah tiga kali dicari, dan dua yang pertama salah:
+     x210 y30  di DALAM kotak jendela — drawWindow (sortY 116) menutupnya;
+     x161 y32  di atas jam dinding — drawClock memakai ctx.arc, dan sapu-ruang
+               waktu itu cuma mencatat fillRect, jadi jamnya tidak kelihatan;
+     x291 y32  di balik kusen bukaan "SAYAP TIMUR LT 1" — gambarSisipKadis
+               digambar sesudah prop dan waktu itu tidak ikut disapu.
+   Yang ini dicari dari RENDER sungguhan di peramban (papan disingkirkan, lima
+   tema digambar, kotak 20x14 yang warnanya polos, lalu papan dipasang lagi dan
+   pikselnya dihitung tampil 100%), dan kedua celah sapu-ruang sudah ditutup.
+   uji-tempat.mjs menjaga letaknya DAN memakai ketiga letak lama sebagai kontrol
+   yang wajib ketahuan bertabrakan. */
+const NOMOR_ANTRE = { x: 233, y: 79, w: 16, h: 10 };
 function drawNomorAntre() {
-  const x = 210, y = 30;
+  const { x, y } = NOMOR_ANTRE;
   r(x, y, 16, 10, '#3a3f45');
   r(x + 1, y + 1, 14, 8, '#141a20');
   const digit = (dx, n) => {
@@ -9994,7 +10008,7 @@ function daftarBarang() {
       isi: () => [['di luar', CUACA.hujan > 0.6 ? 'hujan deras' : CUACA.hujan > 0.05 ? 'gerimis' : 'cerah'],
         ['gorden kanan', (RUANGAN.gordenKanan || 6) > 6 ? 'ditarik lebar (silau)' : 'biasa']] },
     { id: 'antre', nama: 'Papan Nomor Antrean', kode: '3.10.02.05.002', nup: 1, tahun: 2019,
-      lokasi: 'di atas meja printer', kotak: k(210, 30, 16, 10),
+      lokasi: 'dinding antara meja printer dan meja stempel (loket)', kotak: k(NOMOR_ANTRE.x, NOMOR_ANTRE.y, NOMOR_ANTRE.w, NOMOR_ANTRE.h),
       uraian: 'papan LED nomor antrean loket',
       isi: () => [['nomor', 'A-' + String(RUANGAN.antre || 0).padStart(3, '0')]] },
     { id: 'printer', nama: 'Meja Printer & Printer Laser', kode: '3.10.02.03.003', nup: 5, tahun: 2017,

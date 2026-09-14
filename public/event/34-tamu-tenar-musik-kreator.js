@@ -818,7 +818,7 @@ daftarEvent(
       // di lajur yang justru membuatnya melangkah mundur dulu.
       T.wp = [[300, 268], [286, 276]];
       E.data.nomor = TOKOH.ambilNomor();
-      spawn('ping', 218, 34);
+      spawn('ping', NOMOR_ANTRE.x + 8, NOMOR_ANTRE.y + 4);
       blip(560, 0.05);
     });
 

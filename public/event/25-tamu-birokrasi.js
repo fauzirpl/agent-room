@@ -186,7 +186,7 @@ daftarEvent(
     };
     E.data.tahap = 0;
     RUANGAN.antre = (RUANGAN.antre % 99) + 1;      // papan nomor benar-benar maju
-    spawn('ping', 218, 34);
+    spawn('ping', NOMOR_ANTRE.x + 8, NOMOR_ANTRE.y + 4);
   },
   tick(E, dt, S) {
     const T = E.data.t;

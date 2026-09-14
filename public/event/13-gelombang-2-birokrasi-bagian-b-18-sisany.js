@@ -132,7 +132,7 @@ daftarEvent(
   tick(E) {
     pada(E, 0.3, () => {
       RUANGAN.antre = (RUANGAN.antre % 99) + 1;
-      spawn('ping', 218, 34);
+      spawn('ping', NOMOR_ANTRE.x + 8, NOMOR_ANTRE.y + 4);
     });
     pada(E, 1.5, () => {
       const tamu = [...penghuni()].find((o) => o.station === 'idle');

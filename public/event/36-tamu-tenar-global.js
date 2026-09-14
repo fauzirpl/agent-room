@@ -939,17 +939,18 @@ daftarEvent(
    Yang boleh berbunyi cuma satu pegawai, di akhir, dan itu pun karena dia
    tidak mengerti apa yang barusan dilihatnya.
 
-   Dia masuk, menatap papan nomor antrean (drawNomorAntre di x210..226, y30..40
-   — dinding di atas ruang tunggu), membaca kertas di tangannya, diam, lalu
+   Dia masuk, menatap papan nomor antrean (drawNomorAntre, NOMOR_ANTRE di
+   room.js — dinding antara meja printer dan meja stempel), membaca kertas di tangannya, diam, lalu
    MUNDUR: berjalan ke kiri sepanjang lajur sambil hadapnya dipaksa tetap 'up'.
    TOKOH.langkah() menyetel hadap dari arah gerak, jadi paksaannya ditulis
    SESUDAH langkah() tiap frame. Efeknya: punggung ke penonton, wajah tetap ke
    papan, badan menjauh — itu bacaan "mundur pelan" yang benar tanpa satu
    sprite baru.
 
-   Berdiri di (224,164): 12 px di kanan titik berdiri stasiun 'web' (212,138)
-   supaya tidak berimpit dengan pegawai yang benar-benar mencetak, tepat di
-   bawah papan nomor, dan 5 px di atas kursi jauh yang baru mulai y=169.
+   Berdiri di lajur atas tepat di bawah tengah papan nomor (x241): di antara
+   titik berdiri stasiun 'web' (212,138) dan 'edit' (286,140), jadi tidak
+   berimpit dengan pegawai yang benar-benar mencetak atau mengecap, dan 5 px di
+   atas kursi jauh yang baru mulai y=169.
 
    TANPA perluAktor, sengaja. Kalau seluruh ruangan sedang bekerja, adegan ini
    tetap utuh — orang diam yang datang, membaca, dan pergi tanpa ada yang
@@ -968,7 +969,7 @@ daftarEvent(
       aksesori: TENAR_GLOBAL.dadaTigaAngka('#20242c'),
       bawa: 'kertas',                                    // secarik nomor di tangan
     }, false);
-    TOKOH.antar(E.data.t, 224, LANE_UP);
+    TOKOH.antar(E.data.t, NOMOR_ANTRE.x + 8, LANE_UP);
     E.data.jedaPada = 0;
   },
   tick(E, dt, S) {

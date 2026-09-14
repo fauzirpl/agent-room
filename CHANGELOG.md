@@ -230,6 +230,17 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **Papan nomor antrean kelihatan lagi.** Papannya digambar di dalam kotak
+  jendela, dan jendela digambar sesudahnya, jadi yang terlihat cuma kaca dan
+  gorden. Sekarang di dinding polos antara meja printer dan meja stempel
+  (loketnya); kilatan saat nomornya maju dan tamu yang berdiri menatap
+  papannya ikut pindah. Mencarinya membongkar dua titik buta
+  `sapu-ruang.mjs`: lingkaran dan garis (jam dinding) tidak pernah tercatat,
+  dan kusen bukaan ruang kadis tidak pernah disapu — dua percobaan pertama
+  mendarat di atas jam dan di balik kusen. Keduanya ditutup, dan
+  `uji-tempat.mjs` menjaga papannya dengan ketiga letak lama sebagai kontrol
+  yang wajib ketahuan bertabrakan.
+
 - **Event yang menunggu bekas hilang tidak lagi menyala sekali lalu mati
   selamanya.** Sejak bekas bertahan muat ulang, piala voli dipajang, keset
   baru, plang nama ruang kadis, APAR diperiksa, patch panel dilabeli, stiker

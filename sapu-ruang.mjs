@@ -64,7 +64,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // atribusi, bukan kontrak.
 const PERABOT_DI_DALAM = {
   drawWall: ['drawPanelMcb', 'drawPintuWC', 'drawPintuGudang', 'drawPapanKinerja',
-    'drawPapanUmum', 'drawP3K', 'drawPosterAkhlak'],
+    'drawPapanUmum', 'drawP3K', 'drawPosterAkhlak',
+    // bayang semua perlengkapan dinding (tabelBayangDinding): dipisah supaya
+    // bayangan perabot sendiri tidak dibaca sebagai tabrakan dengan drawWall
+    'bayangDinding'],
   drawFloor: ['gambarKarpetBaca'],
 };
 const BADAN_KIRI = 5, BADAN_KANAN = 5, BADAN_ATAS = 30, BADAN_BAWAH = 3;
@@ -109,6 +112,40 @@ export function sapuRuangan({ halus = false, atas = false, kotak = [] } = {}) {
   }
   asli.fillText = cp.fillText;
   cp.fillText = function (t, x, y, ...s) { catat(x, y - 5, String(t).length * 4 + 2, 8); return asli.fillText.apply(this, [t, x, y, ...s]); };
+  /* Path: lingkaran dan garis dulu tidak tercatat sama sekali. Jam dinding
+     (drawClock, ctx.arc di dalam drawWall) tidak kelihatan oleh sapuan, dan
+     papan nomor antrean sempat dipindah persis ke atasnya. Kotak batas path
+     dikumpulkan dari beginPath() sampai fill()/stroke(), lalu dicatat seperti
+     fillRect. Transformasi (translate/rotate) diabaikan, sama seperti fillRect;
+     fill() sesudah gradien dilewati lewat lewatiGrad yang sama. */
+  let jalur = null;
+  const perluas = (x0, y0, x1, y1) => {
+    if (![x0, y0, x1, y1].every(Number.isFinite)) return;
+    if (!jalur) { jalur = { x0, y0, x1, y1 }; return; }
+    jalur.x0 = Math.min(jalur.x0, x0); jalur.y0 = Math.min(jalur.y0, y0);
+    jalur.x1 = Math.max(jalur.x1, x1); jalur.y1 = Math.max(jalur.y1, y1);
+  };
+  const bungkus = (m, fn) => {
+    if (typeof cp[m] !== 'function') return;
+    asli[m] = cp[m];
+    cp[m] = function (...s) { fn(...s); return asli[m].apply(this, s); };
+  };
+  const kotakPath = (x, y, w, h) => perluas(Math.min(x, x + w), Math.min(y, y + h), Math.max(x, x + w), Math.max(y, y + h));
+  bungkus('beginPath', () => { jalur = null; });
+  bungkus('moveTo', (x, y) => perluas(x, y, x, y));
+  bungkus('lineTo', (x, y) => perluas(x, y, x, y));
+  bungkus('rect', kotakPath);
+  bungkus('roundRect', kotakPath);
+  bungkus('arc', (x, y, rr) => perluas(x - rr, y - rr, x + rr, y + rr));
+  bungkus('ellipse', (x, y, rx, ry) => perluas(x - rx, y - ry, x + rx, y + ry));
+  bungkus('quadraticCurveTo', (cx, cy, x, y) => { perluas(cx, cy, cx, cy); perluas(x, y, x, y); });
+  bungkus('bezierCurveTo', (a, b, c, d, x, y) => { perluas(a, b, a, b); perluas(c, d, c, d); perluas(x, y, x, y); });
+  bungkus('fill', () => { if (jalur) catat(jalur.x0, jalur.y0, jalur.x1 - jalur.x0, jalur.y1 - jalur.y0); });
+  bungkus('stroke', () => {
+    if (!jalur) return;
+    const tebal = Math.max(1, Number(cp.lineWidth) || 1) / 2;
+    catat(jalur.x0 - tebal, jalur.y0 - tebal, jalur.x1 - jalur.x0 + 2 * tebal, jalur.y1 - jalur.y0 + 2 * tebal);
+  });
   for (const m of ['createRadialGradient', 'createLinearGradient']) {
     if (typeof cp[m] !== 'function') continue;
     asli[m] = cp[m];
@@ -138,6 +175,13 @@ export function sapuRuangan({ halus = false, atas = false, kotak = [] } = {}) {
       coba(() => ctx.drawWall());
     }
   }
+  /* Bukaan ruang kadis di dinding (kusen + gorden, plang "SAYAP TIMUR LT 1")
+     punya lapis sendiri yang digambar SESUDAH prop — dulu tidak disapu sama
+     sekali, dan papan nomor antrean sempat dipindah ke baliknya. Disapu dalam
+     keadaan bawaan (tertutup: bingkai + gorden saja). */
+  resetRuangan(ctx, pristine);
+  sedang = 'gambarSisipKadis';
+  coba(() => ctx.gambarSisipKadis());
   resetRuangan(ctx, pristine);
   bisukan('drawFloor');
   sedang = 'drawFloor';
