@@ -46,7 +46,7 @@ const periksa = (ok, t, ket) => (ok ? lulus(t) : tolak(t, ket));
 
 const ctx = muatKonteks();
 const { nadaHz, musikGayaNama, musikDrumNama, musikGayaDari, musikSuasanaDari, babakHari,
-        laguWaktunya } = ctx;
+        laguWaktunya, rayaWaktunya } = ctx;
 const NAMA = musikGayaNama();
 const DRUM = musikDrumNama();
 
@@ -196,9 +196,21 @@ console.log(tebal('\nMusik lofi: gayanya ikut suasana ruangan'));
   const jam10 = (tgl) => new Date(2026, 8, tgl, 10, 5);
   const kerja = [7, 8, 9, 10, 11].filter((t) => laguWaktunya(jam10(t)));
   const akhirPekan = [12, 13].filter((t) => laguWaktunya(jam10(t)));
-  periksa(kerja.length === 5 && akhirPekan.length === 0,
-    'jam 10 menyala Senin s.d. Jumat saja — Sabtu & Minggu diam',
-    `hari kerja yang kena: ${kerja.length}/5, akhir pekan yang bocor: ${akhirPekan.length}`);
+  periksa(kerja.join() === '7,9,11' && akhirPekan.length === 0,
+    'lagu kantor jam 10 Senin, Rabu, Jumat — Selasa & Kamis milik Indonesia Raya, akhir pekan diam',
+    `hari yang kena: ${kerja.join(', ') || '-'}, akhir pekan yang bocor: ${akhirPekan.length}`);
+
+  // Keluhan 2026-09-22: jam 10 terdengar Indonesia Raya dua kali (MIDI lalu
+  // lagu kantor). Tidak boleh ada satu jam pun yang milik keduanya.
+  const raya = [7, 8, 9, 10, 11, 12, 13].filter((t) => rayaWaktunya(jam10(t)));
+  const dobel = [];
+  for (let t = 7; t <= 13; t++) for (let j = 0; j < 24; j++) {
+    const d = new Date(2026, 8, t, j, 30);
+    if (rayaWaktunya(d) && laguWaktunya(d)) dobel.push(t + ' jam ' + j);
+  }
+  periksa(raya.join() === '8,10' && !dobel.length,
+    'Indonesia Raya Selasa & Kamis jam 10, tidak pernah bertumpuk dengan lagu kantor',
+    `hari Indonesia Raya: ${raya.join(', ')}; bertumpuk: ${dobel.join('; ') || '-'}`);
 
   const jamLain = [0, 6, 9, 11, 13, 22].filter((j) => laguWaktunya(new Date(2026, 8, 7, j, 30)));
   periksa(!jamLain.length && laguWaktunya(new Date(2026, 8, 7, 10, 0))

@@ -67,7 +67,9 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   suasana: apel pagi lebih cerah, jam istirahat jadi lounge, hujan menutup
   padnya, malam nyaris cuma desis vinyl, dan kalau ada sesi yang macet
   akornya menggantung. Coba `?musik=malam`
-- Indonesia Raya berkumandang tiap Selasa & Kamis jam 10. Lagu kantor milikmu
+- Indonesia Raya berkumandang tiap Selasa & Kamis jam 10 — semua yang
+  menganggur berdiri sikap sempurna satu saf di bawah tiang bendera, dan yang
+  bergerak ditekel satpam (coba `?raya=1`). Lagu kantor milikmu
   sendiri (`lagu-kantor.m4a` di folder proyek) juga bisa disetel Senin–Jumat
   jam 10, tapi mati bawaan — nyalakan lewat centang 🎵 di panel ⚙️
 - Tiap kejadian punya bunyinya sendiri: kucing mengeong, dus ambruk, pintu

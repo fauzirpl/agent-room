@@ -8,6 +8,20 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Sikap sempurna waktu Indonesia Raya.** Begitu lagu kebangsaan diputar
+  (Selasa & Kamis jam 10), SEMUA orang di ruangan meninggalkan kegiatannya —
+  termasuk pegawai yang sedang mengerjakan tool call — dan berdiri satu saf
+  lurus di bawah tiang bendera, tegak menghadap bendera, tidak bergoyang
+  sedikit pun sampai lagunya habis. Tool call yang datang selama lagu tetap
+  tercatat di kartu, log, dan statistik; pegawainya baru berangkat ke meja
+  tool call terakhirnya begitu lagu selesai (sesi Claude-nya sendiri tidak
+  tertahan — yang berdiri cuma gambarnya). Satpam berjaga di ujung saf: yang
+  bergerak ditekel sampai dua-duanya terkapar di lantai. Kejadian acak
+  dibekukan selama lagu. Coba `?raya=1`.
+- **Indonesia Raya yang benar.** Melodi lama ditranskrip dari ingatan, cuma
+  sepotong refrein, dan kedengaran seperti lagu lain. Sekarang satu stanza
+  lengkap plus refrein diulang, diurai dari partitur resmi: G mayor, 4/4,
+  ♩ = 96, ±100 detik, dengan akor pengiring yang mengikuti frasanya.
 - **Seragam satpam & OB.** Satpam memakai kemeja khaki, celana hitam, tali
   bahu, papan nama, tanda SATPAM, lencana, tanda kesatuan merah di lengan, dan
   topi pet hitam. OB memakai kemeja dua warna — bahu dan lengan navy, badan
@@ -29,8 +43,8 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   `/lagu-kantor` membalas 204 dan jadwalnya cuma diam — sama sekali tanpa pesan
   merah, dan janji "nol file audio eksternal" tetap berlaku untuk semua yang
   dibawa repo. Lagunya lewat `busMusik` (jadi ikut slider volume musik dan ikut
-  ducking foley), beat lofi diam selama ia jalan, dan Selasa & Kamis ia
-  menyusul sesudah Indonesia Raya alih-alih menimpanya. Centangnya di panel
+  ducking foley), beat lofi diam selama ia jalan, dan Selasa & Kamis ia tidak
+  diputar karena jam 10 hari itu milik Indonesia Raya. Centangnya di panel
   ⚙️ diingat browser; `mainkanLaguKantor()` di konsol untuk mencobanya tanpa
   menunggu jam 10.
 - **WC.** Pintu kamar mandi di pojok kiri dinding belakang, cermin pintu kadis

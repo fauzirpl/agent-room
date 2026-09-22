@@ -290,10 +290,9 @@ Yang membuatnya berkelakuan sebagai warga ruangan, bukan sebagai tab yang
 menyala sendiri: ia lewat `busMusik`, jadi slider volume musik berlaku
 untuknya dan ducking foley ikut menekannya; beat lofi **diam** selama lagunya
 jalan (loop-nya tetap berjalan, cuma tidak membunyikan apa pun, jadi tidak
-perlu start ulang); dan Selasa & Kamis ia **mengalah** pada Indonesia Raya —
-jadwalnya dicek tiap 20 detik dan tidak menandai "sudah diputar hari ini"
-selama lagu kebangsaan masih jalan, jadi ia menyusul sesudahnya, bukan
-menimpanya. Centangnya di panel ⚙️ **diingat** browser (beda dari tiga centang
+perlu start ulang); dan Selasa & Kamis ia **tidak diputar**: jam 10 hari itu milik Indonesia
+Raya. (Dulu ia menyusul sesudahnya, dan jam 10 jadi berisi dua lagu
+berturut-turut.) Centangnya di panel ⚙️ **diingat** browser (beda dari tiga centang
 suara di atasnya): itu cuma izin untuk menjadwalkan, dan lagunya toh tetap
 menunggu klik pertamamu seperti bunyi lain. Dicoba tanpa menunggu jam 10:
 `mainkanLaguKantor()` di konsol.

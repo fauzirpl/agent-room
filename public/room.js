@@ -5192,7 +5192,7 @@ function drawEyes(a, x, ey, arah) {
    statistik, activeStations); yang ditunda cuma gambarnya: 150 ms jeda
    antisipasi setibanya di stasiun (TIBA_JEDA_MS) — dilewati kalau sedang beku
    atau event mengatur pose — dan selama mengantre di belakang stasiun penuh. */
-const poseKerja = (a) => a.state === 'work' && !a.antre
+const poseKerja = (a) => a.state === 'work' && !a.antre && !a.tegak   // tegak: berdiri di saf Indonesia Raya, kerjanya ditinggal
   && (now >= (a.tibaSampai || 0) || now < a.bekuSampai || !!a.pose);
 
 /* Berapa piksel badan turun ke kursi rapat: 0 berdiri, DUDUK_PX×DUDUK_FRAME
@@ -5211,7 +5211,28 @@ function turunDuduk(a) {
   return lompat ? 0 : Math.max(0, penuh - langkah);
 }
 
+/* a.rebah: sudut (radian) orang yang terkapar di lantai — sejauh ini cuma
+   tekel satpam waktu Indonesia Raya (tickRaya). Diputar di titik kakinya,
+   jadi badannya rebah ke samping di garis lantai yang sama, bukan melayang. */
 function drawPerson(a) {
+  if (!a.rebah) { drawPersonTegak(a); return; }
+  const kx = Math.round(a.x), ky = Math.round(a.y);
+  // bayangan ikut rebah: memanjang sepanjang badan di lantai, bukan bulatan
+  // kaki yang ikut terputar tegak lurus
+  const miring = Math.sin(a.rebah);
+  ctx.globalAlpha = 0.2 * (a.standby && !a.tetap ? 0.55 : 1);
+  ctx.fillStyle = '#20301f';
+  ctx.beginPath();
+  ctx.ellipse(kx + miring * 13, ky + 3, 5 + Math.abs(miring) * 11, 2.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.translate(kx, ky); ctx.rotate(a.rebah); ctx.translate(-kx, -ky);
+  drawPersonTegak(a);
+  ctx.restore();
+}
+
+function drawPersonTegak(a) {
   // Standby digambar pudar: dari ruangan pun harus kelihatan mana yang cuma
   // penambal dan mana yang sesi sungguhan. Alpha dasarnya disimpan karena
   // blok bayangan kaki di bawah memasang alpha-nya sendiri — reset ke 1 di
@@ -5252,7 +5273,7 @@ function drawPerson(a) {
     langkah = Math.round(s * 2);            // tampak samping: kaki depan maju-mundur
   } else if (kerja) {
     bob = Math.sin(t * 4) > 0.85 ? -1 : 0;
-  } else {
+  } else if (!a.tegak) {                   // tegak: sikap sempurna, napas pun ditahan
     bob = Math.sin(t * 1.7) > 0.6 ? -1 : 0;
   }
   // lelah: bahu & kepala turun 1 px — kakinya tetap, tinggi kotak sprite tetap
@@ -5267,8 +5288,9 @@ function drawPerson(a) {
   // dihitung dari posisi orangnya terhadap sumbu kaca, jadi yang di kiri
   // ruangan berbayang ke kiri dan yang di kanan ke kanan — bukan satu arah
   // seragam yang malah terbaca seperti salah gambar.
+  // (yang terkapar: bayangannya digambar drawPerson sebelum diputar)
   ctx.fillStyle = '#20301f';
-  const bp = MOD.bayangPanjang;
+  const bp = a.rebah ? 0 : MOD.bayangPanjang;
   if (bp > 0.01) {
     const arahB = xKaki < JENDELA.x + JENDELA.w / 2 ? -1 : 1;
     const baris = Math.round(12 * bp);
@@ -5278,10 +5300,12 @@ function drawPerson(a) {
       r(xKaki - 4 + arahB * i * 2, y + 1 + Math.round(i * 0.4), Math.max(2, 10 - i * 0.5), 1, '#20301f');
     }
   }
-  ctx.globalAlpha = 0.18 * alphaDasar;
-  ctx.beginPath();
-  ctx.ellipse(xKaki + 1, y + 1, 9, 2.6, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (!a.rebah) {
+    ctx.globalAlpha = 0.18 * alphaDasar;
+    ctx.beginPath();
+    ctx.ellipse(xKaki + 1, y + 1, 9, 2.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.globalAlpha = alphaDasar;
 
   const yb = y + bob;
@@ -6276,7 +6300,9 @@ class Agent {
     this.pose = null;        // pose sesaat: 'angkat', 'nunjuk', 'ngantuk', ...
     this.laju = 1;           // pengali kecepatan jalan sementara (event)
     this.bekuSampai = 0;     // now-timestamp: jalan & efek kerja beku sampai lewat ini
-    this.butuh = null;       // keadaan ketiga: berhenti menunggu keputusan kamu
+    this.tegak = false;      // sikap sempurna (Indonesia Raya): tanpa ayunan napas
+    this.rebah = 0;          // radian; ≠0 = terkapar di lantai (ditekel satpam)
+    this.butuh = null;      // keadaan ketiga: berhenti menunggu keputusan kamu
     this.tungguSejak = 0;    // Date.now() saat mulai menunggu, 0 kalau tidak sedang menunggu
     this.tungguTotal = 0;    // ms akumulasi menunggu kamu sepanjang sesi ini
     this.pengingatTimer = null; // id setTimeout pengingat terkatung (lihat pantauTerkatung)
@@ -6351,6 +6377,9 @@ class Agent {
   goTo(id) {
     const s = STATIONS[id];
     if (!s) return;
+    // Berdiri di saf Indonesia Raya: tujuannya dicatat, perjalanannya menunggu
+    // lagu habis (bubarRaya). Yang terakhir diminta yang berlaku.
+    if (this.tempatRaya && raya && this.eventKerja === raya.E) { this.tujuanRaya = id; return; }
     /* Bukaan ruang kadis. Yang sudah DI DALAM lalu disuruh ke 'agent' lagi
        (Task/mcp beruntun) tidak boleh berkedip keluar-masuk pintu: dia sudah
        di tempat. Selain itu keluar dulu SEBELUM route() dihitung — titik
@@ -8523,38 +8552,42 @@ function musikMatikan() {
   tampilSuasanaMusik('');
 }
 
-/* ---------- Indonesia Raya (lofi, terjadwal Selasa & Kamis jam 10) -------
-   Reff yang paling dihafal semua orang saja, ditranskrip dari ingatan (bukan
-   dari partitur resmi) sebagai tribute lofi — bukan rekaman acuan. Kalau ada
-   nada yang kedengaran meleset, tinggal ubah RAYA_MELODI di bawah.
+/* ---------- Indonesia Raya (terjadwal Selasa & Kamis jam 10) ------------
+   Satu stanza lengkap plus refrein yang diulang, persis bentuk yang diputar
+   di upacara: G mayor, 4/4, ♩ = 96, ±100 detik. Nadanya diurai dari partitur
+   LilyPond di artikel Wikipedia "Indonesia Raya" (lagu kebangsaan, milik
+   umum), bukan ditranskrip dari ingatan — versi lama yang dari ingatan cuma
+   sepotong refrein dan kedengaran seperti lagu lain.
+   RAYA_MELODI: [nomor MIDI, durasi dalam ketuk], 0 = diam; ketuk pertama
+   adalah birama gantung ("In-do-"). RAYA_AKOR: satu akor per dua ketuk
+   sesudah birama gantung itu.
    Sengaja tanpa beat/drum seperti musik lofi kantor di atas: lagu kebangsaan
    dibiarkan cuma pad + melodi + desis vinyl, biar tidak terdengar main-main. */
-const RAYA_SEMITON = [0, 2, 4, 5, 7, 9, 11];   // do re mi fa sol la ti (tangga mayor)
-
-// deg 1..7 = satu oktaf; 8..14 = oktaf berikutnya (do' seperti notasi angka); 0 = diam
-function rayaFreq(deg) {
-  if (!deg) return 0;
-  const oktaf = Math.floor((deg - 1) / 7);
-  const semiton = RAYA_SEMITON[(deg - 1) % 7] + oktaf * 12;
-  return 392.00 * Math.pow(2, semiton / 12);   // do = G4
-}
-function rayaAkor(root, dasarHz) {
-  const f0 = dasarHz * Math.pow(2, RAYA_SEMITON[(root - 1) % 7] / 12);
-  return [f0, f0 * Math.pow(2, 4 / 12), f0 * Math.pow(2, 7 / 12)];   // triad mayor
-}
-const RAYA_G = rayaAkor(1, 196.00), RAYA_C = rayaAkor(4, 196.00), RAYA_D = rayaAkor(5, 196.00);
-
-// [derajat, durasi dalam ketuk] -- "Indonesia Raya, merdeka merdeka, tanahku
-// negeriku yang kucinta, Indonesia Raya merdeka merdeka, hiduplah Indonesia Raya"
 const RAYA_MELODI = [
-  [5, 1], [5, 0.5], [5, 0.5], [8, 1], [0, 0.5], [7, 0.5], [6, 1],
-  [5, 1], [5, 1], [6, 0.5], [5, 0.5], [3, 2],
-  [3, 0.5], [3, 0.5], [4, 0.5], [5, 1.5], [3, 0.5], [1, 0.5],
-  [2, 0.5], [3, 0.5], [4, 0.5], [5, 2],
-  [5, 1], [5, 0.5], [5, 0.5], [8, 1], [0, 0.5], [7, 0.5], [6, 1],
-  [5, 1], [5, 1], [6, 0.5], [5, 0.5], [3, 2],
-  [4, 0.5], [5, 0.5], [6, 1], [5, 0.5], [4, 0.5], [3, 1], [2, 1], [1, 3],
+  [59, 0.75], [60, 0.25], [62, 1], [71, 1.75], [71, 0.25], [69, 0.75], [69, 0.25], [67, 1], [62, 1.5], [0, 0.5], [62, 0.75], [62, 0.25],
+  [64, 1], [62, 1], [60, 1], [59, 1], [57, 2.5], [0, 0.5], [57, 0.75], [59, 0.25], [60, 1], [69, 1.75], [69, 0.25], [67, 0.75],
+  [67, 0.25], [66, 1], [64, 1.5], [0, 0.5], [62, 0.75], [62, 0.25], [66, 1], [64, 1], [62, 1], [60, 1], [59, 2.5], [0, 0.5],
+  [59, 0.75], [60, 0.25], [62, 1], [71, 1.75], [71, 0.25], [69, 0.75], [69, 0.25], [67, 1], [62, 1.5], [0, 0.5], [62, 0.75], [62, 0.25],
+  [64, 1], [62, 1], [67, 1], [69, 1], [66, 2], [64, 0.5], [0, 0.5], [64, 0.75], [64, 0.25], [72, 1], [72, 1], [71, 1],
+  [69, 1], [74, 2], [67, 0.5], [0, 0.5], [66, 0.75], [64, 0.25], [62, 1], [72, 1], [71, 1], [69, 1], [67, 2.5], [0, 0.5],
+  [62, 0.75], [62, 0.25], [64, 1], [72, 0.75], [72, 0.25], [72, 1], [72, 0.75], [72, 0.25], [71, 1], [67, 0.75], [67, 0.25], [67, 1],
+  [66, 0.75], [67, 0.25], [69, 1], [74, 0.75], [74, 0.25], [74, 1], [72, 0.75], [72, 0.25], [71, 2], [67, 0.5], [0, 0.5], [62, 0.75],
+  [62, 0.25], [64, 1], [72, 0.75], [72, 0.25], [72, 1], [72, 0.75], [72, 0.25], [71, 1], [67, 0.75], [67, 0.25], [67, 1], [66, 0.75],
+  [67, 0.25], [69, 1], [74, 1], [74, 1], [71, 0.75], [69, 0.25], [67, 2.5], [0, 0.5], [67, 0.75], [67, 0.25], [72, 1], [76, 0.75],
+  [76, 0.25], [76, 1], [76, 0.75], [76, 0.25], [74, 1], [71, 0.75], [71, 0.25], [71, 1], [74, 0.75], [74, 0.25], [72, 1], [69, 0.75],
+  [69, 0.25], [69, 1], [74, 0.75], [72, 0.25], [71, 2], [67, 0.5], [0, 0.5], [67, 0.75], [67, 0.25], [72, 1], [76, 0.75], [76, 0.25],
+  [76, 1], [76, 0.75], [76, 0.25], [74, 1], [71, 0.75], [71, 0.25], [71, 1], [74, 0.75], [74, 0.25], [74, 1], [72, 0.75], [71, 0.25],
+  [69, 1], [71, 0.75], [69, 0.25], [67, 2.5], [0, 0.5], [67, 0.75], [67, 0.25], [72, 1], [76, 0.75], [76, 0.25], [76, 1], [76, 0.75],
+  [76, 0.25], [74, 1], [71, 0.75], [71, 0.25], [71, 1], [74, 0.75], [74, 0.25], [72, 1], [69, 0.75], [69, 0.25], [69, 1], [74, 0.75],
+  [72, 0.25], [71, 2], [67, 0.5], [0, 0.5], [67, 0.75], [67, 0.25], [72, 1], [76, 0.75], [76, 0.25], [76, 1], [76, 0.75], [76, 0.25],
+  [74, 1], [71, 0.75], [71, 0.25], [71, 1], [74, 0.75], [74, 0.25], [74, 1], [72, 0.75], [71, 0.25], [69, 1], [71, 0.75], [69, 0.25],
+  [67, 2.5], [0, 0.5],
 ];
+const RAYA_AKOR = 'G G G G G G D D Am Am Am G D D G G G G G G G G D C C G G D D D G G C C G G D D G G C C G G D G G G C C G G Am D G G C C G G D D G G C C G G Am D G G C C G G D D G G'.split(' ');
+const RAYA_NADA_AKOR = { G: [7, 11, 2], D: [2, 6, 9], C: [0, 4, 7], Am: [9, 0, 4], Em: [4, 7, 11] };
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+// akor di oktaf G2..F#3, di bawah melodi (yang turun sampai A3)
+const rayaAkor = (nama) => RAYA_NADA_AKOR[nama].map((pc) => midiHz(43 + ((pc - 7 + 12) % 12)));
 
 function rayaPad(t, freqs, durasi, tujuan) {
   freqs.forEach((f) => {
@@ -8621,25 +8654,28 @@ function mainkanIndonesiaRaya() {
   gain.gain.value = 0;
   gain.connect(busMusik);
 
-  const BEAT = 60 / 76;   // tempo sama seperti musik lofi kantor, biar senada
+  const BEAT = 60 / 96;   // ♩ = 96, tempo partitur
   const t0 = audio.currentTime + 0.15;
   const totalBeat = RAYA_MELODI.reduce((s, [, d]) => s + d, 0);
   const totalDur = totalBeat * BEAT;
+  // Lagunya diputar = semua berdiri sikap sempurna, bersuara atau tidak
+  // (autoplay yang dibisukan peramban tidak membatalkan barisannya).
+  mulaiBarisRaya(totalDur + 1.5);
 
   gain.gain.linearRampToValueAtTime(0.55, t0 + 0.8);
   gain.gain.setValueAtTime(0.55, t0 + totalDur - 0.8);
   gain.gain.linearRampToValueAtTime(0.0001, t0 + totalDur + 1.2);
 
-  const akor = [RAYA_G, RAYA_C, RAYA_D, RAYA_G];
-  const perAkor = totalDur / akor.length;
-  akor.forEach((k, i) => rayaPad(t0 + i * perAkor, k, perAkor * 1.1, gain));
+  // pad: birama gantung kosong, lalu satu akor tiap dua ketuk
+  const tAkor = t0 + BEAT;
+  RAYA_AKOR.forEach((k, i) => rayaPad(tAkor + i * 2 * BEAT, rayaAkor(k), 2 * BEAT * 1.08, gain));
 
   rayaKresek(totalDur + 1, gain);
 
   let t = t0;
-  for (const [deg, dur] of RAYA_MELODI) {
+  for (const [m, dur] of RAYA_MELODI) {
     const durSec = dur * BEAT;
-    rayaLead(t, rayaFreq(deg), durSec * 0.92, gain);
+    if (m) rayaLead(t, midiHz(m), durSec * 0.92, gain);
     t += durSec;
   }
 
@@ -8650,10 +8686,15 @@ window.mainkanIndonesiaRaya = mainkanIndonesiaRaya;   // buat dites dari console
 // Dicek tiap 20 detik, bukan `ingatan` langsung waktu didefinisikan -- `ingatan`
 // baru didefinisikan lebih jauh di bawah, dan tanggal terakhir diputar dititip
 // di localStorage supaya tahan reload dan tidak diulang-ulang sepanjang jam 10.
+// Fungsi murni seperti laguWaktunya() di bawah, supaya jadwalnya bisa diuji
+// (uji-musik.mjs) dan lagu kantor bisa menyingkir di hari yang sama.
+function rayaWaktunya(d) {
+  const hari = d.getDay();   // 2 = Selasa, 4 = Kamis
+  return (hari === 2 || hari === 4) && d.getHours() === 10;
+}
 function cekJadwalRaya() {
   const d = new Date();
-  const hari = d.getDay();   // 2 = Selasa, 4 = Kamis
-  if ((hari !== 2 && hari !== 4) || d.getHours() !== 10) return;
+  if (!rayaWaktunya(d)) return;
   const tgl = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
   if (ingatan.baca('rayaTerakhir', '') === tgl) return;
   ingatan.tulis('rayaTerakhir', tgl);
@@ -8662,10 +8703,10 @@ function cekJadwalRaya() {
 setTimeout(cekJadwalRaya, 0);
 setInterval(cekJadwalRaya, 20000);
 
-/* ---------- lagu kantor (Senin-Jumat jam 10) ------------------------------
+/* ---------- lagu kantor (Senin, Rabu, Jumat jam 10) -----------------------
    Satu-satunya bunyi di halaman ini yang datang dari BERKAS, bukan dari
-   oscillator: lagu milik kantornya sendiri, disetel tiap hari kerja jam 10,
-   seperti Indonesia Raya di atas disetel Selasa & Kamis. Berkasnya tidak ikut
+   oscillator: lagu milik kantornya sendiri, disetel jam 10 di hari kerja yang
+   BUKAN milik Indonesia Raya (Selasa & Kamis, di atas). Berkasnya tidak ikut
    di repo (lihat rute /lagu-kantor di server.mjs) — kalau tidak ada, rutenya
    membalas 204, elemen <audio> gagal memuat, dan yang terjadi persis tidak
    ada apa-apa. Itu jalur normal, bukan galat.
@@ -8678,9 +8719,11 @@ setInterval(cekJadwalRaya, 20000);
      bunyi meja — sama seperti beat lofi.
    * Beat lofi DIAM selama lagunya jalan (lihat musikJadwal). Loop-nya tetap
      berjalan supaya tidak perlu start ulang, cuma tidak membunyikan apa pun.
-   * Selasa & Kamis ia mengalah pada Indonesia Raya: jadwalnya dicek tiap 20
-     detik dan tidak menandai "sudah diputar hari ini" selama lagu kebangsaan
-     masih jalan, jadi ia MENYUSUL sesudahnya, bukan menimpanya. */
+   * Selasa & Kamis ia tidak diputar sama sekali. Dulu ia menyusul sesudah
+     Indonesia Raya, dan karena lagu kantor pemilik mesin ini ternyata juga
+     Indonesia Raya (versi instrumen), jam 10 terdengar lagu kebangsaan dua
+     kali berturut-turut (keluhan 2026-09-22). Dua lagu berturut-turut di jam
+     yang sama memang janggal lagu apa pun isinya. */
 
 /* Nilai yang diingat browser dipasang belakangan, di blok panel Pengaturan —
    `ingatan` sendiri baru didefinisikan jauh di bawah sini. Idiom yang sama
@@ -8698,7 +8741,7 @@ let laguMain = false;
    merah, lagunya ikut menyala. */
 function laguWaktunya(d) {
   const hari = d.getDay();
-  return hari >= 1 && hari <= 5 && d.getHours() === 10;
+  return hari >= 1 && hari <= 5 && d.getHours() === 10 && !rayaWaktunya(d);
 }
 
 function mainkanLaguKantor() {
@@ -8754,7 +8797,7 @@ function cekJadwalLagu() {
   if (!laguOn) return;
   const d = new Date();
   if (!laguWaktunya(d)) return;
-  if (rayaSedangMain || laguMain) return;   // mengalah; 20 detik lagi dicoba lagi
+  if (rayaSedangMain || laguMain) return;   // Indonesia Raya dari konsol/apel sedang jalan: coba lagi 20 detik lagi
   const tgl = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
   if (ingatan.baca('laguTerakhir', '') === tgl) return;
   ingatan.tulis('laguTerakhir', tgl);
@@ -10514,8 +10557,11 @@ function handle(ev) {
   const a = agentFor(ev.session);
   // Tool call selalu menang atas event acak. Kalau pegawainya sedang jadi
   // pemeran, dia dilepas saat itu juga — halaman ini melaporkan pekerjaan
-  // sungguhan dulu, baru menghidupkan ruangan.
-  lepasDariEvent(a);
+  // sungguhan dulu, baru menghidupkan ruangan. SATU pengecualian: Indonesia
+  // Raya. Yang berdiri di saf tetap berdiri; kartu, log, dan statistiknya
+  // tetap mencatat tool call-nya, perjalanannya ditunda sampai lagu habis
+  // (lihat goTo). Permintaan Fauzi 2026-09-22: "tinggalkan dulu pekerjaan mereka".
+  if (!(a.tempatRaya && raya && a.eventKerja === raya.E)) lepasDariEvent(a);
   // Keadaan "butuh manusia" beserta pembatalannya dihitung server; halaman
   // cuma mengikuti. `false` berarti tunggunya sudah lewat, `undefined` berarti
   // event ini tidak mengubah apa-apa soal itu.
@@ -14773,6 +14819,8 @@ function lepaskanAktor(a) {
   a.doingEvent = '';
   a.laju = 1;
   a.bekuSampai = 0;
+  a.tegak = false;
+  a.rebah = 0;          // yang ditekel lalu dipanggil tool call bangun saat itu juga (Aturan 1)
   if (!a.adaTugas) { a.busyUntil = 0; a.state = 'idle'; }
 }
 
@@ -14990,6 +15038,7 @@ function tickEvent(dt) {
   resetMod();
   tickRuangan(dt);
   tickApel(dt);         // apel pagi: bukan event acak — jalan walau ?event=0
+  tickRaya(dt);         // sikap sempurna Indonesia Raya: sama, bukan event acak
   if (EVENT_MATI) return;
 
   S = potretRuangan();
@@ -15002,6 +15051,9 @@ function tickEvent(dt) {
     if (E.sisa <= 0 || E.selesaiCepat) matikanEvent(E);
   }
 
+  // Selama Indonesia Raya tidak ada kejadian baru (tamu nyelonong, kucing
+  // lewat): jedanya ikut dibekukan, bukan dihabiskan diam-diam.
+  if (raya) return;
   jedaEvent -= dt;
   if (jedaEvent > 0) return;
 
@@ -15219,6 +15271,311 @@ function cekApel() {
   if (document.hidden) return;                 // "halaman terbuka" — rAF-nya pun berhenti kalau tersembunyi
   if (ingatan.baca('apelTerakhir', '') === tanggalLokal(d)) return;
   mulaiApel(d.getDay() === 1, false);
+}
+
+/* ----------------------------------------- sikap sempurna Indonesia Raya ---
+   Begitu Indonesia Raya berkumandang (jadwal Selasa & Kamis jam 10, atau
+   mainkanIndonesiaRaya() dari konsol) yang menganggur berhenti, lalu berdiri
+   satu saf lurus di bawah tiang bendera, sikap sempurna menghadap bendera —
+   seperti aturan di kantor pemerintah: berdiri tegak, bukan hormat. Napas pun
+   ditahan (a.tegak mematikan ayunan badan di drawPerson).
+
+   Satpam tetap tidak ikut berbaris: dia berdiri di ujung saf menghadap
+   barisan, dan yang bergerak DITEKEL. Dua jenis pelanggar:
+   * Penambal yang iseng — buka HP, menguap, garuk tengkuk. Lelucon yang
+     dipentaskan, peluangnya RAYA_PELUANG_ISENG per lagu. Satpam berlari,
+     menerjang, dua-duanya terkapar (a.rebah), lalu bangun dan kembali ke
+     tempat masing-masing.
+   * Sesi nyata yang keluar barisan — sejak 2026-09-22 cuma yang pulang
+     kantor (session-end). Satpam menerjang tempatnya yang sudah kosong dan
+     nyungsep sendirian. Sekali per lagu; sesudahnya cuma peluit.
+
+   Pengecualian Aturan 1 (permintaan Fauzi 2026-09-22, "orang yang sedang ada
+   task juga harus berdiri, tinggalkan dulu pekerjaan mereka"): selama lagu,
+   sesi nyata yang SEDANG BEKERJA pun dipanggil ke saf dan ditahan di sana.
+   Tool call-nya tetap dicatat (kartu, log, statistik, balon); cuma
+   perjalanannya yang ditunda — goTo() mencatat tujuannya di a.tujuanRaya,
+   handle() tidak melepasnya dari saf, dan bubarRaya() mengantarnya ke meja
+   tool call terakhir begitu lagu habis. Sesi Claude-nya sendiri tidak
+   tertahan sedikit pun: yang berdiri cuma gambarnya.
+
+   Sama seperti apel pagi: bukan event acak, jalan walau ?event=0, pesertanya
+   dipegang lewat eventKerja supaya handle()/destroy() melepasnya seperti
+   biasa. Penjadwal event acak dibekukan selama lagu. Apel pagi memutar
+   lagunya sendiri dengan barisannya sendiri — di situ blok ini diam.
+   Uji: ?raya=1 (lagu 3 detik sesudah halaman dimuat, pasti ada yang iseng). */
+const RAYA_PAKSA = new URLSearchParams(location.search).get('raya');
+const RAYA_SAF_Y = [292, 308];               // di bawah tiang, di atas baris meja kerja; saf kedua lurus di belakangnya
+const RAYA_X0 = 72, RAYA_JARAK = 18, RAYA_PER_SAF = 16;
+const RAYA_PELUANG_ISENG = 0.75;
+const RAYA_ISENG = ['hp', 'nguap', 'usap', 'kipas'];
+const RAYA_TEGUR = ['HEH! SIKAP SEMPURNA!', 'Lagu kebangsaan, Pak!', 'Diam di tempat!'];
+let raya = null;             // { E, anggota, lepas, satpam, posSatpam, sampai, isengPada, iseng, tekel, sudahNyungsep }
+let rayaPaksaSudah = false;
+const rayaPaksaPada = now + 3000;            // beri waktu sesi & standby lahir dulu
+
+/* Siapa yang dipanggil ke saf. Direkrut TERUS selama lagu (rekrutRaya, tiap
+   setengah detik), bukan sekali di detik pertama: waktu lagu mulai, sesi
+   nyata biasanya masih di tengah tool call dan baru menganggur beberapa
+   detik kemudian — dulu mereka lalu jalan-jalan pulang ke meja sepanjang
+   lagu. Sesi nyata: cuma yang menganggur (bisaDipinjam, Aturan 1). Penambal:
+   siapa pun, termasuk yang sedang "mampir kerja" di meja atau di tengah
+   jalan ke WC/gudang/pojok baca/pantri — tick tugas-tugas itu membatalkan
+   dirinya sendiri begitu eventKerja terpasang. Kecuali yang sedang menyeret
+   kursi atau membereskan notulen: dua tugas itu memegang barang ruangan. */
+function bisaBaris(a) {
+  if (a instanceof Peserta || a.tetap === 'satpam' || a.eventKerja) return false;
+  // Sesi nyata: SEMUA, termasuk yang sedang bekerja — pekerjaannya ditinggal
+  // dulu (goTo & handle() menahannya di saf). Kecuali yang sedang pulang kantor.
+  if (!a.standby) return !a.pulang && a.station !== 'keluar';
+  return !a.keluar && !a.diKadis && !a.tugasKursi && !a.tugasNotulen;
+}
+
+const tempatSaf = (i) => ({
+  x: RAYA_X0 + (i % RAYA_PER_SAF) * RAYA_JARAK,
+  y: RAYA_SAF_Y[((i / RAYA_PER_SAF) | 0) % 2],
+});
+
+function pegangRaya(a) {
+  const E = raya.E;
+  a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
+  a.doingEvent = 'sikap sempurna, Indonesia Raya';
+  a.pose = null;
+}
+
+function rekrutRaya() {
+  const R = raya;
+  // satpam penjaga: diambil begitu dia bebas (bisa saja sedang dipinjam event
+  // lain waktu lagu mulai)
+  if (!R.satpam) {
+    const s = standby.find((b) => b.tetap === 'satpam' && !b.eventKerja && !b.keluar);
+    if (s) { R.satpam = s; pegangRaya(s); R.posSatpam = null; }
+  }
+  for (const a of [...penghuni()]) {
+    if (!bisaBaris(a)) continue;
+    // slot kosong pertama: yang lolos dari saf meninggalkan lubang, lubangnya diisi lagi
+    const terisi = new Set(R.E.aktor.filter((b) => b.tempatRaya).map((b) => b.slotRaya));
+    let i = 0;
+    while (terisi.has(i)) i++;
+    // meja yang sedang dikerjakan diingat: sesudah lagu, dia kembali ke situ
+    if (!a.standby && STATIONS[a.station]) a.tujuanRaya = a.station;
+    pegangRaya(a);
+    a.slotRaya = i;
+    a.tempatRaya = tempatSaf(i);
+    a.goToXY(a.tempatRaya.x, a.tempatRaya.y, 'up');
+    if (!R.anggota.includes(a)) R.anggota.push(a);
+    R.lepas.delete(a);
+  }
+  // satpam berdiri di ujung kanan saf pertama; safnya memanjang, dia ikut bergeser
+  const s = R.satpam;
+  if (s && E_punya(s) && !R.tekel) {
+    const slot = R.E.aktor.filter((b) => b.tempatRaya).map((b) => b.slotRaya);
+    const ujung = Math.min(RAYA_PER_SAF, slot.length ? Math.max(...slot) + 1 : 0);
+    const pos = { x: RAYA_X0 + ujung * RAYA_JARAK + 8, y: RAYA_SAF_Y[0] };
+    if (!R.posSatpam || R.posSatpam.x !== pos.x) {
+      R.posSatpam = pos;
+      s.tegak = false;
+      s.goToXY(pos.x, pos.y, 'left');         // mengawasi barisan dari ujung kanan
+    }
+  }
+}
+
+function mulaiBarisRaya(detik) {
+  if (raya || apel) return false;
+  const E = { def: { id: 'indonesia-raya' }, id: 'indonesia-raya', umur: 0, sisa: 0, data: {}, aktor: [], tanda: new Set() };
+  // Dimulai walau belum ada satu pun yang menganggur: penanda "sudah diputar
+  // hari ini" sudah ditulis, jadi batal di sini = tidak ada barisan sama sekali.
+  raya = {
+    E, anggota: [], lepas: new Set(), satpam: null, posSatpam: null,
+    sampai: now + detik * 1000,
+    isengPada: RAYA_PAKSA || Math.random() < RAYA_PELUANG_ISENG ? 12 + Math.random() * 10 : Infinity,
+    iseng: null, tekel: null, sudahNyungsep: false, rekrutBerikut: 0,
+  };
+  rekrutRaya();
+  return true;
+}
+
+// Satpam standby dibungkam Standby.say(); balonnya dipasang ulang ke overlay
+// selama lagu, persis ucapPembina di apel pagi (dicopot lagi di bubarRaya).
+function ucapSatpam(teks) {
+  const p = raya && raya.satpam;
+  if (!p || !raya.E.aktor.includes(p)) return;
+  if (p.standby && !p.el.isConnected) overlay.appendChild(p.el);
+  spawn('talk', p.x, p.y - 24);
+  Agent.prototype.say.call(p, esc(teks));
+}
+
+// Jalan lurus tanpa lewat lajur: saf ini lantai lapang, dan satpam yang
+// memutar lewat lajur depan meja rapat dulu bukan lagi menerjang.
+function lariLurus(a, x, y, hadap, laju) {
+  a.bangkit();
+  a.station = 'acara';
+  a.hadap = hadap || null;
+  a.laju = laju;
+  a.path = [{ x, y }];
+  a.state = 'walk';
+}
+
+/* Tekel dalam lima babak, semuanya diukur dengan `now` (ms):
+   lari   — sprint lurus sampai ±24 px dari korban
+   terjang — 320 ms melayang: badan satpam miring bertahap 0→90° mengikuti
+             busur kecil, dua tangan terjulur ke depan (pose 'duaangkat')
+   rebah  — mendarat menindih; korban tumbang seperti pohon (280 ms, makin
+             lama makin cepat) sambil terdorong 6 px, lalu meronta sebentar
+   bangun — 450 ms, dua-duanya tegak kembali pelan-pelan
+   pulang — satpam ke ujung saf, korban ke tempatnya di saf
+   Tanpa korban (sesi nyata yang lolos): babaknya sama, satpam menerjang
+   lantai kosong. */
+const TEKEL_TERJANG_MS = 320, TEKEL_TUMBANG_MS = 280, TEKEL_REBAH_MS = 2300, TEKEL_BANGUN_MS = 450;
+const easeKeluar = (p) => 1 - (1 - p) * (1 - p);
+
+function mulaiTekel(korban, x, y) {
+  const R = raya, s = R.satpam;
+  const arah = x >= s.x ? 1 : -1;
+  s.tegak = false;
+  lariLurus(s, x - arah * 24, y + 4, null, 3.4);
+  // mendarat di belakang kaki korban, 6 px lebih dekat ke kamera: satpamnya
+  // digambar menindih punggung korban, kepala korban tetap mencuat di depannya
+  R.tekel = { korban, arah, fase: 'lari', t0: 0, tujuan: { x: x - arah * 8, y: y + 6 } };
+  ucapSatpam(korban ? RAYA_TEGUR[(Math.random() * RAYA_TEGUR.length) | 0] : 'BERHENTI DI TEMPAT!');
+}
+
+function tickTekel() {
+  const R = raya, T = R.tekel, s = R.satpam;
+  if (!E_punya(s)) { R.tekel = null; return; }
+  const k = T.korban && E_punya(T.korban) ? T.korban : null;
+  const sudut = T.arah * Math.PI / 2;          // kepala ke arah terjangan
+  const umur = now - T.t0;
+  if (T.fase === 'lari') {
+    if (!s.diam) return;
+    T.fase = 'terjang';
+    T.t0 = now;
+    T.dari = { x: s.x, y: s.y };
+    s.path = [];
+    s.state = 'idle';                          // kaki berhenti mengayun: dia melayang
+    s.face = T.arah > 0 ? 'right' : 'left';
+    s.pose = 'duaangkat';
+  } else if (T.fase === 'terjang') {
+    const p = Math.min(1, umur / TEKEL_TERJANG_MS);
+    s.x = T.dari.x + (T.tujuan.x - T.dari.x) * p;
+    s.y = T.dari.y + (T.tujuan.y - T.dari.y) * p - Math.sin(Math.PI * p) * 7;
+    s.rebah = sudut * easeKeluar(p);
+    if (p < 1) return;
+    T.fase = 'rebah';
+    T.t0 = now;
+    for (let i = 0; i < 8; i++) spawn('dust', s.x + T.arah * 14, s.y);
+    blip(140, 0.12);
+    if (k) {
+      k.pose = null; k.tegak = false;
+      k.face = T.arah > 0 ? 'right' : 'left';  // tumbang ke depan, muka ke lantai
+      T.korbanX = k.x;
+    } else ucapSatpam('Aduh... lolos.');
+  } else if (T.fase === 'rebah') {
+    if (k) {
+      const p = Math.min(1, umur / TEKEL_TUMBANG_MS);
+      k.rebah = sudut * p * p;                 // tumbang seperti pohon: pelan lalu berdebam
+      k.x = T.korbanX + T.arah * 6 * p;
+      // meronta sebentar sesudah jatuh
+      if (umur > 700 && umur < 1500) k.rebah = sudut + Math.sin(now / 45) * 0.06;
+      else if (p >= 1) k.rebah = sudut;
+    }
+    s.y = T.tujuan.y - (umur < 160 ? Math.sin(Math.PI * umur / 160) * 2 : 0);   // memantul sekali
+    if (umur < TEKEL_REBAH_MS) return;
+    T.fase = 'bangun';
+    T.t0 = now;
+    s.pose = null;
+  } else if (T.fase === 'bangun') {
+    const p = Math.min(1, umur / TEKEL_BANGUN_MS);
+    s.rebah = sudut * (1 - easeKeluar(p));
+    if (k) k.rebah = sudut * (1 - easeKeluar(Math.max(0, (umur - 150) / TEKEL_BANGUN_MS)));   // korban menyusul
+    if (umur < TEKEL_BANGUN_MS + 150) return;
+    s.rebah = 0;
+    T.fase = 'pulang';
+    lariLurus(s, R.posSatpam.x, R.posSatpam.y, 'left', 1.4);
+    if (k) {
+      k.rebah = 0;
+      lariLurus(k, k.tempatRaya.x, k.tempatRaya.y, 'up', 1);
+    }
+  } else if (T.fase === 'pulang' && s.diam) {
+    s.laju = 1;
+    s.face = 'left';
+    R.tekel = null;
+  }
+}
+const E_punya = (a) => raya && raya.E.aktor.includes(a);
+
+function tickRaya(dt) {
+  if (!raya) {
+    if (RAYA_PAKSA && !rayaPaksaSudah && now > rayaPaksaPada) {
+      rayaPaksaSudah = true;
+      mainkanIndonesiaRaya();
+    }
+    return;
+  }
+  const R = raya, E = R.E;
+  E.umur += dt;
+  if (now >= R.rekrutBerikut) { R.rekrutBerikut = now + 500; rekrutRaya(); }
+  // Yang sampai di tempatnya berdiri tegak — kecuali yang sedang iseng atau
+  // sedang terkapar; begitu dia kembali ke saf, ia tegak lagi dengan sendirinya.
+  for (const a of E.aktor) {
+    if (a === R.satpam || !a.tempatRaya) continue;
+    if (a.diam && !a.rebah && a !== R.iseng && !(R.tekel && R.tekel.korban === a && R.tekel.fase !== 'pulang')) { a.tegak = true; a.face = 'up'; }
+  }
+  if (R.satpam && E_punya(R.satpam) && R.satpam.diam && !R.tekel) R.satpam.tegak = true;
+
+  // Sesi nyata yang dipanggil tool call keluar barisan: tidak ditahan (Aturan 1).
+  for (const a of R.anggota) {
+    if (R.lepas.has(a) || E.aktor.includes(a)) continue;
+    R.lepas.add(a);
+    if (a.standby || !R.satpam || !E_punya(R.satpam)) continue;
+    if (!R.tekel && !R.sudahNyungsep) { R.sudahNyungsep = true; mulaiTekel(null, a.tempatRaya.x, a.tempatRaya.y); }
+    else ucapSatpam('PRIIIT!');
+  }
+
+  // Si iseng: dipilih dari penambal yang sudah tegak di saf; sesi nyata cuma
+  // cadangan kalau penambalnya tidak ada.
+  if (!R.iseng && !R.tekel && E.umur >= R.isengPada) {
+    R.isengPada = Infinity;
+    const tegak = E.aktor.filter((a) => a !== R.satpam && a.tegak);
+    const calon = tegak.filter((a) => a.standby && !a.tetap);
+    const pilih = (calon.length ? calon : tegak)[(Math.random() * (calon.length || tegak.length)) | 0];
+    if (pilih) {
+      R.iseng = pilih;
+      R.isengMulai = now;
+      pilih.tegak = false;
+      pilih.pose = RAYA_ISENG[(Math.random() * RAYA_ISENG.length) | 0];
+    }
+  }
+  // satpam butuh sekejap untuk sadar — baru menerjang 1,2 detik kemudian
+  if (R.iseng && !R.tekel && now - R.isengMulai > 1200) {
+    const k = R.iseng;
+    R.iseng = null;
+    if (E_punya(k) && E_punya(R.satpam)) mulaiTekel(k, k.x, k.y);
+  }
+  if (R.tekel) tickTekel();
+
+  if (now >= R.sampai) bubarRaya();
+}
+
+function bubarRaya() {
+  const R = raya;
+  raya = null;
+  for (const a of R.anggota.concat(R.satpam || [])) { a.tempatRaya = null; a.slotRaya = null; }
+  for (const a of [...R.E.aktor]) {
+    lepaskanAktor(a);
+    if (a.standby) {
+      if (a.el.isConnected) a.el.remove();
+      a.nextMove = now + 1000 + Math.random() * 3000;
+    } else {
+      // Pekerjaan yang ditinggal dilanjutkan: ke meja tool call terakhirnya
+      // (dicatat goTo selama lagu, atau meja yang sedang dikerjakan waktu
+      // dipanggil ke saf). Yang tidak sedang bertugas pulang ke mejanya.
+      const tuju = a.adaTugas && a.tujuanRaya ? a.tujuanRaya : stasiunPulang(a);
+      a.tujuanRaya = null;
+      a.goTo(tuju);
+    }
+  }
+  for (const a of R.anggota) a.tujuanRaya = null;   // yang sempat lepas (pulang kantor) juga
 }
 
 /* ---------------------------------------------------------- tema kalender ---
