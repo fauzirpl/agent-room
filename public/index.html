@@ -12,6 +12,8 @@
   <section class="stage">
     <div class="stage-inner" id="stageInner">
       <canvas id="room"></canvas>
+      <!-- maket 3D: ruangan yang sama, digambar public/ruang3d.js; tersembunyi di tampilan 2D -->
+      <canvas id="room3d" hidden></canvas>
       <div class="overlay" id="overlay"></div>
       <!-- kartu detail pegawai; isinya dibangun room.js waktu ada yang diklik -->
       <div class="kartu" id="kartu" hidden></div>
@@ -21,6 +23,7 @@
       <span id="connText">menyambung…</span>
       <span class="sep">/</span>
       <span id="nowDoing">kantor masih sepi</span>
+      <button id="tampilanBtn" class="ghost" aria-pressed="false" title="ganti tampilan 2D / 3D">2D</button>
       <button id="settingBtn" class="ghost" title="pengaturan">⚙️</button>
       <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
       <button id="statsBtn" class="ghost" title="statistik token">📊</button>
@@ -456,5 +459,7 @@
 <script src="room.js"></script>
 <!-- katalog event acak; harus sesudah room.js, yang menyediakan daftarEvent() -->
 <script src="event-acak.js"></script>
+<!-- tampilan 3D; paling akhir: memakai fungsi gambar room.js dan kait TIGA-nya -->
+<script src="ruang3d.js"></script>
 </body>
 </html>

@@ -2046,3 +2046,145 @@ bikin garis tepi sprite belang di layar penonton. Balon ucap dan balon pikiran
 tetap tampil (mereka anak stageInner), jadi padukan dengan `?panggung=1` kalau
 siarannya ditonton orang lain: isi balon dan kabar disamarkan, animasinya tetap.
 
+### Tampilan 3D: maket kantor
+
+Ruangan yang sama bisa dilihat sebagai **maket tiga dimensi** — seperti maket
+gedung yang dipajang di lobi dinas: lantai terazo di atas alas kayu jati,
+dinding belakang lengkap dengan Garuda dan jam dindingnya, perabot yang
+benar-benar berdiri, dan pegawai voxel yang berjalan, duduk di kursi rapat,
+dan mengetik di laptop mejanya. Tombol **3D / 2D** di bilah bawah memindah
+tampilan dan pilihannya diingat; `?tampilan=2d` atau `?tampilan=3d` di URL
+mengalahkannya. Bawaannya 3D, kecuali di `?overlay=1` (siaran butuh piksel
+yang dikunci) dan `?kadis=1` (tidak ada kanvas sama sekali).
+
+Kendalinya: **seret** memutar maket, **klik kanan / shift+seret** menggeser,
+**roda** mendekat-menjauh, **klik dua kali** kembali ke tampak awal. Di layar
+sentuh, satu jari memutar dan dua jari mencubit & menggeser. Klik pegawai atau
+perabot membuka kartu yang sama seperti di 2D, dan kamera ikut terbang ke
+barangnya.
+
+**Satu dunia, dua cara melihat.** Simulasinya tidak berubah satu baris pun:
+pegawai, rute, stasiun, antrean, event acak, dan Aturan 1 tetap milik
+`room.js`, di kisi 672x356 yang sama. `public/ruang3d.js` cuma cara lain
+menggambarnya, dan menempel lewat satu kait saja — objek `TIGA` di room.js:
+
+- `frame()` menjalankan seluruh pembaruan seperti biasa, lalu kalau
+  `TIGA.aktif` menyerahkan penggambarannya ke `TIGA.gambar()` alih-alih
+  `drawWall`/`drawFloor`/lapisan 2D. Yang digerbangi HANYA penggambaran — sama
+  seperti aturan bukaan ruang kadis.
+- `keLayar(x, y, kaki)` mendapat argumen ketiga: **garis kaki** benda yang
+  memuat titik itu. 2D tidak membutuhkannya; 3D butuh untuk tahu seberapa jauh
+  titiknya ke dalam. Balon ucap, balon pikir, lencana galat, dan kartu pegawai
+  memberikannya (`this.y`).
+- `let ctx` (bukan `const` lagi) + `gambarKe(k, fn)`: menukar `ctx` sementara
+  lalu SELALU mengembalikannya. Itu yang membuat semua fungsi gambar 2D bisa
+  dipakai ulang tanpa tahu dirinya sedang dipakai 3D.
+- `TIGA.tanpaNeon`: `drawWall` melewatkan tabung neon, karena di 3D neon itu
+  benda gantung sendiri yang sekaligus jadi sumber cahaya.
+
+Tanpa `ruang3d.js` (harness uji di VM), tanpa WebGL2, atau kalau konteks
+WebGL-nya dicabut peramban, `TIGA.aktif` tetap/kembali `false` dan ruangan
+jalan persis seperti dulu. `uji-tiga.mjs` menjaga janji itu.
+
+**Nol pustaka.** WebGL2 ditulis tangan — matriks, shader, peta bayangan —
+sama seperti musik lofi dan bunyi event yang disintesis sendiri. Kantor ini
+tetap tidak memuat apa pun dari luar mesinmu.
+
+**Kerangka 3D, kulit 2D.** Yang dibangun ulang sebagai benda 3D cuma
+BENTUKNYA. Permukaannya dilukis oleh fungsi gambar 2D yang sama persis, ke
+kanvas tekstur berskala 3 texel per piksel dunia:
+
+- **dinding** = seluruh bidang dinding 2D (baris 0..110): `drawWall`,
+  `gambarDinding` event, dan prop yang memang menempel di dinding. Jam dinding
+  tetap berdetak, cuaca di jendela tetap sungguhan, bukaan ruang kadis tetap
+  terlihat. Fungsi yang menggambar dua hal sekaligus dipanggil di dalam klip
+  bagian dindingnya saja: `drawWindow` (jendela, tanpa meja printer di
+  bawahnya) dan `drawFiling` (bagan struktur organisasi, tanpa kabinetnya);
+- **lantai** = `drawFloor` + `gambarLantai` event apa adanya: terazo, karpet,
+  berkas cahaya jendela, ceceran kusut, genangan. Karpet merah, karpet baca,
+  meja lesehan, dan bantal duduk "ditimbulkan" — kotak rendah yang tutupnya
+  memakai lukisan lantai di tapaknya sendiri;
+- **kulit perabot** = muka depan lemari arsip, filing kabinet, rak server
+  (LED-nya tetap berkedip), fotokopi, lemari piala, akuarium (arwananya tetap
+  berenang), dan seterusnya, masing-masing dilukis fungsi gambarnya sendiri di
+  dalam klip kotaknya. Warna samping & tutup kotaknya dicicip dari tepi kulit
+  itu sendiri: lemari kayu dapat samping kayu tanpa tabel warna kedua. Benda di
+  ATAS meja (tumpukan berkas meja stempel, pernak-pernik tiap meja kerja) jadi
+  kartu tegak yang berdiri di papan mejanya.
+
+Dinding dilukis ulang 20 kali sedetik, lantai 7 kali, tiap kulit menurut
+lajunya sendiri (rak server 12, akuarium 15, lemari piala sekali sedetik).
+Mode ringan menyeparuhkan semuanya dan mematikan peta bayangan.
+
+**Proyeksi oblik sebagai kamus.** Gambar 2D ruangan ini proyeksi oblik: titik
+bertinggi h di kedalaman z jatuh di layar pada `y = z - h`. Balikannya —
+**z = garis kaki, h = kaki - y** — dipakai untuk menaruh apa pun yang cuma
+punya koordinat 2D: balon, kartu, partikel, kartu event. Titik yang garis
+kakinya di atas lantai (`kaki <= FLOOR_TOP`) menempel di bidang dinding.
+Satu-satunya pengecualian: titik milik pegawai (balon di y-30) tingginya dikali
+`SKALA_ORANG`, karena pegawai 3D lebih besar dari sprite-nya.
+
+**Dinding dimundurkan 10.** Di 2D, perabot dinding cuma "setebal" 8 px antara
+dasar dinding (y 110) dan garis kakinya (118..120) — di 3D itu lemari setipis
+papan. Bidang dinding 3D ada di z=100, jadi perabotnya punya kedalaman 18..20
+tanpa satu garis kaki pun bergeser: rute dan stasiun tetap berdiri di depan
+mejanya masing-masing.
+
+**Pegawai voxel, 1,4 kali sprite-nya.** Sprite 2D setinggi 28 px itu gaya
+chibi, sementara perabot 2D (meja 18, meja stempel 24, pintu 80..86) diukur
+untuk orang yang lebih besar — di skala 1 pegawainya jadi anak kecil di kantor
+raksasa. Bonekanya dibangun dari kotak berendi (paha-betis, lengan di bahu,
+kepala di leher) dengan palet jabatan yang sama: PDH putih/batik Rabu/batik
+Jumat, seragam satpam (topi pet bermonogram, tali bahu, lambang merah di
+lengan pendek) dan OB (kemeja dua warna), rompi kantor cabang dengan tanda
+pangkatnya, rambut/peci/jilbab/topi dari `kepalaEfektif()`, kacamata, kumis,
+dan kedip mata. Posenya dibaca dari sumber yang sama dengan 2D: langkah dari
+`phase`, lengan kerja dari `workArms()`, pose event dari `posEvent()`, map
+disposisi terangkat waktu menunggu keputusanmu, barang bawaan di tangan,
+terkapar waktu ditekel satpam. Bedanya satu: di 3D mereka **duduk sungguhan**
+— di kursi rapat (mengikuti `turunDuduk()`), di kursi meja kerjanya, dan
+lesehan di pojok baca. Meja kerja 3D sengaja setinggi 15, bukan 18: papan
+setinggi 18 jatuh di bahu orang yang duduk.
+
+Pegawai standby (0,55) dan yang memudar di ambang pintu digambar **tembus
+pandang sungguhan**, dua lintasan: kedalamannya dulu, lalu warnanya dicampur
+di permukaan terdepan saja — sosoknya tetap utuh, bukan tumpukan kotak bening.
+
+**Event jadi kartu.** Tiap event hidup yang punya `gambarProp` dilukis ke
+kanvasnya sendiri dan dipasang sebagai **kartu tegak di kedalaman `sortY`-nya**
+— urutan depth-sort 2D terjaga di ruang 3D: kucing yang tidur di karpet tetap
+tertutup pegawai yang lewat di depannya. `gambarLantai` dan `gambarDinding`
+sudah ikut masuk tekstur lantai & dinding. `gambarAtas` dipilah dari pikselnya
+sendiri: yang keempat pojoknya terisi (kilat foto bersama, mati lampu) jadi
+selubung seluruh layar; sisanya jadi kartu di kedalaman aktor pertama event
+itu, atau menempel di dinding kalau seluruh gambarnya jatuh di bidang dinding.
+Partikel (tinta, glyph, uap, tetes AC) dicap kedalamannya sekali: milik
+pegawai terdekat, selebihnya di lantai atau dinding; tetes AC jatuh lurus ke
+ember yang di 3D berdiri tepat di bawah AC-nya.
+
+**Cahaya ikut jam.** `ambien()` yang sama dengan 2D diterjemahkan jadi cahaya,
+bukan selubung warna: langit & tanah (cahaya belahan), satu cahaya kunci dari
+kiri-atas-depan yang melempar **bayangan sungguhan** (peta bayangan 2048,
+disaring 3x3), dan ketiga tabung neon jadi lampu titik yang ikut berkedip
+(`kedipNeon`) dan padam waktu mati lampu. Malam jadi temaram kebiruan dengan
+genangan cahaya hangat di bawah tiap lampu; kilat menerangi seluruh ruangan.
+
+**Kamera 2D tetap yang memutuskan ke mana melihat.** Mode ikut, sinematik,
+klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
+`tickKamera()`; di 3D bidikannya diterjemahkan jadi titik sasaran dan jarak,
+sementara sudut putar tetap milik orang yang memegang tetikus. Dinding samping
+yang membelakangi kamera dipotong rendah, seperti maket arsitek.
+
+Yang **belum** sama dengan 2D, sengaja dicatat supaya tidak dikira hilang:
+
+- ruang kadis masih lukisan di bukaan dinding, belum ruangan 3D di baliknya;
+- kartu event tetap gambar datar — dari samping dia setipis kertas;
+- debu di berkas cahaya, rim light, dan vignette tidak digambar: cahaya 3D-nya
+  sudah mengerjakan tugas yang sama.
+
+Waktu per tahap (lukis dinding, lantai, kulit, kartu, susun mesh) bisa dilihat
+dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (120 frame, `SS` 2),
+biaya CPU satu frame setara dengan jalur 2D: median 1,3 ms untuk 3D lawan
+1,2 ms untuk 2D. Yang dibayar 3D di luar itu kerja GPU — peta bayangan dan
+satu lintasan utama — yang tidak ikut terukur di angka tersebut.
+

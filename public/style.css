@@ -82,6 +82,29 @@ body {
 }
 .overlay { position: absolute; inset: 0; pointer-events: none; }
 
+/* ---------- maket 3D (public/ruang3d.js) ----------
+   Kanvasnya memenuhi seluruh panggung, bukan kotak 672x356 berbingkai:
+   maketnya mengambang di atas panel kayu jati, dan kamera bebas memutarinya.
+   Kanvas 2D tetap ada di tata letak (fit() mengukurnya) tapi tidak terlihat. */
+#room3d {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; cursor: grab; touch-action: none;
+}
+#room3d.seret { cursor: grabbing; }
+#room3d.tunjuk { cursor: pointer; }
+body.tampil-3d #room { visibility: hidden; }
+#tampilanBtn { font-weight: 700; letter-spacing: .04em; min-width: 32px; }
+#tampilanBtn.nyala { color: var(--emas); border-color: #8a6a14; }
+#tampilanBtn:disabled { opacity: .35; cursor: not-allowed; }
+.petunjuk-3d {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  padding: 5px 12px; border-radius: 12px; pointer-events: none;
+  background: rgba(20, 15, 10, .72); color: var(--khaki-muda); font-size: 11px; white-space: nowrap;
+  opacity: 0; transition: opacity .6s ease;
+}
+.petunjuk-3d.tampak { opacity: 1; }
+body:not(.tampil-3d) .petunjuk-3d { display: none; }
+
 /* speech bubbles live in the overlay, drawn in CSS px so text stays crisp.
    Tiga baris, bukan satu: kalimat sungguhan agen (`ucap`) jarang muat dalam
    sebaris, dan yang terpotong '…' di tengah kata bikin balonnya cuma jadi

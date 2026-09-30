@@ -8,6 +8,19 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: maket kantor.** Ruangan yang sama kini bisa dilihat sebagai
+  maket tiga dimensi yang diputar dengan tetikus (seret memutar, klik kanan
+  menggeser, roda mendekat, klik dua kali kembali; di layar sentuh satu jari
+  memutar, dua jari mencubit). Perabot berdiri sungguhan, pegawai jadi boneka
+  voxel berseragam jabatannya yang duduk di kursi rapat dan kursi meja
+  kerjanya, lampu neon gantung menerangi malam, dan semuanya melempar
+  bayangan. Simulasinya tidak berubah: `public/ruang3d.js` cuma cara lain
+  menggambar, menempel lewat satu kait `TIGA` di room.js, dan melukis dinding,
+  lantai, muka perabot, serta 360 event dengan fungsi gambar 2D yang sama
+  persis (event jadi kartu tegak di kedalaman `sortY`-nya). WebGL2 ditulis
+  tangan, tanpa pustaka. Tombol **3D / 2D** di bilah bawah, pilihannya diingat;
+  `?tampilan=2d|3d` di URL. Tanpa WebGL2 halaman tetap 2D. Dijaga
+  `uji-tiga.mjs`: 3D yang mati tidak boleh mengubah satu pun jalur 2D.
 - **Sikap sempurna waktu Indonesia Raya.** Begitu lagu kebangsaan diputar
   (Selasa & Kamis jam 10), SEMUA orang di ruangan meninggalkan kegiatannya —
   termasuk pegawai yang sedang mengerjakan tool call — dan berdiri satu saf

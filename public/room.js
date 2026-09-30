@@ -370,8 +370,20 @@ const canvas = document.getElementById('room');
 let SS = 1;
 canvas.width = W;
 canvas.height = H;
-const ctx = canvas.getContext('2d');
+/* `let`, bukan `const`: tampilan 3D (public/ruang3d.js) memakai fungsi gambar
+   yang SAMA untuk melukis dinding, lantai, dan muka perabot ke kanvas
+   teksturnya sendiri. Semua pembantu gambar (r, glow, box3, ...) membaca `ctx`
+   waktu dipanggil, jadi cukup ditukar sementara lewat gambarKe() — tidak ada
+   satu pun fungsi gambar yang perlu tahu dirinya sedang dipakai 3D. */
+let ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
+// Jalankan fn dengan `ctx` menunjuk ke konteks lain, lalu kembalikan — juga
+// kalau fn melempar. Satu-satunya jalan yang boleh menukar ctx.
+function gambarKe(k, fn) {
+  const asli = ctx;
+  ctx = k;
+  try { fn(); } finally { ctx = asli; }
+}
 
 const overlay = document.getElementById('overlay');
 const stageInner = document.getElementById('stageInner');
@@ -1555,8 +1567,8 @@ function drawWall() {
   drawPanelMcb();           // sisa dinding kiri pintu gudang — lihat PANEL_MCB
   gambarTemaDinding();      // dekor tema kalender (agustusan, korpri, ...) — di bawah neon
 
-  // lampu neon TL gantung
-  NEON_X.forEach((cx, i) => {
+  // lampu neon TL gantung — di 3D tabungnya benda gantung sendiri (TIGA.tanpaNeon)
+  if (!TIGA.tanpaNeon) NEON_X.forEach((cx, i) => {
     const fl = kedipNeon(i);
     r(cx - 14, 0, 1, 8, '#8b8f86');
     r(cx + 13, 0, 1, 8, '#8b8f86');
@@ -6602,7 +6614,7 @@ class Agent {
       // nyaris tidak bergeser, yang tiga baris bergeser banyak. Ekornya
       // dibatasi separuh lebar balon supaya tidak pernah copot dari badannya.
       const sisi = this.lebarUcap / 2;
-      const [tengah, atas] = keLayar(this.x, this.y - 30);
+      const [tengah, atas] = keLayar(this.x, this.y - 30, this.y);
       const kiri = jagaBingkai(tengah, sisi + 8);
       const bebas = Math.max(0, sisi - 9);
       this.el.style.setProperty('--geser',
@@ -6625,7 +6637,7 @@ class Agent {
       const naik = now < this.bubbleUntil ? this.tinggiUcap : 0;
       // separuh lebar balon + sedikit jarak; tanpa ini pegawai di tepi kiri
       // ruangan memikirkan sesuatu yang kalimatnya terpotong bingkai
-      const [tengah, atas] = keLayar(this.x, this.y - 31);
+      const [tengah, atas] = keLayar(this.x, this.y - 31, this.y);
       const kiri = jagaBingkai(tengah, 118);
       // balon yang digeser masuk bingkai ekornya ikut bergeser balik, supaya
       // gelembungnya tetap menunjuk kepala orangnya
@@ -6638,7 +6650,7 @@ class Agent {
     // Lencana galat: kecil, jadi tidak perlu digeser masuk bingkai seperti
     // balon pikiran — yang penting selalu tepat di atas kepala orangnya.
     if (this.macet) {
-      const [lx, ly] = keLayar(this.x, this.y - 34);
+      const [lx, ly] = keLayar(this.x, this.y - 34, this.y);
       this.elMacet.style.visibility = tampak ? '' : 'hidden';
       this.elMacet.style.left = Math.round(lx) + 'px';
       this.elMacet.style.top = Math.round(ly) + 'px';
@@ -10023,9 +10035,9 @@ function taruhKartu() {
   // Barang: menempel di sisi kanan kotaknya (atau kiri kalau tidak muat), bukan
   // di titik tengah — kotak meja rapat selebar 188 px akan tertutup kartunya.
   const K = barangTerpilih && (barangKeRuangKadis(barangTerpilih) ? SISIP : barangTerpilih.kotak);
-  const [px, py] = K ? keLayar(K.x + K.w, K.y + K.h / 2)
-    : keLayar(terpilih.x, terpilih.y - 14);   // ikut kamera, bukan offX/scale mentah
-  const pxKiri = K ? keLayar(K.x, K.y)[0] : px;
+  const [px, py] = K ? keLayar(K.x + K.w, K.y + K.h / 2, K.y + K.h)
+    : keLayar(terpilih.x, terpilih.y - 14, terpilih.y);   // ikut kamera, bukan offX/scale mentah
+  const pxKiri = K ? keLayar(K.x, K.y, K.y + K.h)[0] : px;
   let left = px + (K ? 10 : 20);
   if (left + w > stageInner.clientWidth - 8) left = pxKiri - (K ? 10 : 20) - w;
   kartuEl.style.left =
@@ -12586,8 +12598,22 @@ const KAMERA_RUTE = ['read', 'search', 'web', 'edit', 'server', 'agent', 'rapat'
 const geraKurang = matchMedia('(prefers-reduced-motion: reduce)');
 const kameraSinematikBoleh = () => !geraKurang.matches;
 
-// titik dunia → px CSS relatif stageInner (yang dipakai DOM di overlay)
-function keLayar(x, y) {
+/* Kait tampilan 3D. public/ruang3d.js mengisi fungsi-fungsinya dan menyalakan
+   `aktif`; room.js cuma bertanya lewat sini, tidak pernah memanggil berkas itu
+   langsung — jadi tanpa ruang3d.js (harness uji di VM, peramban tanpa WebGL2)
+   semuanya jatuh ke jalur 2D yang lama tanpa satu baris pun berubah.
+     kamera(dt)          tiap frame, sesudah tickKamera: kamera 3D ikut bidikan
+     gambar(stasiun)     menggantikan seluruh penggambaran 2D di frame()
+     keLayar(x, y, kaki) titik dunia 2D + garis kakinya → px CSS relatif stageInner
+     tampak(x, y)        pengganti kameraTampak() untuk balon
+     tanpaNeon           drawWall melewatkan tabung neon: di 3D neon itu benda gantung */
+const TIGA = { aktif: false, kamera: null, gambar: null, keLayar: null, tampak: null, tanpaNeon: false };
+
+// titik dunia → px CSS relatif stageInner (yang dipakai DOM di overlay).
+// `kaki` = garis kaki benda yang memuat titik itu (bawaan: titik itu sendiri);
+// 2D tidak membutuhkannya, 3D butuh untuk tahu seberapa jauh titiknya ke dalam.
+function keLayar(x, y, kaki) {
+  if (TIGA.aktif) return TIGA.keLayar(x, y, kaki == null ? y : kaki);
   return [offX + (x * KAMERA.zoom + KAMERA.tx) * scale,
           offY + (y * KAMERA.zoom + KAMERA.ty) * scale];
 }
@@ -12599,6 +12625,7 @@ function dariLayar(cx, cy) {
 // bidikan disembunyikan — jagaBingkai() akan menariknya ke tepi panggung
 // dan dia jadi balon tanpa orang.
 function kameraTampak(x, y) {
+  if (TIGA.aktif) return TIGA.tampak(x, y);
   if (KAMERA.zoom === 1) return true;
   const hw = W / (2 * KAMERA.zoom) + 6, hh = H / (2 * KAMERA.zoom) + 6;
   return Math.abs(x - KAMERA.x) <= hw && Math.abs(y - KAMERA.y) <= hh;
@@ -15733,6 +15760,7 @@ function frame(ts) {
 
   tickEvent(dt);        // sebelum update: MOD dipasang di sini, dibaca di bawah
   tickKamera(dt);       // sebelum update pegawai: balon DOM-nya dihitung lewat keLayar()
+  if (TIGA.aktif) TIGA.kamera(dt);   // 3D: matriks kamera baru dipasang SEBELUM balon dihitung
   tickSisip(dt);        // bukaan ruang kadis: gorden + peralihan alpha masuk/keluar
   tickBanner();         // papan informasi menyusul begitu bidikan banner sampai
   // prefers-reduced-motion: kipas plafon dibekukan (animasi non-esensial);
@@ -15748,6 +15776,15 @@ function frame(ts) {
 
   const busy = [...agents.values(), ...peserta, ...standby].filter((a) => a.state === 'work');
   const activeStations = new Set(busy.map((a) => a.station));
+
+  // Tampilan 3D: simulasi di atas sudah jalan apa adanya (Aturan 1 tidak
+  // tahu-menahu soal tampilan); yang diganti cuma cara menggambarnya.
+  if (TIGA.aktif) {
+    TIGA.gambar(activeStations);
+    taruhKartu();
+    jadwalFrame();
+    return;
+  }
 
   // Getaran genset/gempa: seluruh kanvas digeser, bukan tiap prop satu-satu.
   // ctx.restore() ada SEBELUM taruhKartu() — kartu itu div DOM yang diposisikan

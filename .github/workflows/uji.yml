@@ -177,6 +177,11 @@ jobs:
       - name: Uji satpam & OB tetap
         run: node uji-petugas.mjs
 
+      # Tampilan 3D (public/ruang3d.js) menempel lewat kait TIGA: mati, dia
+      # tidak boleh mengubah satu pun jalur 2D; menyala, simulasinya tetap jalan.
+      - name: Uji tampilan 3D tidak merusak 2D
+        run: node uji-tiga.mjs
+
       # Katalog event di EVENT-ACAK.md tidak boleh basi diam-diam terhadap
       # registri sungguhan di public/event/*.js.
       - name: Periksa keselarasan katalog event

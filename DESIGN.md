@@ -61,6 +61,7 @@ Dokumen ini dipecah per tema ke folder `docs/` (bagian panjangnya sudah 1.800 ba
   - [Mode ringan](docs/02-ruangan.md#mode-ringan)
   - [Mode kadis: `?kadis=1`](docs/02-ruangan.md#mode-kadis-kadis1)
   - [Overlay layar kedua / OBS: `?overlay=1`](docs/02-ruangan.md#overlay-layar-kedua-obs-overlay1)
+  - [Tampilan 3D: maket kantor](docs/02-ruangan.md#tampilan-3d-maket-kantor)
 
 ### [Isi transkrip & arsip](docs/03-isi-transkrip.md)
 
