@@ -8,6 +8,13 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: pintu kadis sungguhan, ceceran lantai.** Pintu dua daun ruang
+  kepala dinas kini berlubang di dalam kusen jatinya: daun kanannya mengayun ke
+  dalam selama ada yang mengurus delegasi di sana, memperlihatkan lorong
+  berkarpet merah dengan pintu ruangan yang terang di ujungnya; kesetnya jadi
+  tikar sungguhan. Kertas dikepal, lembaran rebah, dan map atau daun yang
+  tercecer dari event kini benda kecil di lantai, muncul menurut kusut harian.
+  Lemari piala di ruang kadis ikut jadi voxel.
 - **Tampilan 3D: jendela berlubang, akuarium berair, lemari kaca.** Jendela
   kantor kini lubang sungguhan di tembok: kacanya di punggung tembok tetap
   menampilkan langit, matahari, bulan, kota & Monas, hujan, dan kilat yang sama,

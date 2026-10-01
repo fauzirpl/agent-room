@@ -2114,8 +2114,8 @@ kanvas tekstur berskala 3 texel per piksel dunia:
   lemari kaca — tidak dilukis, tapi dibangun (lihat **Perabot voxel** di bawah).
 
 Dinding dilukis ulang 20 kali sedetik, lantai 7 kali, tiap kulit menurut
-lajunya sendiri (rak server 12, fotokopi 6, lemari piala kecil ruang kadis
-sekali sedetik).
+lajunya sendiri (rak server 12, fotokopi 6, daun pintu WC & gudang 3, daun
+pintu kadis 2).
 Mode ringan menyeparuhkan semuanya dan mematikan peta bayangan.
 
 **Proyeksi oblik sebagai kamus.** Gambar 2D ruangan ini proyeksi oblik: titik
@@ -2227,6 +2227,16 @@ pintunya. Di gudang dia tidak memudar: kelihatan meraih rak di dalam
 diberikan sesudah dia sampai di ambang. Boneka, balon, klik, dan partikelnya
 ikut lewat `posisiOrang()` yang sama dengan tamu kadis.
 
+**Pintu kadis juga.** Pintu dua daun ruang kepala dinas (`drawKadis`) dilubangi
+di dalam kusen jatinya; kusen dan lis mahkotanya timbul. Daunnya lukisan pintu
+**tertutup** yang sama — panel timbul, gagang kuningan, plat tendang dengan
+titik kuningan sebanyak tamu yang sedang menghadap — dan seperti di 2D cuma
+daun kanan yang terbuka, ke dalam, selama stasiun `agent` dipakai atau event
+menyalakan `MOD.pintuKadis`. Di baliknya lorong berpanel kayu beratap dengan
+karpet merah tua, dan di ujungnya pintu ruangan yang terang kekuningan:
+"gelap di dalam, cahaya kuning dari ruangan" versi 2D. Keset baru
+(`kesetAda`) jadi tikar sungguhan di ambangnya.
+
 **Perabot voxel.** Benda yang di putaran awal masih kartu tegak (lukisan 2D
 yang berdiri, atau dua kartu bersilang untuk tanaman), atau cuma lukisan di
 muka sebuah kotak padahal isinya bervolume (jendela, akuarium, lemari kaca),
@@ -2282,10 +2292,16 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
 - **Lemari piala** berpintu kaca: piala emas & perak, plakat, dua medali
   bertali merah-putih yang tersemat di punggung lemari, piagam dan foto
   bersama yang berdiri bersandar, piala voli kalau `RUANGAN.piala` — di balik
-  kaca berkilap miring. Lemari kecil di ruang kadis tetap lukisannya.
+  kaca berkilap miring. Lemari kecil di ruang kadis versi ringkasnya, rak
+  terbuka tanpa kaca (ruangan itu cuma terlihat lewat jendela atau dari atas).
 - **Rak pojok baca**: rak buku pendek dua susun (satu buku dicabut separuh) dan
   rak koran bertongkat penjepit; korannya kekuningan kalau masih edisi kemarin
   (`koranBasi()`).
+- **Ceceran di lantai**: kertas dikepal dan lembaran rebah bersudut terangkat
+  di empat belas titik `KUSUT_LANTAI`, muncul menurut ambang kusutnya
+  masing-masing (lukisannya memudar masuk dulu, bendanya menyusul), plus
+  barang tercecer dari event (`propLantai`: map merah, map disposisi, daun,
+  kertas bekas). Tiap benda menutup tepat cetakan lukisannya di lantai.
 
 Isi yang ikut keadaan `RUANGAN` masuk satu grup sendiri yang dibangun ulang
 **hanya waktu `tandaPerabot()` berubah** (kusut dihitung per lapis, layu
@@ -2295,7 +2311,7 @@ tiap frame. Air akuarium dan pintu kaca lemari piala digambar tembus pandang di
 lintasan pudar, tapi **tidak ikut peta bayangan**: kaca yang membayangi isinya
 sendiri menggelapkan piala di baliknya. Stasiun yang sedang dipakai mendapat
 pendar kuning sayup di tepi papan rak arsip atau bibir meja stempel, pengganti
-`glow()` 2D yang dulu terlukis di kartunya. Sembilan belas kulit yang tidak
+`glow()` 2D yang dulu terlukis di kartunya. Dua puluh kulit yang tidak
 terpakai lagi (termasuk tujuh kartu meja kerja) ikut dibuang, jadi melukis
 kulit malah lebih ringan dari sebelumnya.
 
@@ -2337,9 +2353,10 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
   yang sama;
 - gambar event bertebal, tapi tetap satu lapis: kucing voxel dari samping
   terbaca sebagai kucing, papan yang miring di 2D tetap papan pipih yang miring;
-- ruangan di balik tembok (kadis, WC, gudang) cuma kelihatan lewat bukaannya
-  atau dari kamera yang didongakkan tinggi: tembok belakang tetap setinggi
-  aslinya, tidak ikut dipotong rendah seperti dinding samping.
+- ruangan di balik tembok (kadis, WC, gudang, lorong pintu kadis) cuma
+  kelihatan lewat bukaannya atau dari kamera yang didongakkan tinggi: tembok
+  belakang tetap setinggi aslinya, tidak ikut dipotong rendah seperti dinding
+  samping.
 
 Waktu per tahap (lukis dinding, lantai, kulit, kartu, susun mesh) bisa dilihat
 dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (150 frame, `SS` 2,
