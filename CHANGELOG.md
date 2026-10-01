@@ -8,6 +8,14 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: tamu event dan kucing kantor jadi voxel.** Kurir, tamu salah
+  alamat, pegawai baru yang lapor diri, sampai tamu tenar kini berdiri sebagai
+  boneka voxel di tempatnya sendiri, segaya pegawai — bukan lagi guntingan
+  gambar 2D di kedalaman yang keliru. Topi, helm, kacamata hitam, raket, dan
+  nomor jersey tamu tenar menempel di bonekanya; pemanjat lemari arsip
+  benar-benar terangkat di depan lemarinya. Kucing kantor (jalan lewat, duduk,
+  meringkuk di karpet, tidur di atas rak server, duduk di keyboard laptop)
+  dan tikus yang lewat kolong punya model voxel sendiri.
 - **Tampilan 3D: dekor tema, printer yang bisa macet, sisa yang masih pipih.**
   Spanduk 17 Agustus, HUT KORPRI, dan tahun anggaran jadi kain bergelombang
   bertali di atas jendela; umbul-umbul merah putih membentang sepanjang tembok;

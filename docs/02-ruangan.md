@@ -2170,6 +2170,31 @@ dinding. Partikel (tinta, glyph, uap, tetes AC) dicap tempatnya sekali: milik
 pegawai terdekat, milik tamu ruang kadis, di lantai, atau di dinding; tetes AC
 jatuh lurus ke ember yang di 3D berdiri tepat di bawah AC-nya.
 
+**Tamu event jadi boneka.** Semua sosok orang di gambar event lewat satu
+pintu, `drawPerson()` — dipanggil `gambarOrangLuar` (kurir, tamu salah alamat,
+pegawai baru lapor diri, dan belasan lainnya), `TAMU_BIROKRASI.gambar`, dan
+`TOKOH.gambar` (tamu tenar). Di kartu, sosok itu berdiri di kedalaman `sortY`
+milik EVENT, bukan di tempat orangnya, jadi tamu yang lewat di lajur lain
+terbaca sebagai guntingan kertas di tempat yang salah. Sekarang ±30 kali
+sedetik gambar tiap event dijalankan sekali di **kanvas hampa** (semua perintah
+gambar tidak melakukan apa-apa) sambil `drawPerson` diganti pencatat. Tiap
+sosok yang tercatat — palet, hadap, melangkah atau diam, barang bawaan,
+`globalAlpha`-nya — berdiri sebagai boneka voxel di `(x, y)`-nya sendiri,
+segaya pegawai, berbayang, ikut pudar. Waktu kartunya dilukis, sosoknya
+dilewati, jadi kartu tinggal berisi properti event. Aksesori tamu tenar (topi,
+helm, kacamata hitam, raket di punggung, nomor jersey) dilukis ke **stiker**
+kecilnya sendiri, diperbesar `SKALA_ORANG` di sekitar titik kakinya, dan
+menempel di depan bonekanya mengikuti posisinya tiap frame. Tamu yang kakinya
+jatuh di jalur perabot dinding (y < 121, misalnya pemanjat lemari arsip)
+ditaruh di muka perabot dan diangkat setinggi selisihnya.
+
+**Hewan bermodel.** Lima event kucing kantor (jalan lewat, duduk dibelai,
+meringkuk di karpet rapat, tidur di atas rak server, duduk di keyboard laptop
+pegawainya) dan tikus yang lewat kolong tidak lagi berkartu: `MODEL_EVENT`
+membangun boneka voxel dari `E.data` yang sama — kucing dengan tiga pose
+(kaki melangkah dan ekor tegak bergoyang, duduk tegak berekor melingkar,
+meringkuk dengan napas naik-turun), warna bulunya ikut lukisan tiap event.
+
 **Ruang kadis sungguhan.** Di 2D ruang kadis adalah bukaan berbingkai — lukisan
 ruangan mini yang diklip ke kotak 72x46 di dinding. Di 3D dindingnya benar-benar
 **dilubangi** di bingkai itu (kusen jati bertebal, ambang yang menjorok ke ruang
@@ -2366,8 +2391,10 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 
 - rim light dan vignette tidak digambar — cahaya 3D-nya sudah mengerjakan tugas
   yang sama;
-- gambar event bertebal, tapi tetap satu lapis: kucing voxel dari samping
-  terbaca sebagai kucing, papan yang miring di 2D tetap papan pipih yang miring;
+- gambar event selain orang dan hewan bermodel tetap kartu bertebal satu
+  lapis: papan yang miring di 2D tetap papan pipih yang miring, dan properti
+  yang digambar di samping tamu (tali pemanjat, misalnya) tetap berdiri di
+  kedalaman `sortY` event, bukan menempel di bonekanya;
 - ruangan di balik tembok (kadis, WC, gudang, lorong pintu kadis) cuma
   kelihatan lewat bukaannya atau dari kamera yang didongakkan tinggi: tembok
   belakang tetap setinggi aslinya, tidak ikut dipotong rendah seperti dinding

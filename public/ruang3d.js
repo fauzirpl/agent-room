@@ -2476,8 +2476,9 @@ void main() { hasil = vec4(1.0); }`;
     const pose = a.butuh ? { l: -6, r: -6 } : poseNama ? posEvent({ pose: poseNama, phase: t }) : (kerja ? workArms(a) : null);
     if (pose) { lenganL = sudutLengan(pose.l); lenganR = sudutLengan(pose.r); }
 
-    // dasar: kaki di (x, 0, z) dunia, badan menghadap +z lokal, diskalakan
-    let dasar = A3.geser(px, 0, pz);
+    // dasar: kaki di (x, 0, z) dunia (tamu event yang memanjat: terangkat),
+    // badan menghadap +z lokal, diskalakan
+    let dasar = A3.geser(px, a.angkat || 0, pz);
     if (a.rebah) dasar = A3.kali(dasar, A3.putarZ(-a.rebah));
     dasar = A3.kali(dasar, A3.kali(A3.putarY(st.yaw), A3.skala(SKALA_ORANG)));
     if (a.miring) dasar = A3.kali(dasar, A3.putarZ(-0.18));
@@ -2837,6 +2838,13 @@ void main() { hasil = vec4(1.0); }`;
       const alfa = (a.standby && !a.tetap ? 0.55 : 1) * nyata;
       susunOrang(alfa < 0.999 ? G.pudar : S, a, dt, alfa, ganti);
     }
+    // tamu event (sosok drawPerson di gambar event): boneka voxel di tempatnya sendiri
+    for (const { o, alfa } of ORANG_EVENT.daftar) susunOrang(alfa < 0.999 ? G.pudar : S, o, dt, alfa);
+    // hewan event yang bermodel: kucing kantor, tikus
+    for (const E of eventHidup) {
+      const model = MODEL_EVENT[E.def.id];
+      if (model) aman(() => model(S, E));
+    }
     // sorotan orang yang kartunya terbuka: cincin di lantai
     if (terpilih && !terpilih.diKadis) cincin(S, terpilih.x, terpilih.y, 9 + Math.sin(now / 240) * 1.2, warna(P.amber), 0.9);
     // sorotan barang: bingkai rusuk emas di kotak 3D-nya (yang diklik lebih
@@ -3088,13 +3096,15 @@ void main() { hasil = vec4(1.0); }`;
     const calon = [E.aktor && E.aktor[0], d.a, d.pejabat, d.orang && d.orang[0]];
     return calon.find((o) => o && typeof o.x === 'number' && typeof o.y === 'number') || null;
   }
-  function kartuUntuk(peta, E, tinggi) {
+  // lebar: kanvas selebar dunia (kartu event) atau sesempit stiker aksesori,
+  // yang lalu digeser ke x0 dunianya tiap frame
+  function kartuUntuk(peta, E, tinggi, lebar = W) {
     let kt = peta.get(E);
     if (!kt) {
       const kv = document.createElement('canvas');
-      kv.width = W; kv.height = tinggi;
+      kv.width = lebar; kv.height = tinggi;
       const k = kv.getContext('2d', { willReadFrequently: true });
-      kt = { kv, k, tek: tekstur(W, tinggi, false), tinggi, terakhir: -1e9, tepi: null, kosong: true,
+      kt = { kv, k, tek: tekstur(lebar, tinggi, false), tinggi, lebar, x0: 0, terakhir: -1e9, tepi: null, kosong: true,
         tint: null, z: 0, dasar: 0, dinding: false };
       peta.set(E, kt);
     }
@@ -3174,11 +3184,198 @@ void main() { hasil = vec4(1.0); }`;
     return tepi;
   }
 
+  /* ------------------------------------------------- tamu event jadi boneka
+     Semua sosok orang di gambar event lewat SATU pintu: drawPerson() —
+     dipanggil gambarOrangLuar (00-dasar), TAMU_BIROKRASI.gambar, dan
+     TOKOH.gambar (tamu tenar). Di kartu, sosok itu berdiri di kedalaman sortY
+     milik EVENT, bukan di tempat orangnya; tamu yang lewat di lajur lain jadi
+     guntingan kertas yang salah tempat. Jadi:
+       - ±30x sedetik gambar event dijalankan sekali di KANVAS HAMPA (semua
+         perintah gambar tidak melakukan apa-apa) sambil drawPerson diganti
+         pencatat: tiap sosok tercatat dengan pal/hadap/langkah/bawaan dan
+         globalAlpha-nya, lalu berdiri sebagai boneka voxel di (x, y)-nya
+         sendiri — segaya pegawai, berbayang, ikut pudar;
+       - waktu kartu event dilukis, drawPerson & TOKOH.gambar dilewati:
+         kartunya tinggal berisi properti event;
+       - aksesori tamu tenar (topi, helm, kacamata hitam, raket...) dilukis
+         ke STIKER kecilnya sendiri, diperbesar SKALA_ORANG di sekitar titik
+         kakinya, dan menempel di depan boneka — x-nya mengikuti tiap frame. */
+  const HAMPA = (() => {
+    const isi = {
+      globalAlpha: 1, fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, font: '10px sans-serif',
+      textBaseline: 'alphabetic', textAlign: 'start', imageSmoothingEnabled: false,
+      globalCompositeOperation: 'source-over', canvas: { width: W, height: H },
+    };
+    const tumpuk = [], kosong = () => {};
+    const khusus = {
+      save: () => { tumpuk.push(isi.globalAlpha); },
+      restore: () => { if (tumpuk.length) isi.globalAlpha = tumpuk.pop(); },
+      measureText: (t) => ({ width: String(t).length * 3 }),
+      createLinearGradient: () => ({ addColorStop: kosong }),
+      createRadialGradient: () => ({ addColorStop: kosong }),
+      createPattern: () => null,
+      getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(4) }),
+      isPointInPath: () => false,
+      getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      getLineDash: () => [],
+    };
+    const ctxHampa = new Proxy(isi, {
+      get: (t, k) => (k in khusus ? khusus[k] : k in t ? t[k] : kosong),
+      set: (t, k, v) => { t[k] = v; return true; },
+    });
+    return { ctx: ctxHampa, isi, reset() { isi.globalAlpha = 1; tumpuk.length = 0; } };
+  })();
+  const adaTokoh = () => typeof TOKOH === 'object' && TOKOH && typeof TOKOH.gambar === 'function';
+  const ORANG_EVENT = { daftar: [], terakhir: -1e9 };
+  const tiruanEvent = new WeakMap();     // E -> [orang tiruan per urutan panggil]: yaw tetap halus
+  function catatOrangEvent() {
+    if (now - ORANG_EVENT.terakhir < 33) return;
+    ORANG_EVENT.terakhir = now;
+    const daftar = [], asliDraw = window.drawPerson, tokohAda = adaTokoh(), asliTokoh = tokohAda ? TOKOH.gambar : null;
+    let E = null, urut = 0, tokohKini = null;
+    window.drawPerson = (a) => {
+      if (!a || typeof a.x !== 'number' || typeof a.y !== 'number' || !a.pal) return;
+      let arr = tiruanEvent.get(E);
+      if (!arr) { arr = []; tiruanEvent.set(E, arr); }
+      const o = arr[urut] || (arr[urut] = { path: [], pose: null });
+      urut++;
+      // Di 2D tak ada yang bisa BERDIRI di jalur perabot dinding (y < 121):
+      // tamu dengan kaki setinggi itu sedang memanjat/melompat di depan
+      // perabot. Bonekanya ditaruh di muka perabot dan diangkat selisihnya.
+      o.x = a.x; o.y = a.y < 121 ? 122 : a.y; o.angkat = a.y < 121 ? 121 - a.y : 0;
+      o.face = a.face || 'down'; o.state = a.state || 'idle';
+      o.phase = a.phase || 0; o.slot = a.slot || 0; o.pal = a.pal; o.bawa = a.bawa || null;
+      const g = +HAMPA.isi.globalAlpha;
+      daftar.push({ o, alfa: Number.isFinite(g) ? Math.max(0, Math.min(1, g)) : 1, tokoh: tokohKini });
+    };
+    if (tokohAda) TOKOH.gambar = function (t) { tokohKini = t; try { return asliTokoh.call(this, t); } finally { tokohKini = null; } };
+    try {
+      for (E of eventHidup) {
+        urut = 0;
+        for (const lapis of ['gambarProp', 'gambarAtas']) {
+          if (!E.def[lapis]) continue;
+          HAMPA.reset();
+          gambarKe(HAMPA.ctx, () => aman(() => E.def[lapis](E, S_EVENT())));
+        }
+      }
+    } finally {
+      window.drawPerson = asliDraw;
+      if (tokohAda) TOKOH.gambar = asliTokoh;
+    }
+    ORANG_EVENT.daftar = daftar;
+  }
+  // Lukis gambar event TANPA sosok orangnya (badannya sudah jadi boneka voxel,
+  // aksesori tamu tenar jadi stiker sendiri).
+  function tanpaSosok(gambar) {
+    return () => {
+      const asliDraw = window.drawPerson, tokohAda = adaTokoh(), asliTokoh = tokohAda ? TOKOH.gambar : null;
+      window.drawPerson = () => {};
+      if (tokohAda) TOKOH.gambar = () => {};
+      try { gambar(); } finally {
+        window.drawPerson = asliDraw;
+        if (tokohAda) TOKOH.gambar = asliTokoh;
+      }
+    };
+  }
+  /* Hewan event yang punya model voxel sendiri: kartunya tidak dilukis, yang
+     berdiri boneka 3D dari keadaan E.data yang sama. Kucing kantor (lima
+     event) dengan tiga pose — jalan (kaki melangkah, ekor bergoyang), duduk
+     (tegak, ekor melingkar di kaki), tidur (meringkuk, napas naik-turun) — dan
+     tikus yang lewat kolong. Warna bulu ikut lukisan 2D tiap event; ukuran
+     dikali SKALA_ORANG seperti pegawai. yaw 0 = menghadap +x. */
+  function kucing3D(S, x, z, h, pose, c, yaw) {
+    const m = A3.kali(A3.geser(x, h, z), A3.kali(A3.putarY(yaw), A3.skala(SKALA_ORANG)));
+    const bulu = warna(c), terang = warna(sh(c, 1.15)), gelap = warna(sh(c, 0.82)), mata = warna('#3a2a20'), hidung = warna('#d98a8a');
+    if (pose === 'tidur') {
+      const n = 1 + Math.sin(now / 900) * 0.05;
+      kotakM(S, m, -3.5, 3.2, 0, 3 * n, -2.4, 2.4, bulu);                       // badan meringkuk
+      kotakM(S, m, -3.2, 2.9, 3 * n, 3.4 * n, -2, 2, terang);
+      const kp = A3.kali(m, A3.geser(2.2, 0, 0));
+      kotakM(S, kp, 0, 2.6, 0.2, 2.6, -1.5, 1.5, bulu);                          // kepala bersandar di depan
+      kotakM(S, kp, 0.4, 1.2, 2.6, 3.4, -1.3, -0.5, bulu); kotakM(S, kp, 0.4, 1.2, 2.6, 3.4, 0.5, 1.3, bulu);
+      kotakM(S, kp, 2.6, 2.7, 1.5, 1.7, -1, -0.3, mata); kotakM(S, kp, 2.6, 2.7, 1.5, 1.7, 0.3, 1, mata);   // mata terpejam
+      const ek = Math.sin(now / 900) * 0.3;
+      kotakM(S, m, -3.8, 2.6, 0, 0.9, 2.4 + ek, 3.2 + ek, gelap);               // ekor melingkar
+      return;
+    }
+    if (pose === 'duduk') {
+      kotakM(S, m, -2, 1.6, 0, 3.6, -1.9, 1.9, bulu);                            // pinggul
+      kotakM(S, m, -0.6, 2.2, 2.6, 6, -1.5, 1.5, bulu);                          // dada tegak
+      kotakM(S, m, 1.2, 2, 0, 3, -1.2, -0.5, terang); kotakM(S, m, 1.2, 2, 0, 3, 0.5, 1.2, terang);   // kaki depan
+      kotakM(S, m, -0.2, 3, 5.6, 8.6, -1.6, 1.6, bulu);                          // kepala
+      kotakM(S, m, 0.2, 1, 8.6, 9.5, -1.4, -0.6, bulu); kotakM(S, m, 0.2, 1, 8.6, 9.5, 0.6, 1.4, bulu);
+      kotakM(S, m, 3, 3.1, 7, 7.7, -1.1, -0.5, mata); kotakM(S, m, 3, 3.1, 7, 7.7, 0.5, 1.1, mata);
+      kotakM(S, m, 3, 3.15, 6.3, 6.7, -0.25, 0.25, hidung);
+      const ek = Math.sin(now / 220) * 0.6;
+      kotakM(S, m, -2.6, 2.4, 0, 0.8, 1.9 + ek * 0.4, 2.7 + ek * 0.4, gelap);   // ekor melingkar di kaki
+      return;
+    }
+    // jalan: empat kaki melangkah berselang, ekor tegak bergoyang
+    const t = now / 1000, langkah = Math.sin(t * 12) * 0.6;
+    for (const [lx, lz, f] of [[1.8, -0.9, 1], [1.8, 0.9, -1], [-2.2, -0.9, -1], [-2.2, 0.9, 1]]) {
+      kotakM(S, m, lx - 0.4 + langkah * f, lx + 0.4 + langkah * f, 0, 2.2, lz - 0.4, lz + 0.4, gelap);
+    }
+    kotakM(S, m, -3, 2.8, 2, 4.8, -1.5, 1.5, bulu);                              // badan
+    kotakM(S, m, -2.8, 2.6, 4.8, 5.1, -1.2, 1.2, terang);
+    kotakM(S, m, 2.2, 5.2, 3.8, 6.8, -1.5, 1.5, bulu);                           // kepala
+    kotakM(S, m, 2.8, 3.6, 6.8, 7.7, -1.4, -0.6, bulu); kotakM(S, m, 2.8, 3.6, 6.8, 7.7, 0.6, 1.4, bulu);   // telinga
+    kotakM(S, m, 5.2, 5.3, 5.4, 6, -1.1, -0.5, mata); kotakM(S, m, 5.2, 5.3, 5.4, 6, 0.5, 1.1, mata);
+    kotakM(S, m, 5.2, 5.35, 4.6, 5, -0.25, 0.25, hidung);
+    const ekor = A3.kali(m, A3.poros(-3, 4.6, 0, A3.putarZ(0.9 + Math.sin(now / 200) * 0.25)));
+    kotakM(S, ekor, -6, -3, 4.3, 5.1, -0.4, 0.4, gelap);
+  }
+  function tikus3D(S, x, z) {
+    const m = A3.kali(A3.geser(x, 0, z), A3.skala(SKALA_ORANG)), abu = warna('#4a4238'), ekor = warna('#5c5348');
+    kotakM(S, m, 0, 5, 0.3, 2.2, -1, 1, abu);
+    kotakM(S, m, 4, 6.2, 0.5, 2.3, -0.8, 0.8, abu);
+    kotakM(S, m, 4.2, 4.9, 2.1, 2.8, -0.9, -0.3, ekor); kotakM(S, m, 4.2, 4.9, 2.1, 2.8, 0.3, 0.9, ekor);
+    kotakM(S, m, -3.4, 0, 0.6, 1, -0.2, 0.2, ekor);
+  }
+  const MODEL_EVENT = {
+    'kucing-kantor-mampir': (S, E) => {
+      const K = E.data.k;
+      if (K && K.x >= -8 && K.x <= W + 8) kucing3D(S, K.x + 3, K.y, 0, K.fase === 'tidur' ? 'tidur' : 'jalan', '#d98a3a', 0);
+    },
+    'kucing-kantor': (S, E) => {
+      const D = E.data;
+      if (D.x != null) kucing3D(S, D.x, D.y, 0, D.fase === 'duduk' ? 'duduk' : 'jalan', '#c9a06a', D.fase === 'duduk' ? Math.PI : 0);
+    },
+    // duduk di atas keyboard laptop pegawainya, menghadap dia
+    'kucing-di-atas-keyboard': (S, E) => {
+      const a = E.data.a;
+      if (a) kucing3D(S, a.x + 21, 340, MEJA_H + 1.2, 'duduk', '#c9a06a', -Math.PI / 2);
+    },
+    'kucing-tidur-di-rak-server': (S) => kucing3D(S, 392, 111, 91, 'tidur', '#c9a06a', Math.PI),
+    'kucing-tidur-di-karpet': (S) => kucing3D(S, 242, 246, 0.8, 'tidur', '#d99a4e', 0),
+    'tikus-lewat-kolong': (S, E) => { if (E.data.x != null && E.data.x <= 420) tikus3D(S, E.data.x, 116); },
+  };
+
+  const KARTU_AKSESORI = new Map();      // tamu tenar -> stiker aksesori
+  const STIKER = { lebar: 80, tinggi: 72, kaki: 64 };
+  function perbaruiStikerAksesori(t, o) {
+    const kt = kartuUntuk(KARTU_AKSESORI, t, STIKER.tinggi, STIKER.lebar);
+    kt.x0 = o.x - STIKER.lebar / 2;
+    kt.z = o.y + 4.5;
+    kt.dasar = STIKER.kaki;
+    kt.angkat = o.angkat || 0;
+    const x = Math.round(t.x), y = Math.round(t.y), s = SKALA_ORANG;
+    const d = lukisKartu(kt, () => {
+      ctx.setTransform(s, 0, 0, s, STIKER.lebar / 2 - s * x, STIKER.kaki - s * y);
+      t.aksesori(x, y, t.hadap || 'down', t);
+    });
+    if (!d) return kt;
+    const kotakNya = kotakIsi(d, STIKER.lebar, STIKER.tinggi);
+    kt.kosong = !kotakNya;
+    kt.tepi = kotakNya ? cariTepi(d, STIKER.lebar, kotakNya) : null;
+    if (!kt.kosong) unggah(kt.tek, kt.kv, false);
+    return kt;
+  }
+
   function perbaruiKartuProp(E) {
     const sortY = Math.max(DINDING_Z + 4, Math.min(H, E.def.sortY == null ? 118 : E.def.sortY));
     const kt = kartuUntuk(KARTU_PROP, E, Math.ceil(sortY) + 2);
     kt.z = sortY; kt.dasar = sortY;
-    const d = lukisKartu(kt, () => E.def.gambarProp(E, S_EVENT()));
+    const d = lukisKartu(kt, tanpaSosok(() => E.def.gambarProp(E, S_EVENT())));
     if (!d) return kt;
     const kotakNya = kotakIsi(d, W, kt.tinggi);
     kt.kosong = !kotakNya;
@@ -3188,7 +3385,7 @@ void main() { hasil = vec4(1.0); }`;
   }
   function perbaruiKartuAtas(E) {
     const kt = kartuUntuk(KARTU_ATAS, E, H);
-    const d = lukisKartu(kt, () => E.def.gambarAtas(E, S_EVENT()));
+    const d = lukisKartu(kt, tanpaSosok(() => E.def.gambarAtas(E, S_EVENT())));
     if (!d) return kt;
     const pojok = [[1, 1], [W - 2, 1], [1, H - 2], [W - 2, H - 2]].map(([x, y]) => (y * W + x) * 4);
     if (pojok.every((i) => d[i + 3] > 2)) {
@@ -3215,10 +3412,17 @@ void main() { hasil = vec4(1.0); }`;
   function perbaruiKartu() {
     for (const kt of KARTU_PROP.values()) kt.dipakai = false;
     for (const kt of KARTU_ATAS.values()) kt.dipakai = false;
+    for (const kt of KARTU_AKSESORI.values()) kt.dipakai = false;
     kartuHidup.length = 0;
     tintLayar = [];
+    catatOrangEvent();
+    for (const { o, tokoh } of ORANG_EVENT.daftar) {
+      if (!tokoh || typeof tokoh.aksesori !== 'function') continue;
+      const kt = perbaruiStikerAksesori(tokoh, o);
+      if (!kt.kosong) kartuHidup.push(kt);
+    }
     for (const E of eventHidup) {
-      if (E.def.gambarProp) {
+      if (E.def.gambarProp && !MODEL_EVENT[E.def.id]) {          // yang bermodel voxel tidak berkartu
         const kt = perbaruiKartuProp(E);
         if (!kt.kosong) kartuHidup.push(kt);
       }
@@ -3228,7 +3432,7 @@ void main() { hasil = vec4(1.0); }`;
         else if (!kt.kosong) kartuHidup.push(kt);
       }
     }
-    for (const peta of [KARTU_PROP, KARTU_ATAS]) {
+    for (const peta of [KARTU_PROP, KARTU_ATAS, KARTU_AKSESORI]) {
       for (const [E, kt] of peta) if (!kt.dipakai) { gl.deleteTexture(kt.tek); peta.delete(E); }
     }
   }
@@ -3244,23 +3448,25 @@ void main() { hasil = vec4(1.0); }`;
     for (const kt of kartuHidup) {
       const zf = kt.dinding ? DINDING_Z + 0.4 + TEBAL_KARTU : kt.z + TEBAL_KARTU / 2;
       const zb = kt.dinding ? DINDING_Z + 0.4 : kt.z - TEBAL_KARTU / 2;
-      const hb = Math.max(0, kt.dasar - kt.tinggi), ht = kt.dasar;
-      const uv = [0, 0, 1, (kt.dasar - hb) / kt.tinggi];
-      S.segi([0, hb, zf], [W, hb, zf], [W, ht, zf], [0, ht, zf], [0, 0, 1], PUTIH, uv);
-      S.segi([W, hb, zb], [0, hb, zb], [0, ht, zb], [W, ht, zb], [0, 0, -1], PUTIH, [1, 0, 0, uv[3]]);
+      const ang = kt.angkat || 0;                              // stiker tamu yang sedang memanjat
+      const hb0 = Math.max(0, kt.dasar - kt.tinggi), hb = hb0 + ang, ht = kt.dasar + ang;
+      const uv = [0, 0, 1, (kt.dasar - hb0) / kt.tinggi];
+      const xa = kt.x0, xb = kt.x0 + kt.lebar;
+      S.segi([xa, hb, zf], [xb, hb, zf], [xb, ht, zf], [xa, ht, zf], [0, 0, 1], PUTIH, uv);
+      S.segi([xb, hb, zb], [xa, hb, zb], [xa, ht, zb], [xb, ht, zb], [0, 0, -1], PUTIH, [1, 0, 0, uv[3]]);
       if (!kt.tepi) continue;
       for (const t of kt.tepi) {
         if (t.tegak) {
-          const h0 = Math.max(0, kt.dasar - t.b), h1 = kt.dasar - t.a;
-          if (h1 <= 0) continue;
-          const x = t.garis;
+          const h0 = Math.max(0, kt.dasar - t.b) + ang, h1 = kt.dasar - t.a + ang;
+          if (h1 <= ang) continue;
+          const x = kt.x0 + t.garis;
           if (t.arah > 0) Ss.segi([x, h0, zf], [x, h0, zb], [x, h1, zb], [x, h1, zf], [1, 0, 0], t.c);
           else Ss.segi([x, h0, zb], [x, h0, zf], [x, h1, zf], [x, h1, zb], [-1, 0, 0], t.c);
         } else {
-          const h = kt.dasar - t.garis;
-          if (h < 0) continue;
-          if (t.arah > 0) Ss.segi([t.a, h, zf], [t.b, h, zf], [t.b, h, zb], [t.a, h, zb], [0, 1, 0], t.c);
-          else Ss.segi([t.a, h, zb], [t.b, h, zb], [t.b, h, zf], [t.a, h, zf], [0, -1, 0], t.c);
+          const h = kt.dasar - t.garis + ang, a = kt.x0 + t.a, b = kt.x0 + t.b;
+          if (h < ang) continue;
+          if (t.arah > 0) Ss.segi([a, h, zf], [b, h, zf], [b, h, zb], [a, h, zb], [0, 1, 0], t.c);
+          else Ss.segi([a, h, zb], [b, h, zb], [b, h, zf], [a, h, zf], [0, -1, 0], t.c);
         }
       }
     }
@@ -3310,16 +3516,20 @@ void main() { hasil = vec4(1.0); }`;
     // isi perabot yang ikut keadaan RUANGAN: dibangun ulang hanya kalau berubah
     const tp = tandaPerabot();
     if (tp !== tandaPerabotTerakhir) { bangunPerabot(); tandaPerabotTerakhir = tp; }
+    const t4a = performance.now();
     hitungCahaya();
     perbaruiDebu3D(dt);
     susunDinamis(stasiun, dt);
+    const t4b = performance.now();
     susunKartu();
     susunBerkas(G.berkas);
     WADAH.berkas.isi(G.berkas);
     const t5 = performance.now();
-    // rata-rata bergerak per tahap (ms), dibaca lewat window.RUANG3D.waktu
+    // rata-rata bergerak per tahap (ms), dibaca lewat window.RUANG3D.waktu;
+    // susun dirinci: perabot (tanda + bangun ulang), dinamis, kartuSusun
     const ema = (k, v) => { T[k] = T[k] == null ? v : T[k] * 0.9 + v * 0.1; };
     ema('dinding', t1 - t0); ema('lantai', t2 - t1); ema('kulit', t3 - t2); ema('kartu', t4 - t3); ema('susun', t5 - t4);
+    ema('perabot', t4a - t4); ema('dinamis', t4b - t4a); ema('kartuSusun', t5 - t4b);
 
     // --- lintasan bayangan
     const bayangNyala = !ringanAktif();
