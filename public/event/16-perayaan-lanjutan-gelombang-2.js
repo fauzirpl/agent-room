@@ -194,7 +194,7 @@ daftarEvent(
     if (E.data.potong && baris > 0) r(cx - 1, base - baris * 3 - 2, 2, 2, '#c22b2b');
     r(cx - 8, base + 1, 16, 2, '#3e6b4f');
   },
-  sortY: 200,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (200 dulu tertimpa taplak)
   selesai(E) { for (const a of E.data.orang) a.pose = null; },
 },
 

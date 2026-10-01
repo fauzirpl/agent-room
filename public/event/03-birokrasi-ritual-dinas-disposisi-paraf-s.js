@@ -522,7 +522,7 @@ daftarEvent(
     }
     r(x - 1, y + 8, 14, 2, '#b6bcc1');
   },
-  sortY: 200,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (200 dulu tertimpa taplak)
 },
 
 /* Paling jujur di kelompok rapat: tidak memindahkan siapa pun. Dipicu justru
@@ -552,7 +552,7 @@ daftarEvent(
     r(238, 196, 10, 1, '#d9d4c2');
     r(252, 198, 2, 2, Math.sin(now / 300) > 0 ? '#e8453f' : '#5c2222');   // LED mik
   },
-  sortY: 205,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (205 dulu tertimpa taplak)
 },
 
 );

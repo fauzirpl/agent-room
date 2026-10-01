@@ -249,7 +249,7 @@ daftarEvent(
       r(x + 1 + i * 3, y - 3, 3, 3, i % 2 ? '#b5762e' : '#c98a3a');
     }
   },
-  sortY: 202,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (202 dulu tertimpa taplak)
 },
 
 /* Dus kiriman ekspedisi jatuh berurutan di depan bukaan ruang kadis, lalu

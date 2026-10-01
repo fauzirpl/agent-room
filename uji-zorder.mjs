@@ -28,7 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  muatKonteks, buatSatuOrang, buatS, buatPristine, resetRuangan,
+  muatKonteks, buatSatuOrang, buatS, buatE, buatPristine, resetRuangan,
   merah, hijau, kuning, abu, tebal,
 } from './uji-event.mjs';
 
@@ -197,6 +197,153 @@ function bandingkan(golden, sekarang) {
   return beda;
 }
 
+/* -------------------------------------------- prop event tertimpa perabot --- *
+ * Golden di atas menjaga urutan fixture pegawai, bukan isi gambar event. Yang
+ * lolos darinya: prop event yang sortY-nya jatuh SEBELUM perabot yang menutupi
+ * gambarnya. Sembilan event di atas taplak meja rapat (gorengan, nasi kotak,
+ * kue ulang tahun, toples arisan, tumpeng, ...) dulu ber-sortY 200..205 —
+ * meja rapatnya sendiri 249 — jadi taplak dilukis belakangan dan menimpa
+ * SELURUH barangnya; dua event yang paling sering di katalog tidak pernah
+ * kelihatan. Di sini tiap gambarProp dijalankan (mulai + tick, Math.random
+ * diberi benih) terhadap kanvas pencatat sel 1x1, begitu juga gambar semua
+ * PROPS; prop yang >= 90% selnya tertimpa perabot ber-sortY lebih besar =
+ * gagal. Yang memang sengaja di balik perabot dicatat di SENGAJA_TERTUTUP. */
+const SENGAJA_TERTUTUP = {
+  'tikus-lewat-kolong': 'lewat KOLONG lemari arsip: memang di balik perabot',
+};
+const AMBANG_TERTUTUP = 0.9;
+
+// Kanvas 2D yang cuma mencatat sel 1x1 mana yang diwarnai (kotak luar tiap
+// fillRect/fill/stroke/drawImage/teks, ikut transform). Sosok orang dilewati.
+function kanvasSel() {
+  const K = { sel: new Set(), alphaMin: 0.05, diam: 0 };
+  let T = [1, 0, 0, 1, 0, 0], jalur = [], alpha = 1;
+  const tumpuk = [];
+  const kali = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3],
+    a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+  const ubah = (x, y) => [T[0] * x + T[2] * y + T[4], T[1] * x + T[3] * y + T[5]];
+  const tandai = (titik) => {
+    if (K.diam || alpha < K.alphaMin || !titik.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of titik) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    x0 = Math.floor(x0); y0 = Math.floor(y0); x1 = Math.ceil(x1); y1 = Math.ceil(y1);
+    // selubung selayar (kilat, mati lampu) bukan benda yang bisa tertimpa
+    if (!Number.isFinite(x0 + x1 + y0 + y1) || x1 - x0 > 400 || y1 - y0 > 250) return;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) K.sel.add(x + ',' + y);
+  };
+  const kotak = (x, y, w, h) => tandai([ubah(x, y), ubah(x + w, y), ubah(x, y + h), ubah(x + w, y + h)]);
+  const isi = {
+    save() { tumpuk.push([T.slice(), alpha]); },
+    restore() { const s = tumpuk.pop(); if (s) [T, alpha] = s; },
+    setTransform(a, b, c, d, e, f) { T = typeof a === 'object' ? [a.a, a.b, a.c, a.d, a.e, a.f] : [a, b, c, d, e, f]; },
+    resetTransform() { T = [1, 0, 0, 1, 0, 0]; },
+    transform(a, b, c, d, e, f) { T = kali(T, [a, b, c, d, e, f]); },
+    translate(x, y) { T = kali(T, [1, 0, 0, 1, x, y]); },
+    scale(x, y) { T = kali(T, [x, 0, 0, y, 0, 0]); },
+    rotate(r) { const c = Math.cos(r), s = Math.sin(r); T = kali(T, [c, s, -s, c, 0, 0]); },
+    getTransform() { return { a: T[0], b: T[1], c: T[2], d: T[3], e: T[4], f: T[5] }; },
+    beginPath() { jalur = []; },
+    moveTo(x, y) { jalur.push(ubah(x, y)); },
+    lineTo(x, y) { jalur.push(ubah(x, y)); },
+    rect(x, y, w, h) { jalur.push(ubah(x, y), ubah(x + w, y), ubah(x, y + h), ubah(x + w, y + h)); },
+    arc(x, y, r) { jalur.push(ubah(x - r, y - r), ubah(x + r, y - r), ubah(x - r, y + r), ubah(x + r, y + r)); },
+    ellipse(x, y, rx, ry) { jalur.push(ubah(x - rx, y - ry), ubah(x + rx, y - ry), ubah(x - rx, y + ry), ubah(x + rx, y + ry)); },
+    quadraticCurveTo(a, b, x, y) { jalur.push(ubah(a, b), ubah(x, y)); },
+    bezierCurveTo(a, b, c, d, x, y) { jalur.push(ubah(a, b), ubah(c, d), ubah(x, y)); },
+    arcTo(a, b, x, y) { jalur.push(ubah(a, b), ubah(x, y)); },
+    fill() { tandai(jalur); },
+    stroke() { tandai(jalur); },
+    fillRect: kotak, strokeRect: kotak,
+    fillText(t, x, y) { kotak(x, y - 6, String(t).length * 4, 7); },
+    drawImage(img, ...a) {
+      if (a.length === 2) kotak(a[0], a[1], img.width || 1, img.height || 1);
+      else if (a.length === 4) kotak(...a);
+      else if (a.length === 8) kotak(a[4], a[5], a[6], a[7]);
+    },
+    measureText(t) { return { width: String(t).length * 4, actualBoundingBoxAscent: 6, actualBoundingBoxDescent: 2 }; },
+    createLinearGradient() { return { addColorStop() {} }; },
+    createRadialGradient() { return { addColorStop() {} }; },
+    createConicGradient() { return { addColorStop() {} }; },
+    createPattern() { return { setTransform() {} }; },
+    getImageData(x, y, w, h) { return { width: w, height: h, data: new Uint8ClampedArray(Math.max(0, (w | 0) * (h | 0) * 4)) }; },
+    getLineDash() { return []; },
+    isPointInPath() { return false; },
+  };
+  K.ctx = new Proxy(isi, {
+    get: (t, k) => (k in t ? t[k] : k === 'globalAlpha' ? alpha : () => {}),
+    set: (t, k, v) => { if (k === 'globalAlpha') alpha = Number(v); return true; },
+  });
+  K.reset = () => { K.sel.clear(); T = [1, 0, 0, 1, 0, 0]; jalur = []; alpha = 1; tumpuk.length = 0; };
+  return K;
+}
+
+function periksaTertutup() {
+  const ctx = muatKonteks();
+  const H = ctx.__jembatan__;
+  ctx.__ctxPalsu.__kendali.ketat = false;
+  const pristine = buatPristine(ctx);
+  const K = kanvasSel();
+  const drawPersonAsli = ctx.drawPerson;
+  ctx.drawPerson = (a) => { K.diam++; try { drawPersonAsli(a); } finally { K.diam--; } };
+  const acakAsli = Math.random;
+  let benih = 20260930;
+  Math.random = () => { benih = (benih * 1103515245 + 12345) % 2147483648; return benih / 2147483648; };
+  const gagal = [];
+  let diperiksa = 0;
+  try {
+    // perabot: cuma piksel pejal (alpha >= 0,5) — bayangan tembus tidak menutupi
+    K.alphaMin = 0.5;
+    const perabot = H.PROPS.map((p) => {
+      K.reset();
+      try { ctx.gambarKe(K.ctx, () => p.draw(false)); } catch { /* perabot yang butuh keadaan lain: lewati */ }
+      return { sortY: p.sortY, nama: (p.draw && p.draw.name) || '?', sel: new Set(K.sel) };
+    });
+    K.alphaMin = 0.05;
+    for (const def of H.EVENT_ACAK) {
+      if (typeof def.gambarProp !== 'function') continue;
+      resetRuangan(ctx, pristine);
+      const S = buatS(ctx, { jam: 12, hujan: 0, petir: false, ramai: true });
+      const E = buatE(def);
+      let terbanyak = new Set();
+      const cicip = () => {
+        K.reset();
+        try { ctx.gambarKe(K.ctx, () => def.gambarProp(E, S)); } catch { return; }
+        if (K.sel.size > terbanyak.size) terbanyak = new Set(K.sel);
+      };
+      try {
+        def.mulai && def.mulai(E, S);
+        cicip();
+        const dt = Math.min(1, Math.max(0.1, (def.durasi || 10) / 24));
+        for (let n = 1; E.sisa > 0 && n <= 400; n++) {
+          E.umur += dt; E.sisa -= dt;
+          def.tick && def.tick(E, dt, S);
+          if (n % 2 === 0) cicip();
+        }
+        cicip();
+        def.selesai && def.selesai(E, S);
+      } catch { /* event yang butuh keadaan lain: sel yang sempat tercatat tetap dinilai */ }
+      for (const a of E.aktor) { a.eventKerja = null; a.betah = a.betahAsli || false; }
+      if (terbanyak.size < 6) continue;          // titik satu-dua piksel (lalat, nyamuk): tidak bermakna
+      diperiksa++;
+      const sy = def.sortY == null ? 118 : def.sortY;
+      const oleh = new Map();
+      let tertutup = 0;
+      for (const s of terbanyak) {
+        const p = perabot.find((q) => q.sortY > sy && q.sel.has(s));
+        if (p) { tertutup++; oleh.set(p.nama, (oleh.get(p.nama) || 0) + 1); }
+      }
+      const porsi = tertutup / terbanyak.size;
+      if (porsi >= AMBANG_TERTUTUP && !SENGAJA_TERTUTUP[def.id]) {
+        const siapa = [...oleh.entries()].sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(', ');
+        gagal.push(`${def.id}: sortY ${sy}, ${Math.round(porsi * 100)}% dari ${terbanyak.size} piksel tertimpa ${siapa}`);
+      }
+    }
+  } finally {
+    Math.random = acakAsli;
+  }
+  return { gagal, diperiksa };
+}
+
 /* ----------------------------------------------------------------- CLI --- */
 function main() {
   const argv = process.argv.slice(2);
@@ -239,13 +386,21 @@ function main() {
   for (const b of beda.filter((x) => !KASUS.some((k) => k.id === x.id))) {
     console.log(merah('  ✗ ' + b.id) + '\n' + merah('      ' + b.pesan));
   }
+  const tutup = periksaTertutup();
+  console.log((tutup.gagal.length ? merah('  ✗ ') : hijau('  ✓ ')) + 'prop-event-tidak-tertimpa-perabot'.padEnd(44)
+    + abu(`${tutup.diperiksa} gambarProp: < ${AMBANG_TERTUTUP * 100}% pikselnya tertimpa perabot ber-sortY lebih besar`));
+  for (const g of tutup.gagal) console.log(merah('      ' + g));
   console.log();
   if (beda.length) {
     console.log(merah(`${beda.length} kasus z-order berubah dari golden.`)
       + abu(' Kalau memang disengaja: node uji-zorder.mjs --perbarui'));
-    process.exit(1);
   }
-  console.log(hijau(`${KASUS.length} kasus z-order sama dengan golden.`));
+  if (tutup.gagal.length) {
+    console.log(merah(`${tutup.gagal.length} prop event tidak kelihatan: perabot yang dilukis sesudahnya menimpanya.`)
+      + abu(' Naikkan sortY-nya melewati perabot itu, atau catat di SENGAJA_TERTUTUP kalau memang disengaja.'));
+  }
+  if (beda.length || tutup.gagal.length) process.exit(1);
+  console.log(hijau(`${KASUS.length} kasus z-order sama dengan golden; tidak ada prop event yang tertimpa perabot.`));
 }
 
 main();

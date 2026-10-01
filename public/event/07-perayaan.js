@@ -32,7 +32,7 @@ daftarEvent(
       r(x + 7, y - 4, 1, 1, Math.sin(now / 90) > 0 ? '#ffd06a' : '#ffb454');
     }
   },
-  sortY: 202,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (202 dulu tertimpa taplak)
   selesai(E) { for (const a of E.aktor) a.pose = null; },
 },
 
@@ -66,7 +66,7 @@ daftarEvent(
     r(x, y, 10, 1, '#eef4fa');
     if (!E.data.keluar) for (let i = 0; i < 4; i++) r(x + 2 + (i % 3) * 2, y + 5 + (i % 2) * 3, 1, 3, P.paper);
   },
-  sortY: 202,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (202 dulu tertimpa taplak)
 },
 
 {
@@ -99,7 +99,7 @@ daftarEvent(
       r(x + 2 + i * 3, y + 2, 3, 3, ['#c9a03a', '#3e6b4f', '#b03030', '#3565b0', '#d2a8ff'][i]);
     }
   },
-  sortY: 202,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (202 dulu tertimpa taplak)
 },
 
 /* Paling murah dari kelompok perayaan karena JABATAN sudah punya pal.pattern

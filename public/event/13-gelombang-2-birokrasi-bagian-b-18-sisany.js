@@ -214,7 +214,7 @@ daftarEvent(
     ctx.globalAlpha = 1;
   },
   gambarProp() { r(196, 20, 10, 6, '#8b9098'); r(196, 20, 10, 1, '#aeb4ba'); },
-  sortY: 26,
+  sortY: 117,   // toa di dinding: sesudah jendela (116), 26 dulu tertimpa ceruk gordennya
 },
 
 {

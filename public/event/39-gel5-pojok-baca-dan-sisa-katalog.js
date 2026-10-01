@@ -335,7 +335,7 @@ daftarEvent(
     r(266, 192, 4, 5, '#f2f0e6');
     r(266, 192, 4, 1, '#c9b07a');
   },
-  sortY: 202,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (202 dulu tertimpa taplak)
   selesai(E) { if (E.data.a) { E.data.a.bawa = null; E.data.a.bawaSampai = 0; } },
 },
 

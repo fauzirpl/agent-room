@@ -74,6 +74,14 @@ cooldown per event. Bentuk satu definisi:
 }
 ```
 
+`sortY` adalah garis kaki prop itu dalam urutan gambar ruangan: perabot dan
+pegawai yang garis kakinya lebih besar dilukis sesudahnya dan menimpanya.
+Barang yang **ditaruh di atas perabot** ikut garis kaki perabotnya, bukan
+letak gambarnya — isi taplak meja rapat (meja rapatnya sendiri 249) memakai
+250. Sembilan event pernah memakai 200..205 dan barangnya tidak pernah
+kelihatan; `uji-zorder.mjs` sekarang menggagalkan prop yang ≥ 90% pikselnya
+tertimpa perabot (pengecualian yang disengaja dicatat di `SENGAJA_TERTUTUP`).
+
 Event mengubah ruangan lewat dua objek. **`MOD`** dikembalikan ke nilai bawaan
 tiap frame, jadi event cukup memasangnya di `tick()` tanpa perlu membereskannya
 sendiri — intensitas neon, kecepatan kipas, layar laptop, kabut di kaca, sorot

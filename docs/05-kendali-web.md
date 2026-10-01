@@ -601,7 +601,11 @@ Tiga harness Node nol-dependency, semuanya dijalankan `npm test` dan CI:
   sisi dekat, di depan/belakang meja kerja, prop event ber-`sortY`) dan
   membandingkan **urutan** gambar prop/pegawai dengan `uji-zorder.golden.json`.
   Golden-nya urutan id, bukan angka y: geser `sortY` boleh, asal urutannya
-  memang disengaja (`--perbarui`).
+  memang disengaja (`--perbarui`). Sesudah itu tiap `gambarProp` di registri
+  dijalankan (mulai + tick, `Math.random` berbenih) terhadap kanvas pencatat
+  piksel, begitu juga gambar semua perabot: prop yang ≥ 90% pikselnya tertimpa
+  perabot ber-`sortY` lebih besar gagal — yang memang sengaja di balik perabot
+  dicatat di `SENGAJA_TERTUTUP`.
 - **`uji-katalog.mjs`** papan skor `event-acak.json` vs `daftarEvent()`:
   katalog, terdaftar, terimplementasi, belum (per kategori), dan id di luar
   katalog. Selalu exit 0 (`--gerbang` untuk menggagalkan). Angka jumlah event

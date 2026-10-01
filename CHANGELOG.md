@@ -8,6 +8,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: barang event jadi voxel.** Isi taplak meja rapat — gorengan
+  di nampan seng, nasi kotak bertutup terbuka, kopi, kue ulang tahun berlilin,
+  toples arisan yang dikocok, kardus oleh-oleh, tumpeng yang menyusut tiap
+  dipotong, laptop rapat daring, takjil buka puasa — kini benda sungguhan di
+  atas meja. Teknisi AC memanjat tangga lipat yang merapat ke tembok sampai
+  kepalanya tepat di bawah AC (embernya digeser dulu), flipchart berkaki tiga,
+  kurir menjinjing kardusnya, OB mengepel dengan gagang pel dan papan "awas
+  licin"; kerucut licin, payung lipat, laba-laba yang turun dari plafon, dan
+  toa di atas gorden ikut jadi voxel, dan kursi kosong yang "berputar sendiri"
+  benar-benar berputar.
 - **Tampilan 3D: tamu event dan kucing kantor jadi voxel.** Kurir, tamu salah
   alamat, pegawai baru yang lapor diri, sampai tamu tenar kini berdiri sebagai
   boneka voxel di tempatnya sendiri, segaya pegawai — bukan lagi guntingan
@@ -332,6 +342,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **Makanan di meja rapat kelihatan lagi.** Sembilan event menaruh barangnya
+  di atas taplak dengan `sortY` 200..205, padahal meja rapat sendiri 249 —
+  taplaknya dilukis belakangan dan menimpa seluruh barang itu. Gorengan dan
+  nasi kotak makan siang, dua event yang paling sering muncul, tidak pernah
+  kelihatan; kue ulang tahun, toples arisan, oleh-oleh, kopi rapat molor,
+  tumpeng, berkas rapat pleno, dan kaki laptop rapat daring ikut tertimbun.
+  Sekarang `sortY`-nya 250, seperti buka puasa dan nota dinas yang sejak awal
+  benar. Toa pengumuman yang tertimpa ceruk gorden jendela ikut dipindah (117).
+  `uji-zorder.mjs` kini menggagalkan prop event yang ≥ 90% pikselnya tertimpa
+  perabot yang dilukis sesudahnya.
 - **Papan nomor antrean kelihatan lagi.** Papannya digambar di dalam kotak
   jendela, dan jendela digambar sesudahnya, jadi yang terlihat cuma kaca dan
   gorden. Sekarang di dinding polos antara meja printer dan meja stempel

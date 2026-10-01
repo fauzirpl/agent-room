@@ -2195,6 +2195,28 @@ membangun boneka voxel dari `E.data` yang sama — kucing dengan tiga pose
 (kaki melangkah dan ekor tegak bergoyang, duduk tegak berekor melingkar,
 meringkuk dengan napas naik-turun), warna bulunya ikut lukisan tiap event.
 
+**Barang event bermodel.** Barang yang paling sering muncul di gambar event
+ikut dibangun voxel dari `E.data`-nya lewat `MODEL_EVENT` yang sama. Isi taplak
+meja rapat — nampan gorengan, nasi kotak bertutup terbuka, gelas kopi, kue
+ulang tahun berlilin, toples arisan yang dikocok, kardus oleh-oleh, tumpeng
+yang menyusut tiap dipotong, laptop rapat daring, takjil buka puasa, toples kue
+lebaran, amplop nota dinas, berkas rapat pleno — berdiri di permukaan meja 3D,
+di pita kosong antara mik dan gelas yang statis. Tangga lipat teknisi AC
+merapat ke tembok di bawah unit AC: bonekanya memanjat anak tangga sampai
+kepalanya tepat di bawah AC (lengan terangkat, obeng di tangan), ember
+penadahnya digeser selama tangga berdiri, dan tangganya dipanggul terlipat waktu
+datang dan pulang. Flipchart berkaki tiga, tapi kertasnya tetap kartu yang
+dipotong ke bidang kertas (`klip`), jadi coretan bagannya tetap hidup. Kurir
+menjinjing kardusnya (bawaan boneka) dan tablet tanda tangan; OB menyeret
+gagang pel yang menyapu lantai di depan kakinya dan memasang papan "awas
+licin"; kerucut licin dan payung lipat ada yang ditaruh dan ada yang dijinjing;
+laba-laba turun dari plafon di atas meja rapat; ember kedua menadah atap bocor;
+toa terpasang di atas lambrequin gorden. Kursi kosong yang "berputar sendiri" —
+di 2D cuma sandaran yang menyempit-melebar — di sini benar-benar berputar dua
+kali mengitari tiangnya. Barang di atas taplak yang belum bermodel tidak jatuh
+ke lantai: kartu event ber-`sortY` 249..255 yang isinya habis di dalam bidang
+meja berdiri di atas meja 3D (`zRapat()`).
+
 **Ruang kadis sungguhan.** Di 2D ruang kadis adalah bukaan berbingkai — lukisan
 ruangan mini yang diklip ke kotak 72x46 di dinding. Di 3D dindingnya benar-benar
 **dilubangi** di bingkai itu (kusen jati bertebal, ambang yang menjorok ke ruang
@@ -2391,10 +2413,10 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 
 - rim light dan vignette tidak digambar — cahaya 3D-nya sudah mengerjakan tugas
   yang sama;
-- gambar event selain orang dan hewan bermodel tetap kartu bertebal satu
-  lapis: papan yang miring di 2D tetap papan pipih yang miring, dan properti
-  yang digambar di samping tamu (tali pemanjat, misalnya) tetap berdiri di
-  kedalaman `sortY` event, bukan menempel di bonekanya;
+- gambar event selain orang, hewan, dan barang bermodel tetap kartu bertebal
+  satu lapis: papan yang miring di 2D tetap papan pipih yang miring, dan
+  properti yang digambar di samping tamu (tali pemanjat, misalnya) tetap
+  berdiri di kedalaman `sortY` event, bukan menempel di bonekanya;
 - ruangan di balik tembok (kadis, WC, gudang, lorong pintu kadis) cuma
   kelihatan lewat bukaannya atau dari kamera yang didongakkan tinggi: tembok
   belakang tetap setinggi aslinya, tidak ikut dipotong rendah seperti dinding

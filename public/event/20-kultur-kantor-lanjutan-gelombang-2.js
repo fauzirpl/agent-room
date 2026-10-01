@@ -709,7 +709,7 @@ daftarEvent(
       r(x + 2, y + 3, 2, 2, '#5f8a42'); // lalapan/sambal
     }
   },
-  sortY: 202,
+  sortY: 250,   // di atas taplak: meja rapat sendiri sortY 249 (202 dulu tertimpa taplak)
 },
 
 {
