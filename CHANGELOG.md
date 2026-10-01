@@ -8,6 +8,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: perabot yang tadinya pipih jadi voxel.** Lemari arsip kini
+  rak terbuka sungguhan berisi ordner berlabel dan bundel bertali (bundel yang
+  dipinjam bolong dari raknya, yang kepenuhan menyembul dan bertumpuk dus di
+  depannya). Tanaman pot dan palem berdaun voxel — tanamannya bisa layu.
+  Pernak-pernik tujuh meja kerja dibangun per tema, lengkap dengan tumpukan
+  berkas harian dan dus di kolong meja. Meja stempel punya tumpukan berkas, map
+  disposisi, cap basah yang mengering, dan bak tinta; fotokopi menyalakan
+  lampu panel dan sinar pindai waktu dipakai. Rak brosur, sanitizer, buku tamu
+  yang tintanya bertambah, standee VISI, dan kursi lipat pos satpam ikut
+  dibangun; X-banner benar-benar miring lalu rebah saat event zona integritas.
 - **Tampilan 3D: pintu WC dan gudang sungguhan.** Tembok belakang kini juga
   berlubang di kedua pintu itu, dan daunnya pintu berengsel yang mengayun ke
   dalam setiap ada yang masuk atau keluar — tetap bergambar plang pria·WC·

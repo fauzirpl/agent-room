@@ -2104,13 +2104,13 @@ kanvas tekstur berskala 3 texel per piksel dunia:
   berkas cahaya jendela, ceceran kusut, genangan. Karpet merah, karpet baca,
   meja lesehan, dan bantal duduk "ditimbulkan" — kotak rendah yang tutupnya
   memakai lukisan lantai di tapaknya sendiri;
-- **kulit perabot** = muka depan lemari arsip, filing kabinet, rak server
-  (LED-nya tetap berkedip), fotokopi, lemari piala, akuarium (arwananya tetap
+- **kulit perabot** = muka depan filing kabinet, rak server (LED-nya tetap
+  berkedip), badan fotokopi, lemari piala, akuarium (arwananya tetap
   berenang), dan seterusnya, masing-masing dilukis fungsi gambarnya sendiri di
   dalam klip kotaknya. Warna samping & tutup kotaknya dicicip dari tepi kulit
-  itu sendiri: lemari kayu dapat samping kayu tanpa tabel warna kedua. Benda di
-  ATAS meja (tumpukan berkas meja stempel, pernak-pernik tiap meja kerja) jadi
-  kartu tegak yang berdiri di papan mejanya.
+  itu sendiri: lemari kayu dapat samping kayu tanpa tabel warna kedua. Yang
+  bukan "muka sebuah kotak" — rak terbuka, tanaman, barang di atas meja — tidak
+  dilukis, tapi dibangun (lihat **Perabot voxel** di bawah).
 
 Dinding dilukis ulang 20 kali sedetik, lantai 7 kali, tiap kulit menurut
 lajunya sendiri (rak server 12, akuarium 15, lemari piala sekali sedetik).
@@ -2224,6 +2224,54 @@ pintunya. Di gudang dia tidak memudar: kelihatan meraih rak di dalam
 (bergantian dengan diam), lalu keluar membawa kardus yang di simulasi baru
 diberikan sesudah dia sampai di ambang. Boneka, balon, klik, dan partikelnya
 ikut lewat `posisiOrang()` yang sama dengan tamu kadis.
+
+**Perabot voxel.** Benda yang di putaran awal masih kartu tegak (lukisan 2D
+yang berdiri, atau dua kartu bersilang untuk tanaman) sekarang dibangun dari
+kotak, mengikuti gambar 2D-nya piksel demi piksel — tiap `r(x, y, w, h)` jadi
+kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
+
+- **Lemari arsip** jadi rak terbuka sungguhan: rangka jati, empat papan, ordner
+  berdiri berlabel dan berlubang ring di baris 0 & 2, tumpukan map dan bundel
+  bertali di baris 1 & 3. Keadaannya ikut `RUANGAN`: bundel yang dipinjam
+  bidang lain (`boksHilang`) bolong dari raknya, `arsipPenuh` memunculkan map
+  yang menyembul miring dan dus tambahan di depan lemari (sesekali
+  menghamburkan debu), dan di atasnya dus arsip, map kliping mingguan, piala
+  voli, serta stiker inventaris.
+- **Tanaman pot** dari kubus yang mengecil ke ujung, persis `leafP` 2D, tapi
+  menyebar ke segala arah; waktu layu hijaunya luntur dan ujungnya menunduk.
+  **Palem** ruang tunggu (dan kembarannya di ruang kadis) berpelepah melengkung
+  dengan anak daun berpasangan.
+- **Meja kerja**: pernak-pernik tujuh tema (papan nama & map rapi, kertas
+  longsor, figure & manga, lightstick yang berpendar, pot kecil, termos &
+  toples & foto keluarga, kardus BMN & lembar BAST), lalu kusut harian di lajur
+  belakang meja dengan ambang `gambarKusutMeja()` yang sama — lapis berkas, map
+  disandarkan, lembar yang nyeruak, dan **dus di kolong meja** (yang di 3D
+  sebelumnya hilang karena jatuh di luar kartu). Tema agustusan menancapkan
+  bendera kecil bertiang lidi di tiap meja.
+- **Meja stempel**: tumpukan berkas (`tumpukanStempel`, rapi/zig-zag), map
+  disposisi pink dan antaran caraka, goresan pulpen, cap basah yang merah
+  segar lalu mengering, noda tinta di papan meja, bantalan yang memucat waktu kering,
+  bak & dua stempel kayu, rak surat dua susun.
+- **Fotokopi**: tutup kaca, pengumpan dokumen dengan kertas aslinya, panel yang
+  lampunya menyala dan sinar pindai yang menyapu selama dipakai, lembar hasil
+  di baki, rim cadangan dari `rimKertas`.
+- **Rak brosur, sanitizer injak, buku tamu** (baris tintanya menumpuk, bolpoin
+  bertali muncul sesudah tamu pertama), **standee VISI** (papan setebal jari,
+  rangka silang, bohlam berpendar), dan **kursi lipat pos satpam** yang di 3D
+  sebelumnya belum ada.
+- **X-banner** benar-benar miring lalu rebah telentang mengikuti
+  `RUANGAN.xbanner.sudut`, berputar pada tepi belakang kakinya; kainnya selalu
+  lukisan banner tegak (dilukis dengan sudut ditahan 0), jadi yang memendek
+  adalah sudut pandangnya, bukan gambarnya.
+
+Isi yang ikut keadaan `RUANGAN` masuk satu grup sendiri yang dibangun ulang
+**hanya waktu `tandaPerabot()` berubah** (kusut dihitung per lapis, layu
+dibulatkan ke 1/20), jadi tidak menambah kerja per frame; yang memang bergerak
+— X-banner, lampu fotokopi, cap basah — disusun tiap frame. Stasiun yang
+sedang dipakai mendapat pendar kuning sayup di tepi papan rak arsip atau bibir
+meja stempel, pengganti `glow()` 2D yang dulu terlukis di kartunya. Enam belas
+kulit yang tidak terpakai lagi (termasuk tujuh kartu meja kerja) ikut dibuang,
+jadi melukis kulit malah lebih ringan dari sebelumnya.
 
 **Pajangan dinding timbul.** Papan nama dinas, kubah CCTV, bagan struktur
 organisasi, monitor CRT, AC, plakat nilai, foto pejabat, Garuda, plang KEPALA
