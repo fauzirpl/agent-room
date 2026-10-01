@@ -8,6 +8,17 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D, bagian yang dulu masih datar.** Ruang kadis kini ruangan
+  sungguhan di balik dinding: dindingnya dilubangi di bingkai bukaan (kusen jati
+  bertebal, ambang menjorok), dan di baliknya ada kantor kadis lengkap — foto
+  Presiden & Wakil Presiden mengapit Garuda, lemari piala, meja jati berbendera
+  meja, kadis duduk di kursinya, lampu gantung sendiri — dengan gorden vitrase
+  3D yang tersibak seperti di 2D; tamunya berdiri melapor di depan meja. Gambar
+  event jadi kartu bertebal (siluetnya dipindai jadi sprite voxel, kucing
+  kantor dari samping tetap punya badan). Pajangan dinding timbul: papan nama,
+  foto pejabat, Garuda, AC, CRT, papan-papan, dan jam dinding berupa cakram
+  yang jarumnya tetap berjalan. Debu melayang di berkas cahaya jendela dan di
+  bawah neon, dengan berkas jendela sebagai selubung cahaya tipis.
 - **Tampilan 3D: maket kantor.** Ruangan yang sama kini bisa dilihat sebagai
   maket tiga dimensi yang diputar dengan tetikus (seret memutar, klik kanan
   menggeser, roda mendekat, klik dua kali kembali; di layar sentuh satu jari

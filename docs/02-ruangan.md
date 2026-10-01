@@ -2150,17 +2150,65 @@ Pegawai standby (0,55) dan yang memudar di ambang pintu digambar **tembus
 pandang sungguhan**, dua lintasan: kedalamannya dulu, lalu warnanya dicampur
 di permukaan terdepan saja — sosoknya tetap utuh, bukan tumpukan kotak bening.
 
-**Event jadi kartu.** Tiap event hidup yang punya `gambarProp` dilukis ke
-kanvasnya sendiri dan dipasang sebagai **kartu tegak di kedalaman `sortY`-nya**
-— urutan depth-sort 2D terjaga di ruang 3D: kucing yang tidur di karpet tetap
-tertutup pegawai yang lewat di depannya. `gambarLantai` dan `gambarDinding`
+**Event jadi kartu bertebal.** Tiap event hidup yang punya `gambarProp`
+dilukis ke kanvasnya sendiri (satu texel per piksel dunia — gambar event memang
+pixel-art) dan dipasang sebagai **kartu tegak di kedalaman `sortY`-nya**:
+urutan depth-sort 2D terjaga di ruang 3D, kucing yang tidur di karpet tetap
+tertutup pegawai yang lewat di depannya. Kartunya tidak setipis kertas:
+siluetnya dipindai, dan tiap tepi antara piksel isi dan piksel kosong jadi sisi
+setebal 3 berwarna piksel tepinya — kucing jadi sprite voxel yang dari samping
+tetap punya badan. Pemindaiannya dibatasi kotak isi gambar (dibaca lewat
+tampilan 32-bit) dan paling sering 20 kali sedetik; gambar yang terlalu
+berisik (>3.000 ruas tepi) tetap datar. `gambarLantai` dan `gambarDinding`
 sudah ikut masuk tekstur lantai & dinding. `gambarAtas` dipilah dari pikselnya
 sendiri: yang keempat pojoknya terisi (kilat foto bersama, mati lampu) jadi
-selubung seluruh layar; sisanya jadi kartu di kedalaman aktor pertama event
-itu, atau menempel di dinding kalau seluruh gambarnya jatuh di bidang dinding.
-Partikel (tinta, glyph, uap, tetes AC) dicap kedalamannya sekali: milik
-pegawai terdekat, selebihnya di lantai atau dinding; tetes AC jatuh lurus ke
-ember yang di 3D berdiri tepat di bawah AC-nya.
+selubung seluruh layar; sisanya jadi kartu bertebal di kedalaman aktor pertama
+event itu, atau menonjol dari dinding kalau seluruh gambarnya jatuh di bidang
+dinding. Partikel (tinta, glyph, uap, tetes AC) dicap tempatnya sekali: milik
+pegawai terdekat, milik tamu ruang kadis, di lantai, atau di dinding; tetes AC
+jatuh lurus ke ember yang di 3D berdiri tepat di bawah AC-nya.
+
+**Ruang kadis sungguhan.** Di 2D ruang kadis adalah bukaan berbingkai — lukisan
+ruangan mini yang diklip ke kotak 72x46 di dinding. Di 3D dindingnya benar-benar
+**dilubangi** di bingkai itu (kusen jati bertebal, ambang yang menjorok ke ruang
+utama), dan di baliknya berdiri ruangan 128x64 yang terbuka ke atas seperti
+seluruh maket: foto Presiden & Wakil Presiden mengapit Garuda, lemari piala,
+pintu dalam, karpet merah tua, palem, meja jati berlis kuningan dengan map
+disposisi, telepon, dan sepasang bendera meja, dan kadisnya duduk di kursi
+bersandaran tinggi. Ruangan itu ada di bayangan tembok bersama, jadi punya
+lampu gantungnya sendiri — sumber cahaya keempat di shader, yang juga merembes
+sedikit lewat jendela ke ruang utama. Gordennya vitrase 3D yang tersibak
+mengikuti `RUANG_KADIS.t` persis seperti `drawGordenSisip()`.
+
+Koordinat bukaan tetap bahasa simulasinya: tamu berdiri di `KADIS_TITIK`,
+kadis di (329, 65). x dipakai apa adanya — tamu dan meja jati tetap tepat di
+balik jendelanya — sedangkan y bukaan (garis lantai `SISIP_LANTAI` sampai ambang
+bawah) direntang jadi kedalaman ruangan oleh `kadisZ()`. Satu pintu,
+`posisiOrang()`, memetakan tamu untuk boneka, balon ucap, kartu, klik (cuma
+lewat jendela atau dari atas tembok), dan partikelnya. Yang beda dari 2D: tamu
+**berdiri melapor**, tidak duduk — adatnya memang begitu, dan kepala orang
+duduk (±33) tenggelam di bawah ambang jendela (35), jadi dari ruang utama dia
+tidak akan kelihatan. Setelan bukaan `mati` tetap berarti nol jejak: lubangnya
+disumbat potongan lukisan dinding yang sama dan ruangannya tidak digambar.
+
+**Pajangan dinding timbul.** Papan nama dinas, kubah CCTV, bagan struktur
+organisasi, monitor CRT, AC, plakat nilai, foto pejabat, Garuda, plang KEPALA
+DINAS, papan kinerja, papan pengumuman, kotak P3K, poster BerAKHLAK, papan
+nomor antrean, dan panel MCB menonjol dari tembok; jam dinding dan rambu
+dilarang merokok jadi cakram. Muka depannya tetap tekstur dinding hidup di
+kotak yang sama — jarum jamnya tetap berdetak dan LED AC tetap berkedip di muka
+yang menonjol itu — sedangkan warna sisinya dicicip dari tepi lukisannya
+sendiri. Bayangan tempel yang sudah dilukis `bayangDinding()` jatuh pas di
+belakangnya. Karena relief mencicip lukisan dinding, dinding dilukis sekali
+SEBELUM geometri statis dibangun.
+
+**Debu & berkas cahaya.** Pasangan 3D `drawDebu()`: debu yang cuma kelihatan
+waktu ditembus cahaya, hidup di volumenya sendiri — prisma berkas jendela (dari
+kaca turun ke petak sinar yang dilukis `drawFloor`) waktu siang, kerucut di
+bawah tiap neon waktu malam. Kapan menyala dan seberapa kuat diambil dari
+`debuSumber()` yang sama, jadi debu 3D lahir & padam bersama debu 2D-nya.
+Berkas jendelanya sendiri digambar sebagai selubung cahaya aditif tipis yang
+memudar ke lantai dan meredup waktu hujan. Mode ringan mematikan keduanya.
 
 **Cahaya ikut jam.** `ambien()` yang sama dengan 2D diterjemahkan jadi cahaya,
 bukan selubung warna: langit & tanah (cahaya belahan), satu cahaya kunci dari
@@ -2175,16 +2223,21 @@ klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
 sementara sudut putar tetap milik orang yang memegang tetikus. Dinding samping
 yang membelakangi kamera dipotong rendah, seperti maket arsitek.
 
-Yang **belum** sama dengan 2D, sengaja dicatat supaya tidak dikira hilang:
+Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 
-- ruang kadis masih lukisan di bukaan dinding, belum ruangan 3D di baliknya;
-- kartu event tetap gambar datar — dari samping dia setipis kertas;
-- debu di berkas cahaya, rim light, dan vignette tidak digambar: cahaya 3D-nya
-  sudah mengerjakan tugas yang sama.
+- rim light dan vignette tidak digambar — cahaya 3D-nya sudah mengerjakan tugas
+  yang sama;
+- gambar event bertebal, tapi tetap satu lapis: kucing voxel dari samping
+  terbaca sebagai kucing, papan yang miring di 2D tetap papan pipih yang miring;
+- pintu WC dan gudang masih lukisan di dinding; yang masuk ke sana tetap
+  memudar di ambangnya seperti di 2D, bukan berjalan ke ruangan di baliknya.
 
 Waktu per tahap (lukis dinding, lantai, kulit, kartu, susun mesh) bisa dilihat
-dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (120 frame, `SS` 2),
-biaya CPU satu frame setara dengan jalur 2D: median 1,3 ms untuk 3D lawan
-1,2 ms untuk 2D. Yang dibayar 3D di luar itu kerja GPU — peta bayangan dan
-satu lintasan utama — yang tidak ikut terukur di angka tersebut.
+dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (150 frame, `SS` 2,
+ruang kadis terbuka berisi tamu, satu event bergambar hidup, debu menyala):
+median 3,4 ms per frame untuk 3D lawan 2,3 ms untuk 2D di keadaan yang sama —
+yang termahal menyusun mesh dinamis (±1,1 ms; kotak ditulis langsung dari satu
+penyangga sudut, tanpa alokasi per titik) dan memindai kartu event (±0,8 ms).
+Kerja GPU — peta bayangan dan satu lintasan utama — tidak ikut terukur di
+angka tersebut.
 

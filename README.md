@@ -52,7 +52,8 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 - Setiap tool call Claude Code jadi gerakan di ruangan, bukan cuma baris log
 - **Maket 3D**: kantornya bisa diputar dan dilihat dari sudut mana pun —
   perabot yang benar-benar berdiri, pegawai voxel yang duduk di kursi rapat
-  dan mengetik di mejanya, bayangan dan lampu neon yang ikut jam. WebGL2
+  dan mengetik di mejanya, ruang kadis sungguhan di balik jendela dinding,
+  debu di berkas cahaya, bayangan dan lampu neon yang ikut jam. WebGL2
   ditulis sendiri, tanpa pustaka; dinding, lantai, dan 360 event-nya tetap
   dilukis kode pixel-art yang sama. Tombol **3D / 2D** di bilah bawah, atau
   `?tampilan=2d`
@@ -172,7 +173,8 @@ removes it, `--coba` only shows what would be run).
 - Every Claude Code tool call becomes motion in the room, not just a log line
 - **A 3D model of the office**: orbit around it and look from any angle — real
   standing furniture, voxel civil servants who sit at the meeting table and
-  type at their desks, shadows and neon lights that follow the clock.
+  type at their desks, the head of office's room behind a real window in the
+  wall, dust in the light beams, shadows and neon lights that follow the clock.
   Hand-written WebGL2, no libraries; walls, floor, and all 360 events are still
   painted by the same pixel-art code. Toggle with the **3D / 2D** button in the
   bottom bar, or `?tampilan=2d`
