@@ -8,6 +8,14 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: dekor tema, printer yang bisa macet, sisa yang masih pipih.**
+  Spanduk 17 Agustus, HUT KORPRI, dan tahun anggaran jadi kain bergelombang
+  bertali di atas jendela; umbul-umbul merah putih membentang sepanjang tembok;
+  papan imsakiyah Ramadan menonjol dari dinding. Printer di bawah jendela kini
+  benda sungguhan yang bisa macet — tutupnya terangkat, kertasnya tersangkut,
+  lampunya berkedip merah. Sandal jepit di depan WC, koran-buku-gelas di meja
+  lesehan, dan papan PANTRI ikut dibangun, jadi tidak ada lagi perabot yang
+  berupa kartu tipis.
 - **Tampilan 3D: pintu kadis sungguhan, ceceran lantai.** Pintu dua daun ruang
   kepala dinas kini berlubang di dalam kusen jatinya: daun kanannya mengayun ke
   dalam selama ada yang mengurus delegasi di sana, memperlihatkan lorong

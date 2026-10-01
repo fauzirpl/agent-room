@@ -2302,6 +2302,20 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
   masing-masing (lukisannya memudar masuk dulu, bendanya menyusul), plus
   barang tercecer dari event (`propLantai`: map merah, map disposisi, daun,
   kertas bekas). Tiap benda menutup tepat cetakan lukisannya di lantai.
+- **Printer** di bawah jendela: badan krem, kertas di baki belakang, baki
+  keluaran, stapler kosong. `MOD.printerMacet` membuatnya macet sungguhan —
+  tutupnya terangkat, badannya memendek, selembar kertas tersangkut bergetar,
+  lampunya berkedip merah; internet putus = merah tetap.
+- **Sandal jepit** di depan WC (hilang selagi WC dipakai), **bacaan lesehan**
+  (koran terbuka, dua buku bertumpuk, segelas teh; dua buku di karpet), dan
+  **papan PANTRI** yang kini bertebal di atas sekatnya — benda tegak terakhir
+  yang tadinya kartu.
+- **Dekor tema kalender** (`RUANGAN.tema`): spanduk di atas jendela jadi kain
+  bergelombang bertali dan berpaku (agustusan, HUT KORPRI, tahun anggaran) —
+  mukanya tetap lukisan spanduk yang sama, termasuk angka tahunnya;
+  umbul-umbul merah putih bertali sepanjang tembok, menempel rapat supaya
+  perabot tinggi menutupinya persis seperti di 2D; papan imsakiyah Ramadan
+  timbul. Uji: `?tema=agustusan|korpri|tahun-anggaran|ramadan`.
 
 Isi yang ikut keadaan `RUANGAN` masuk satu grup sendiri yang dibangun ulang
 **hanya waktu `tandaPerabot()` berubah** (kusut dihitung per lapis, layu
@@ -2311,9 +2325,10 @@ tiap frame. Air akuarium dan pintu kaca lemari piala digambar tembus pandang di
 lintasan pudar, tapi **tidak ikut peta bayangan**: kaca yang membayangi isinya
 sendiri menggelapkan piala di baliknya. Stasiun yang sedang dipakai mendapat
 pendar kuning sayup di tepi papan rak arsip atau bibir meja stempel, pengganti
-`glow()` 2D yang dulu terlukis di kartunya. Dua puluh kulit yang tidak
+`glow()` 2D yang dulu terlukis di kartunya. Dua puluh satu kulit yang tidak
 terpakai lagi (termasuk tujuh kartu meja kerja) ikut dibuang, jadi melukis
-kulit malah lebih ringan dari sebelumnya.
+kulit malah lebih ringan dari sebelumnya. Kartu tegak sudah tidak ada sama
+sekali; yang masih "lukisan berdiri" tinggal gambar event (kartu bertebal).
 
 **Pajangan dinding timbul.** Papan nama dinas, kubah CCTV, bagan struktur
 organisasi, monitor CRT, AC, plakat nilai, foto pejabat, Garuda, plang KEPALA

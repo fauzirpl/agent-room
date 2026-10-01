@@ -290,12 +290,6 @@
     }
   }
 
-  // Bidang bertekstur tegak menghadap +z (atau miring lewat dua titik alas).
-  function papan(S, xa, za, xb, zb, y0, y1, uv, c = PUTIH, e = 0) {
-    const dx = xb - xa, dz = zb - za, l = Math.hypot(dx, dz) || 1;
-    const n = [dz / l, 0, -dx / l];
-    S.segi([xa, y0, za], [xb, y0, zb], [xb, y1, zb], [xa, y1, za], [-n[0], 0, -n[2]], c, uv, e);
-  }
   const PUTIH = [1, 1, 1, 1];
 
   // ------------------------------------------------------------- shader
@@ -626,10 +620,10 @@ void main() { hasil = vec4(1.0); }`;
      dalam dua lintasan: kedalaman dulu, lalu warna dicampur di permukaan
      terdepan saja, jadi sosoknya tetap utuh, bukan tumpukan kotak bening. */
   const G = {
-    polos: new Susun(), dinding: new Susun(), lantai: new Susun(), kulit: new Susun(), papan: new Susun(),
+    polos: new Susun(), dinding: new Susun(), lantai: new Susun(), kulit: new Susun(),
     dinamis: new Susun(), samping: new Susun(), pudar: new Susun(), kartu: new Susun(), tint: new Susun(64),
     kadisPolos: new Susun(), kadisKulit: new Susun(), sumbat: new Susun(64), kartuSisi: new Susun(), berkas: new Susun(64), dinamisKulit: new Susun(64),
-    perabot: new Susun(), kaca: new Susun(64),
+    perabot: new Susun(), kaca: new Susun(64), temaDinding: new Susun(64),
   };
   /* perabot: isi perabot yang ikut keadaan RUANGAN (tumpukan berkas, map
      disposisi, buku tamu, kusut meja, tanaman layu, isi lemari arsip). Tidak
@@ -639,10 +633,10 @@ void main() { hasil = vec4(1.0); }`;
      menggelapkan piala di baliknya). */
   const WADAH = {
     polos: new Wadah(false), dinding: new Wadah(false), lantai: new Wadah(false), kulit: new Wadah(false),
-    papan: new Wadah(false), dinamis: new Wadah(true), samping: new Wadah(true), pudar: new Wadah(true), kartu: new Wadah(true),
+    dinamis: new Wadah(true), samping: new Wadah(true), pudar: new Wadah(true), kartu: new Wadah(true),
     tint: new Wadah(true), kadisPolos: new Wadah(false), kadisKulit: new Wadah(false), sumbat: new Wadah(true),
     kartuSisi: new Wadah(true), berkas: new Wadah(true), dinamisKulit: new Wadah(true), perabot: new Wadah(false),
-    kaca: new Wadah(false),
+    kaca: new Wadah(false), temaDinding: new Wadah(false),
   };
 
   /* Kotak yang muka depannya kulit 2D. Muka depan ada di z1 (garis kaki 2D) dan
@@ -656,12 +650,6 @@ void main() { hasil = vec4(1.0); }`;
     // warna sisi baru ada sesudah kulit dilukis pertama kali — bangunStatis
     // dipanggil sesudah semua kulit dilukis, jadi di sini sudah terisi
     kotak(G.polos, x0, x1, y0, y1, z0, z1, sisi(), { sisi: S_KIRI | S_KANAN | S_ATAS | S_BELAKANG, w: { atas: o.atas || atas() } });
-  }
-  // Kartu tegak bertekstur (papan nama pantri): alfa diuji, dua muka. Baris
-  // bawah rect jatuh di tinggi y0.
-  function standee(s, x0, x1, z, y0) {
-    if (!s) return;
-    papan(G.papan, x0, z, x1, z, y0, y0 + s.rect.h, s.uv);
   }
   // Benda rendah yang tutupnya memakai lukisan lantai 2D di tapaknya sendiri
   // (karpet, meja lesehan, bantal): lukisannya sudah benar dilihat dari atas.
@@ -698,7 +686,6 @@ void main() { hasil = vec4(1.0); }`;
     K_ = {
       visi: kulit('visi', { x: 84, y: 64, w: 22, h: 48 }, () => drawVisi(), 0.5),
       filing: kulit('filing', { x: 106, y: 62, w: 52, h: 57 }, (S) => { drawFiling(aktif('search')(S)); drawStiker(); }, 3),
-      printer: kulit('printer', { x: 199, y: 82, w: 28, h: 14 }, (S) => drawWindow(aktif('web')(S)), 6),
       server: kulit('server', { x: 360, y: 29, w: 60, h: 91 }, (S) => { drawServer(aktif('server')(S)); drawStiker(); }, 12),
       absen: kulit('absen', { x: 424, y: 100, w: 9, h: 13 }, () => drawAbsensi(), 2),
       fotokopi: kulit('fotokopi', { x: FOTOKOPI.x, y: FOTOKOPI.y + 12, w: FOTOKOPI.w, h: FOTOKOPI.h - 12 }, () => drawFotokopi(), 6),
@@ -745,7 +732,7 @@ void main() { hasil = vec4(1.0); }`;
 
   // ----------------------------------------------------------- bangun statis
   function bangunStatis() {
-    for (const k of ['polos', 'dinding', 'lantai', 'kulit', 'papan', 'kaca']) G[k].kosongkan();
+    for (const k of ['polos', 'dinding', 'lantai', 'kulit', 'kaca']) G[k].kosongkan();
     const S = G.polos;
 
     // --- alas maket: kayu jati gelap, seperti maket gedung di lobi dinas
@@ -767,9 +754,8 @@ void main() { hasil = vec4(1.0); }`;
     standeeVisi(S);                                          // standee VISI berkaki silang
     // kulitnya mulai y=62: baris 61 milik bingkai bagan yang digambar sesudah kabinet
     kotakKulit(k.filing, 106, 158, 0, 57, DINDING_Z + 2, 119);
-    // meja printer + printer
+    // meja printer; printernya di bagian dinamis (bisa macet: tutup terangkat)
     meja(197, 229, DINDING_Z + 1, 117, 20, KAYU, KAYU_TUA, { palang: false });
-    kotakKulit(k.printer, 199, 227, 20, 34, 104, 114);
     // meja stempel: bak, stempel, rak surat; tumpukan berkasnya di grup perabot
     meja(252, 320, DINDING_Z + 1, 118, 22, KAYU, KAYU_TUA);
     barangMejaStempel(S);
@@ -832,6 +818,7 @@ void main() { hasil = vec4(1.0); }`;
     timbul(592, 660, 196, 210, 5, warna('#6b4f34'));
     for (const cx of BACA.slot) timbul(cx - 9, cx + 9, 220, 232, 3.5, warna('#6b3b3b'));
     rakPojokBaca(S);                                         // korannya di grup perabot (kemarin = kekuningan)
+    bacaanLesehan(S);
 
     // --- pos satpam
     meja(POS_SATPAM.x + 3, POS_SATPAM.x + 26, 303, 314, 16, KAYU, warna('#6b4f34'), { palang: false });
@@ -848,7 +835,7 @@ void main() { hasil = vec4(1.0); }`;
     kusenPintuKadis(S);
     bangunLorongKadis(S);
 
-    for (const k2 of ['polos', 'dinding', 'lantai', 'kulit', 'papan', 'kaca']) WADAH[k2].isi(G[k2]);
+    for (const k2 of ['polos', 'dinding', 'lantai', 'kulit', 'kaca']) WADAH[k2].isi(G[k2]);
     bangunRuangKadis();
   }
 
@@ -894,7 +881,13 @@ void main() { hasil = vec4(1.0); }`;
     kotak(S, px, px + tb, 0, T, py + 5, p0, kayu, { sisi: SEMUA, w: { atas: pucuk } });             // sekat kiri, atas pintu
     kotak(S, px, px + tb, 0, T, p1, y1, kayu, { sisi: SEMUA, w: { atas: pucuk } });                 // sekat kiri, bawah pintu
     for (const kz of [p0 - 3, p1]) kotak(S, px - 1, px + tb + 1, 0, T + 2, kz, kz + 3, gelapkan(KAYU, 1.16), { sisi: SEMUA });
-    standee(K_.papanPantri, px + 14, px + 40, py + 2.5, T);
+    // papan PANTRI di atas sekat: kertas berbingkai setebal jari, bukan kartu tipis
+    const sp = K_.papanPantri;
+    if (sp) {
+      const sx0 = px + 14, sx1 = px + 40, sz = py + 2.6;
+      G.kulit.segi([sx0, T, sz], [sx1, T, sz], [sx1, T + 9, sz], [sx0, T + 9, sz], [0, 0, 1], PUTIH, sp.uv);
+      kotak(S, sx0, sx1, T, T + 9, sz - 0.8, sz, warna('#e4ddc8'), { sisi: S_KIRI | S_KANAN | S_ATAS | S_BELAKANG });
+    }
     /* Counter granit + lemari bawah laminasi. Gambar 2D pantri mencampur
        tampak atas (sekat, meja) dan tampak depan (lemari, microwave) dalam
        satu fungsi, jadi yang dipinjam cuma dua muka yang memang tampak
@@ -1513,6 +1506,110 @@ void main() { hasil = vec4(1.0); }`;
     for (let i = 0; i < 3; i++) kotak(S, 642, 652, 7.6 - i * 2, 8 - i * 2, 184.2, 184.3, baris, { sisi: S_DEPAN });
   }
 
+  /* Dekor tema kalender (gambarTemaDinding): spanduk di atas jendela
+     (agustusan, HUT KORPRI, tahun anggaran) jadi KAIN — muka lukisan dinding
+     yang sama dipotong lajur-lajur miring yang bergelombang, diikat tali ke
+     paku; umbul-umbul merah putih bertali sepanjang tembok (agustusan), yang
+     memutus di depan perabot tinggi persis seperti tertutup perabotnya di 2D;
+     papan imsakiyah Ramadan timbul. Ikut grup perabot (tema ada di tandanya). */
+  const SPANDUK = { x: 192, y: 4, w: 74, h: 12 };
+  const PAPAN_RAMADAN = { x: 417, y: 53, w: 22, h: 32 };
+  /* Umbul-umbul menempel rapat di tembok (z +0,5): lukisannya di dinding persis
+     di belakangnya, jadi tidak kelihatan dobel dari samping, dan lemari arsip,
+     AC, rak server, lemari piala menutupinya sendiri seperti di 2D. Yang
+     dilewati cuma yang di 2D tertutup lukisan lain: kaca jendela & pintu kadis. */
+  const UMBUL_LEWATI = [[176, 248], [436, 492]];
+  function temaDinding(S, St) {
+    const t = RUANGAN.tema;
+    if (!t) return;
+    const uv = (x0, y0, x1, y1) => [x0 / W, y0 / FLOOR_TOP, x1 / W, y1 / FLOOR_TOP];
+    if (t === 'agustusan' || t === 'korpri' || t === 'tahun-anggaran') {
+      const SP = SPANDUK, h0 = FLOOR_TOP - (SP.y + SP.h), h1 = FLOOR_TOP - SP.y, n = 10;
+      const c = warna(t === 'agustusan' ? P.red : t === 'korpri' ? '#28406b' : '#3e6b4f');
+      const zx = (x) => DINDING_Z + 0.9 + 0.35 * Math.sin((x - SP.x) * 0.35);
+      for (let i = 0; i < n; i++) {
+        const xa = SP.x + (SP.w / n) * i, xb = SP.x + (SP.w / n) * (i + 1), za = zx(xa), zb = zx(xb);
+        const l = Math.hypot(xb - xa, zb - za), nor = [-(zb - za) / l, 0, (xb - xa) / l];
+        St.segi([xa, h0, za], [xb, h0, zb], [xb, h1, zb], [xa, h1, za], nor, PUTIH, uv(xa, SP.y, xb, SP.y + SP.h));
+        S.segi([xb, h0, zb - 0.25], [xa, h0, za - 0.25], [xa, h1, za - 0.25], [xb, h1, zb - 0.25], [-nor[0], 0, -nor[2]], gelapkan(c, 0.8));
+      }
+      for (const [x0, x1, xp] of [[SP.x - 3, SP.x, SP.x - 3.6], [SP.x + SP.w, SP.x + SP.w + 3, SP.x + SP.w + 2.6]]) {
+        kotak(S, x0, x1, h1 - 4.4, h1 - 3.6, DINDING_Z + 0.2, DINDING_Z + 1.2, warna('#8b8f86'), { sisi: SEMUA });   // tali
+        kotak(S, xp, xp + 1, h1 - 5, h1 - 3, DINDING_Z, DINDING_Z + 0.8, warna('#5a6068'), { sisi: SEMUA });        // paku
+      }
+    }
+    if (t === 'agustusan') {
+      const tali = warna('#b9bcb2'), merah = warna(P.red), putih = warna('#f4f2ec'), zt = DINDING_Z + 0.5;
+      let mulai = 0;
+      for (const [a, b] of [...UMBUL_LEWATI, [W, W]]) {
+        if (a > mulai) kotak(S, mulai, a, 85.2, 85.8, zt - 0.2, zt + 0.2, tali, { sisi: SEMUA });
+        mulai = b;
+      }
+      for (let x = 2; x < W; x += 8) {
+        if (UMBUL_LEWATI.some(([a, b]) => x + 6 > a && x < b)) continue;
+        const c = ((x / 8) | 0) % 2 === 0 ? merah : putih;
+        const m = A3.kali(A3.geser(0, 85.2, zt), A3.putarX(-0.05 - 0.04 * (1 + Math.sin(x * 0.3))));   // ujungnya sedikit terangkat dari tembok
+        kotakM(S, m, x, x + 6, -2, 0, -0.15, 0.15, c);
+        kotakM(S, m, x + 1, x + 5, -4, -2, -0.15, 0.15, c);
+        kotakM(S, m, x + 2, x + 4, -5.5, -4, -0.15, 0.15, c);
+      }
+    }
+    if (t === 'ramadan') {
+      const R2 = PAPAN_RAMADAN, h0 = FLOOR_TOP - (R2.y + R2.h), h1 = FLOOR_TOP - R2.y, z1 = DINDING_Z + 1.5;
+      St.segi([R2.x, h0, z1], [R2.x + R2.w, h0, z1], [R2.x + R2.w, h1, z1], [R2.x, h1, z1], [0, 0, 1], PUTIH, uv(R2.x, R2.y, R2.x + R2.w, R2.y + R2.h));
+      kotak(S, R2.x, R2.x + R2.w, h0, h1, DINDING_Z, z1, warna('#6d5535'), { sisi: S_ATAS | S_BAWAH | S_KIRI | S_KANAN });
+    }
+  }
+
+  /* Printer di meja kecil bawah jendela (bagian akhir drawWindow): badan
+     krem, kertas di baki belakang, celah & baki keluaran, stapler.
+     MOD.printerMacet: badannya memendek 3 (seperti 2D), tutupnya terangkat,
+     selembar kertas tersangkut miring dan bergetar, lampu berkedip merah
+     cepat; MOD.internetMati: merah tetap; biasa: hijau berdenyut pelan. */
+  function printerVoxel(S) {
+    const macet = !!MOD.printerMacet, h = 20, tinggi = macet ? 9 : 12, krem = warna('#ddd6c1');
+    kotak(S, 202, 224, h, h + tinggi, 104, 114, krem, { sisi: SEMUA, w: { atas: warna('#e8e2cf') } });
+    kotak(S, 204, 220, h + tinggi, h + tinggi + 3, 104.5, 106, warna(P.paper), { sisi: SEMUA });
+    kotak(S, 204, 222, h + 2, h + 3, 114, 114.1, warna('#c4bda8'), { sisi: S_DEPAN });
+    kotak(S, 205, 221, h + 1.4, h + 1.9, 114, 117, krem, { sisi: SEMUA });
+    kotak(S, 199, 204, h, h + 2, 108, 111, warna('#3a3f45'), { sisi: SEMUA, w: { atas: warna('#5a6068') } });   // stapler kosong
+    if (macet) {
+      kotakM(S, A3.kali(A3.geser(0, h + tinggi, 104), A3.putarX(-0.6)), 202, 224, 0, 1.2, 0, 10, krem);
+      const g = Math.sin(now / 55) > 0 ? 1 : 0;
+      kotakM(S, A3.kali(A3.geser(206 + g, h + 2.2, 114), A3.putarX(-0.35)), 0, 10, -0.1, 0.1, 0, 4, warna('#f4f2ea'));
+    }
+    const nyala = macet ? Math.sin(now / 140) > 0 : MOD.internetMati ? true : Math.sin(now / 500) > 0;
+    const led = macet ? (nyala ? '#e8453f' : '#5c2222') : MOD.internetMati ? '#c22b2b' : (nyala ? '#57d06a' : '#2c5c38');
+    kotak(S, 219, 221, h + 7, h + 9, 114, 114.2, warna(led), { sisi: S_DEPAN, e: nyala ? 0.9 : 0 });
+  }
+
+  // Sandal jepit di depan pintu WC — cuma kalau WC-nya kosong (drawSandalWC):
+  // yang di dalam memakainya.
+  function sandalWC(S) {
+    if (wcTerisi()) return;
+    const tali = warna('#2f5fb0');
+    for (const [x, z] of [[15, 111], [19, 112]]) {
+      kotak(S, x, x + 3, 0, 0.5, z, z + 6, warna('#eef0ea'), { sisi: SEMUA });
+      kotak(S, x + 1, x + 2, 0.5, 0.9, z + 1, z + 1.6, tali, { sisi: SEMUA });
+      kotak(S, x, x + 1, 0.5, 0.8, z + 2, z + 2.6, tali, { sisi: SEMUA });
+      kotak(S, x + 2, x + 3, 0.5, 0.8, z + 2, z + 2.6, tali, { sisi: SEMUA });
+    }
+  }
+
+  // Bacaan di meja lesehan & karpet pojok baca (gambarKarpetBaca): koran
+  // terbuka, dua buku bertumpuk, segelas teh; dua buku tergeletak di karpet.
+  function bacaanLesehan(S) {
+    const h = 5;                                             // tutup meja lesehan yang ditimbulkan
+    kotak(S, 600, 612, h, h + 0.3, 199, 206, warna(P.paper), { sisi: SEMUA });
+    kotak(S, 605.8, 606.2, h + 0.3, h + 0.36, 199, 206, warna('#b9c0ca'), { sisi: S_ATAS });
+    kotak(S, 620, 630, h, h + 1.2, 200, 205, warna('#7a2020'), { sisi: SEMUA, w: { atas: warna('#a83a3a') } });
+    kotak(S, 622, 632, h + 1.2, h + 2.2, 202, 207, warna('#2f4f7a'), { sisi: SEMUA });
+    tabung(S, 642.5, 203, 2.3, h, h + 5, warna('#f2f0e6'), { segmen: 8, atas: warna('#c9b07a') });
+    kotak(S, 587, 596, 0.8, 1.9, 232, 237.5, warna('#3e6b4f'), { sisi: SEMUA, w: { atas: warna('#5d8f6c') } });
+    kotak(S, 589, 598, 0.8, 1.9, 237.5, 242, warna('#7a2020'), { sisi: SEMUA, w: { atas: warna('#a83a3a') } });
+    kotak(S, 596, 598, 1.9, 2, 237.8, 241, warna(P.paper), { sisi: S_ATAS });
+  }
+
   /* Keset baru di ambang pintu kadis (RUANGAN.kesetAda): tikar hijau tua
      bertepi merah dengan alur — lukisannya di tekstur lantai tertutup tepat. */
   function kesetKadis(S) {
@@ -1585,7 +1682,10 @@ void main() { hasil = vec4(1.0); }`;
     koranRak(S);
     kesetKadis(S);
     cecerLantai(S);
+    G.temaDinding.kosongkan();
+    temaDinding(S, G.temaDinding);
     WADAH.perabot.isi(S);
+    WADAH.temaDinding.isi(G.temaDinding);
   }
 
   /* X-banner (drawXBanner) yang benar-benar MIRING lalu REBAH: kainnya
@@ -2719,6 +2819,8 @@ void main() { hasil = vec4(1.0); }`;
     }
 
     ikanAkuarium(S);
+    printerVoxel(S);
+    sandalWC(S);
 
     // galon dispenser
     if (!MOD.galonLepas) {
@@ -3266,13 +3368,12 @@ void main() { hasil = vec4(1.0); }`;
     gl.uniform1f(u.uUji, 0.02);
     gl.bindTexture(gl.TEXTURE_2D, TEK_PUTIH); WADAH.polos.gambar(); WADAH.perabot.gambar(); WADAH.dinamis.gambar(); WADAH.samping.gambar();
     if (adaKadis) WADAH.kadisPolos.gambar();
-    gl.bindTexture(gl.TEXTURE_2D, TEK_DINDING); WADAH.dinding.gambar();
+    gl.bindTexture(gl.TEXTURE_2D, TEK_DINDING); WADAH.dinding.gambar(); WADAH.temaDinding.gambar();
     if (!adaKadis) WADAH.sumbat.gambar();
     gl.bindTexture(gl.TEXTURE_2D, TEK_LANTAI); WADAH.lantai.gambar();
     gl.bindTexture(gl.TEXTURE_2D, TEK_KULIT); WADAH.kulit.gambar(); WADAH.dinamisKulit.gambar();
     gl.disable(gl.CULL_FACE);
     gl.uniform1f(u.uUji, 0.5);
-    WADAH.papan.gambar();
     if (adaKadis) WADAH.kadisKulit.gambar();
     // kartu event: muka depan + belakang per tekstur (12 titik per kartu),
     // lalu sisi-sisi siluetnya sekaligus tanpa tekstur
