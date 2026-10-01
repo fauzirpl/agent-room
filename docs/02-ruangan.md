@@ -2409,6 +2409,23 @@ klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
 sementara sudut putar tetap milik orang yang memegang tetikus. Dinding samping
 yang membelakangi kamera dipotong rendah, seperti maket arsitek.
 
+**Melihat dari mata pegawai (POV).** Klik seorang pegawai di 3D dan kamera
+meluncur (±0,45 detik) ke depan wajahnya. Letak dan arahnya diambil dari
+matriks kepala bonekanya sendiri (`susunOrang` menyimpannya), jadi pandangan
+ikut turun waktu dia duduk, ikut menoleh ke arah hadapnya, terkantuk-kantuk,
+dan naik-turun sedikit waktu dia berjalan. Pegawai yang duduk di meja kerja
+otomatis menatap laptopnya — layar kode yang bergerak di kanan depannya, yang
+dari arah hadap lurus jatuh di luar bidang pandang — sampai penonton menoleh
+sendiri. Seret = menoleh, roda atau cubit = lebar pandang, klik dua kali =
+kembali ke lirikan semula, klik orang lain yang kelihatan = pindah ke matanya.
+Selama POV badan pegawai itu sendiri tidak digambar dan tidak bisa diklik
+(sinar kliknya berangkat dari dalam kepalanya), kartunya diparkir di tepi
+kiri, dan maket ditutup dinding depan berpita serta plafon: cuma muka dalamnya
+yang digambar, jadi dari kamera maket keduanya tidak pernah kelihatan. Keluar
+lewat Esc, tombol "kembali ke maket" di pita bawah, menutup kartunya, atau klik
+tempat kosong. POV cuma dari klik di ruangan 3D — klik baris kru di panel tetap
+membuka kartu tanpa memindah kamera.
+
 Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 
 - rim light dan vignette tidak digambar — cahaya 3D-nya sudah mengerjakan tugas

@@ -2271,6 +2271,51 @@ void main() { hasil = vec4(1.0); }`;
     return null;
   }
 
+  /* POV: klik seorang pegawai di 3D = melihat dari matanya. Kamera berdiri di
+     depan wajah bonekanya — matriks kepala dari susunOrang, jadi ikut duduk,
+     menoleh, terkantuk-kantuk, dan naik-turun waktu berjalan — memandang ke
+     arah hadapnya; seret = menoleh di luar arah itu, roda = lebar pandang.
+     Bonekanya sendiri tidak digambar selama kamera di dalam kepalanya.
+     Selesai kalau kartunya ditutup (klik tempat kosong, ✕), Esc, tombol di
+     pita bawah, atau orangnya pergi; klik orang lain yang kelihatan = pindah
+     ke matanya. Peralihan maket <-> mata ±0,45 detik. */
+  const POV = { orang: null, bekas: null, t: 0, lirikYaw: 0, lirikPitch: 0, otomatis: true, fov: 58 * Math.PI / 180 };
+  const SUSUN_HAMPA = { sudut() {}, segi() {}, tri() {} };   // susunOrang tanpa geometri: cuma keadaannya yang maju
+  function mulaiPov(a) {
+    if (POV.orang !== a) { POV.lirikYaw = 0; POV.lirikPitch = 0; POV.otomatis = true; }
+    POV.orang = a; POV.bekas = a;
+    perbaruiHudPov();
+  }
+  function keluarPov() {
+    if (!POV.orang) return;
+    POV.orang = null;
+    perbaruiHudPov();
+  }
+  // penghuni() itu generator (agents, peserta, standby), bukan larik
+  function masihDiRuangan(a) {
+    for (const o of penghuni()) if (o === a) return true;
+    return false;
+  }
+  // Mata pegawai di dunia 3D, dari matriks kepala terbarunya (dihitung ulang
+  // dengan dt 0: posisi sekarang, tanpa memajukan pelunakan hadap & duduknya)
+  function mataOrang(a) {
+    susunOrang(SUSUN_HAMPA, a, 0, 1, tampilanKhusus(a));
+    const st = keadaanOrang.get(a), K = st && st.kepala;
+    if (!K) return null;
+    const mata = [K[1] * 21.2 + K[2] * 4.4 + K[3], K[5] * 21.2 + K[6] * 4.4 + K[7], K[9] * 21.2 + K[10] * 4.4 + K[11]];
+    const depan = norm3(K[2], K[6], K[10]);
+    return { mata, hadap: Math.atan2(depan[0], depan[2]), angguk: Math.asin(Math.max(-1, Math.min(1, depan[1]))) };
+  }
+  /* Ke mana matanya memang tertuju di luar hadap badannya, selama penonton
+     belum menoleh sendiri: pegawai yang duduk di meja kerja menatap laptopnya
+     di kanan depan (layar cx+13..cx+29, z 336) — bukan sekat meja lurus di
+     depannya, yang membuat layarnya jatuh di luar bidang pandang. */
+  function lirikOtomatis(a, mp) {
+    if (a.station !== 'think' || (a.path && a.path.length) || Math.abs(a.y - MEJA_KERJA_Y) >= 3) return [0, 0];
+    const dx = a.x + 21 - mp.mata[0], dz = 336 - mp.mata[2], dy = MEJA_H + 7.5 - mp.mata[1];
+    return [Math.atan2(dx, dz) - mp.hadap, Math.atan2(dy, Math.hypot(dx, dz)) - mp.angguk + 0.1];
+  }
+
   function tickKamera3D(dt) {
     ukurKanvas();
     const f = fokus3D();
@@ -2285,7 +2330,33 @@ void main() { hasil = vec4(1.0); }`;
     const s = [...KAM.sasaranK];
     if (MOD.getar) s[1] += Math.sin(now / 40) * MOD.getar * 0.9;   // getaran genset/gempa
     const m = matriksKamera(KAM.yawK, KAM.pitchK, KAM.jarakK, s);
-    KAM.mata = m.mata; KAM.v = m.v; KAM.p = m.p; KAM.vp = m.vp;
+
+    // POV menyatu dengan kamera maket lewat POV.t (0 = maket, 1 = mata)
+    if (POV.orang && (terpilih !== POV.orang || !masihDiRuangan(POV.orang))) keluarPov();
+    const tuju = POV.orang ? 1 : 0;
+    POV.t = geraKurang3.matches ? tuju : POV.t + Math.max(-dt * 2.2, Math.min(dt * 2.2, tuju - POV.t));
+    const siapa = POV.orang || POV.bekas, mp = POV.t > 0 && siapa ? mataOrang(siapa) : null;
+    if (!mp) {
+      if (POV.t <= 0) POV.bekas = null;
+      KAM.mata = m.mata; KAM.v = m.v; KAM.p = m.p; KAM.vp = m.vp;
+      return;
+    }
+    if (POV.otomatis) {
+      const [ly, lp] = lirikOtomatis(siapa, mp), kl = geraKurang3.matches ? 1 : 1 - Math.exp(-Math.max(0, dt) * 3);
+      POV.lirikYaw += Math.atan2(Math.sin(ly - POV.lirikYaw), Math.cos(ly - POV.lirikYaw)) * kl;
+      POV.lirikPitch += (lp - POV.lirikPitch) * kl;
+    }
+    const h = mp.hadap + POV.lirikYaw, p = Math.max(-1.1, Math.min(0.9, mp.angguk - 0.1 + POV.lirikPitch));
+    const arah = [Math.sin(h) * Math.cos(p), Math.sin(p), Math.cos(h) * Math.cos(p)];
+    const e = POV.t * POV.t * (3 - 2 * POV.t);
+    const antara = (a, b) => [a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e, a[2] + (b[2] - a[2]) * e];
+    const mata = antara(m.mata, mp.mata);
+    const lihat = antara(s, [mp.mata[0] + arah[0] * 40, mp.mata[1] + arah[1] * 40, mp.mata[2] + arah[2] * 40]);
+    KAM.mata = mata;
+    KAM.v = M4.lihat(mata, lihat, [0, 1, 0]);
+    KAM.p = M4.perspektif(KAM.fov + (POV.fov - KAM.fov) * e, KAM.lebar / KAM.tinggi,
+      8 + (0.5 - 8) * e, (KAM.jarakK * 3 + 800) * (1 - e) + 1600 * e);
+    KAM.vp = M4.kali(KAM.p, KAM.v);
   }
 
   let lebarCss = 0, tinggiCss = 0, dprPakai = 1;
@@ -2329,12 +2400,16 @@ void main() { hasil = vec4(1.0); }`;
     return [(c[0] / c[3] * 0.5 + 0.5) * lebarCss, (1 - (c[1] / c[3] * 0.5 + 0.5)) * tinggiCss, c[2] / c[3]];
   }
   function keLayar3D(x, y, kaki) {
+    // POV: kartu orang yang matanya dipakai kamera diparkir di tepi kiri,
+    // bukan di tengah pandangannya sendiri
+    if (POV.t > 0.5 && POV.orang && orangDi(x, kaki) === POV.orang) return [16, tinggiCss * 0.5];
     const [X, Y, Z] = titik3D(x, y, kaki);
     const p = proyeksi(X, Y, Z);
     return p ? [p[0], p[1]] : [-9999, -9999];
   }
   function tampak3D(x, y) {
     const a = orangDi(x, y);
+    if (a && a === POV.orang && POV.t > 0.5) return false;     // balonnya sendiri: dia kameranya
     const [X, Z] = a ? posisiOrang(a) : [x, y];
     const p = proyeksi(X, (a ? SKALA_ORANG : 1) * 28, Z);
     return !!p && p[0] > -40 && p[0] < lebarCss + 40 && p[1] > -40 && p[1] < tinggiCss + 40 && p[2] < 1;
@@ -2582,6 +2657,7 @@ void main() { hasil = vec4(1.0); }`;
     // --- kepala
     const ngantuk = a.ngantuk || 0;
     const kepala = A3.kali(tubuh, A3.poros(0, 16.5, 0, A3.putarX(ngantuk * 0.12)));
+    st.kepala = kepala;                                   // mata kamera POV (mataOrang)
     const jenisKepala = kepalaEfektif(a);
     kotakM(S, kepala, -1, 1, 16, 17.2, -1, 1, kulitC);                                  // leher
     kotakM(S, kepala, -4, 4, 17, 25, -3.5, 3.5, kulitC);
@@ -2674,6 +2750,7 @@ void main() { hasil = vec4(1.0); }`;
     G.samping.kosongkan();
     dindingSamping(G.samping, -6, 0, KAM.mata[0] < -4);
     dindingSamping(G.samping, W, W + 6, KAM.mata[0] > W + 4);
+    if (POV.t > 0) tutupMaketPov(G.samping);
     WADAH.samping.isi(G.samping);
 
     // lampu neon gantung: tabung menyala sesuai kedipNeon
@@ -2844,13 +2921,15 @@ void main() { hasil = vec4(1.0); }`;
       tabung(S, dx, 285, 2, 45, 48, warna('#5f9fd4'), { segmen: 8 });
     }
 
-    // pegawai: yang pudar ke grup campur, sisanya pejal
+    // pegawai: yang pudar ke grup campur, sisanya pejal. Yang matanya sedang
+    // dipakai kamera POV tidak digambar (keadaannya tetap maju lewat SUSUN_HAMPA)
     G.pudar.kosongkan();
+    const tanpaBadan = POV.t > 0.4 ? POV.orang || POV.bekas : null;
     for (const a of penghuni()) {
       const ganti = tampilanKhusus(a);                        // yang sedang masuk/keluar WC & gudang
       const nyata = ganti && ganti.alfa != null ? ganti.alfa : (a.alpha == null ? 1 : a.alpha);
       const alfa = (a.standby && !a.tetap ? 0.55 : 1) * nyata;
-      susunOrang(alfa < 0.999 ? G.pudar : S, a, dt, alfa, ganti);
+      susunOrang(a === tanpaBadan ? SUSUN_HAMPA : alfa < 0.999 ? G.pudar : S, a, dt, alfa, ganti);
     }
     // tamu event (sosok drawPerson di gambar event): boneka voxel di tempatnya sendiri
     for (const { o, alfa } of ORANG_EVENT.daftar) susunOrang(alfa < 0.999 ? G.pudar : S, o, dt, alfa);
@@ -2860,7 +2939,7 @@ void main() { hasil = vec4(1.0); }`;
       if (model) aman(() => model(S, E));
     }
     // sorotan orang yang kartunya terbuka: cincin di lantai
-    if (terpilih && !terpilih.diKadis) cincin(S, terpilih.x, terpilih.y, 9 + Math.sin(now / 240) * 1.2, warna(P.amber), 0.9);
+    if (terpilih && !terpilih.diKadis && terpilih !== tanpaBadan) cincin(S, terpilih.x, terpilih.y, 9 + Math.sin(now / 240) * 1.2, warna(P.amber), 0.9);
     // sorotan barang: bingkai rusuk emas di kotak 3D-nya (yang diklik lebih
     // tegas dari yang cuma dilewati kursor) — pengganti drawSorotBarang 2D
     const bSorot = barangTerpilih || barangHover;
@@ -2882,6 +2961,18 @@ void main() { hasil = vec4(1.0); }`;
     if (h > 10) kotak(S, x0, x1, 10, Math.min(h, 38), z0, z1, MINT, { sisi: SEMUA });
     if (h > 38) kotak(S, x0 - (x0 < 0 ? 0 : 0.6), x1 + (x0 < 0 ? 0.6 : 0), 38, 40, z0, z1, LIS, { sisi: SEMUA });
     if (h > 40) kotak(S, x0, x1, 40, h + 3, z0, z1, KREM, { sisi: SEMUA, w: { atas: warna('#f2ecd8') } });
+  }
+  /* Maket tidak berdinding depan dan tidak berplafon — dari mata pegawai yang
+     menghadap ke depan itu jurang hitam. Selama POV ditutup: dinding depan
+     berpita & plafon setinggi tembok belakang. Cuma muka DALAM-nya yang
+     digambar, jadi dari kamera maket (di luar ruangan) tetap tidak kelihatan. */
+  function tutupMaketPov(S) {
+    const z0 = LANTAI_Z1, z1 = LANTAI_Z1 + 6, x0 = -6, x1 = W + 6, sisi = S_BELAKANG;
+    kotak(S, x0, x1, 0, 10, z0, z1, PLIN, { sisi });
+    kotak(S, x0, x1, 10, 38, z0, z1, MINT, { sisi });
+    kotak(S, x0, x1, 38, 40, z0 - 0.6, z1, LIS, { sisi });
+    kotak(S, x0, x1, 40, TINGGI_DINDING + 3, z0, z1, KREM, { sisi });
+    kotak(S, x0, x1, TINGGI_DINDING, TINGGI_DINDING + 1, DINDING_Z - 6, z1, warna('#eeebe0'), { sisi: S_BAWAH });
   }
 
   /* Kursi: dudukan setinggi DUDUKAN_Y — persis pinggul pegawai yang sudah
@@ -4090,6 +4181,9 @@ void main() { hasil = vec4(1.0); }`;
   function pilihOrang(r) {
     let kena = null, tk = Infinity;
     for (const a of penghuni()) {
+      // POV: sinarnya berangkat dari dalam kepala orang itu sendiri — dia selalu
+      // kena di jarak 0 dan menelan semua klik ke orang lain
+      if (a === POV.orang && POV.t > 0.3) continue;
       // tamu kadis cuma bisa diklik lewat jendelanya (atau dari atas tembok)
       if (a.diKadis && (!KADIS_SIAP || !sisipBoleh() || !lewatJendela(r))) continue;
       const [X, Z] = posisiOrang(a);
@@ -4111,10 +4205,13 @@ void main() { hasil = vec4(1.0); }`;
   }
   function pilihBarang(r) {
     let kena = null, tk = Infinity;
+    // POV: kotak pilih yang memuat mata kamera itu sendiri (meja tempat dia
+    // duduk, meja rapat di sebelahnya) kena di jarak 0 ke arah mana pun
+    const tMin = POV.t > 0.3 ? 1 : 0;
     for (const b of daftarBarang()) {
       const k = kotakBarang3D(b.kotak);
       const t = kenaKotak(r, ...k);
-      if (t >= 0 && (t < tk - 2 || (Math.abs(t - tk) <= 2 && kena && b.luas < kena.luas))) { tk = t; kena = b; }
+      if (t >= tMin && (t < tk - 2 || (Math.abs(t - tk) <= 2 && kena && b.luas < kena.luas))) { tk = t; kena = b; }
     }
     return kena;
   }
@@ -4125,7 +4222,7 @@ void main() { hasil = vec4(1.0); }`;
   function klik3D(cx, cy) {
     const r = sinar(cx, cy);
     const a = pilihOrang(r);
-    if (a) { bukaKartu(a); return; }
+    if (a) { bukaKartu(a); mulaiPov(a); return; }
     tutupKartu();
     const barangLama = barangTerpilih;
     tutupKartuBarang();
@@ -4163,17 +4260,25 @@ void main() { hasil = vec4(1.0); }`;
     if (seret.cubit != null && tunjuk.size === 2) {
       const [p, q] = [...tunjuk.values()];
       const d = Math.hypot(p.x - q.x, p.y - q.y);
-      KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * d / Math.max(20, seret.cubit)));
-      seret.cubit = d;
       const tengah = [(p.x + q.x) / 2, (p.y + q.y) / 2];
-      geserSasaran(tengah[0] - seret.tengah[0], tengah[1] - seret.tengah[1]);
+      if (POV.orang) lebarPandang(Math.max(20, seret.cubit) / d);       // POV: cubit = lebar pandang
+      else {
+        KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * d / Math.max(20, seret.cubit)));
+        geserSasaran(tengah[0] - seret.tengah[0], tengah[1] - seret.tengah[1]);
+      }
+      seret.cubit = d;
       seret.tengah = tengah;
       return;
     }
     const dx = x - seret.x, dy = y - seret.y;
     if (!seret.jauh && Math.hypot(x - seret.x0, y - seret.y0) > 5) { seret.jauh = true; kanvas.classList.add('seret'); }
     if (!seret.jauh) return;
-    if (seret.geser) geserSasaran(dx, dy);
+    if (POV.orang) {
+      // POV: menoleh di luar arah hadap orangnya (seret ke kanan = menoleh ke kanan)
+      POV.otomatis = false;
+      POV.lirikYaw = Math.max(-Math.PI, Math.min(Math.PI, POV.lirikYaw - dx * 0.005));
+      POV.lirikPitch = Math.max(-0.95, Math.min(0.8, POV.lirikPitch - dy * 0.004));
+    } else if (seret.geser) geserSasaran(dx, dy);
     else {
       KAM.yaw = Math.max(-1.3, Math.min(1.3, KAM.yaw - dx * 0.006));
       KAM.pitch = Math.max(0.1, Math.min(1.45, KAM.pitch + dy * 0.005));
@@ -4192,12 +4297,17 @@ void main() { hasil = vec4(1.0); }`;
   kanvas.addEventListener('contextmenu', (e) => e.preventDefault());
   kanvas.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (POV.orang) { lebarPandang(Math.exp(e.deltaY * 0.001)); return; }
     KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * Math.exp(-e.deltaY * 0.0012)));
   }, { passive: false });
+  const lebarPandang = (kali) => { POV.fov = Math.max(0.6, Math.min(1.5, POV.fov * kali)); };   // ±34°..86°
   kanvas.addEventListener('dblclick', () => {
+    // POV: kembali memandang lurus ke depan orangnya (maketnya tidak disentuh)
+    if (POV.orang) { POV.otomatis = true; POV.fov = 58 * Math.PI / 180; return; }
     KAM.yaw = KAM_AWAL.yaw; KAM.pitch = KAM_AWAL.pitch; KAM.zoom = KAM_AWAL.zoom;
     KAM.sasaran = [...KAM_AWAL.sasaran];
   });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && POV.orang) keluarPov(); });
   kanvas.addEventListener('mouseleave', () => { barangHover = null; kanvas.classList.remove('tunjuk'); });
   /* Geser = "memegang lantai": titik lantai di bawah kursor ikut kursor.
      kanan kamera = (cos yaw, 0, -sin yaw), maju di lantai = (-sin yaw, 0, -cos yaw);
@@ -4233,20 +4343,35 @@ void main() { hasil = vec4(1.0); }`;
       tombol.setAttribute('aria-pressed', aktif ? 'true' : 'false');
       tombol.classList.toggle('nyala', aktif);
       tombol.textContent = aktif ? '3D' : '2D';
-      tombol.title = aktif ? 'tampilan 3D — seret untuk memutar, roda untuk zoom, klik dua kali untuk kembali. Klik: kembali ke 2D'
+      tombol.title = aktif ? 'tampilan 3D — seret untuk memutar, roda untuk zoom, klik dua kali untuk kembali, klik pegawai untuk melihat dari matanya. Klik: kembali ke 2D'
         : 'tampilan 2D pixel-art — klik: pindah ke maket 3D';
     }
     if (simpan) ingatan.tulis('tampilan', aktif ? '3d' : '2d');
     if (aktif) { lebarCss = -1; ukurKanvas(); tunjukkanPetunjuk(); }
-    else { fit(); petunjuk.classList.remove('tampak'); }
+    else { keluarPov(); fit(); petunjuk.classList.remove('tampak'); }
   }
 
   // Petunjuk kendali, sekali tiap masuk 3D, memudar sendiri: orang yang baru
   // pertama melihat maket ini tidak tahu kanvasnya bisa diputar.
   const petunjuk = document.createElement('div');
   petunjuk.className = 'petunjuk-3d';
-  petunjuk.textContent = 'seret: putar maket · klik kanan / shift+seret: geser · roda: dekat–jauh · klik dua kali: tampak awal';
+  petunjuk.textContent = 'seret: putar maket · klik kanan / shift+seret: geser · roda: dekat–jauh · klik dua kali: tampak awal · klik pegawai: lihat dari matanya';
   stageInner.appendChild(petunjuk);
+
+  // Pita POV: mata siapa yang sedang dipakai, cara menoleh, dan jalan pulang ke maket
+  const hudPov = document.createElement('div');
+  hudPov.className = 'pov-3d';
+  hudPov.hidden = true;
+  hudPov.innerHTML = '<span class="pov-judul"></span>'
+    + '<span class="pov-kunci">seret: menoleh · roda: lebar pandang · klik orang lain: pindah · Esc: keluar</span>'
+    + '<button type="button" class="pov-keluar">kembali ke maket</button>';
+  stageInner.appendChild(hudPov);
+  hudPov.querySelector('.pov-keluar').addEventListener('click', keluarPov);
+  function perbaruiHudPov() {
+    hudPov.hidden = !POV.orang;
+    if (POV.orang) hudPov.querySelector('.pov-judul').textContent = 'dari mata ' + namaTampil(POV.orang);
+    if (POV.orang) petunjuk.classList.remove('tampak');
+  }
   let petunjukTimer = 0;
   function tunjukkanPetunjuk() {
     petunjuk.classList.add('tampak');

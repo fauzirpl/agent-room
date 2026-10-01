@@ -8,6 +8,13 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: lihat dari mata pegawai.** Klik seorang pegawai di maket 3D
+  dan kameranya meluncur ke depan wajahnya: pandangannya ikut tinggi duduknya,
+  arah hadapnya, dan langkahnya. Pegawai yang sedang di meja kerja langsung
+  menatap layar laptopnya. Seret untuk menoleh, roda untuk lebar pandang, klik
+  orang lain yang kelihatan untuk pindah ke matanya; Esc, tombol "kembali ke
+  maket", atau klik tempat kosong untuk keluar. Selama itu ruangan ditutup
+  dinding depan dan plafon, jadi tidak ada jurang hitam di depan mata.
 - **Tampilan 3D: barang event jadi voxel.** Isi taplak meja rapat — gorengan
   di nampan seng, nasi kotak bertutup terbuka, kopi, kue ulang tahun berlilin,
   toples arisan yang dikocok, kardus oleh-oleh, tumpeng yang menyusut tiap

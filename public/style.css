@@ -105,6 +105,25 @@ body.tampil-3d #room { visibility: hidden; }
 .petunjuk-3d.tampak { opacity: 1; }
 body:not(.tampil-3d) .petunjuk-3d { display: none; }
 
+/* POV 3D: klik pegawai = melihat dari matanya. Pita di bawah panggung menyebut
+   mata siapa, cara menoleh, dan tombol pulang ke maket. */
+.pov-3d {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 16px);
+  padding: 4px 5px 4px 12px; border-radius: 12px;
+  background: rgba(20, 15, 10, .8); color: var(--khaki-muda); font-size: 11px; white-space: nowrap;
+}
+.pov-3d[hidden], body:not(.tampil-3d) .pov-3d { display: none; }
+.pov-3d .pov-judul { font-weight: 700; color: #f6ecd0; overflow: hidden; text-overflow: ellipsis; }
+.pov-3d .pov-kunci { opacity: .75; overflow: hidden; text-overflow: ellipsis; }
+.pov-3d .pov-keluar {
+  font: inherit; color: inherit; cursor: pointer; flex: none;
+  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 8px; padding: 2px 9px;
+}
+.pov-3d .pov-keluar:hover { background: rgba(255, 255, 255, .18); }
+@media (max-width: 640px) { .pov-3d .pov-kunci { display: none; } }
+
 /* speech bubbles live in the overlay, drawn in CSS px so text stays crisp.
    Tiga baris, bukan satu: kalimat sungguhan agen (`ucap`) jarang muat dalam
    sebaris, dan yang terpotong '…' di tengah kata bikin balonnya cuma jadi
