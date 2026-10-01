@@ -57,8 +57,9 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
   kucing kantor, dan barang-barang event juga voxel), jendela
   berlubang dengan langit yang ikut jam, ruang kadis sungguhan di balik
   jendela dinding, pintu WC, gudang, dan ruang kadis yang benar-benar mengayun,
-  debu di berkas cahaya, bayangan dan lampu neon yang ikut jam — klik seorang
-  pegawai untuk melihat ruangan dari matanya. WebGL2 ditulis
+  debu di berkas cahaya, bayangan dan lampu neon yang ikut jam, lampu meja
+  yang menyala waktu lembur, kubah CCTV yang menoleh mengikuti orang lewat —
+  klik seorang pegawai untuk melihat ruangan dari matanya. WebGL2 ditulis
   sendiri, tanpa pustaka; dinding, lantai, dan 360 event-nya tetap dilukis
   kode pixel-art yang sama. Tombol **3D / 2D** di bilah bawah, atau
   `?tampilan=2d`
@@ -184,8 +185,9 @@ removes it, `--coba` only shows what would be run).
   window whose sky follows the clock, the head of
   office's room behind a real window in the wall, restroom, storeroom, and
   office doors that actually swing open, dust in the light beams, shadows and
-  neon lights that follow the clock — click a civil servant to see the room
-  through their eyes. Hand-written WebGL2, no libraries; walls,
+  neon lights that follow the clock, desk lamps that glow when someone works
+  late, a CCTV dome that turns to follow passers-by — click a civil servant to
+  see the room through their eyes. Hand-written WebGL2, no libraries; walls,
   floor, and all 360 events are still painted by the same pixel-art code.
   Toggle with the **3D / 2D** button in the bottom bar, or `?tampilan=2d`
 - Thought bubbles & a news box — actual transcript content, not just tool names

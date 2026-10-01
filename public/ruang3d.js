@@ -324,8 +324,8 @@ uniform vec3 uArah;
 uniform vec3 uKunci;
 uniform vec3 uLangit;
 uniform vec3 uTanah;
-uniform vec3 uLampuPos[6];
-uniform vec3 uLampuWarna[6];
+uniform vec4 uLampuPos[16];     // xyz posisi, w = redaman (lampu ruangan 0,00016; lampu meja 0,025)
+uniform vec3 uLampuWarna[16];
 uniform float uUji;
 uniform float uBayangNyala;
 uniform float uTexel;
@@ -356,10 +356,10 @@ void main() {
   if (!gl_FrontFacing) n = -n;
   vec3 cahaya = mix(uTanah, uLangit, n.y * 0.5 + 0.5);
   cahaya += uKunci * max(dot(n, uArah), 0.0) * bayang();
-  for (int i = 0; i < 6; i++) {
-    vec3 d = uLampuPos[i] - vPos;
-    float jarak = length(d);
-    float redam = 1.0 / (1.0 + jarak * jarak * 0.00016);
+  for (int i = 0; i < 16; i++) {
+    vec3 d = uLampuPos[i].xyz - vPos;
+    float jarak = max(length(d), 0.001);
+    float redam = 1.0 / (1.0 + jarak * jarak * uLampuPos[i].w);
     cahaya += uLampuWarna[i] * (0.35 + 0.65 * max(dot(n, d / jarak), 0.0)) * redam;
   }
   vec3 rgb = dasar * mix(cahaya, vec3(1.0), clamp(vEmisi, 0.0, 1.0));
@@ -510,15 +510,16 @@ void main() { hasil = vec4(1.0); }`;
       ctx.clearRect(0, 0, W, TINGGI_DINDING);
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = 1;
-      TIGA.tanpaNeon = true;
+      TIGA.tanpaNeon = TIGA.tanpaCCTV = true;      // neon & kubah CCTV: benda 3D sendiri
       aman(() => drawWall());
-      TIGA.tanpaNeon = false;
+      TIGA.tanpaNeon = TIGA.tanpaCCTV = false;
       // urutan 2D: gambarDinding event tepat sesudah dinding, SEBELUM prop
       // (pintu, jendela) — yang menempel di daun pintu memang tertutup pintunya
       aman(() => gambarLapis('gambarDinding'));
       aman(() => drawEdaran());
       aman(() => drawNomorAntre());
-      aman(() => drawCRT());
+      // monitor CRT: benda 3D di rak dinding sendiri (monitorCRT, kulit 'crt'),
+      // bukan lukisan di bidang dinding — kalau ikut, dari samping kelihatan dobel
       aman(() => drawPlakatNilai());
       // jendela + gorden, tanpa meja printer di bawahnya (itu benda 3D)
       aman(() => klip(JENDELA.x - 10, 0, JENDELA.w + 50, JENDELA.y + JENDELA.h + 7, () => drawWindow(stasiun.has('web'))));
@@ -629,20 +630,24 @@ void main() { hasil = vec4(1.0); }`;
     polos: new Susun(), dinding: new Susun(), lantai: new Susun(), kulit: new Susun(),
     dinamis: new Susun(), samping: new Susun(), pudar: new Susun(), kartu: new Susun(), tint: new Susun(64),
     kadisPolos: new Susun(), kadisKulit: new Susun(), sumbat: new Susun(64), kartuSisi: new Susun(), berkas: new Susun(64), dinamisKulit: new Susun(64),
-    perabot: new Susun(), kaca: new Susun(64), temaDinding: new Susun(64),
+    perabot: new Susun(), kaca: new Susun(64), temaDinding: new Susun(64), sinar: new Susun(64),
   };
   /* perabot: isi perabot yang ikut keadaan RUANGAN (tumpukan berkas, map
      disposisi, buku tamu, kusut meja, tanaman layu, isi lemari arsip). Tidak
      disusun tiap frame — dibangun ulang cuma waktu tandaPerabot() berubah.
      kaca: air akuarium & pintu kaca lemari piala — tembus pandang di lintasan
      pudar, tapi TIDAK ikut peta bayangan (kaca yang membayangi isinya sendiri
-     menggelapkan piala di baliknya). */
+     menggelapkan piala di baliknya).
+     sinar: kembaran dinamisnya — cahaya & hawa yang bukan benda (genangan
+     lampu meja, hembusan AC, petak silau matahari). Disusun tiap frame,
+     dicampur di lintasan pudar, tidak berbayang: petak silau 0,15 di atas
+     lantai yang ikut peta bayangan malah menggelapkan lantai di bawahnya. */
   const WADAH = {
     polos: new Wadah(false), dinding: new Wadah(false), lantai: new Wadah(false), kulit: new Wadah(false),
     dinamis: new Wadah(true), samping: new Wadah(true), pudar: new Wadah(true), kartu: new Wadah(true),
     tint: new Wadah(true), kadisPolos: new Wadah(false), kadisKulit: new Wadah(false), sumbat: new Wadah(true),
     kartuSisi: new Wadah(true), berkas: new Wadah(true), dinamisKulit: new Wadah(true), perabot: new Wadah(false),
-    kaca: new Wadah(false), temaDinding: new Wadah(false),
+    kaca: new Wadah(false), temaDinding: new Wadah(false), sinar: new Wadah(true),
   };
 
   /* Kotak yang muka depannya kulit 2D. Muka depan ada di z1 (garis kaki 2D) dan
@@ -731,6 +736,8 @@ void main() { hasil = vec4(1.0); }`;
       // dikerjakan laci 3D (laciFiling), bukan lukisan yang menimpa laci di bawahnya
       filing: kulit('filing', { x: 106, y: 62, w: 52, h: 57 }, () => filingTertutup(() => { drawFiling(false); drawStiker(); }), 3),
       server: kulit('server', { x: 360, y: 29, w: 60, h: 91 }, (S) => { drawServer(aktif('server')(S)); drawStiker(); }, 12),
+      // layar monitor CRT di rak dinding (monitorCRT); tidak lagi ikut lukisan dinding
+      crt: kulit('crt', { x: 159, y: 45, w: 18, h: 16 }, () => drawCRT(), 6),
       fotokopi: kulit('fotokopi', { x: FOTOKOPI.x, y: FOTOKOPI.y + 12, w: FOTOKOPI.w, h: FOTOKOPI.h - 12 }, () => drawFotokopi(), 6),
       // daun pintu kadis: lukisan pintu TERTUTUP (panel timbul, gagang kuningan,
       // plat tendang & titik kuningan jumlah tamu); bukanya dikerjakan daun 3D
@@ -931,6 +938,7 @@ void main() { hasil = vec4(1.0); }`;
     // ruang kadis; badannya tembok berplester setebal 6; pajangannya timbul
     dindingBerlubang(S);
     reliefDinding(S);
+    monitorCRT(S);
 
     // --- perabot dinding
     const k = K_;
@@ -1990,10 +1998,9 @@ void main() { hasil = vec4(1.0); }`;
      yang sudah dilukis bayangDinding() jatuh pas di belakangnya. */
   const TIMBUL_DINDING = [
     { x: 18, y: 7, w: 134, h: 15, d: 1.6 },          // papan nama dinas
-    { x: 3, y: 3, w: 12, h: 10, d: 5 },              // kubah CCTV
     { x: 104, y: 20, w: 56, h: 42, d: 1.2 },         // bagan struktur organisasi
-    { x: 159, y: 45, w: 18, h: 16, d: 7 },           // monitor CRT bekas
-    { x: 336, y: 14, w: 38, h: 13, d: 9 },           // AC split
+    { x: 336, y: 14, w: 38, h: 10, d: 9 },           // AC split: badan atasnya (sirip & rumah bawah: acSplit)
+    // kubah CCTV (kubahCCTV) dan monitor CRT (monitorCRT) dibangun sungguhan
     { x: 376, y: 16, w: 40, h: 30, d: 1.2 },         // plakat nilai
     { x: 268, y: 6, w: 12, h: 15, d: 1.6 },          // foto pejabat kiri
     { x: 290, y: 6, w: 20, h: 16, d: 1 },            // Garuda
@@ -2046,6 +2053,82 @@ void main() { hasil = vec4(1.0); }`;
         S.segi(titik(a0, DINDING_Z), titik(a1, DINDING_Z), p1, p0, [Math.cos(am), Math.sin(am), 0], tepi);
       }
     }
+  }
+
+  /* --------------------------------------------- pajangan dinding yang hidup
+     AC split (drawWall 2D, 336..374 x y14..27): badan atasnya relief dinding
+     (LED-nya tetap lukisan hidup); di bawahnya rumah sirip yang masuk sedikit,
+     sirip yang mengayun pelan selama AC menyala (rapat waktu MOD.acMati), dan
+     hembusan dingin tipis yang turun dari mulutnya. Tetesnya sudah partikel. */
+  function acSplit(S) {
+    const mati = !!MOD.acMati, zDepan = DINDING_Z + 9;
+    kotak(S, 336, 374, 83, 86, DINDING_Z, zDepan - 2.4, warna('#d5d9d0'), { sisi: SEMUA });
+    kotak(S, 337.5, 372.5, 84, 85.6, zDepan - 2.4, zDepan - 2.3, warna('#2c3038'), { sisi: S_DEPAN });   // mulut angin
+    const sudut = mati ? 0 : 0.55 + 0.35 * Math.sin(now / 1800);
+    kotakM(S, A3.poros(0, 86, zDepan - 0.6, A3.putarX(-sudut)), 337.5, 372.5, 82.6, 86, zDepan - 1, zDepan - 0.6, warna('#e4e7e0'));
+    if (mati) return;
+    for (let k = 0; k < 4; k++) {
+      const t = ((now / 1500) + k * 0.27) % 1, x = 342 + k * 8 + Math.sin(now / 700 + k) * 1.5;
+      kotak(G.sinar, x, x + 3.5, 83 - t * 20, 85 - t * 20, zDepan + t * 12, zDepan + t * 12 + 2.5,
+        [0.86, 0.95, 1, 0.18 * (1 - t) * Math.min(1, t * 5)], { sisi: SEMUA, e: 1 });   // berpendar: di bayangan badan AC tanpa itu jadi noda kelabu
+    }
+  }
+  /* Kubah CCTV di pojok kiri-atas (drawWall 2D, 4..14 x y4..12): pelat dinding,
+     lengan, rumah kubah, dan lensa yang MENOLEH — membidik titik sapuan selama
+     cctv-menyapu-ruangan, pegawai yang kartunya dibuka, atau orang terdekat
+     yang sedang berjalan; tanpa sasaran ia menyapu pelan sendiri. LED merahnya
+     berkedip seperti 2D. */
+  const CCTV = { yaw: 0.7, pitch: 0.45, x: 9, y: 100.4, z: DINDING_Z + 5.5 };
+  function kubahCCTV(S, dt) {
+    const C = CCTV, abu = warna('#9aa1a6'), kubah = warna('#2c3038');
+    kotak(S, 4, 14, 101.6, 106.4, DINDING_Z, DINDING_Z + 1.2, warna('#7c838a'), { sisi: SEMUA });
+    kotak(S, 8.3, 9.7, 102.6, 104, DINDING_Z + 1.2, C.z, abu, { sisi: SEMUA });
+    tabung(S, C.x, C.z, 3.7, 101.4, 102.8, abu, { segmen: 12 });
+    tabung(S, C.x, C.z, 3.5, 100.5, 101.4, kubah, { segmen: 12 });
+    tabung(S, C.x, C.z, 3.0, 99.7, 100.5, kubah, { segmen: 12 });
+    tabung(S, C.x, C.z, 2.2, 99.1, 99.7, kubah, { segmen: 10 });
+    let sasaran = null;
+    const sapu = eventHidup.find((E) => E.def.id === 'cctv-menyapu-ruangan');
+    if (sapu && sapu.data.sapuX != null) sasaran = [sapu.data.sapuX, 10, 300];
+    else if (terpilih && !terpilih.diKadis) { const [px, pz] = posisiOrang(terpilih); sasaran = [px, 20, pz]; }
+    else {
+      let jarak = Infinity;
+      for (const a of penghuni()) {
+        if (a.diKadis || a.state !== 'walk') continue;
+        const [px, pz] = posisiOrang(a), d = Math.hypot(px - C.x, pz - C.z);
+        if (d < jarak) { jarak = d; sasaran = [px, 20, pz]; }
+      }
+    }
+    let yaw = 0.7 + 0.45 * Math.sin(now / 5200), pitch = 0.42;
+    if (sasaran) {
+      const dx = sasaran[0] - C.x, dy = sasaran[1] - C.y, dz = sasaran[2] - C.z;
+      yaw = Math.atan2(dx, dz); pitch = Math.atan2(-dy, Math.hypot(dx, dz));
+    }
+    const k = geraKurang3.matches ? 1 : Math.min(1, Math.max(0, dt) * 2.5);
+    C.yaw += Math.atan2(Math.sin(yaw - C.yaw), Math.cos(yaw - C.yaw)) * k;
+    C.pitch += (pitch - C.pitch) * k;
+    const m = A3.kali(A3.geser(C.x, C.y, C.z), A3.kali(A3.putarY(C.yaw), A3.putarX(C.pitch)));
+    kotakM(S, m, -1.15, 1.15, -1.15, 1.15, 1.9, 2.5, warna('#5a6068'));                                // cincin lensa
+    kotakM(S, m, -0.8, 0.8, -0.8, 0.8, 2.5, 3.3, warna('#101418'), 0.15);                              // lensa
+    const led = Math.sin(now / 1000) > 0;
+    kotakM(S, m, 1.3, 1.8, 0.9, 1.4, 2.2, 2.6, warna(led ? P.red : '#5c2222'), led ? 1 : 0);
+  }
+  /* Monitor CRT bekas di rak dinding (drawCRT 2D, 159..177 x y45..64): layarnya
+     kulit hidup sendiri (bar gulingnya waktu MOD.crtAktif) dan sedikit
+     memancar; di belakangnya tabung yang menirus ke tembok, di bawahnya leher,
+     dudukan, dan papan rak bersiku besi. */
+  function monitorCRT(S) {
+    const s = K_ && K_.crt;
+    const z = DINDING_Z, rangka = warna('#3a3f45'), tabungW = warna('#2f3439');
+    kotak(S, 158.5, 179.5, 44.6, 46, z, z + 17, KAYU, { sisi: SEMUA, w: { atas: gelapkan(KAYU, 1.12) } });   // papan rak
+    for (const bx of [159.5, 177.5]) kotak(S, bx, bx + 1, 38, 44.6, z, z + 9, BESI_TUA, { sisi: SEMUA });    // siku
+    kotak(S, 163, 173, 46, 47.2, z + 4, z + 14, warna('#2b2f34'));                                             // dudukan
+    kotak(S, 166, 170, 47.2, 49, z + 7, z + 11, rangka);                                                      // leher
+    kotak(S, 162, 174, 51, 63, z + 4, z + 12, tabungW, { sisi: SEMUA });                                       // tabung
+    kotak(S, 165, 171, 53.5, 60.5, z + 1, z + 4, tabungW, { sisi: SEMUA });                                    // pangkal tabung
+    kotak(S, 159, 177, 49, 65, z + 12, z + 16, rangka, { sisi: S_KIRI | S_KANAN | S_ATAS | S_BAWAH });        // bingkai
+    if (s) G.kulit.segi([159, 49, z + 16], [177, 49, z + 16], [177, 65, z + 16], [159, 65, z + 16], [0, 0, 1], PUTIH, s.uv, 0.25);
+    else kotak(S, 159, 177, 49, 65, z + 12, z + 16, warna('#1d3a2a'), { sisi: S_DEPAN });
   }
 
   // tembok berpita (plin · mint · lis · krem), sama seperti ruang utama
@@ -2594,7 +2677,16 @@ void main() { hasil = vec4(1.0); }`;
 
   // ------------------------------------------------------------- cahaya
   const ARAH_KUNCI = norm3(-0.34, 0.9, 0.62);   // dari kiri-atas-depan: bayangan jatuh ke kanan-belakang
-  const CAHAYA = { langit: [0.8, 0.8, 0.78], tanah: [0.6, 0.6, 0.58], kunci: [0.4, 0.39, 0.36], lampuPos: new Float32Array(18), lampuWarna: new Float32Array(18) };
+  // 16 lampu titik: xyz + redaman per lampu (lampu ruangan menjangkau jauh, lampu meja cuma mejanya)
+  const CAHAYA = { langit: [0.8, 0.8, 0.78], tanah: [0.6, 0.6, 0.58], kunci: [0.4, 0.39, 0.36], lampuPos: new Float32Array(64), lampuWarna: new Float32Array(48) };
+  const REDAM_RUANGAN = 0.00016, REDAM_MEJA = 0.025;
+  function pasangLampu(i, x, y, z, r, g, b, redam = REDAM_RUANGAN) {
+    CAHAYA.lampuPos[i * 4] = x; CAHAYA.lampuPos[i * 4 + 1] = y; CAHAYA.lampuPos[i * 4 + 2] = z; CAHAYA.lampuPos[i * 4 + 3] = redam;
+    CAHAYA.lampuWarna[i * 3] = r; CAHAYA.lampuWarna[i * 3 + 1] = g; CAHAYA.lampuWarna[i * 3 + 2] = b;
+  }
+  // lampu meja yang menyala (meja terpakai, bukan meja padam) — diisi susunDinamis,
+  // dibaca hitungCahaya frame berikutnya
+  const LAMPU_MEJA = MEJA_KERJA_X.map(() => 0);
   const LAMPU_Z = 150, LAMPU_Y = 97;
   function hitungCahaya() {
     const A = ambien();
@@ -2617,28 +2709,30 @@ void main() { hasil = vec4(1.0); }`;
     for (let i = 0; i < 3; i++) {
       const cx = NEON_X[i];
       const nyala = cx == null ? 0 : kedipNeon(i) * (0.25 + 0.75 * lampu);
-      CAHAYA.lampuPos[i * 3] = cx == null ? 0 : cx;
-      CAHAYA.lampuPos[i * 3 + 1] = LAMPU_Y - 4;
-      CAHAYA.lampuPos[i * 3 + 2] = LAMPU_Z + 20;
-      CAHAYA.lampuWarna[i * 3] = 0.34 * nyala;
-      CAHAYA.lampuWarna[i * 3 + 1] = 0.32 * nyala;
-      CAHAYA.lampuWarna[i * 3 + 2] = 0.26 * nyala;
+      pasangLampu(i, cx == null ? 0 : cx, LAMPU_Y - 4, LAMPU_Z + 20, 0.34 * nyala, 0.32 * nyala, 0.26 * nyala);
     }
     // lampu keempat: lampu gantung kantor kadis. Ruangan itu ada di bayangan
     // tembok bersama, jadi tanpa lampunya sendiri dia cuma kotak gelap.
     // Cahayanya juga yang merembes sedikit lewat jendela ke ruang utama.
     const kadis = KADIS_SIAP && sisipBoleh() ? 0.7 + 0.3 * lampu : 0;
-    CAHAYA.lampuPos.set([KADIS_LAMPU.x, KADIS_LAMPU.y - 6, KADIS_LAMPU.z], 9);
-    CAHAYA.lampuWarna.set([0.5 * kadis, 0.44 * kadis, 0.32 * kadis], 9);
+    pasangLampu(3, KADIS_LAMPU.x, KADIS_LAMPU.y - 6, KADIS_LAMPU.z, 0.5 * kadis, 0.44 * kadis, 0.32 * kadis);
     // lampu kelima & keenam: lampu WC (putih dingin) dan bohlam gudang (kuning),
     // menyala selama ada orangnya atau pintunya terbuka
     const wc = wcTerisi() || pintuTerbuka(DAUN.wc) ? 1 : 0;
     const gd = gudangTerisi() || pintuTerbuka(DAUN.gudang) ? 1 : 0;
-    CAHAYA.lampuPos.set(LAMPU_WC().map((v, i) => (i === 1 ? v - 4 : v)), 12);
-    CAHAYA.lampuWarna.set([0.42 * wc, 0.46 * wc, 0.5 * wc], 12);
-    CAHAYA.lampuPos.set(BOHLAM_GUDANG(), 15);
-    CAHAYA.lampuWarna.set([0.5 * gd, 0.42 * gd, 0.26 * gd], 15);
+    const [wx, wy, wz] = LAMPU_WC(), [bx, by, bz] = BOHLAM_GUDANG();
+    pasangLampu(4, wx, wy - 4, wz, 0.42 * wc, 0.46 * wc, 0.5 * wc);
+    pasangLampu(5, bx, by, bz, 0.5 * gd, 0.42 * gd, 0.26 * gd);
+    /* lampu ketujuh dst.: lampu meja kerja, kuning hangat dan berjangkauan
+       pendek — menerangi papan meja, laptop, dan wajah pegawainya, bukan
+       ruangan. Siang nyaris tak terasa; malam (lembur) jadi genangan hangat. */
+    MEJA_KERJA_X.forEach((cx, i) => {
+      const n = LAMPU_MEJA[i] * (0.15 + 0.85 * lampu);
+      pasangLampu(6 + i, cx - 28.5, MEJA_H + 6.5, 335.5, 0.9 * n, 0.72 * n, 0.42 * n, REDAM_MEJA);
+    });
+    MALAM.lampu = lampu;
   }
+  const MALAM = { lampu: 0 };      // 0 siang .. 1 malam, dari ambien() — dipakai genangan lampu meja
 
   // --------------------------------------------------------- peta bayangan
   const PETA_N = 2048;
@@ -2921,6 +3015,10 @@ void main() { hasil = vec4(1.0); }`;
   function susunDinamis(stasiun, dt) {
     const S = G.dinamis;
     S.kosongkan();
+    // grup tembus pandang dikosongkan paling awal: uap AC dan genangan lampu
+    // meja menulis ke grup sinar jauh sebelum pegawai & partikel ke grup pudar
+    G.pudar.kosongkan();
+    G.sinar.kosongkan();
 
     // Dinding samping: rendah kalau kamera ada di baliknya (maket dipotong).
     // Grup sendiri yang tidak ikut lintasan bayangan — dinding setinggi 110
@@ -2930,6 +3028,10 @@ void main() { hasil = vec4(1.0); }`;
     dindingSamping(G.samping, W, W + 6, KAM.mata[0] > W + 4);
     if (POV.t > 0) tutupMaketPov(G.samping);
     WADAH.samping.isi(G.samping);
+
+    // pajangan dinding yang bergerak: sirip AC, lensa CCTV
+    acSplit(S);
+    kubahCCTV(S, dt);
 
     // lampu neon gantung: tabung menyala sesuai kedipNeon
     NEON_X.forEach((cx, i) => {
@@ -2973,8 +3075,17 @@ void main() { hasil = vec4(1.0); }`;
       kursi(S, cx + serong, 355.6, -1, false, true);
       const h = MEJA_H;
       const nyala = (terpakai.has(i) || MOD.mejaHantu === i) && MOD.mejaPadam !== i;
+      LAMPU_MEJA[i] = nyala ? 1 : 0;                         // lampu titik mejanya (hitungCahaya)
       const layar = nyala ? campur(warna('#173a96'), warna('#9fc3ff'), 0.15 + 0.1 * Math.sin(now / 300 + i)) : warna('#20242c');
       kotak(S, cx + 13, cx + 29, h + 1.6, h + 13.4, 336, 336.2, layar, { sisi: S_DEPAN, e: nyala ? 0.85 : 0 });
+      // genangan cahaya lampu meja di papan meja: tiga cakram hangat bertingkat
+      // (di lintasan pudar cuma yang teratas yang dicampur, jadi pinggirnya
+      // memudar bertahap), cuma terasa waktu ruangan gelap
+      if (nyala && MALAM.lampu > 0.05) {
+        [[7.5, 0.1], [5.5, 0.18], [3, 0.28]].forEach(([r, al], j) => {
+          tabung(G.sinar, cx - 22, 339, r, h + 0.04 + j * 0.03, h + 0.06 + j * 0.03, [1, 0.86, 0.55, al * MALAM.lampu], { segmen: 14, e: 1 });
+        });
+      }
       if (nyala) {
         for (let b = 0; b < 3; b++) {
           const lw = 3 + ((b * 5 + ((now * MOD.layar / 150) | 0) + i * 3) % 9);
@@ -3103,7 +3214,6 @@ void main() { hasil = vec4(1.0); }`;
 
     // pegawai: yang pudar ke grup campur, sisanya pejal. Yang matanya sedang
     // dipakai kamera POV tidak digambar (keadaannya tetap maju lewat SUSUN_HAMPA)
-    G.pudar.kosongkan();
     const tanpaBadan = POV.t > 0.4 ? POV.orang || POV.bekas : null;
     for (const a of penghuni()) {
       const ganti = tampilanKhusus(a);                        // yang sedang masuk/keluar WC & gudang
@@ -3132,6 +3242,7 @@ void main() { hasil = vec4(1.0); }`;
 
     WADAH.dinamis.isi(S);
     WADAH.pudar.isi(G.pudar);
+    WADAH.sinar.isi(G.sinar);
   }
 
   function dindingSamping(S, x0, x1, rendah) {
@@ -4155,7 +4266,7 @@ void main() { hasil = vec4(1.0); }`;
     'silau-sore-gorden': (S, E) => {
       if (E.umur > 6) return;
       const c = warna('#ffd88a'), ca = [c[0], c[1], c[2], 0.26 * Math.max(0, 1 - E.umur / 6)];
-      G.pudar.segi([150, 0.15, 200], [300, 0.15, 200], [238, 0.15, 101], [186, 0.15, 101], [0, 1, 0], ca, UV_POLOS, 0.7);
+      G.sinar.segi([150, 0.15, 200], [300, 0.15, 200], [238, 0.15, 101], [186, 0.15, 101], [0, 1, 0], ca, UV_POLOS, 0.7);
     },
     // cahaya monitor lembur sudah dipancarkan layar-layar 3D-nya sendiri
     'lembur-sampai-malam': () => {},
@@ -4278,7 +4389,7 @@ void main() { hasil = vec4(1.0); }`;
     // silau matahari sore di layar rak server: petak putih yang memudar
     'matahari-silau-monitor': (S, E) => {
       if (E.umur > 10) return;
-      kotak(G.pudar, 384, 394, 0.5, 12, 121, 121.1, [1, 1, 1, 0.5 * Math.max(0, 1 - E.umur / 10)], { sisi: S_DEPAN, e: 0.8 });   // di muka UPS (120,9)
+      kotak(G.sinar, 384, 394, 0.5, 12, 121, 121.1, [1, 1, 1, 0.5 * Math.max(0, 1 - E.umur / 10)], { sisi: S_DEPAN, e: 0.8 });   // di muka UPS (120,9)
     },
     // layar rak server menganggur: logo jeruji amber berputar di layar gelap
     'layar-server-idle-logo': (S, E) => {
@@ -4558,7 +4669,7 @@ void main() { hasil = vec4(1.0); }`;
     gl.uniform3fv(u.uKunci, CAHAYA.kunci);
     gl.uniform3fv(u.uLangit, CAHAYA.langit);
     gl.uniform3fv(u.uTanah, CAHAYA.tanah);
-    gl.uniform3fv(u.uLampuPos, CAHAYA.lampuPos);
+    gl.uniform4fv(u.uLampuPos, CAHAYA.lampuPos);
     gl.uniform3fv(u.uLampuWarna, CAHAYA.lampuWarna);
     gl.uniform1f(u.uBayangNyala, bayangNyala ? 1 : 0);
     gl.uniform1f(u.uTexel, 1 / PETA_N);
@@ -4594,20 +4705,21 @@ void main() { hasil = vec4(1.0); }`;
     }
     // yang tembus pandang: kedalaman dulu (tanpa warna), lalu warna dicampur
     // di permukaan terdepan saja — sosok pudar tetap pejal bentuknya. Kaca
-    // (air akuarium, pintu lemari piala) ikut lintasan ini, tidak ikut bayangan.
-    if (WADAH.pudar.n || WADAH.kaca.n) {
+    // (air akuarium, pintu lemari piala) dan sinar (genangan lampu, uap AC,
+    // silau) ikut lintasan ini, tidak ikut bayangan.
+    if (WADAH.pudar.n || WADAH.kaca.n || WADAH.sinar.n) {
       gl.bindTexture(gl.TEXTURE_2D, TEK_PUTIH);
       gl.uniform1f(u.uUji, 0.0);
       gl.uniform1f(u.uPudar, 1);
       gl.enable(gl.CULL_FACE);
       gl.colorMask(false, false, false, false);
-      WADAH.pudar.gambar(); WADAH.kaca.gambar();
+      WADAH.pudar.gambar(); WADAH.kaca.gambar(); WADAH.sinar.gambar();
       gl.colorMask(true, true, true, true);
       gl.depthMask(false);
       gl.depthFunc(gl.LEQUAL);
       gl.enable(gl.BLEND);
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      WADAH.pudar.gambar(); WADAH.kaca.gambar();
+      WADAH.pudar.gambar(); WADAH.kaca.gambar(); WADAH.sinar.gambar();
       gl.disable(gl.BLEND);
       gl.depthFunc(gl.LESS);
       gl.depthMask(true);

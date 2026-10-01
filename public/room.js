@@ -1387,7 +1387,7 @@ function tabelBayangDinding() {
   const J = JENDELA;
   bayangDindingTabel = [
     { x: 18,  y: 7,  w: 134, h: 15 },                              // papan nama dinas
-    { x: 4,   y: 4,  w: 10,  h: 8  },                              // kubah CCTV
+    { x: 4,   y: 4,  w: 10,  h: 8, cctv: true },                   // kubah CCTV (3D: bayangannya sungguhan)
     { x: J.x - 8, y: J.y - 8, w: J.w + 16, h: J.h + 12 },          // ceruk jendela
     { x: 159, y: 45, w: 18,  h: 16 },                              // monitor CRT
     { x: 158, y: 54, w: 16,  h: 20 },                              // kalender dinding
@@ -1406,6 +1406,7 @@ function tabelBayangDinding() {
 function bayangDinding() {
   ctx.imageSmoothingEnabled = true;
   for (const b of tabelBayangDinding()) {
+    if (b.cctv && TIGA.tanpaCCTV) continue;
     if (b.bulat) {
       ctx.globalAlpha = 0.20;
       ctx.drawImage(bayangBulat(), b.x - 1, b.y + 1, b.w + 6, b.h + 6);
@@ -1541,11 +1542,14 @@ function drawWall() {
   ctx.beginPath(); ctx.moveTo(427, 47); ctx.lineTo(433, 41); ctx.stroke();
 
   // CCTV kubah pojok kiri-atas, sebelum spanduk mulai — LED merah tetap
-  // berkedip pelan di luar event, kerucut sapuannya cuma muncul saat event
-  r(4, 4, 10, 8, '#7c838a');
-  r(4, 4, 10, 2, '#9aa1a6');
-  r(7, 10, 4, 2, '#5a6068');
-  r(8, 11, 2, 1, Math.sin(now / 1000) > 0 ? P.red : '#5c2222');
+  // berkedip pelan di luar event, kerucut sapuannya cuma muncul saat event.
+  // Di 3D kubahnya benda sendiri yang lensanya menoleh (TIGA.tanpaCCTV)
+  if (!TIGA.tanpaCCTV) {
+    r(4, 4, 10, 8, '#7c838a');
+    r(4, 4, 10, 2, '#9aa1a6');
+    r(7, 10, 4, 2, '#5a6068');
+    r(8, 11, 2, 1, Math.sin(now / 1000) > 0 ? P.red : '#5c2222');
+  }
 
   drawPintuWC();            // pojok kiri, di bawah CCTV — cermin pintu kadis
   drawPintuGudang();        // bentang pilar kedua (576..672), dinding belakang
@@ -12606,8 +12610,10 @@ const kameraSinematikBoleh = () => !geraKurang.matches;
      gambar(stasiun)     menggantikan seluruh penggambaran 2D di frame()
      keLayar(x, y, kaki) titik dunia 2D + garis kakinya → px CSS relatif stageInner
      tampak(x, y)        pengganti kameraTampak() untuk balon
-     tanpaNeon           drawWall melewatkan tabung neon: di 3D neon itu benda gantung */
-const TIGA = { aktif: false, kamera: null, gambar: null, keLayar: null, tampak: null, tanpaNeon: false };
+     tanpaNeon           drawWall melewatkan tabung neon: di 3D neon itu benda gantung
+     tanpaCCTV           drawWall melewatkan kubah CCTV & bayangan tempelnya: di 3D
+                         kubahnya benda yang menoleh dan berbayang sungguhan */
+const TIGA = { aktif: false, kamera: null, gambar: null, keLayar: null, tampak: null, tanpaNeon: false, tanpaCCTV: false };
 
 // titik dunia → px CSS relatif stageInner (yang dipakai DOM di overlay).
 // `kaki` = garis kaki benda yang memuat titik itu (bawaan: titik itu sendiri);

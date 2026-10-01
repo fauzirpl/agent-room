@@ -8,6 +8,14 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: pajangan dinding yang hidup.** Sirip AC split kini mengayun
+  pelan selama AC menyala (dan merapat waktu AC mati), dengan kepulan hawa
+  dingin tipis yang turun dari mulutnya. Kubah CCTV di pojok menoleh mengikuti
+  orang yang lewat, pegawai yang kartunya dibuka, atau titik sapuan event CCTV,
+  dengan LED merah yang berkedip. Monitor CRT bekas berdiri di rak kayu
+  bersiku dengan tabung yang menonjol ke belakang; layarnya tetap hidup. Lampu
+  meja kerja benar-benar menyala: bohlamnya berpendar dan malam hari ada
+  genangan cahaya hangat di papan mejanya.
 - **Tampilan 3D: muka perabot jadi timbul.** Rak server kini berongga dengan
   lima unit yang menonjol, papan nama, dan UPS di depannya; lampu-lampunya tetap
   berkedip. Laci lemari filing benar-benar meluncur keluar waktu ada yang mencari
@@ -366,6 +374,10 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **Silau 3D tidak lagi membayangi tempatnya sendiri.** Petak silau matahari
+  sore di lantai dan silau di muka UPS ikut peta bayangan, jadi lantai tepat di
+  bawah petak hangat itu malah lebih gelap. Cahaya dan hawa yang bukan benda
+  kini punya grup tembus pandang sendiri yang tidak berbayang.
 - **Makanan di meja rapat kelihatan lagi.** Sembilan event menaruh barangnya
   di atas taplak dengan `sortY` 200..205, padahal meja rapat sendiri 249 —
   taplaknya dilukis belakangan dan menimpa seluruh barang itu. Gorengan dan

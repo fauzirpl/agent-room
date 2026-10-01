@@ -13,7 +13,8 @@
 // Yang diuji di sandbox uji-event.mjs (VM tanpa WebGL):
 //   1. kait TIGA ada, mati bawaan, dan keLayar() 2D mengabaikan argumen kaki;
 //   2. gambarKe() menukar ctx dan SELALU mengembalikannya, juga kalau fn melempar;
-//   3. TIGA.tanpaNeon cuma membuang tabung neon dari drawWall, bukan dindingnya;
+//   3. TIGA.tanpaNeon / tanpaCCTV cuma membuang tabung neon / kubah CCTV (dan
+//      bayangan tempelnya) dari drawWall, bukan dindingnya;
 //   4. frame() dengan TIGA.aktif: pegawai tetap di-update, kamera & gambar 3D
 //      dipanggil sekali, dan drawWall 2D tidak disentuh sama sekali;
 //   5. keLayar() meneruskan garis kaki ke TIGA (bawaan: titik itu sendiri),
@@ -70,14 +71,14 @@ console.log(tebal('\nTampilan 3D tidak boleh merusak 2D'));
 // ------------------------------------------------------------------ 3
 {
   const ctx = muatKonteks();
-  const hitung = (tanpaNeon) => {
+  const hitung = (kait, nyala) => {
     const k = buatCtxPalsu({ ketat: true });
     jalankan(ctx, 'globalThis.__kPalsu = null');
     ctx.__kPalsu = k;
-    jalankan(ctx, `TIGA.tanpaNeon = ${tanpaNeon}; try { gambarKe(__kPalsu, () => drawWall()); } finally { TIGA.tanpaNeon = false; }`);
+    jalankan(ctx, `TIGA.${kait} = ${nyala}; try { gambarKe(__kPalsu, () => drawWall()); } finally { TIGA.${kait} = false; }`);
     return k.__kendali.hitung;
   };
-  const biasa = hitung(false), tanpa = hitung(true);
+  const biasa = hitung('tanpaNeon', false), tanpa = hitung('tanpaNeon', true);
   const neon = jalankan(ctx, 'NEON_X.length');
   const rBiasa = biasa.get('fillRect') || 0, rTanpa = tanpa.get('fillRect') || 0;
   // tiap tabung: dua kabel, rumah lampu, tabung, pendar glow() = 5 fillRect
@@ -85,6 +86,13 @@ console.log(tebal('\nTampilan 3D tidak boleh merusak 2D'));
     'TIGA.tanpaNeon membuang tepat tabung neon dari drawWall (' + neon + ' tabung x 5 fillRect)',
     rBiasa + ' - ' + rTanpa + ' != ' + neon * 5);
   cek((tanpa.get('drawImage') || 0) >= 1 && rTanpa > 20, 'dinding & isinya tetap digambar tanpa neon');
+  // kubah CCTV: badan, tutup, lensa, LED = 4 fillRect, ditambah dua tingkat
+  // bayangan tempelnya di bayangDinding() = 2 fillRect
+  const rCctv = hitung('tanpaCCTV', true).get('fillRect') || 0;
+  cek(rBiasa - rCctv === 6,
+    'TIGA.tanpaCCTV membuang tepat kubah CCTV & bayangan tempelnya dari drawWall (4 + 2 fillRect)',
+    rBiasa + ' - ' + rCctv + ' != 6');
+  cek(jalankan(ctx, 'TIGA.tanpaNeon === false && TIGA.tanpaCCTV === false'), 'kedua kait pelukis dinding mati lagi sesudahnya');
 }
 
 // ------------------------------------------------------------------ 4

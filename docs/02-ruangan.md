@@ -2081,6 +2081,8 @@ menggambarnya, dan menempel lewat satu kait saja — objek `TIGA` di room.js:
   dipakai ulang tanpa tahu dirinya sedang dipakai 3D.
 - `TIGA.tanpaNeon`: `drawWall` melewatkan tabung neon, karena di 3D neon itu
   benda gantung sendiri yang sekaligus jadi sumber cahaya.
+- `TIGA.tanpaCCTV`: `drawWall` melewatkan kubah CCTV dan bayangan tempelnya,
+  karena di 3D kubahnya benda yang menoleh dan melempar bayangan sungguhan.
 
 Tanpa `ruang3d.js` (harness uji di VM), tanpa WebGL2, atau kalau konteks
 WebGL-nya dicabut peramban, `TIGA.aktif` tetap/kembali `false` dan ruangan
@@ -2410,16 +2412,43 @@ terpakai lagi (termasuk tujuh kartu meja kerja) ikut dibuang, jadi melukis
 kulit malah lebih ringan dari sebelumnya. Kartu tegak sudah tidak ada sama
 sekali; yang masih "lukisan berdiri" tinggal gambar event (kartu bertebal).
 
-**Pajangan dinding timbul.** Papan nama dinas, kubah CCTV, bagan struktur
-organisasi, monitor CRT, AC, plakat nilai, foto pejabat, Garuda, plang KEPALA
-DINAS, papan kinerja, papan pengumuman, kotak P3K, poster BerAKHLAK, papan
-nomor antrean, dan panel MCB menonjol dari tembok; jam dinding dan rambu
-dilarang merokok jadi cakram. Muka depannya tetap tekstur dinding hidup di
+**Pajangan dinding timbul.** Papan nama dinas, bagan struktur organisasi,
+badan atas AC, plakat nilai, foto pejabat, Garuda, plang KEPALA DINAS, papan
+kinerja, papan pengumuman, kotak P3K, poster BerAKHLAK, papan nomor antrean,
+dan panel MCB menonjol dari tembok; jam dinding dan rambu dilarang merokok
+jadi cakram. Muka depannya tetap tekstur dinding hidup di
 kotak yang sama — jarum jamnya tetap berdetak dan LED AC tetap berkedip di muka
 yang menonjol itu — sedangkan warna sisinya dicicip dari tepi lukisannya
 sendiri. Bayangan tempel yang sudah dilukis `bayangDinding()` jatuh pas di
 belakangnya. Karena relief mencicip lukisan dinding, dinding dilukis sekali
 SEBELUM geometri statis dibangun.
+
+**Pajangan dinding yang hidup.** Empat pajangan dibangun sungguhan, bukan
+relief:
+
+- **AC split** — di bawah badan reliefnya ada rumah sirip yang masuk sedikit,
+  dengan sirip yang mengayun pelan selama AC menyala dan merapat waktu
+  `MOD.acMati`. Dari mulutnya turun kepulan hawa dingin pucat; tetesnya tetap
+  partikel yang jatuh ke ember.
+- **Kubah CCTV** di pojok kiri atas: pelat, lengan, rumah, kubah bertingkat,
+  dan lensa yang **menoleh** — membidik titik sapuan selama event
+  `cctv-menyapu-ruangan`, pegawai yang kartunya dibuka, atau orang terdekat
+  yang sedang berjalan; tanpa sasaran ia menyapu pelan sendiri. LED merahnya
+  berkedip. Lukisan kubah 2D-nya dilewatkan waktu dinding 3D dilukis
+  (`TIGA.tanpaCCTV`), jadi tidak ada LED kedua di tembok di belakangnya.
+- **Monitor CRT** berdiri di papan rak kayu bersiku besi: dudukan, leher,
+  tabung yang menirus ke tembok, dan bingkai. Layarnya kulit hidup sendiri
+  (`drawCRT()`, bar gulingnya waktu `MOD.crtAktif`) yang sedikit memancar;
+  lukisan dinding tidak lagi menggambar CRT, supaya tidak ada gambar kembar di
+  tembok di belakangnya.
+- **Lampu meja kerja** menyala selama mejanya dipakai: bohlam di bawah kapnya
+  berpendar, dan lampu titiknya sendiri menerangi papan meja, laptop, dan
+  wajah pegawainya. Siang nyaris tak terasa; malam ada genangan cahaya hangat
+  bertingkat di papan meja.
+
+Genangan lampu, kepulan AC, dan petak silau matahari tinggal di grup `sinar`:
+tembus pandang dan dicampur di lintasan pudar, tetapi **tidak berbayang** —
+cahaya yang ikut peta bayangan malah menggelapkan permukaan yang ia terangi.
 
 **Debu & berkas cahaya.** Pasangan 3D `drawDebu()`: debu yang cuma kelihatan
 waktu ditembus cahaya, hidup di volumenya sendiri — prisma berkas jendela (dari
@@ -2433,8 +2462,11 @@ memudar ke lantai dan meredup waktu hujan. Mode ringan mematikan keduanya.
 bukan selubung warna: langit & tanah (cahaya belahan), satu cahaya kunci dari
 kiri-atas-depan yang melempar **bayangan sungguhan** (peta bayangan 2048,
 disaring 3x3), dan ketiga tabung neon jadi lampu titik yang ikut berkedip
-(`kedipNeon`) dan padam waktu mati lampu. Malam jadi temaram kebiruan dengan
-genangan cahaya hangat di bawah tiap lampu; kilat menerangi seluruh ruangan.
+(`kedipNeon`) dan padam waktu mati lampu. Shader menampung enam belas lampu
+titik, masing-masing dengan redamannya sendiri: neon, lampu kadis, WC, dan
+gudang menjangkau jauh, tujuh lampu meja kerja cuma mejanya. Malam jadi
+temaram kebiruan dengan genangan cahaya hangat di bawah tiap lampu; kilat
+menerangi seluruh ruangan.
 
 **Kamera 2D tetap yang memutuskan ke mana melihat.** Mode ikut, sinematik,
 klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
