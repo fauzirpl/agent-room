@@ -2106,10 +2106,20 @@ kanvas tekstur berskala 3 texel per piksel dunia:
   meja lesehan, dan bantal duduk "ditimbulkan" — kotak rendah yang tutupnya
   memakai lukisan lantai di tapaknya sendiri;
 - **kulit perabot** = muka depan filing kabinet, rak server (LED-nya tetap
-  berkedip), badan fotokopi, printer, dispenser, penghancur kertas, dan
+  berkedip), badan fotokopi, dispenser, microwave, lemari counter pantri, dan
   seterusnya, masing-masing dilukis fungsi gambarnya sendiri di dalam klip
-  kotaknya. Warna samping & tutup kotaknya dicicip dari tepi kulit itu
-  sendiri: lemari kayu dapat samping kayu tanpa tabel warna kedua. Yang bukan
+  kotaknya — lalu dipasang sebagai **relief** (`reliefKulit`): mukanya dipecah
+  jadi lapisan menurut bagian lukisannya, tiap lapisan kotak sendiri bermuka
+  potongan kulit yang sama dan bersisi warna tepi lukisan di tempat itu
+  (dicicip dari kanvas kulitnya, jadi lemari kayu dapat samping kayu tanpa
+  tabel warna kedua). Rak server berongga dengan lima unit yang menonjol, papan
+  nama, dan UPS paling depan; fotokopi berlaci kertas bergagang dan beroda;
+  dispenser bercerukan tempat gelas dengan keran voxel; jendela microwave masuk
+  ke dalam bingkai pintunya. Laci filing malah kotak sungguhan yang meluncur
+  keluar (`laciFiling`) waktu ada yang mencari berkas, laci yang tertinggal
+  terbuka, atau yang sudah dikosongkan — kulitnya dilukis dengan semua laci
+  tertutup, supaya lukisan laci yang ketarik tidak menimpa laci di bawahnya.
+  Mesin absen dan penghancur kertas sudah penuh voxel, tanpa kulit. Yang bukan
   "muka sebuah kotak" — rak terbuka, tanaman, barang di atas meja, akuarium,
   lemari kaca — tidak dilukis, tapi dibangun (lihat **Perabot voxel** di bawah).
 

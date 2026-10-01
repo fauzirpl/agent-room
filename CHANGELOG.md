@@ -8,6 +8,14 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: muka perabot jadi timbul.** Rak server kini berongga dengan
+  lima unit yang menonjol, papan nama, dan UPS di depannya; lampu-lampunya tetap
+  berkedip. Laci lemari filing benar-benar meluncur keluar waktu ada yang mencari
+  berkas, dengan map berwarna di dalamnya (atau kosong melompong). Fotokopi punya
+  laci kertas bergagang, roda, dan baki keluaran; dispenser punya ceruk dengan
+  keran panas & dingin dan baki tetes; microwave berjendela jaring yang masuk ke
+  dalam; lemari counter pantri berdaun pintu. Mesin absen dan penghancur kertas
+  jadi benda voxel sungguhan.
 - **Tampilan 3D: barang event gelombang kedua.** Kain dagangan pedagang,
   barisan semut yang merayap ke bungkus gorengan, colokan di kolong meja, dus
   arsip yang terguling, silau matahari sore di lantai, kantong kopi ojol, topi
