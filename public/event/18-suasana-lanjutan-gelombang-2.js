@@ -225,6 +225,7 @@ daftarEvent(
   id: 'pelangi-selepas-hujan',
   kelas: 'latar', bobot: B.jarang, cooldown: 1800, durasi: 50,
   syarat: (S) => CUACA.hujan < 0.1 && S.jam > 15 && S.jam < 17.5 && Math.random() < 0.25,
+  atasDiDinding: true,          // busurnya di dalam kaca, bukan di atas kepala penonton
   mulai(E) {
     E.data.orang = pinjamAktor(E, 3);
     E.data.orang.forEach((a, i) => a.goToXY(198 + i * 16, 138, 'up'));

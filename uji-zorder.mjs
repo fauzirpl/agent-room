@@ -26,6 +26,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import {
   muatKonteks, buatSatuOrang, buatS, buatE, buatPristine, resetRuangan,
@@ -344,6 +345,74 @@ function periksaTertutup() {
   return { gagal, diperiksa };
 }
 
+/* -------------------------------------------- isi kaca sesudah langit --- *
+ * drawWindow (prop sortY 116) mengisi kaca dengan langit opak, dan dilukis
+ * SESUDAH gambarLapis('gambarDinding'). Isi klipJendela() dari gambarDinding
+ * dulu dilukis di tempat, jadi tertimbun langit dan tidak pernah kelihatan:
+ * Monas & lampu kota, bulan purnama, layangan, kucing berantem, burung di
+ * kusen, gerobak bakso, asap genset. Sekarang isinya ditunda ke lapis kaca
+ * (lukisKaca di drawWindow). Di sini frame() ASLI dijalankan per event dengan
+ * ctx pencatat urutan: tiap isi klipJendela dilukis tepat sekali per
+ * panggilan, SESUDAH fillRect langit. Kontrolnya event buatan yang menggambar
+ * di kaca TANPA klipJendela — wajib ketahuan tertimbun, bukti pencatatnya
+ * memang bisa melihat urutan yang salah. */
+const KACA_DIKENAL = ['monas-lampu-malam-dipandangi', 'bulan-purnama-besar', 'layangan-nyangkut-kabel',
+  'kucing-berantem-di-parkiran', 'burung-di-kusen-jendela', 'tukang-bakso-lewat', 'genset-uji-bulanan'];
+function periksaKaca() {
+  const ctx = muatKonteks();
+  const H = ctx.__jembatan__;
+  const k = ctx.__ctxPalsu;
+  k.__kendali.ketat = false;
+  const pristine = buatPristine(ctx);
+  const J = JSON.parse(vm.runInContext('JSON.stringify(JENDELA)', ctx));
+  const WARNA_KONTROL = '#0a0b0c';
+  const KONTROL = vm.runInContext(`({ id: 'uji-kaca-tanpa-klip', kelas: 'latar', durasi: 100,
+    gambarDinding() { r(JENDELA.x + 10, JENDELA.y + 10, 3, 3, '${WARNA_KONTROL}'); } })`, ctx);
+  const log = [];
+  const frAsli = k.fillRect;
+  k.fillRect = function (x, y, w, h) {
+    if (x === J.x && y === J.y && w === J.w && h === J.h && typeof k.fillStyle !== 'string') log.push('langit');
+    else if (k.fillStyle === WARNA_KONTROL) log.push('isi');
+    return frAsli.apply(this, arguments);
+  };
+  let panggil = 0;
+  const klipAsli = ctx.klipJendela;
+  ctx.klipJendela = (fn) => { panggil++; return klipAsli(() => { log.push('isi'); fn(); }); };
+  const gagal = [], ketemu = [];
+  let kontrolTertimbun = false;
+  const TS = 5000;
+  try {
+    for (const def of [...H.EVENT_ACAK, KONTROL]) {
+      if (typeof def.gambarDinding !== 'function') continue;
+      H.agents.clear(); H.peserta.length = 0; H.standby.length = 0; H.eventHidup.length = 0;
+      resetRuangan(ctx, pristine);
+      const S = buatS(ctx, { jam: 12, hujan: 0, petir: false, ramai: false });
+      const E = buatE(def);
+      try { def.mulai && def.mulai(E, S); } catch { /* event yang butuh keadaan lain: gambarnya tetap dicoba */ }
+      H.eventHidup.push(E);
+      H.setLast(TS); H.setNow(TS);
+      log.length = 0; panggil = 0;
+      ctx.frame(TS);
+      H.eventHidup.length = 0;
+      for (const a of E.aktor) { a.eventKerja = null; a.betah = a.betahAsli || false; }
+      const langit = log.indexOf('langit');
+      const isi = log.flatMap((x, i) => (x === 'isi' ? [i] : []));
+      if (def === KONTROL) { kontrolTertimbun = langit >= 0 && isi.length > 0 && isi.every((i) => i < langit); continue; }
+      if (!panggil) continue;
+      ketemu.push(def.id);
+      if (langit < 0) gagal.push(`${def.id}: langit drawWindow tidak tercatat di frame()`);
+      else if (isi.length !== panggil) gagal.push(`${def.id}: ${panggil} panggilan klipJendela, ${isi.length} yang dilukis`);
+      else if (isi.some((i) => i < langit)) gagal.push(`${def.id}: isi kacanya dilukis SEBELUM langit (tertimbun)`);
+    }
+  } finally {
+    ctx.klipJendela = klipAsli;
+    k.fillRect = frAsli;
+  }
+  for (const id of KACA_DIKENAL) if (!ketemu.includes(id)) gagal.push(`${id}: gambarDinding-nya tidak lagi melukis lewat klipJendela`);
+  if (!kontrolTertimbun) gagal.push('kontrol: gambar di kaca TANPA klipJendela tidak ketahuan tertimbun — pencatatnya buta');
+  return { gagal, diperiksa: ketemu.length };
+}
+
 /* ----------------------------------------------------------------- CLI --- */
 function main() {
   const argv = process.argv.slice(2);
@@ -390,6 +459,10 @@ function main() {
   console.log((tutup.gagal.length ? merah('  ✗ ') : hijau('  ✓ ')) + 'prop-event-tidak-tertimpa-perabot'.padEnd(44)
     + abu(`${tutup.diperiksa} gambarProp: < ${AMBANG_TERTUTUP * 100}% pikselnya tertimpa perabot ber-sortY lebih besar`));
   for (const g of tutup.gagal) console.log(merah('      ' + g));
+  const kaca = periksaKaca();
+  console.log((kaca.gagal.length ? merah('  ✗ ') : hijau('  ✓ ')) + 'isi-kaca-sesudah-langit'.padEnd(44)
+    + abu(`${kaca.diperiksa} gambarDinding ber-klipJendela: isinya dilukis sesudah langit drawWindow (kontrol tanpa klip: tertimbun)`));
+  for (const g of kaca.gagal) console.log(merah('      ' + g));
   console.log();
   if (beda.length) {
     console.log(merah(`${beda.length} kasus z-order berubah dari golden.`)
@@ -399,8 +472,12 @@ function main() {
     console.log(merah(`${tutup.gagal.length} prop event tidak kelihatan: perabot yang dilukis sesudahnya menimpanya.`)
       + abu(' Naikkan sortY-nya melewati perabot itu, atau catat di SENGAJA_TERTUTUP kalau memang disengaja.'));
   }
-  if (beda.length || tutup.gagal.length) process.exit(1);
-  console.log(hijau(`${KASUS.length} kasus z-order sama dengan golden; tidak ada prop event yang tertimpa perabot.`));
+  if (kaca.gagal.length) {
+    console.log(merah(`${kaca.gagal.length} isi kaca jendela tertimbun langit atau hilang.`)
+      + abu(' Gambar di dalam kaca lewat klipJendela(), bukan langsung — lihat lukisKaca di room.js.'));
+  }
+  if (beda.length || tutup.gagal.length || kaca.gagal.length) process.exit(1);
+  console.log(hijau(`${KASUS.length} kasus z-order sama dengan golden; tidak ada prop event yang tertimpa perabot; isi kaca di atas langit.`));
 }
 
 main();

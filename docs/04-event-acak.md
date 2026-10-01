@@ -70,6 +70,7 @@ cooldown per event. Bentuk satu definisi:
   syarat: (S) => S.lampu > 0.15,
   mulai(E, S) {}, tick(E, dt, S) {}, selesai(E, S) {},
   gambarDinding(E), gambarLantai(E), gambarProp(E) + sortY, gambarAtas(E),
+  atasDiDinding: true,     // atau (E) => boolean: gambarAtas menempel di dinding/kaca
   lanjutan: [{ id: 'ups-beep-baterai', peluang: 0.5 }],
 }
 ```
@@ -81,6 +82,15 @@ letak gambarnya — isi taplak meja rapat (meja rapatnya sendiri 249) memakai
 250. Sembilan event pernah memakai 200..205 dan barangnya tidak pernah
 kelihatan; `uji-zorder.mjs` sekarang menggagalkan prop yang ≥ 90% pikselnya
 tertimpa perabot (pengecualian yang disengaja dicatat di `SENGAJA_TERTUTUP`).
+
+Menggambar di dalam kaca jendela memakai `klipJendela(fn)`. Dari
+`gambarDinding`, isinya ditunda ke *lapis kaca* dan dilukis sesudah langit
+`drawWindow` — menggambar langsung di kotak jendela tanpa `klipJendela` tetap
+tertimbun langit. `gambarAtas` yang seluruh isinya menempel di bidang dinding
+atau kaca (sorot lampu, isi kaca, kedip rambu) wajib bertanda `atasDiDinding`:
+2D tidak membedakannya, tapi tampilan 3D melukisnya ke tekstur dinding alih-alih
+kartu di kedalaman aktornya. `uji-tiga.mjs` menggagalkan `gambarAtas`
+ber-`klipJendela` yang tidak bertanda.
 
 Event mengubah ruangan lewat dua objek. **`MOD`** dikembalikan ke nilai bawaan
 tiap frame, jadi event cukup memasangnya di `tick()` tanpa perlu membereskannya

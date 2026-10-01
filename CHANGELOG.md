@@ -374,6 +374,59 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **Isi kaca jendela akhirnya kelihatan, di 2D maupun 3D.** Tujuh event yang
+  menggambar di kaca — Monas & lampu kota, bulan purnama, layangan, kucing
+  berantem di parkiran, burung di kusen, gerobak bakso, asap genset — selama ini
+  tertimbun langit opak `drawWindow`, karena `gambarDinding` dilukis lebih dulu.
+  Isi `klipJendela()` dari `gambarDinding` kini ditunda ke *lapis kaca*
+  (`lukisKaca()` di `drawWindow`), sesudah langit dan siluet kota. Di 3D,
+  `gambarAtas` yang menempel di dinding atau kaca diberi tanda eksplisit
+  `atasDiDinding`: pelangi, bayang gerhana, banjir, dan lalat di kaca, kedip
+  rambu dilarang merokok, serta kupu-kupu yang hinggap kini dilukis ke tekstur
+  dinding, tidak lagi jadi kartu yang melayang di tengah ruangan. Efek tipis
+  yang dulu dibuang (sorot lampu mobil malam, sirene lewat, riak senyap magrib)
+  ikut tampil. Dijaga `uji-zorder.mjs` dan `uji-tiga.mjs`.
+- **Meja rapat tidak lagi kebobolan undangan.** `kursiKosong()` dulu cuma
+  menghitung yang sedang duduk, jadi peserta yang pergi ke stasiun tool atau
+  masih antre terbaca sebagai "kursi kosong" dan tiap `SubagentStart`
+  melahirkan undangan baru — `uji-ulang` benih 2, 12, dan 15 merah dengan 14
+  peserta untuk 9 kursi, tapi lolos di CI yang cuma memutar benih bawaan.
+  Sekarang setiap peserta yang belum bubar memegang satu kursi; yang pergi ke
+  stasiun tool memesan kursinya (`Peserta.kursi`) dan sepulangnya duduk lagi di
+  kursi yang sama, bukan antre. Uji terarahnya `node uji-event.mjs --kursi`
+  (ikut `--semua`); `npm test` dan CI ikut memutar `uji-ulang --benih 2`.
+- **Tampilan 3D: datang dan pulang lewat pintu, bukan menembus tembok.**
+  Pegawai baru dan peserta rapat lahir di luar tepi kiri dunia, yang pulang
+  keluar di tepi kiri atau kanan — di maket artinya berjalan menembus dinding
+  samping lalu berdiri di luar alas. Kini tiap dinding samping punya ambang
+  berkusen jati tepat di lajurnya (kiri di lajur bawah, kanan di lajur atas)
+  dengan lampu KELUAR hijau dan teras kecil; siapa pun yang lewat tepi dunia
+  menebal atau memudar di ambang itu bersama barang bawaannya (tangga teknisi,
+  pel, galon, tablet kurir, aksesori tamu tenar). Balon, klik, cincin sorotan,
+  dan bidikan kubah CCTV ikut hilang bersama sosoknya. Simulasi 2D tidak berubah.
+- **Tampilan 3D tidak lagi menghabiskan memori kalau dibiarkan berjam-jam.**
+  `warna()` menyimpan tiap pasangan warna × tingkat tembus pandang selamanya,
+  padahal debu di berkas cahaya, partikel, dan pegawai yang memudar mengganti
+  tingkatnya tiap frame — ±2.900 catatan baru per detik, ±1,9 GB per jam, sampai
+  tab kehabisan memori atau 3D mati sendiri. Kini cuma satu catatan per warna;
+  warna tembus pandang dibuat baru tiap dipakai.
+- **Tampilan 3D: cubit dua jari tidak lagi melenyapkan maket.** Di HP/tablet,
+  cubit lalu angkat satu jari lalu geser membuat sudut kamera jadi NaN dan
+  maket hilang sampai halaman dimuat ulang. Sekarang jari yang tersisa
+  melanjutkan putaran (getar di bawah 5 px diabaikan, dan mengangkatnya bukan
+  klik), dan kamera punya jaring pengaman yang kembali ke tampak awal sendiri
+  kalau angkanya rusak, sambil melaporkan galatnya sekali.
+- **Tampilan 3D: taplak meja rapat ikut keadaan ruangan.** Tumpukan notulen sisa
+  rapat subagent, noda kopi yang menumpuk, dan gelas yang terguling di
+  genangannya kini tampil seperti di 2D — dulu taplak 3D selalu bersih dan
+  keempat gelasnya selalu tegak, jadi petugas notulen "mengambil kertas" dari
+  meja kosong. `tumpahan-kopi-rapat` yang dibatalkan sebelum dilap kini tetap
+  menegakkan gelasnya (nodanya tertinggal), tidak rebah selamanya.
+- **Perbaikan 3D di atas dijaga uji sungguhan.** `uji-tiga.mjs` kini menjalankan
+  `ruang3d.js` di atas WebGL2 palsu yang merekam geometri per wadah: cubit &
+  jaring NaN kamera, cache `warna()`, isi taplak rapat, pintu samping beserta
+  barang bawaan, cincin sorotan, dan kubah CCTV — tiap pemeriksaannya terbukti
+  merah kalau perbaikannya dicabut.
 - **Silau 3D tidak lagi membayangi tempatnya sendiri.** Petak silau matahari
   sore di lantai dan silau di muka UPS ikut peta bayangan, jadi lantai tepat di
   bawah petak hangat itu malah lebih gelap. Cahaya dan hawa yang bukan benda
@@ -419,7 +472,10 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
   `uji-ulang.mjs` begitu urutan acaknya bergeser. Catatan jujur: kode di commit
   sebelumnya pun sudah gagal `uji-ulang` di benih 4 (`kucing-di-atas-keyboard`,
   kelas yang sama) dan benih 7 (bocor peserta); benih bawaan saja yang selama
-  ini lolos. Keduanya belum disentuh.
+  ini lolos. Keduanya belum disentuh. (Per 2026-10-01 benih 4 dan 7 sudah hijau;
+  bocor peserta pindah ke benih 2/12/15 dan sudah diperbaiki — lihat "Meja rapat
+  tidak lagi kebobolan undangan". Kelas `kucing-di-atas-keyboard` kini muncul di
+  benih 18 dan masih belum disentuh.)
 
 - **Beat lofi tidak lagi melempar kalau gaya musik sempat kosong di tengah
   birama.** Scheduler membaca `musikGayaAktif` di setiap langkah, jadi

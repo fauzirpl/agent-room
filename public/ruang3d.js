@@ -71,16 +71,20 @@
   const geraKurang3 = matchMedia('(prefers-reduced-motion: reduce)');
 
   // --------------------------------------------------------------- warna
+  /* Yang disimpan cuma satu rgba beralfa 1 per warna. Alfa pecahan (debu yang
+     berdenyut, partikel, pegawai yang memudar) berganti tiap frame: kalau ikut
+     jadi kunci, tiap nilainya tinggal selamanya — ribuan kunci sedetik sampai
+     memorinya habis dan gagalTotal mematikan 3D. Larik beralfa 1 dipakai
+     bersama: jangan diubah di tempat (gelapkan/campur membuat larik baru). */
   const cacheWarna = new Map();
   function warna(c, a = 1) {
-    const kunci = c + '|' + a;
-    let v = cacheWarna.get(kunci);
+    let v = cacheWarna.get(c);
     if (!v) {
       const [r, g, b] = bagiWarna(c);
-      v = [r / 255, g / 255, b / 255, a];
-      cacheWarna.set(kunci, v);
+      v = [r / 255, g / 255, b / 255, 1];
+      cacheWarna.set(c, v);
     }
-    return v;
+    return a === 1 ? v : [v[0], v[1], v[2], a];
   }
   const gelapkan = (c, f) => [c[0] * f, c[1] * f, c[2] * f, c[3]];
   const campur = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t, p[3] + (q[3] - p[3]) * t];
@@ -295,6 +299,18 @@
       if (!o.tanpaAtas) S.segi([cx, y1, cz], [cx, y1, cz], [x1, y1, z1], [x0, y1, z0], [0, 1, 0], ca, UV_POLOS, e);
     }
   }
+  // Tabung rebah, sumbunya sejajar x (gelas terguling): x0 mulut (o.mulut),
+  // x1 dasar (o.dasar); sisinya menyinggung bidang cy - r.
+  function tabungRebah(S, x0, x1, cy, cz, r, c, o = {}) {
+    const n = o.segmen || 10, uv = [0.5, 0.5];
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2, am = (a0 + a1) / 2;
+      const p0 = [cy + Math.cos(a0) * r, cz + Math.sin(a0) * r], p1 = [cy + Math.cos(a1) * r, cz + Math.sin(a1) * r];
+      S.segi([x0, p0[0], p0[1]], [x0, p1[0], p1[1]], [x1, p1[0], p1[1]], [x1, p0[0], p0[1]], [0, Math.cos(am), Math.sin(am)], c);
+      S.tri([x1, cy, cz], [x1, p0[0], p0[1]], [x1, p1[0], p1[1]], [1, 0, 0], o.dasar || c, uv, uv, uv);
+      S.tri([x0, cy, cz], [x0, p1[0], p1[1]], [x0, p0[0], p0[1]], [-1, 0, 0], o.mulut || c, uv, uv, uv);
+    }
+  }
 
   const PUTIH = [1, 1, 1, 1];
 
@@ -484,8 +500,11 @@ void main() { hasil = vec4(1.0); }`;
 
   // ---------------------------------------------- lapisan dinding & lantai
   /* Dinding: seluruh bidang dinding 2D (baris 0..110) apa adanya — drawWall,
-     prop yang menempel di dinding, gambarDinding event, dan bukaan ruang
-     kadis. Perabot yang BERDIRI di depan dinding tidak ikut: mereka jadi
+     prop yang menempel di dinding, gambarDinding event (isi kacanya lewat
+     lapis kaca drawWindow), gambarAtas yang bertanda atasDiDinding, dan
+     bukaan ruang kadis. Dilukis ulang tiap 50 ms (100 ms mode ringan), jadi
+     yang bergerak di sini — lalat, gerobak bakso — jalan 20 langkah sedetik.
+     Perabot yang BERDIRI di depan dinding tidak ikut: mereka jadi
      benda 3D sendiri, jadi dinding di belakangnya harus polos. Fungsi yang
      menggambar dua-duanya (drawWindow: jendela + meja printer, drawFiling:
      kabinet + bagan) dipanggil di dalam klip bagian dindingnya saja. */
@@ -514,7 +533,8 @@ void main() { hasil = vec4(1.0); }`;
       aman(() => drawWall());
       TIGA.tanpaNeon = TIGA.tanpaCCTV = false;
       // urutan 2D: gambarDinding event tepat sesudah dinding, SEBELUM prop
-      // (pintu, jendela) — yang menempel di daun pintu memang tertutup pintunya
+      // (pintu, jendela) — yang menempel di daun pintu memang tertutup pintunya;
+      // isi kacanya (klipJendela) ditunda ke drawWindow, sesudah langit
       aman(() => gambarLapis('gambarDinding'));
       aman(() => drawEdaran());
       aman(() => drawNomorAntre());
@@ -529,6 +549,9 @@ void main() { hasil = vec4(1.0); }`;
       // bukaan ruang kadis: cuma KUSEN-nya yang dilukis — isinya ruangan 3D
       // sungguhan di balik lubang dinding (bangunRuangKadis), bukan lukisan
       aman(() => { if (sisipBoleh()) drawKusenSisip(); });
+      // gambarAtas bertanda atasDiDinding (lalat di kaca, pelangi, sorot lampu
+      // mobil, kedip rambu): paling akhir seperti di 2D, dan bukan kartu
+      aman(() => gambarLapis('gambarAtas', atasDiDinding));
       ctx.globalAlpha = 1;
     });
     unggah(TEK_DINDING, kvDinding);
@@ -633,8 +656,9 @@ void main() { hasil = vec4(1.0); }`;
     perabot: new Susun(), kaca: new Susun(64), temaDinding: new Susun(64), sinar: new Susun(64),
   };
   /* perabot: isi perabot yang ikut keadaan RUANGAN (tumpukan berkas, map
-     disposisi, buku tamu, kusut meja, tanaman layu, isi lemari arsip). Tidak
-     disusun tiap frame — dibangun ulang cuma waktu tandaPerabot() berubah.
+     disposisi, buku tamu, kusut meja, tanaman layu, isi lemari arsip, isi
+     taplak rapat). Tidak disusun tiap frame — dibangun ulang cuma waktu
+     tandaPerabot() berubah.
      kaca: air akuarium & pintu kaca lemari piala — tembus pandang di lintasan
      pudar, tapi TIDAK ikut peta bayangan (kaca yang membayangi isinya sendiri
      menggelapkan piala di baliknya).
@@ -1031,14 +1055,12 @@ void main() { hasil = vec4(1.0); }`;
   }
 
   function barangMejaRapat(S, R) {
-    // mikrofon, gelas, botol, map, notulen — kecil, statis
+    // mikrofon, botol, map, selembar notulen — kecil, statis; gelas, tumpukan
+    // notulen sisa & noda kopi ikut keadaan RUANGAN: isiTaplakRapat (grup perabot)
     for (const mx of [208, 246, 284]) {
       kotak(S, mx - 2, mx + 3, R.h, R.h + 1, 205, 208, warna('#3a3f45'));
       kotak(S, mx, mx + 1, R.h + 1, R.h + 8, 206, 207, warna('#5a6068'));
       kotak(S, mx - 1, mx + 2, R.h + 7, R.h + 10, 205.5, 207.5, warna('#2c3038'));
-    }
-    for (const [gx, gz] of [[190, 228], [226, 224], [266, 224], [302, 228]]) {
-      tabung(S, gx + 2.5, gz, 2.2, R.h, R.h + 5, warna('#eef2f6'), { segmen: 8, atas: warna('#c9a05a') });
     }
     for (const bx of [198, 292]) {
       tabung(S, bx + 1.5, 226, 1.6, R.h, R.h + 8, warna('#bcd8e8'), { segmen: 6 });
@@ -1839,6 +1861,61 @@ void main() { hasil = vec4(1.0); }`;
     }
   }
 
+  /* Isi taplak meja rapat yang ikut keadaan RUANGAN (drawRapat 2D); mik,
+     botol & map tetap statis di barangMejaRapat.
+       - Empat gelas. Yang dijatuhkan tumpahan-kopi-rapat (RUANGAN.gelasGuling
+         = x titik gelasnya) rebah, mulutnya ke kiri di genangan kopi yang
+         nanti ditinggalkan lapnya sebagai noda (x - 4, y 209).
+       - Tumpukan notulen sisa subagent (RUANGAN.notulen, maks NOTULEN_MAKS):
+         selembar per peserta yang permisi, di sudut kiri depan (NOTULEN_X),
+         setengah satuan per lapis, tiap lapis ketiga tergeser seperti 2D.
+         Tepi depannya mundur dari bibir taplak: petugas notulen berdiri di
+         y 238, dan badannya sudah masuk ke tepi meja 3D.
+       - Bekas kopi (RUANGAN.nodaKopi {x, y, lebar}): bercak rata di atas
+         taplak, y 2D direntang zRapat(). Noda kembar (tetes bocor di titik
+         yang sama) makin pekat, seperti alfa 0,5 yang bertumpuk di 2D. */
+  const GELAS_RAPAT = [[190, 228], [226, 224], [266, 224], [302, 228]];   // [x gelasTitik 2D, z]
+  function isiTaplakRapat(S) {
+    const R = MEJA_RAPAT, kain = warna('#f1eee2'), kopi = warna('#6b4a2a'), kaca = warna('#eef2f6');
+    // ujungnya membulat (lapis kedua lebih sempit, lebih dalam); tidak menjulur keluar meja
+    const bercak = (x0, x1, z0, z1, naik, c) => {
+      const t = Math.min(0.8, (x1 - x0) / 4);
+      for (const [xa, xb, za, zb] of [[x0, x1, z0, z1], [x0 + t, x1 - t, z0 - 0.5, z1 + 0.5]]) {
+        const X0 = Math.max(R.x0 + 0.4, xa), X1 = Math.min(R.x1 - 0.4, xb), Z0 = Math.max(R.z0 + 0.4, za), Z1 = Math.min(R.z1 - 0.4, zb);
+        if (X1 > X0 && Z1 > Z0) kotak(S, X0, X1, R.h, R.h + naik, Z0, Z1, c, { sisi: S_ATAS });
+      }
+    };
+    const kembar = new Map();
+    for (const n of RUANGAN.nodaKopi || []) {
+      const k = n.x + ',' + n.y + ',' + n.lebar, ada = kembar.get(k);
+      if (ada) ada.jumlah++; else kembar.set(k, { n, jumlah: 1 });
+    }
+    let i = 0;
+    for (const { n, jumlah } of kembar.values()) {
+      const z0 = zRapat(n.y);
+      bercak(n.x, n.x + n.lebar, z0, Math.max(zRapat(n.y + 2), z0 + 2), 0.04 + (i++ % 3) * 0.02, campur(kain, kopi, 1 - 0.5 ** jumlah));
+    }
+    for (const [gx, gz] of GELAS_RAPAT) {
+      if (RUANGAN.gelasGuling === gx) {
+        bercak(gx - 4.5, gx + 3, zRapat(209), gz + 1.6, 0.11, campur(kain, kopi, 0.8));
+        tabungRebah(S, gx, gx + 5, R.h + 2.2, gz, 2.2, kaca, { segmen: 8, mulut: campur(kaca, kopi, 0.55) });
+      } else {
+        tabung(S, gx + 2.5, gz, 2.2, R.h, R.h + 5, kaca, { segmen: 8, atas: warna('#c9a05a') });
+      }
+    }
+    // tepi depan tumpukan: badan petugas yang berdiri di y 238 sampai z ±234,8
+    const lapis = Math.min(NOTULEN_MAKS, RUANGAN.notulen | 0), zf = R.z1 - 5.4;
+    for (let k = 0; k < lapis; k++) {
+      const x = NOTULEN_X + (k % 3 === 1 ? 1 : 0), dz = k % 3 === 2 ? -0.5 : 0, y = R.h + k * 0.5;
+      kotak(S, x, x + 8, y, y + 0.5, zf - 10 + dz, zf + dz, warna(k % 2 ? '#d9d4c3' : P.paper));
+      if (k === lapis - 1) {                               // coretan di lembar teratas
+        for (const [zl, p] of [[zf - 8, 5], [zf - 6.5, 4.5], [zf - 5, 3]]) {
+          kotak(S, x + 1.5, x + 1.5 + p, y + 0.5, y + 0.53, zl + dz, zl + dz + 0.5, warna('#9aa7b4'), { sisi: S_ATAS });
+        }
+      }
+    }
+  }
+
   /* Tanda keadaan grup perabot: kalau sama dengan frame lalu, grupnya tidak
      disentuh. Kusut dimasukkan sebagai lapis per meja (bukan k mentah yang
      berubah tiap detik), layu dibulatkan ke 1/20. */
@@ -1856,7 +1933,9 @@ void main() { hasil = vec4(1.0); }`;
       Math.min(10, R.bukuTamu | 0), R.tema || '', Math.round((R.tanamanLayu || 0) * 20), kusut,
       Math.round((R.gordenKanan || 6) * 2), koranBasi() ? 1 : 0, R.kesetAda ? 1 : 0,
       KUSUT_LANTAI.filter((c) => k > c.a + 0.025).length,
-      (R.propLantai || []).map((p) => p.jenis + Math.round(p.x) + ',' + Math.round(p.y)).join(';')].join('|');
+      (R.propLantai || []).map((p) => p.jenis + Math.round(p.x) + ',' + Math.round(p.y)).join(';'),
+      Math.min(NOTULEN_MAKS, R.notulen | 0), R.gelasGuling == null ? '' : R.gelasGuling,
+      (R.nodaKopi || []).map((n) => n.x + ',' + n.y + ',' + n.lebar).join(';')].join('|');
   }
   let tandaPerabotTerakhir = null;
   function bangunPerabot() {
@@ -1873,6 +1952,7 @@ void main() { hasil = vec4(1.0); }`;
     koranRak(S);
     kesetKadis(S);
     cecerLantai(S);
+    isiTaplakRapat(S);
     G.temaDinding.kosongkan();
     temaDinding(S, G.temaDinding);
     WADAH.perabot.isi(S);
@@ -2090,11 +2170,12 @@ void main() { hasil = vec4(1.0); }`;
     let sasaran = null;
     const sapu = eventHidup.find((E) => E.def.id === 'cctv-menyapu-ruangan');
     if (sapu && sapu.data.sapuX != null) sasaran = [sapu.data.sapuX, 10, 300];
-    else if (terpilih && !terpilih.diKadis) { const [px, pz] = posisiOrang(terpilih); sasaran = [px, 20, pz]; }
+    else if (terpilih && !terpilih.diKadis && !lenyapDiAmbang(terpilih)) { const [px, pz] = posisiOrang(terpilih); sasaran = [px, 20, pz]; }
     else {
       let jarak = Infinity;
       for (const a of penghuni()) {
-        if (a.diKadis || a.state !== 'walk') continue;
+        // yang sudah lenyap di balik pintu samping tidak dibidik lagi
+        if (a.diKadis || a.state !== 'walk' || lenyapDiAmbang(a)) continue;
         const [px, pz] = posisiOrang(a), d = Math.hypot(px - C.x, pz - C.z);
         if (d < jarak) { jarak = d; sasaran = [px, 20, pz]; }
       }
@@ -2452,7 +2533,8 @@ void main() { hasil = vec4(1.0); }`;
      keluar. Posisi simulasinya tidak disentuh — ini murni cara melihatnya.
      Gudang terbuka ke atas, jadi penghuninya tidak memudar: dia kelihatan
      meraih rak, lalu keluar membawa kardus yang baru diberikan simulasi
-     sesudah dia sampai di ambang. */
+     sesudah dia sampai di ambang. Selebihnya: yang lewat pintu samping
+     (ambangSamping di bawah). */
   function tampilanKhusus(a) {
     const pudar = Math.max(0, Math.min(1, a.alpha == null ? 1 : a.alpha));
     if (a.tugasWC === 'masuk' || a.tugasWC === 'keluar') {
@@ -2468,7 +2550,36 @@ void main() { hasil = vec4(1.0); }`;
       return { x: a.x + Math.sin(t * 0.45) * 9, z: RUANG_GUDANG.z0 + 17, alfa: 1, face: 'up',
         pose: Math.sin(t * 1.3) > 0.2 ? 'duaangkat' : 'diam' };
     }
-    return null;
+    return ambangSamping(a);
+  }
+
+  /* Pintu samping. Di 2D tepi jendela itu sendiri pintunya: pegawai baru dan
+     peserta rapat muncul di x -14 lajur bawah, yang pulang hilang di
+     (-20, LANE_DOWN) atau (PINTU_X = W+20, LANE_UP). Maket 3D berdinding
+     samping pejal dan alasnya cuma sampai ±12 — tanpa pintu mereka menembus
+     tembok lalu berdiri melayang di luar alas. Jadi tiap dinding samping
+     dilubangi ambang berkusen tepat di lajurnya (dindingSamping), dan yang
+     x-nya lewat 0 / W memudar di ambang itu: pola WC dibalik — di sana alpha
+     jadi langkah, di sini langkah lewat tepi jadi alpha. Lewat `jauh` (jarak
+     lahirnya) = hilang; tampilnya cuma maju `langkah`, berhenti di teras
+     kecil di atas alas. Posisi simulasinya tidak disentuh. */
+  const PINTU_SAMPING = { lebar: 26, tinggi: 78, kusen: 3, jauh: 14, langkah: 9 };
+  function ambangSamping(a) {
+    const lewat = a.x < 0 ? -a.x : a.x - W;
+    if (!(lewat > 0)) return null;
+    const PS = PINTU_SAMPING, k = Math.min(1, lewat / PS.jauh);
+    const pudar = Math.max(0, Math.min(1, a.alpha == null ? 1 : a.alpha));
+    return { x: a.x < 0 ? -k * PS.langkah : W + k * PS.langkah, z: a.y, alfa: pudar * (1 - k) };
+  }
+  // sudah lewat ambang sampai tak kelihatan: balon, klik, kubah CCTV, dan POV-nya ikut hilang
+  const lenyapDiAmbang = (a) => { const p = ambangSamping(a); return !!p && p.alfa <= 0.02; };
+  /* Alfa badan seseorang di 3D: dari tampilan penggantinya (ambang WC,
+     gudang, pintu samping) atau pudar simulasinya, standby setengah tembus.
+     Tamu event: alpha-nya globalAlpha sosok 2D-nya (catatOrangEvent). Satu
+     rumus untuk badannya (susunDinamis) dan barang bawaannya (tampilPemilik). */
+  function alfaOrang(a, ganti = tampilanKhusus(a)) {
+    const nyata = ganti && ganti.alfa != null ? ganti.alfa : (a.alpha == null ? 1 : a.alpha);
+    return (a.standby && !a.tetap ? 0.55 : 1) * nyata;
   }
 
   // --------------------------------------------------------------- kamera
@@ -2563,6 +2674,9 @@ void main() { hasil = vec4(1.0); }`;
     const st = keadaanOrang.get(a), K = st && st.kepala;
     if (!K) return null;
     const mata = [K[1] * 21.2 + K[2] * 4.4 + K[3], K[5] * 21.2 + K[6] * 4.4 + K[7], K[9] * 21.2 + K[10] * 4.4 + K[11]];
+    // tidak ikut keluar lewat pintu samping: dari balik tembok tutup POV (muka
+    // dalam saja) tak kelihatan dan dinding sampingnya rebah jadi mode rendah
+    mata[0] = Math.max(2, Math.min(W - 2, mata[0]));
     const depan = norm3(K[2], K[6], K[10]);
     return { mata, hadap: Math.atan2(depan[0], depan[2]), angguk: Math.asin(Math.max(-1, Math.min(1, depan[1]))) };
   }
@@ -2576,8 +2690,33 @@ void main() { hasil = vec4(1.0); }`;
     return [Math.atan2(dx, dz) - mp.hadap, Math.atan2(dy, Math.hypot(dx, dz)) - mp.angguk + 0.1];
   }
 
+  /* Jaring NaN. Satu angka rusak di kamera — mis. seret yang kehilangan titik
+     awalnya — tidak pernah sembuh sendiri: pelunakan K di bawah mengejar NaN
+     selamanya dan maketnya lenyap sampai muat ulang. Yang rusak disalin ulang
+     dari tampak awal / tujuannya, dan dilaporkan sekali saja. */
+  const hingga = (...v) => v.every(Number.isFinite);
+  let kameraRusakDilapor = false;
+  function laporKameraRusak(apa) {
+    if (kameraRusakDilapor) return;
+    kameraRusakDilapor = true;
+    console.warn('[3d] kamera ' + apa + ' tidak hingga — dipulihkan');
+    try { laporGalat('3d: kamera ' + apa + ' tidak hingga, dipulihkan', 'ruang3d.js'); } catch { /* laporan cuma bonus */ }
+  }
+  function kameraAwal() {
+    KAM.yaw = KAM_AWAL.yaw; KAM.pitch = KAM_AWAL.pitch; KAM.zoom = KAM_AWAL.zoom;
+    KAM.sasaran = [...KAM_AWAL.sasaran];
+  }
+  const lunakSehat = () => hingga(KAM.yawK, KAM.pitchK, KAM.jarakK, ...KAM.sasaranK);
+  // versi K yang sudah rusak tidak bisa meluncur pulang: salin langsung dari tujuannya
+  function salinLunak(jarak, sasaran) {
+    KAM.yawK = KAM.yaw; KAM.pitchK = KAM.pitch;
+    KAM.jarakK = hingga(jarak) ? jarak : KAM.dasar;
+    KAM.sasaranK = hingga(...sasaran) ? [...sasaran] : [...KAM_AWAL.sasaran];
+  }
+
   function tickKamera3D(dt) {
     ukurKanvas();
+    if (!hingga(KAM.yaw, KAM.pitch, KAM.zoom, ...KAM.sasaran)) { laporKameraRusak('tujuan'); kameraAwal(); }
     const f = fokus3D();
     const sasaran = f ? f.titik : KAM.sasaran;
     const jarak = KAM.dasar / (f ? Math.max(KAM.zoom, f.zoom) : KAM.zoom);
@@ -2587,12 +2726,13 @@ void main() { hasil = vec4(1.0); }`;
     KAM.pitchK += (KAM.pitch - KAM.pitchK) * k;
     KAM.jarakK += (jarak - KAM.jarakK) * k;
     for (let i = 0; i < 3; i++) KAM.sasaranK[i] += (sasaran[i] - KAM.sasaranK[i]) * k;
+    if (!lunakSehat()) { laporKameraRusak('lunak'); salinLunak(jarak, sasaran); }
     const s = [...KAM.sasaranK];
     if (MOD.getar) s[1] += Math.sin(now / 40) * MOD.getar * 0.9;   // getaran genset/gempa
     const m = matriksKamera(KAM.yawK, KAM.pitchK, KAM.jarakK, s);
 
     // POV menyatu dengan kamera maket lewat POV.t (0 = maket, 1 = mata)
-    if (POV.orang && (terpilih !== POV.orang || !masihDiRuangan(POV.orang))) keluarPov();
+    if (POV.orang && (terpilih !== POV.orang || !masihDiRuangan(POV.orang) || lenyapDiAmbang(POV.orang))) keluarPov();
     const tuju = POV.orang ? 1 : 0;
     POV.t = geraKurang3.matches ? tuju : POV.t + Math.max(-dt * 2.2, Math.min(dt * 2.2, tuju - POV.t));
     const siapa = POV.orang || POV.bekas, mp = POV.t > 0 && siapa ? mataOrang(siapa) : null;
@@ -2600,6 +2740,10 @@ void main() { hasil = vec4(1.0); }`;
       if (POV.t <= 0) POV.bekas = null;
       KAM.mata = m.mata; KAM.v = m.v; KAM.p = m.p; KAM.vp = m.vp;
       return;
+    }
+    if (!hingga(POV.lirikYaw, POV.lirikPitch, POV.fov)) {
+      laporKameraRusak('POV');
+      POV.lirikYaw = 0; POV.lirikPitch = 0; POV.otomatis = true; POV.fov = 58 * Math.PI / 180;
     }
     if (POV.otomatis) {
       const [ly, lp] = lirikOtomatis(siapa, mp), kl = geraKurang3.matches ? 1 : 1 - Math.exp(-Math.max(0, dt) * 3);
@@ -2670,6 +2814,7 @@ void main() { hasil = vec4(1.0); }`;
   function tampak3D(x, y) {
     const a = orangDi(x, y);
     if (a && a === POV.orang && POV.t > 0.5) return false;     // balonnya sendiri: dia kameranya
+    if (a && lenyapDiAmbang(a)) return false;                  // sudah di balik pintu samping
     const [X, Z] = a ? posisiOrang(a) : [x, y];
     const p = proyeksi(X, (a ? SKALA_ORANG : 1) * 28, Z);
     return !!p && p[0] > -40 && p[0] < lebarCss + 40 && p[1] > -40 && p[1] < tinggiCss + 40 && p[2] < 1;
@@ -2995,6 +3140,48 @@ void main() { hasil = vec4(1.0); }`;
     const hx = 5.4;
     kotakM(S, mR, hx - w / 2, hx + w / 2, 8.2 - h / 2, 8.2 + h / 2, 1 - d / 2, 1 + d / 2, c(col));
   }
+
+  /* BAWAAN di tangan (a.bawa) digambar susunOrang sendiri — semata wayang
+     dengan badannya. Barang bawaan yang dibangun model event di LUAR
+     susunOrang (tangga & galon yang dipanggul, pel, tablet kurir, nasi
+     kotak, payung, kerucut, kotak dana, stiker aksesori tamu tenar) ikut
+     tampilan pemiliknya lewat sini: digeser sejauh posisiOrang menggeser
+     badannya (ambang pintu samping, WC, gudang, ruang kadis) dan sepudar
+     alfaOrang-nya. Tanpa ini badannya memudar di ambang sementara barangnya
+     tertinggal pejal di posisi simulasi, di luar alas. null = pemiliknya
+     tidak kelihatan, barangnya juga jangan. */
+  function tampilPemilik(a) {
+    const alfa = a ? alfaOrang(a) : 0;
+    if (!(alfa > 0.02)) return null;
+    const [x, z] = posisiOrang(a);
+    return { dx: x - a.x, dz: z - a.y, alfa };
+  }
+  // Penyusun titipan: tiap titik digeser (dx, dz) dan alfanya dikali, lalu
+  // diteruskan ke penyusun tujuannya — kotak, tabung, balok, dan bentuk
+  // barangnya tidak perlu tahu soal pemiliknya.
+  class SusunIkut extends Susun {
+    constructor(tuju, dx, dz, alfa) {
+      super(0);
+      Object.assign(this, { tuju, dx, dz, alfa, cAsli: null, cIkut: null });
+    }
+    jamin(k) { this.tuju.jamin(k); }
+    t(x, y, z, nx, ny, nz, c, u, v, e) {
+      if (c !== this.cAsli) { this.cAsli = c; this.cIkut = this.alfa < 0.999 ? [c[0], c[1], c[2], c[3] * this.alfa] : c; }
+      this.tuju.t(x + this.dx, y, z + this.dz, nx, ny, nz, this.cIkut, u, v, e);
+    }
+  }
+  /* Penyusun untuk barang bawaan pemilik a: S apa adanya selama pemiliknya
+     pejal di tempat simulasinya; kalau dia digeser/memudar, titipan ke
+     G.pudar (yang memudar dicampur, seperti badannya). menempel: barangnya
+     menumpang matriks badan (st.kepala) yang sudah digeser susunOrang —
+     cukup alfanya. null: jangan digambar. */
+  function susunPemilik(S, a, menempel = false) {
+    const p = tampilPemilik(a);
+    if (!p) return null;
+    const dx = menempel ? 0 : p.dx, dz = menempel ? 0 : p.dz;
+    if (p.alfa >= 0.999 && !dx && !dz) return S;
+    return new SusunIkut(p.alfa < 0.999 ? G.pudar : S, dx, dz, p.alfa);
+  }
   function alatKerja(S, a, mL, mR, tubuh, c) {
     switch (a.station) {
       case 'read': kotakM(S, tubuh, -4.6, 4.6, 11, 16.6, 2.8, 3.4, c('#d9b96a')); break;
@@ -3217,19 +3404,28 @@ void main() { hasil = vec4(1.0); }`;
     const tanpaBadan = POV.t > 0.4 ? POV.orang || POV.bekas : null;
     for (const a of penghuni()) {
       const ganti = tampilanKhusus(a);                        // yang sedang masuk/keluar WC & gudang
-      const nyata = ganti && ganti.alfa != null ? ganti.alfa : (a.alpha == null ? 1 : a.alpha);
-      const alfa = (a.standby && !a.tetap ? 0.55 : 1) * nyata;
+      const alfa = alfaOrang(a, ganti);
       susunOrang(a === tanpaBadan ? SUSUN_HAMPA : alfa < 0.999 ? G.pudar : S, a, dt, alfa, ganti);
     }
-    // tamu event (sosok drawPerson di gambar event): boneka voxel di tempatnya sendiri
-    for (const { o, alfa } of ORANG_EVENT.daftar) susunOrang(alfa < 0.999 ? G.pudar : S, o, dt, alfa);
+    // tamu event (sosok drawPerson di gambar event): boneka voxel di tempatnya sendiri.
+    // Yang datang/pergi lewat tepi ikut memudar di ambang pintu samping
+    // (posisinya lewat posisiOrang → tampilanKhusus, alfanya lewat alfaOrang)
+    for (const { o } of ORANG_EVENT.daftar) {
+      const al = alfaOrang(o);
+      susunOrang(al < 0.999 ? G.pudar : S, o, dt, al);
+    }
     // hewan & barang event yang bermodel: kucing kantor, tikus, isi meja rapat, tangga...
     for (const E of eventHidup) {
       const model = MODEL_EVENT[E.def.id];
       if (model) aman(() => model(S, E));
     }
     // sorotan orang yang kartunya terbuka: cincin di lantai
-    if (terpilih && !terpilih.diKadis && terpilih !== tanpaBadan) cincin(S, terpilih.x, terpilih.y, 9 + Math.sin(now / 240) * 1.2, warna(P.amber), 0.9);
+    // (yang sedang lewat pintu samping: di sosoknya, sepudar dia, hilang bersamanya)
+    const pintuTerpilih = terpilih && ambangSamping(terpilih), alfaCincin = pintuTerpilih ? pintuTerpilih.alfa : 1;
+    if (terpilih && !terpilih.diKadis && terpilih !== tanpaBadan && alfaCincin > 0.02) {
+      cincin(alfaCincin < 0.999 ? G.pudar : S, pintuTerpilih ? pintuTerpilih.x : terpilih.x, pintuTerpilih ? pintuTerpilih.z : terpilih.y,
+        9 + Math.sin(now / 240) * 1.2, warna(P.amber, alfaCincin), 0.9);
+    }
     // sorotan barang: bingkai rusuk emas di kotak 3D-nya (yang diklik lebih
     // tegas dari yang cuma dilewati kursor) — pengganti drawSorotBarang 2D
     const bSorot = barangTerpilih || barangHover;
@@ -3245,13 +3441,55 @@ void main() { hasil = vec4(1.0); }`;
     WADAH.sinar.isi(G.sinar);
   }
 
+  /* Dinding samping berlubang ambang pintu samping di lajurnya: kiri di
+     LANE_DOWN, kanan di LANE_UP (lihat ambangSamping). Tiap pita tembok
+     dipotong di tepi LUAR kusen, bukan di tepi lubang — muka potongnya tidak
+     boleh sebidang dengan muka kusen. Kusennya ikut grup samping, jadi sama
+     seperti temboknya tidak berbayang: kusen yang membayangi lantai tanpa
+     tembok di sebelahnya jadi bayangan gawang di tengah ruangan. */
   function dindingSamping(S, x0, x1, rendah) {
     const h = rendah ? 12 : TINGGI_DINDING;
     const z0 = DINDING_Z - 6, z1 = LANTAI_Z1;
-    kotak(S, x0, x1, 0, Math.min(h, 10), z0, z1, PLIN, { sisi: SEMUA });
-    if (h > 10) kotak(S, x0, x1, 10, Math.min(h, 38), z0, z1, MINT, { sisi: SEMUA });
-    if (h > 38) kotak(S, x0 - (x0 < 0 ? 0 : 0.6), x1 + (x0 < 0 ? 0.6 : 0), 38, 40, z0, z1, LIS, { sisi: SEMUA });
-    if (h > 40) kotak(S, x0, x1, 40, h + 3, z0, z1, KREM, { sisi: SEMUA, w: { atas: warna('#f2ecd8') } });
+    const PS = PINTU_SAMPING, kiri = x0 < 0, zt = kiri ? LANE_DOWN : LANE_UP;
+    const kz0 = zt - PS.lebar / 2 - PS.kusen, kz1 = zt + PS.lebar / 2 + PS.kusen, atasKusen = PS.tinggi + 4;
+    const pita = (ya, yb, xa, xb, c, o) => {
+      kotak(S, xa, xb, ya, yb, z0, kz0, c, o);
+      kotak(S, xa, xb, ya, yb, kz1, z1, c, o);
+      if (yb > atasKusen) kotak(S, xa, xb, Math.max(ya, atasKusen), yb, kz0, kz1, c, o);
+    };
+    pita(0, Math.min(h, 10), x0, x1, PLIN, { sisi: SEMUA });
+    if (h > 10) pita(10, Math.min(h, 38), x0, x1, MINT, { sisi: SEMUA });
+    if (h > 38) pita(38, 40, x0 - (kiri ? 0 : 0.6), x1 + (kiri ? 0.6 : 0), LIS, { sisi: SEMUA });
+    if (h > 40) pita(40, h + 3, x0, x1, KREM, { sisi: SEMUA, w: { atas: warna('#f2ecd8') } });
+    kusenSamping(S, kiri, x0, x1, zt, h);
+  }
+  /* Kusen jati pintu samping, sekeluarga dengan kusen pintu kadis: dua tiang
+     dan balok atas menembus tebal tembok, menonjol di kedua mukanya; lis
+     mahkota dan kotak lampu KELUAR hijau di muka dalam. Di lantai: plat
+     ambang, dan di luar teras kecil di atas alas — yang lewat memudar di
+     atasnya, bukan di udara. Mode rendah: tiangnya terpotong setinggi tembok. */
+  function kusenSamping(S, kiri, x0, x1, zt, h) {
+    const PS = PINTU_SAMPING, jati = warna('#4a3626');
+    const pz0 = zt - PS.lebar / 2, pz1 = zt + PS.lebar / 2, kz0 = pz0 - PS.kusen, kz1 = pz1 + PS.kusen;
+    const xa = x0 - 1.2, xb = x1 + 1.2;
+    const dalam = kiri ? x1 : x0;                                  // muka yang menghadap ruangan
+    const tonjol = (d0, d1) => (kiri ? [dalam + d0, dalam + d1] : [dalam - d1, dalam - d0]);
+    const tegak = h < PS.tinggi ? h : PS.tinggi;
+    kotak(S, xa, xb, 0, tegak, kz0, pz0, jati, { sisi: SEMUA });
+    kotak(S, xa, xb, 0, tegak, pz1, kz1, jati, { sisi: SEMUA });
+    if (h >= PS.tinggi) {
+      kotak(S, xa, xb, PS.tinggi, PS.tinggi + 4, kz0, kz1, jati, { sisi: SEMUA });
+      const [la, lb] = tonjol(0, 2.6);
+      kotak(S, la, lb, PS.tinggi + 4, PS.tinggi + 7, kz0 - 2, kz1 + 2, warna('#3a2a1c'), { sisi: SEMUA, w: { atas: warna('#6b4a30') } });
+      const [ba, bb] = tonjol(0, 1.6), muka = kiri ? S_KANAN : S_KIRI, h0 = PS.tinggi + 10;
+      kotak(S, ba, bb, h0, h0 + 6, zt - 8, zt + 8, warna('#1f5e3a'), { sisi: SEMUA });
+      const [ka, kb] = tonjol(1.6, 1.7), [pa, pb] = tonjol(1.7, 1.75);
+      kotak(S, ka, kb, h0 + 0.8, h0 + 5.2, zt - 7.2, zt + 7.2, warna('#2fbf6a'), { sisi: muka, e: 0.85 });
+      kotak(S, pa, pb, h0 + 2.5, h0 + 3.5, zt - 4.5, zt + 4.5, warna('#f4fff6'), { sisi: muka, e: 1 });
+    }
+    kotak(S, xa, xb, -0.5, 0.35, pz0, pz1, warna('#6a5a48'), { sisi: TANPA_BAWAH });   // plat ambang
+    const [ta, tb] = kiri ? [-11.5, xa] : [xb, W + 11.5];
+    kotak(S, ta, tb, -0.5, 0.15, kz0, kz1, warna('#8f897c'), { sisi: TANPA_BAWAH });    // teras luar
   }
   /* Maket tidak berdinding depan dan tidak berplafon — dari mata pegawai yang
      menghadap ke depan itu jurang hitam. Selama POV ditutup: dinding depan
@@ -3264,6 +3502,28 @@ void main() { hasil = vec4(1.0); }`;
     kotak(S, x0, x1, 38, 40, z0 - 0.6, z1, LIS, { sisi });
     kotak(S, x0, x1, 40, TINGGI_DINDING + 3, z0, z1, KREM, { sisi });
     kotak(S, x0, x1, TINGGI_DINDING, TINGGI_DINDING + 1, DINDING_Z - 6, z1, warna('#eeebe0'), { sisi: S_BAWAH });
+    // Ambang pintu samping menganga ke luar maket: selama matanya di dalam
+    // ruangan, di baliknya ada lorong pendek. Muka dalamnya pun menghadap ke
+    // ruangan — dari kamera maket yang masih di luar ia akan muncul di samping
+    // alas, jadi baru digambar sesudah mata itu masuk.
+    const m = KAM.mata;
+    if (m[0] > 0 && m[0] < W && m[2] > DINDING_Z && m[2] < LANTAI_Z1 && m[1] < TINGGI_DINDING) {
+      lorongSamping(S, true);
+      lorongSamping(S, false);
+    }
+  }
+  function lorongSamping(S, kiri) {
+    const PS = PINTU_SAMPING, zt = kiri ? LANE_DOWN : LANE_UP, h = PS.tinggi + 4;
+    const z0 = zt - PS.lebar / 2 - 2, z1 = zt + PS.lebar / 2 + 2;
+    const [xa, xb] = kiri ? [-24, -6] : [W + 6, W + 24];
+    const [ua, ub] = kiri ? [xa - 1, xa] : [xb, xb + 1], ujung = kiri ? S_KANAN : S_KIRI;
+    kotak(S, xa, xb, -0.5, 0, z0, z1, warna('#8f897c'), { sisi: S_ATAS });                      // lantai
+    for (const [ya, yb, c] of [[0, 10, PLIN], [10, 38, MINT], [38, 40, LIS], [40, h, KREM]]) {
+      kotak(S, ua, ub, ya, yb, z0, z1, c, { sisi: ujung });                                      // dinding ujung
+      kotak(S, xa, xb, ya, yb, z0 - 1, z0, c, { sisi: S_DEPAN });
+      kotak(S, xa, xb, ya, yb, z1, z1 + 1, c, { sisi: S_BELAKANG });
+    }
+    kotak(S, xa, xb, h, h + 1, z0, z1, warna('#eeebe0'), { sisi: S_BAWAH });                      // plafon
   }
 
   /* Kursi: dudukan setinggi DUDUKAN_Y — persis pinggul pegawai yang sudah
@@ -3481,11 +3741,12 @@ void main() { hasil = vec4(1.0); }`;
      Letaknya:
        gambarProp — tegak di kedalaman sortY-nya, persis urutan depth-sort 2D:
          yang di belakang meja rapat tetap di belakang meja rapat;
-       gambarAtas — dipilah dari pikselnya sendiri, bukan dari daftar event:
-         keempat pojok terisi (kilat foto bersama, mati lampu, rona syukuran)
-         jadi selubung seluruh layar; selebihnya kartu di kedalaman aktor
-         pertama event itu, atau menempel di dinding kalau seluruh gambarnya
-         jatuh di bidang dinding.
+       gambarAtas — yang bertanda atasDiDinding (room.js) tidak berkartu:
+         lukisDinding melukisnya ke tekstur dinding. Sisanya dipilah dari
+         pikselnya sendiri: keempat pojok terisi (kilat foto bersama, mati
+         lampu, rona syukuran) jadi selubung seluruh layar; selebihnya kartu
+         di kedalaman aktor pertama event itu, atau menempel di dinding kalau
+         seluruh gambarnya jatuh di bidang dinding.
 
      Yang mahal di sini membaca pikselnya balik, bukan melukisnya: kanvasnya
      willReadFrequently, pemindaian tepinya dibatasi kotak isinya, dan semua
@@ -3510,7 +3771,7 @@ void main() { hasil = vec4(1.0); }`;
       kv.width = lebar; kv.height = tinggi;
       const k = kv.getContext('2d', { willReadFrequently: true });
       kt = { kv, k, tek: tekstur(lebar, tinggi, false), tinggi, lebar, x0: 0, terakhir: -1e9, tepi: null, kosong: true,
-        tint: null, z: 0, dasar: 0, dinding: false };
+        tint: null, z: 0, dasar: 0, dinding: false, alfa: 1 };
       peta.set(E, kt);
     }
     kt.dipakai = true;
@@ -3663,8 +3924,10 @@ void main() { hasil = vec4(1.0); }`;
       // kurir yang menjinjing kardus (lihat bermodel())
       const model = MODEL_EVENT[E.def.id];
       if (model && model.orang) aman(() => model.orang(E, o));
+      // pudar sosok 2D-nya jadi alpha boneka, seperti a.alpha pegawai (alfaOrang)
       const g = +HAMPA.isi.globalAlpha;
-      daftar.push({ o, alfa: Number.isFinite(g) ? Math.max(0, Math.min(1, g)) : 1, tokoh: tokohKini });
+      o.alpha = Number.isFinite(g) ? Math.max(0, Math.min(1, g)) : 1;
+      daftar.push({ o, tokoh: tokohKini });
     };
     if (tokohAda) TOKOH.gambar = function (t) { tokohKini = t; try { return asliTokoh.call(this, t); } finally { tokohKini = null; } };
     try {
@@ -3779,8 +4042,9 @@ void main() { hasil = vec4(1.0); }`;
                          (teknisi di anak tangga, kurir yang menjinjing kardus)
      Barang di atas taplak meja rapat berdiri di permukaan meja 3D (setinggi
      MEJA_RAPAT.h) di pita kosongnya, z 209..223: di belakang pita itu mik
-     (z 205..208), di depannya gelas, botol & map yang statis. Ukurannya ikut
-     lukisan 2D, satu satuan per piksel, seperti perabot — bukan SKALA_ORANG. */
+     (z 205..208), di depannya gelas, botol, map, dan tumpukan notulen di
+     sudut kiri (isiTaplakRapat). Ukurannya ikut lukisan 2D, satu satuan per
+     piksel, seperti perabot — bukan SKALA_ORANG. */
   const bermodel = (fn, opsi) => Object.assign(fn, opsi);
   // Balok persegi setebal t dari titik a ke titik b: kaki tangga & easel, gagang pel.
   function balok(S, a, b, t, c, e = 0) {
@@ -4033,7 +4297,8 @@ void main() { hasil = vec4(1.0); }`;
         tanggaLipat(S);
         tabung(S, 343, 101.4, 1.1, 0, 83, warna('#5a6068'), { segmen: 6 });                   // pipa pembuangan dari bawah AC ke plin
       } else {
-        tanggaPanggul(S, T.x + (T.fase === 'pulang' ? 8.4 : -12.6), zTeknisi(T));
+        const Sb = susunPemilik(S, tamuEvent(E));              // ikut teknisinya lewat ambang
+        if (Sb) tanggaPanggul(Sb, T.x + (T.fase === 'pulang' ? 8.4 : -12.6), zTeknisi(T));
       }
       // ember penadahnya digeser ke kiri selama tangga berdiri; bekas basah di tempat lamanya
       if (T.tangga || E.data.emberGeser) {
@@ -4068,35 +4333,34 @@ void main() { hasil = vec4(1.0); }`;
     // kurir selalu menghadap penonton: kardus di tangan kanannya (sisi +x, a.bawa
     // boneka), tablet tanda tangan di tangan kirinya
     'kurir-paket-datang': bermodel((S, E) => {
-      const T = E.data.t;
-      if (!T || T.x < -12) return;
+      const T = E.data.t, Sb = T && T.x >= -12 && susunPemilik(S, tamuEvent(E));   // ikut kurirnya lewat ambang
+      if (!Sb) return;
       const s = SKALA_ORANG, x = T.x, z = T.y;
-      kotak(S, x - 9 * s, x - 4 * s, 9 * s, 16 * s, z + 2.4, z + 3.2, warna('#20242c'), { sisi: SEMUA });
-      kotak(S, x - 8 * s, x - 5 * s, 10 * s, 15 * s, z + 3.2, z + 3.3, warna('#7aa5e8'), { sisi: S_DEPAN, e: 0.6 });
+      kotak(Sb, x - 9 * s, x - 4 * s, 9 * s, 16 * s, z + 2.4, z + 3.2, warna('#20242c'), { sisi: SEMUA });
+      kotak(Sb, x - 8 * s, x - 5 * s, 10 * s, 15 * s, z + 3.2, z + 3.3, warna('#7aa5e8'), { sisi: S_DEPAN, e: 0.6 });
     }, { orang(E, o) { if (!E.data.bawa) o.bawa = 'kardus'; } }),
     // gagang pel dari tangan petugas ke kepala pel yang menyapu lantai di depan kakinya
     'ob-ngepel-lantai': (S, E) => {
       const T = E.data.t;
       if (!T || T.x < -14) return;
-      const arah = T.fase === 'pulang' ? -1 : 1, s = SKALA_ORANG, z = LANE_DOWN, kx = T.x + arah * 8 * s;
-      balok(S, [T.x + arah * 7 * s, 18 * s, z + 2], [kx, 0.8, z + 8], 0.8, warna('#8a6844'));
-      kotak(S, kx - 5.2, kx + 5.2, 0, 0.5, z + 6.3, z + 10.2, warna('#9aa1a6'));
-      kotak(S, kx - 5, kx + 5, 0.5, 1.5, z + 6.5, z + 10, warna('#c9c3b0'));
+      const Sb = susunPemilik(S, tamuEvent(E));                // ikut petugasnya lewat ambang
+      if (Sb) {
+        const arah = T.fase === 'pulang' ? -1 : 1, s = SKALA_ORANG, z = LANE_DOWN, kx = T.x + arah * 8 * s;
+        balok(Sb, [T.x + arah * 7 * s, 18 * s, z + 2], [kx, 0.8, z + 8], 0.8, warna('#8a6844'));
+        kotak(Sb, kx - 5.2, kx + 5.2, 0, 0.5, z + 6.3, z + 10.2, warna('#9aa1a6'));
+        kotak(Sb, kx - 5, kx + 5, 0.5, 1.5, z + 6.5, z + 10, warna('#c9c3b0'));
+      }
       if (E.data.papan) papanLicin3D(S, 196, 268);
     },
     'payung-basah-di-pojok': bermodel((S, E) => {
       if (E.data.taruh) { payung3D(S, 54, 270, 0, 0.07); return; }
-      const a = E.data.a;
-      if (!a || a.eventKerja !== E) return;
-      const [px, pz] = posisiOrang(a);
-      payung3D(S, px + (a.face === 'left' ? -7 : 7), pz + 1.5, 1.5, 0);       // dijinjing tegak di sisi badan
+      const a = E.data.a, Sb = a && a.eventKerja === E && susunPemilik(S, a);
+      if (Sb) payung3D(Sb, a.x + (a.face === 'left' ? -7 : 7), a.y + 1.5, 1.5, 0);   // dijinjing tegak di sisi badan
     }, { atas: true }),
     'ember-luber-lantai-licin': bermodel((S, E) => {
       if (E.data.kerucut) { kerucutLicin3D(S, 328, 166); kerucutLicin3D(S, 370, 166); }
-      const a = E.data.a;
-      if (!E.data.bawa || !a) return;
-      const [px, pz] = posisiOrang(a);
-      kerucutLicin3D(S, px + (a.face === 'left' ? -8 : 8), pz + 2, 9);         // dijinjing setinggi pinggang
+      const a = E.data.a, Sb = E.data.bawa && a && susunPemilik(S, a);
+      if (Sb) kerucutLicin3D(Sb, a.x + (a.face === 'left' ? -8 : 8), a.y + 2, 9);   // dijinjing setinggi pinggang
     }, { atas: true }),
     // ember kedua di bawah atap yang bocor (pojok kiri depan)
     'atap-bocor-musim-hujan': (S) => {
@@ -4144,11 +4408,14 @@ void main() { hasil = vec4(1.0); }`;
      kampung, dan lomba makan kerupuk. Barang yang dipanggul menempel ke
      matriks badan boneka (st.kepala dari susunOrang), jadi ikut arah hadapnya. */
   const bertopi = (o) => { o.pal = { ...o.pal, head: 'topi' }; };   // pal-nya objek baru tiap gambarOrangLuar
-  const badanTamu = (E, i = 0) => {
-    const arr = tiruanEvent.get(E), o = arr && arr[i], st = o && keadaanOrang.get(o);
-    return st && st.kepala;
+  // Boneka tamu ke-i gambar event E — cuma yang ada di catatan terakhir:
+  // yang tidak tercatat tidak digambar, matriks badannya basi
+  const tamuEvent = (E, i = 0) => {
+    const arr = tiruanEvent.get(E), o = arr && arr[i];
+    return o && ORANG_EVENT.daftar.some((d) => d.o === o) ? o : null;
   };
   const badanPegawai = (a) => { const st = a && keadaanOrang.get(a); return st && st.kepala; };
+  const badanTamu = (E, i = 0) => badanPegawai(tamuEvent(E, i));
   // Ayam kampung (gambarAyamKampung): badan krem, ekor cokelat tegak, jengger
   // merah; lokal menghadap +x, arah -1 = menghadap -x. patuk: kepala menunduk.
   function ayam3D(S, x, z, arah, maju, patuk) {
@@ -4276,12 +4543,13 @@ void main() { hasil = vec4(1.0); }`;
     'ojol-datang-bawa-pesanan': bermodel(() => {}, { orang(E, o) { o.bawa = 'kantong'; } }),
     'satpam-patroli': bermodel(() => {}, { orang(E, o) { bertopi(o); o.bawa = 'senter'; } }),
     'tukang-galon-datang': (S, E) => {
-      const T = E.data.t, K = badanTamu(E);
+      const T = E.data.t, o = tamuEvent(E), K = badanPegawai(o);
       if (!T || T.panggul === false || !K) return;
-      if (T.panggul === 'angkat') {
-        const [px, pz] = [T.x, T.y];
-        tabung(S, px, pz + 5, 4.4, 18, 30, warna('#7db8e8', 0.9), { segmen: 10, atas: warna('#5f9fd4') });   // diangkat ke dispenser
-      } else galonDipanggul(S, K);
+      // ikut tukangnya: yang dipanggul menumpang matriks badannya, cukup alfanya
+      const angkat = T.panggul === 'angkat', Sb = susunPemilik(S, o, !angkat);
+      if (!Sb) return;
+      if (angkat) tabung(Sb, T.x, T.y + 5, 4.4, 18, 30, warna('#7db8e8', 0.9), { segmen: 10, atas: warna('#5f9fd4') });   // diangkat ke dispenser
+      else galonDipanggul(Sb, K);
     },
     'nasi-kotak-datang': (S, E) => {
       const T = E.data.t, h = MEJA_RAPAT.h, putih = warna('#f2ece0'), karet = warna('#c9a03a');
@@ -4290,11 +4558,11 @@ void main() { hasil = vec4(1.0); }`;
         kotak(S, x0 + (x1 - x0) * 0.6, x0 + (x1 - x0) * 0.7, y0, y0 + 3.5, z0 - 0.05, z1 + 0.05, karet);   // karet gelang
       };
       if (T && T.x > -12 && T.x < W + 12 && !E.data.taruh) {
-        const K = badanTamu(E);
-        if (K) {                                                                                       // tiga kotak dipanggul di bahu kanan
+        const o = tamuEvent(E), K = badanPegawai(o), Sb = K && susunPemilik(S, o, true);
+        if (Sb) {                                                                                      // tiga kotak dipanggul di bahu kanan
           for (let i = 0; i < 3; i++) {
-            kotakM(S, K, 4.2, 10.6, 16.6 + i * 2.6, 19 + i * 2.6, -2.4, 2.4, putih);
-            kotakM(S, K, 8.2, 8.9, 16.6 + i * 2.6, 19.05 + i * 2.6, -2.45, 2.45, karet);
+            kotakM(Sb, K, 4.2, 10.6, 16.6 + i * 2.6, 19 + i * 2.6, -2.4, 2.4, putih);
+            kotakM(Sb, K, 8.2, 8.9, 16.6 + i * 2.6, 19.05 + i * 2.6, -2.45, 2.45, karet);
           }
         }
       }
@@ -4308,15 +4576,16 @@ void main() { hasil = vec4(1.0); }`;
       const a = E.data.a;
       if (!a) return;
       const kayu = warna('#8a6844'), isi = E.data.isi || 0;
-      const kotakDana = (m) => {
-        kotakM(S, m, -3, 3, 0, 5, -2.5, 2.5, kayu);
-        kotakM(S, m, -3.1, 3.1, 5, 5.4, -2.6, 2.6, warna('#a5804f'));
-        kotakM(S, m, -1.2, 1.2, 5.4, 5.45, -0.3, 0.3, warna('#3a2a18'));                               // celah
-        for (let i = 0; i < Math.min(5, isi); i++) kotakM(S, m, -1 + i * 0.3, 0.6 + i * 0.3, 4.4, 6.2 + i * 0.25, -0.12, 0.12, warna(P.paper));
+      const kotakDana = (Sk, m) => {
+        kotakM(Sk, m, -3, 3, 0, 5, -2.5, 2.5, kayu);
+        kotakM(Sk, m, -3.1, 3.1, 5, 5.4, -2.6, 2.6, warna('#a5804f'));
+        kotakM(Sk, m, -1.2, 1.2, 5.4, 5.45, -0.3, 0.3, warna('#3a2a18'));                              // celah
+        for (let i = 0; i < Math.min(5, isi); i++) kotakM(Sk, m, -1 + i * 0.3, 0.6 + i * 0.3, 4.4, 6.2 + i * 0.25, -0.12, 0.12, warna(P.paper));
       };
-      if (E.data.taruh) { kotakDana(A3.geser(244, MEJA_RAPAT.h, 234)); return; }                    // di tepi depan meja rapat
-      const K = badanPegawai(a);                                    // 2D juga tidak menanyakan eventKerja-nya
-      if (K) kotakDana(A3.kali(K, A3.kali(A3.geser(4.6, 10.5, 3.6), A3.skala(1 / SKALA_ORANG))));   // didekap di dada kanan
+      if (E.data.taruh) { kotakDana(S, A3.geser(244, MEJA_RAPAT.h, 234)); return; }                 // di tepi depan meja rapat
+      // 2D juga tidak menanyakan eventKerja-nya; menumpang matriks badan, cukup alfanya
+      const K = badanPegawai(a), Sb = K && susunPemilik(S, a, true);
+      if (Sb) kotakDana(Sb, A3.kali(K, A3.kali(A3.geser(4.6, 10.5, 3.6), A3.skala(1 / SKALA_ORANG))));   // didekap di dada kanan
     },
     'ayam-nyelonong-masuk': bermodel((S, E) => {
       const A = E.data.ay;
@@ -4443,8 +4712,10 @@ void main() { hasil = vec4(1.0); }`;
   const STIKER = { lebar: 80, tinggi: 72, kaki: 64 };
   function perbaruiStikerAksesori(t, o) {
     const kt = kartuUntuk(KARTU_AKSESORI, t, STIKER.tinggi, STIKER.lebar);
-    kt.x0 = o.x - STIKER.lebar / 2;
-    kt.z = o.y + 4.5;
+    const p = tampilPemilik(o);                  // menempel di bonekanya, juga di ambang pintu samping
+    kt.alfa = p ? p.alfa : 0;
+    kt.x0 = o.x + (p ? p.dx : 0) - STIKER.lebar / 2;
+    kt.z = o.y + (p ? p.dz : 0) + 4.5;
     kt.dasar = STIKER.kaki;
     kt.angkat = o.angkat || 0;
     const x = Math.round(t.x), y = Math.round(t.y), s = SKALA_ORANG;
@@ -4522,7 +4793,7 @@ void main() { hasil = vec4(1.0); }`;
     for (const { o, tokoh } of ORANG_EVENT.daftar) {
       if (!tokoh || typeof tokoh.aksesori !== 'function') continue;
       const kt = perbaruiStikerAksesori(tokoh, o);
-      if (!kt.kosong) kartuHidup.push(kt);
+      if (!kt.kosong && kt.alfa > 0.02) kartuHidup.push(kt);
     }
     for (const E of eventHidup) {
       // yang bermodel voxel tidak berkartu — kecuali bidang klip-nya, dan
@@ -4532,7 +4803,8 @@ void main() { hasil = vec4(1.0); }`;
         const kt = perbaruiKartuProp(E, model ? model.klip : null);
         if (!kt.kosong) kartuHidup.push(kt);
       }
-      if (E.def.gambarAtas && !(model && model.atas)) {
+      // yang bertanda atasDiDinding sudah dilukis lukisDinding ke tekstur dinding
+      if (E.def.gambarAtas && !(model && model.atas) && !atasDiDinding(E)) {
         const kt = perbaruiKartuAtas(E);
         if (kt.tint) tintLayar.push(kt.tint);
         else if (!kt.kosong) kartuHidup.push(kt);
@@ -4558,21 +4830,24 @@ void main() { hasil = vec4(1.0); }`;
       const hb0 = Math.max(0, kt.dasar - kt.tinggi), hb = hb0 + ang, ht = kt.dasar + ang;
       const uv = [0, 0, 1, (kt.dasar - hb0) / kt.tinggi];
       const xa = kt.x0, xb = kt.x0 + kt.lebar;
-      S.segi([xa, hb, zf], [xb, hb, zf], [xb, ht, zf], [xa, ht, zf], [0, 0, 1], PUTIH, uv);
-      S.segi([xb, hb, zb], [xa, hb, zb], [xa, ht, zb], [xb, ht, zb], [0, 0, -1], PUTIH, [1, 0, 0, uv[3]]);
+      // stiker aksesori yang memudar bersama bonekanya (dither alfa titik)
+      const pudar = kt.alfa < 0.999, muka = pudar ? [1, 1, 1, kt.alfa] : PUTIH;
+      S.segi([xa, hb, zf], [xb, hb, zf], [xb, ht, zf], [xa, ht, zf], [0, 0, 1], muka, uv);
+      S.segi([xb, hb, zb], [xa, hb, zb], [xa, ht, zb], [xb, ht, zb], [0, 0, -1], muka, [1, 0, 0, uv[3]]);
       if (!kt.tepi) continue;
       for (const t of kt.tepi) {
+        const c = pudar ? [t.c[0], t.c[1], t.c[2], kt.alfa] : t.c;
         if (t.tegak) {
           const h0 = Math.max(0, kt.dasar - t.b) + ang, h1 = kt.dasar - t.a + ang;
           if (h1 <= ang) continue;
           const x = kt.x0 + t.garis;
-          if (t.arah > 0) Ss.segi([x, h0, zf], [x, h0, zb], [x, h1, zb], [x, h1, zf], [1, 0, 0], t.c);
-          else Ss.segi([x, h0, zb], [x, h0, zf], [x, h1, zf], [x, h1, zb], [-1, 0, 0], t.c);
+          if (t.arah > 0) Ss.segi([x, h0, zf], [x, h0, zb], [x, h1, zb], [x, h1, zf], [1, 0, 0], c);
+          else Ss.segi([x, h0, zb], [x, h0, zf], [x, h1, zf], [x, h1, zb], [-1, 0, 0], c);
         } else {
           const h = kt.dasar - t.garis + ang, a = kt.x0 + t.a, b = kt.x0 + t.b;
           if (h < ang) continue;
-          if (t.arah > 0) Ss.segi([a, h, zf], [b, h, zf], [b, h, zb], [a, h, zb], [0, 1, 0], t.c);
-          else Ss.segi([a, h, zb], [b, h, zb], [b, h, zf], [a, h, zf], [0, -1, 0], t.c);
+          if (t.arah > 0) Ss.segi([a, h, zf], [b, h, zf], [b, h, zb], [a, h, zb], [0, 1, 0], c);
+          else Ss.segi([a, h, zb], [b, h, zb], [b, h, zf], [a, h, zf], [0, -1, 0], c);
         }
       }
     }
@@ -4791,6 +5066,7 @@ void main() { hasil = vec4(1.0); }`;
       if (a === POV.orang && POV.t > 0.3) continue;
       // tamu kadis cuma bisa diklik lewat jendelanya (atau dari atas tembok)
       if (a.diKadis && (!KADIS_SIAP || !sisipBoleh() || !lewatJendela(r))) continue;
+      if (lenyapDiAmbang(a)) continue;                        // sudah di balik pintu samping
       const [X, Z] = posisiOrang(a);
       const hw = 6 * SKALA_ORANG;
       const t = kenaKotak(r, X - hw, X + hw, 0, 29 * SKALA_ORANG, Z - hw, Z + hw);
@@ -4896,6 +5172,16 @@ void main() { hasil = vec4(1.0); }`;
     const [x, y] = posisi(e);
     if (!seret.jauh && seret.cubit == null && e.type === 'pointerup' && seret.tombol === 0) klik3D(x, y);
     if (tunjuk.size === 0) { seret = null; kanvas.classList.remove('seret'); }
+    // Cubit tinggal satu jari: lanjut sebagai seret biasa dari jari yang
+    // tersisa. Objek cubit tidak punya x/y — kalau dibiarkan, gerakan
+    // berikutnya menghitung x - undefined = NaN dan maketnya lenyap.
+    // jauh: false — getar jari yang tertinggal (< 5 px) tidak memutar maket;
+    // tombol -1 — klik3D di atas cuma untuk tombol 0, jadi mengangkat jari
+    // terakhir tidak pernah jadi klik, sedekat apa pun dia dari titik awalnya.
+    else if (seret.cubit != null && tunjuk.size === 1) {
+      const [p] = tunjuk.values();
+      seret = { x: p.x, y: p.y, x0: p.x, y0: p.y, tombol: -1, geser: false, jauh: false };
+    }
   };
   kanvas.addEventListener('pointerup', lepas);
   kanvas.addEventListener('pointercancel', lepas);
@@ -4909,8 +5195,8 @@ void main() { hasil = vec4(1.0); }`;
   kanvas.addEventListener('dblclick', () => {
     // POV: kembali memandang lurus ke depan orangnya (maketnya tidak disentuh)
     if (POV.orang) { POV.otomatis = true; POV.fov = 58 * Math.PI / 180; return; }
-    KAM.yaw = KAM_AWAL.yaw; KAM.pitch = KAM_AWAL.pitch; KAM.zoom = KAM_AWAL.zoom;
-    KAM.sasaran = [...KAM_AWAL.sasaran];
+    kameraAwal();
+    if (!lunakSehat()) salinLunak(KAM.dasar / KAM_AWAL.zoom, KAM_AWAL.sasaran);   // yang sehat tetap meluncur pulang
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && POV.orang) keluarPov(); });
   kanvas.addEventListener('mouseleave', () => { barangHover = null; kanvas.classList.remove('tunjuk'); });
@@ -4919,7 +5205,7 @@ void main() { hasil = vec4(1.0); }`;
      seret mendatar menggeser sasaran berlawanan dengan kanan, seret tegak
      sepanjang maju dibagi sin(pitch) karena lantai tampak memendek. */
   function geserSasaran(dx, dy) {
-    const k = KAM.jarakK / tinggiCss * 1.05;
+    const k = KAM.jarakK / Math.max(1, tinggiCss) * 1.05;   // tinggi 0 -> k tak hingga, 0 * Infinity = NaN
     const cy = Math.cos(KAM.yawK), sy = Math.sin(KAM.yawK);
     const tegak = dy / Math.max(0.35, Math.sin(KAM.pitchK));
     const s = KAM.sasaran;

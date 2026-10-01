@@ -1143,7 +1143,10 @@ subagent memang naik ke sesi induknya.
 
 Sesudah kerjanya selesai peserta **kembali ke kursinya** sendiri (`update()` di
 `class Peserta`, jeda 2 detik supaya rentetan tool call tidak membuatnya
-bolak-balik). Notulen sisa rapat sekarang dihitung dari `pernahDuduk`, bukan
+bolak-balik). Selama dia pergi kursinya dipesan (`Peserta.kursi`):
+`slotBebas('rapat')` tidak memberikannya ke orang lain dan `kursiKosong()` tetap
+menghitungnya, jadi undangan yang datang saat itu ikut daring, bukan menduduki
+kursinya. Notulen sisa rapat sekarang dihitung dari `pernahDuduk`, bukan
 dari "sedang di kursi" — sejak peserta bisa pergi ke stasiun, dia bisa sedang
 di lemari arsip waktu rapatnya ditutup.
 
@@ -1292,6 +1295,9 @@ kedatangan; yang dikenali orangnya, bukan sekadar kursinya.
 Kursinya ada 9: tujuh menghadap kamera di sisi jauh, dua lagi membelakangi kamera
 di sisi dekat. Kalau fasenya lebih banyak dari kursi yang tersisa, sisanya
 dicatat di log sebagai "ikut daring" — tidak dipaksa menumpuk di satu titik.
+Yang dihitung memegang kursi adalah setiap peserta yang belum bubar — termasuk
+yang sedang ke stasiun tool dan yang masih antre di belakang meja — ditambah
+pegawai lain yang sedang duduk di meja rapat.
 
 Meja rapat menghalangi tengah ruangan, jadi pegawainya tidak menembusnya — mereka
 memutar lewat lajur depan meja dinding atau lajur depan meja rapat, tersambung di
@@ -2059,7 +2065,9 @@ yang dikunci) dan `?kadis=1` (tidak ada kanvas sama sekali).
 
 Kendalinya: **seret** memutar maket, **klik kanan / shift+seret** menggeser,
 **roda** mendekat-menjauh, **klik dua kali** kembali ke tampak awal. Di layar
-sentuh, satu jari memutar dan dua jari mencubit & menggeser. Klik pegawai atau
+sentuh, satu jari memutar dan dua jari mencubit & menggeser — angkat
+salah satu jari di tengah cubitan dan jari yang tersisa melanjutkan putaran.
+Klik pegawai atau
 perabot membuka kartu yang sama seperti di 2D, dan kamera ikut terbang ke
 barangnya.
 
@@ -2097,7 +2105,9 @@ BENTUKNYA. Permukaannya dilukis oleh fungsi gambar 2D yang sama persis, ke
 kanvas tekstur berskala 3 texel per piksel dunia:
 
 - **dinding** = seluruh bidang dinding 2D (baris 0..110): `drawWall`,
-  `gambarDinding` event, dan prop yang memang menempel di dinding. Jam dinding
+  `gambarDinding` event (isi kacanya lewat lapis kaca `drawWindow`, sesudah
+  langit), `gambarAtas` bertanda `atasDiDinding`, dan prop yang memang
+  menempel di dinding; dilukis ulang tiap 50 ms (100 ms di mode ringan). Jam dinding
   tetap berdetak, cuaca di jendela tetap sungguhan (kacanya kini di punggung
   tembok — lihat **Perabot voxel**), bukaan ruang kadis tetap
   terlihat. Fungsi yang menggambar dua hal sekaligus dipanggil di dalam klip
@@ -2174,8 +2184,10 @@ setebal 3 berwarna piksel tepinya — kucing jadi sprite voxel yang dari samping
 tetap punya badan. Pemindaiannya dibatasi kotak isi gambar (dibaca lewat
 tampilan 32-bit) dan paling sering 20 kali sedetik; gambar yang terlalu
 berisik (>3.000 ruas tepi) tetap datar. `gambarLantai` dan `gambarDinding`
-sudah ikut masuk tekstur lantai & dinding. `gambarAtas` dipilah dari pikselnya
-sendiri: yang keempat pojoknya terisi (kilat foto bersama, mati lampu) jadi
+sudah ikut masuk tekstur lantai & dinding. `gambarAtas` yang bertanda
+`atasDiDinding` (sorot lampu mobil, sirene, isi kaca seperti pelangi dan lalat,
+kedip rambu) ikut tekstur dinding — juga kaca jendela yang mundur — bukan kartu.
+Sisanya dipilah dari pikselnya sendiri: yang keempat pojoknya terisi (kilat foto bersama, mati lampu) jadi
 selubung seluruh layar; sisanya jadi kartu bertebal di kedalaman aktor pertama
 event itu, atau menonjol dari dinding kalau seluruh gambarnya jatuh di bidang
 dinding. Partikel (tinta, glyph, uap, tetes AC) dicap tempatnya sekali: milik
@@ -2399,7 +2411,9 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
   perabot tinggi menutupinya persis seperti di 2D; papan imsakiyah Ramadan
   timbul. Uji: `?tema=agustusan|korpri|tahun-anggaran|ramadan`.
 
-Isi yang ikut keadaan `RUANGAN` masuk satu grup sendiri yang dibangun ulang
+Isi yang ikut keadaan `RUANGAN` — termasuk isi taplak meja rapat: tumpukan
+notulen sisa, noda kopi, dan gelas yang terguling di genangannya — masuk satu
+grup sendiri yang dibangun ulang
 **hanya waktu `tandaPerabot()` berubah** (kusut dihitung per lapis, layu
 dibulatkan ke 1/20, lebar gorden ke 0,5), jadi tidak menambah kerja per frame;
 yang memang bergerak — X-banner, lampu fotokopi, cap basah, arwana — disusun
@@ -2472,7 +2486,12 @@ menerangi seluruh ruangan.
 klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
 `tickKamera()`; di 3D bidikannya diterjemahkan jadi titik sasaran dan jarak,
 sementara sudut putar tetap milik orang yang memegang tetikus. Dinding samping
-yang membelakangi kamera dipotong rendah, seperti maket arsitek.
+yang membelakangi kamera dipotong rendah, seperti maket arsitek. Keduanya
+berpintu: ambang berkusen jati dengan lampu KELUAR hijau, kiri di lajur bawah
+dan kanan di lajur atas. Pegawai baru dan peserta rapat masuk lewat pintu kiri
+sambil menebal; yang pulang memudar di ambang kiri atau kanan di atas teras
+kecil, bersama barang bawaannya — tidak ada lagi yang menembus tembok atau
+berdiri di luar alas.
 
 **Melihat dari mata pegawai (POV).** Klik seorang pegawai di 3D dan kamera
 meluncur (±0,45 detik) ke depan wajahnya. Letak dan arahnya diambil dari
@@ -2486,7 +2505,9 @@ kembali ke lirikan semula, klik orang lain yang kelihatan = pindah ke matanya.
 Selama POV badan pegawai itu sendiri tidak digambar dan tidak bisa diklik
 (sinar kliknya berangkat dari dalam kepalanya), kartunya diparkir di tepi
 kiri, dan maket ditutup dinding depan berpita serta plafon: cuma muka dalamnya
-yang digambar, jadi dari kamera maket keduanya tidak pernah kelihatan. Keluar
+yang digambar, jadi dari kamera maket keduanya tidak pernah kelihatan. Ambang
+pintu samping ikut disumbat lorong pendek, dan mata POV tidak pernah ikut keluar
+lewat pintu itu: begitu orangnya lenyap di ambang, POV selesai sendiri. Keluar
 lewat Esc, tombol "kembali ke maket" di pita bawah, menutup kartunya, atau klik
 tempat kosong. POV cuma dari klik di ruangan 3D — klik baris kru di panel tetap
 membuka kartu tanpa memindah kamera.
@@ -2502,7 +2523,11 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 - ruangan di balik tembok (kadis, WC, gudang, lorong pintu kadis) cuma
   kelihatan lewat bukaannya atau dari kamera yang didongakkan tinggi: tembok
   belakang tetap setinggi aslinya, tidak ikut dipotong rendah seperti dinding
-  samping.
+  samping;
+- tamu event yang datang atau pergi di lajur tanpa pintu (teknisi AC di lajur
+  atas kiri, tamu buku tamu, tamu pos satpam) memudar di tembok samping yang
+  pejal, dan barang yang dilukis 2D di tangan tamu lewat `gambarAtas` (bukan
+  model) tidak ikut memudar bersamanya.
 
 Waktu per tahap (lukis dinding, lantai, kulit, kartu, susun mesh) bisa dilihat
 dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (150 frame, `SS` 2,

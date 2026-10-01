@@ -10,6 +10,7 @@ daftarEvent(
   id: 'lalat-nabrak-kaca',
   kelas: 'latar', bobot: B.sering, cooldown: 300, durasi: 16,
   syarat: (S) => S.luar > 0.5,
+  atasDiDinding: true,          // lalatnya di kaca, bukan di kedalaman yang mengusir
   mulai(E) {
     E.data.x = JENDELA.x + JENDELA.w / 2;
     E.data.y = JENDELA.y + JENDELA.h / 2;

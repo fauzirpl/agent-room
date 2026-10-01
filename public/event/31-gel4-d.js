@@ -116,6 +116,7 @@ daftarEvent(
   kelas: 'latar', bobot: B.langka, cooldown: 2700, durasi: 46,
   perluAktor: true,
   babak: { libur: 0 },
+  atasDiDinding: true,          // airnya di dalam kaca, bukan di kedalaman penonton jendela
   bentrokDengan: [
     'hujan-pertama-bau-tanah', 'kabut-embun-jendela', 'pelangi-selepas-hujan',
     'monas-lampu-malam-dipandangi',
@@ -206,9 +207,11 @@ daftarEvent(
      sortY: kaca (y 26..68) tidak pernah beririsan dengan kepala siapa pun
      (pejalan LANE_UP y=164, kepalanya masih di sekitar y130). Konsekuensinya
      air ini digambar SESUDAH kusen aluminium drawWindow, jadi kusen tengah
-     vertikalnya harus digambar ulang di akhir. Turun ke gambarDinding BUKAN
-     jalan keluar: drawWindow (prop sortY 116) mengisi seluruh kaca dengan
-     gradien langit yang opak, jadi apa pun di gambarDinding terkubur.
+     vertikalnya harus digambar ulang di akhir. (Waktu ditulis, gambarDinding
+     bukan jalan keluar karena langit opak drawWindow menimbunnya; sekarang
+     isi klipJendela dari gambarDinding ditunda ke lapis kaca drawWindow —
+     lihat lukisKaca di room.js — tapi air ini tetap di gambarAtas, dan
+     teduh() di bawah memang menganggapnya begitu.)
 
      Konsekuensi kedua, yang lebih halus dan sempat terlewat: di ujung frame()
      urutan gambarnya drawParts() → drawAmbien() → drawDebu() →

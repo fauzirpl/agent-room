@@ -96,6 +96,7 @@ daftarEvent(
   id: 'senyap-magrib',
   kelas: 'latar', bobot: B.sedang, cooldown: 82800, durasi: 12,
   syarat: (S) => S.jam >= 17.9 && S.jam < 18.02,
+  atasDiDinding: true,          // riaknya melingkari jendela, di tembok
   tick(E) {
     MOD.ambPlus = 0.04 * Math.min(1, E.umur / 3);
     MOD.hening = true;

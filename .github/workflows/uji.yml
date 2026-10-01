@@ -196,6 +196,15 @@ jobs:
       - name: Uji putar ulang hari sungguhan (fixture buku agenda)
         run: node uji-ulang.mjs
 
+      # Hari yang sama di satu jalur dunia lain. Benih bawaan saja pernah
+      # meloloskan bocor kursi rapat (14 peserta untuk 9 kursi). Benih 2 dan 12
+      # merahnya di momen yang SAMA (frame 5177, baris #440), jadi satu benih
+      # cukup; kasus terarahnya ada di `uji-event.mjs --kursi`. Satu hari penuh
+      # lagi, kira-kira selama langkah di atas: sekitar 30–45 detik di mesin
+      # pengembang yang lengang, sampai ±100 detik waktu mesinnya sedang sibuk.
+      - name: Uji putar ulang, benih yang dulu merah
+        run: node uji-ulang.mjs --benih 2
+
       # Hari yang sama, tapi diputar ke SISI SERVER: 3.154 payload hook dibangun
       # ulang dari fixture dan dikirim ke POST /event, lalu diperiksa dari luar
       # lewat /stream, /buku-induk, /ruangan, /health, dan /stream?ulang=.

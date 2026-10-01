@@ -1860,7 +1860,8 @@ function drawCRT() {
 
 function drawWindow(active) {
   // koordinatnya dipakai bersama event yang menggambar di dalam kaca
-  // (burung di kusen, layangan, bulan purnama) lewat klipJendela()
+  // (burung di kusen, layangan, bulan purnama) lewat klipJendela() — isi
+  // gambarDinding-nya baru dilukis di sini, sesudah langit (lukisKaca)
   const { x, y, w, h } = JENDELA;
   const A = ambien();
   r(x - 8, y - 8, w + 16, h + 12, P.creamD);               // ceruk gorden
@@ -1936,6 +1937,9 @@ function drawWindow(active) {
     }
     ctx.globalAlpha = 1;
   }
+  // lapis kaca: isi klipJendela dari gambarDinding event — di depan kota,
+  // di balik hujan dan kaca berkabut
+  lukisKaca();
   // hujan: goresan miring jatuh di balik kaca, jumlah dan panjangnya ikut deras
   if (CUACA.hujan > 0.01) {
     ctx.save();
@@ -6136,6 +6140,8 @@ function slotBebas(id, diri) {
   // bukan lewat KURSI_TOTAL, supaya kembalikanKursi() tidak perlu tahu dan
   // slotBebas tetap satu-satunya penjaga kursi mana yang benar-benar duduk.
   if (id === 'rapat' && RUANGAN.kursiDipinjam >= 0) dipakai.add(RUANGAN.kursiDipinjam);
+  // kursi peserta yang sedang ke stasiun tool tetap miliknya (Peserta.kursi)
+  if (id === 'rapat') for (const p of peserta) if (p !== diri && !p.keluar && p.kursi >= 0) dipakai.add(p.kursi);
   for (const other of penghuni()) {
     // yang mengantre (antre) berdiri di lajur, bukan di slot — jangan dihitung
     if (other !== diri && other.station === id && !other.antre) dipakai.add(other.slotIdx);
@@ -6987,6 +6993,10 @@ class Peserta extends Agent {
        sedang di lemari arsip waktu rapatnya ditutup, dan notulennya tetap
        harus tercatat. */
     this.pernahDuduk = false;
+    /* Kursi rapat yang DIPESAN selama dia pergi ke stasiun tool (lihat goTo),
+       -1 = tidak memesan. Selama dipesan, slotBebas('rapat') tidak memberikan
+       kursi itu ke orang lain, jadi sepulangnya dia langsung duduk lagi. */
+    this.kursi = -1;
   }
 
   /* Kursi sementara diambil alih oleh agen yang sebenarnya. Namanya diganti
@@ -7018,6 +7028,32 @@ class Peserta extends Agent {
   masuk() {
     this.goTo('rapat');
     this.sapa();
+  }
+
+  /* Berangkat dari kursi rapat ke stasiun tool: kursinya dipesan, bukan
+     dilepas. Tanpa ini kursi itu terbaca kosong selama dia di lemari arsip —
+     undangan baru atau pegawai yang mampir mendudukinya, dan dia sendiri
+     pulang ke antrean di belakang meja. */
+  goTo(id) {
+    if (id !== 'rapat' && this.station === 'rapat' && !this.antre) this.kursi = this.slotIdx;
+    super.goTo(id);
+  }
+
+  // Pulang ke kursi yang dipesan: langsung duduk, tidak ikut antre. Kalau
+  // kursinya terisi juga (dipinjam kursi-tambahan-ditarik), jalur biasa.
+  // `!(k >= 0)`, bukan `k < 0`: kursi yang belum terpasang (undefined —
+  // constructor Agent sudah memanggil goTo() sebelum constructor Peserta
+  // mengisinya) berarti tidak memesan, bukan slotIdx undefined dan jalur NaN.
+  slotOffset(id) {
+    const k = this.kursi;
+    if (id !== 'rapat' || !(k >= 0)) return super.slotOffset(id);
+    this.kursi = -1;
+    let terisi = k === RUANGAN.kursiDipinjam;
+    for (const o of penghuni()) if (o !== this && o.station === 'rapat' && !o.antre && o.slotIdx === k) terisi = true;
+    if (terisi) return super.slotOffset(id);
+    this.antre = 0;
+    this.slotIdx = k;
+    return slotKe(k, STATIONS.rapat.step);
   }
 
   bubar() {
@@ -7759,9 +7795,17 @@ function hapusPegawai(a) {
   renderCrew();
 }
 
+/* Peserta yang belum bubar SELALU memegang satu kursi: yang duduk, yang
+   sedang ke stasiun tool (kursinya dipesan, Peserta.kursi), dan yang masih
+   mengantre di belakang meja. Dulu cuma yang station 'rapat' && !antre yang
+   dihitung — selama meja rapat punya antrean dan satu kursi kosong, tiap
+   SubagentStart melahirkan undangan baru yang ikut antre tanpa terhitung
+   (uji-ulang --benih 2: 14 peserta untuk 9 kursi). Penghuni lain dihitung
+   hanya kalau benar-benar memegang kursi. */
 function kursiKosong() {
   let dipakai = 0;
-  for (const o of penghuni()) if (o.station === 'rapat' && !o.antre) dipakai++;
+  for (const p of peserta) if (!p.keluar) dipakai++;
+  for (const o of penghuni()) if (o.station === 'rapat' && !o.antre && !peserta.includes(o)) dipakai++;
   // kursi yang sedang dipinjam (kursi-tambahan-ditarik) tidak boleh ikut dihitung
   // kosong: fisiknya sedang berdiri di baris meja kerja, bukan di meja rapat.
   const dipinjam = RUANGAN.kursiDipinjam >= 0 ? 1 : 0;
@@ -15130,23 +15174,63 @@ function pada(E, detik, fn) {
 }
 
 /* Lapisan gambar. Event menggambar lewat empat kait, masing-masing di tempat
-   yang benar dalam urutan gambar ruangan — bukan semuanya di atas segalanya. */
-function gambarLapis(nama) {
+   yang benar dalam urutan gambar ruangan — bukan semuanya di atas segalanya.
+   `saring` (opsional) memilih sebagian event: tampilan 3D memakainya untuk
+   gambarAtas yang menempel di dinding (lihat atasDiDinding). */
+function gambarLapis(nama, saring) {
+  const kaca = nama === 'gambarDinding';
+  if (kaca) kacaAntre.length = 0;
   for (const E of eventHidup) {
     const fn = E.def[nama];
-    if (fn) { try { fn(E, S); } catch (e) { console.warn('[event]', E.id, e); laporGalatEvent(E.id, e); } }
+    if (!fn || (saring && !saring(E))) continue;
+    kacaMilik = kaca ? E : null;
+    try { fn(E, S); } catch (e) { console.warn('[event]', E.id, e); laporGalatEvent(E.id, e); }
   }
+  kacaMilik = null;
+}
+
+/* gambarAtas yang menempel di bidang dinding atau kaca jendela — tanda
+   EKSPLISIT di definisi event, bukan tebakan dari letak pikselnya:
+   atasDiDinding: true, atau (E) => boolean kalau cuma sebagian umurnya
+   (kupu-kupu yang hinggap). 2D tidak membedakannya — gambarAtas memang
+   paling akhir. Tampilan 3D melukisnya ke tekstur dinding (kaca jendela yang
+   mundur ikut, karena memakai potongan tekstur itu), bukan kartu yang berdiri
+   di kedalaman aktornya; efek tipis beralfa rendah pun ikut, padahal kartu
+   cuma dipasang kalau ada piksel beralfa >= 128. */
+function atasDiDinding(E) {
+  const t = E.def.atasDiDinding;
+  if (!t || !E.def.gambarAtas) return false;
+  if (typeof t !== 'function') return true;
+  try { return !!t(E); } catch (e) { laporGalatEvent(E.id, e); return false; }
 }
 
 // jendela dipakai bersama beberapa event (burung, layangan, bulan, Monas)
 const JENDELA = { x: 186, y: 26, w: 52, h: 42 };
+/* Lapis kaca. Langit drawWindow opak, dan drawWindow prop (sortY 116) yang
+   dilukis SESUDAH gambarLapis('gambarDinding') — di 2D maupun di lukisDinding
+   3D. Isi klipJendela() dari gambarDinding karena itu tidak dilukis di
+   tempat (dulu langsung tertimbun langit): ditunda ke antrean ini, lalu
+   drawWindow menjalankannya lewat lukisKaca() sesudah langit & siluet kota,
+   sebelum hujan, kilat, dan kaca berkabut. Di luar itu klipJendela melukis
+   di tempat seperti biasa — gambarAtas memang sudah sesudah segalanya, dan
+   pemanggilan langsung (harness uji) tetap melukis. */
+const kacaAntre = [];         // [E, fn] menunggu langit
+let kacaMilik = null;         // event gambarDinding yang sedang dilukis
 function klipJendela(fn) {
+  if (kacaMilik) { kacaAntre.push([kacaMilik, fn]); return; }
+  lukisDiKaca(fn);
+}
+function lukisDiKaca(fn) {
   ctx.save();
   ctx.beginPath();
   ctx.rect(JENDELA.x, JENDELA.y, JENDELA.w, JENDELA.h);
   ctx.clip();
-  fn();
-  ctx.restore();
+  try { fn(); } finally { ctx.restore(); }
+}
+function lukisKaca() {
+  for (const [E, fn] of kacaAntre.splice(0)) {
+    try { lukisDiKaca(fn); } catch (e) { console.warn('[event]', E.id, e); laporGalatEvent(E.id, e); }
+  }
 }
 
 /* -------------------------------------------------------------- apel pagi ---

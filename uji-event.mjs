@@ -44,8 +44,9 @@
 //
 // Pakai:
 //   node uji-event.mjs <id>          satu event, detail lengkap
-//   node uji-event.mjs --semua       sapu semua event + uji penjadwal, ringkas
+//   node uji-event.mjs --semua       sapu semua event + uji penjadwal + uji kursi, ringkas
 //   node uji-event.mjs --penjadwal   cuma uji aturan bentrok/panggung/aktor
+//   node uji-event.mjs --kursi       cuma uji pemesanan kursi rapat (lihat ujiKursiRapat)
 //   node uji-event.mjs --daftar      cetak semua id yang valid
 
 import fs from 'node:fs';
@@ -1115,6 +1116,167 @@ export function ujiPenjadwal(ctx, pristine) {
   return kasus;
 }
 
+/* ---------------------------------------------------------- kursi rapat --- *
+ * Pemesanan kursi rapat (Peserta.kursi), diuji lewat jalur ASLI room.js:
+ * peserta lahir dari handle() 'subagent-start', berangkat ke stasiun tool
+ * lewat handle() 'pre' ber-agenId, bubar lewat 'subagent-stop'. Yang dibaca
+ * kursiKosong(), slotBebas('rapat'), dan slotIdx/antre pesertanya sendiri.
+ *
+ * Kenapa di sini dan bukan cuma di uji-ulang.mjs: bocornya (14 peserta untuk
+ * 9 kursi) dulu baru ketahuan dari satu jalur dunia hari penuh, ±30–45 detik
+ * per benih, dan merahnya cuma berbunyi "peserta (belum bubar) LEWAT". Kasus
+ * di bawah menyebut janji mana yang patah, dalam hitungan milidetik.
+ *
+ * Sandbox-nya SENDIRI (muatKonteks baru), bukan ctx milik sapuan --semua:
+ * keadaan yang ditinggalkan ratusan event di sana (RUANGAN, agents, standby)
+ * tidak dijamin bersih untuk meja rapat, padahal hitungan kursi di bawah
+ * dipatok angka persis. */
+export function ujiKursiRapat(ctx = muatKonteks()) {
+  const H = ctx.__jembatan__;
+  const { peserta, KURSI_N, KURSI_TOTAL, STATIONS, RUANGAN } = H;
+  // `const` di room.js: tidak jadi properti context, dibaca lewat skrip di dalamnya
+  const rapatAktif = new vm.Script('rapatAktif').runInContext(ctx);
+  const slotKe = new vm.Script('slotKe').runInContext(ctx);
+  const kasus = [];
+  const uji = (nama, fn) => {
+    try { fn(); kasus.push({ nama, lulus: true }); }
+    catch (e) { kasus.push({ nama, lulus: false, pesan: e.message }); }
+  };
+  const harus = (kondisi, pesan) => { if (!kondisi) throw new Error(pesan); };
+  const SESI = 'sesi-kursi-rapat';
+  let seq = 0, nomorAgen = 0;
+  const kirim = (ev) => ctx.handle({ id: ++seq, ts: Date.now(), session: SESI, cwd: 'proyek-uji', ...ev });
+  const datang = (agenId) => {
+    kirim({ kind: 'subagent-start', agenId, agen: 'Explore' });
+    return peserta.find((p) => !p.keluar && p.agenId === agenId) || null;
+  };
+  const kerja = (p, tool) => kirim({ kind: 'pre', agenId: p.agenId, tool, label: 'uji', ok: true });
+  const pamit = (p) => kirim({ kind: 'subagent-stop', agenId: p.agenId, agen: 'Explore' });
+  // habiskan path lalu arrive(), persis yang dilakukan update() setibanya
+  const tiba = (a) => { while (a.path.length) { const t = a.path.shift(); a.x = t.x; a.y = t.y; } a.arrive(); };
+  const duduk = (p) => p.station === 'rapat' && !p.antre;
+  const bersih = () => {
+    for (const p of peserta) p.keluar = true;
+    peserta.length = 0;
+    rapatAktif.length = 0;
+    H.agents.clear();
+    H.standby.length = 0;
+    RUANGAN.kursiDipinjam = -1;
+  };
+  const rombongan = (n) => {
+    const r = [];
+    for (let i = 0; i < n; i++) {
+      const p = datang('ag-' + ++nomorAgen);
+      harus(p, `undangan ke-${i + 1} tidak lahir padahal meja belum penuh`);
+      tiba(p);
+      r.push(p);
+    }
+    return r;
+  };
+
+  uji('peserta di stasiun tool tetap dihitung memegang kursinya', () => {
+    bersih();
+    const [, , c] = rombongan(3);
+    harus(duduk(c) && c.slotIdx === 2, `peserta ketiga seharusnya duduk di kursi 2, dapat ${c.station}/${c.slotIdx} antre ${c.antre}`);
+    harus(ctx.kursiKosong() === KURSI_TOTAL - 3, `awal: kosong ${ctx.kursiKosong()}, harusnya ${KURSI_TOTAL - 3}`);
+    kerja(c, 'Read');
+    harus(c.station === 'read', 'pre Read ber-agenId tidak memberangkatkan pesertanya ke lemari arsip');
+    harus(c.kursi === 2, `kursi 2 tidak dipesan waktu berangkat (kursi = ${c.kursi})`);
+    harus(ctx.kursiKosong() === KURSI_TOTAL - 3,
+      `selama dia di lemari arsip kursiKosong() = ${ctx.kursiKosong()}, harusnya tetap ${KURSI_TOTAL - 3}`);
+    tiba(c);
+    kerja(c, 'Edit');
+    harus(c.station === 'edit' && c.kursi === 2,
+      `pindah lemari arsip -> meja stempel menghapus pesanannya (kursi = ${c.kursi})`);
+    harus(ctx.kursiKosong() === KURSI_TOTAL - 3, `di meja stempel kursiKosong() = ${ctx.kursiKosong()}`);
+  });
+
+  uji('kursi yang dipesan tidak diberikan ke undangan baru', () => {
+    bersih();
+    const [, , c] = rombongan(3);
+    kerja(c, 'Read');
+    tiba(c);
+    harus(ctx.slotBebas('rapat') === 3, `slotBebas('rapat') = ${ctx.slotBebas('rapat')}, harusnya 3 (kursi 2 dipesan)`);
+    const d = datang('ag-susulan');
+    harus(d, 'undangan susulan tidak lahir padahal masih ada kursi');
+    tiba(d);
+    harus(duduk(d) && d.slotIdx === 3, `undangan susulan duduk di ${d.slotIdx} (antre ${d.antre}), harusnya kursi 3`);
+  });
+
+  uji('pulang ke rapat: duduk lagi di kursinya sendiri, tidak antre', () => {
+    bersih();
+    const [a, , c] = rombongan(3);
+    kerja(c, 'Read');
+    tiba(c);
+    pamit(a);                       // kursi 0 kosong: slot bebas terendah, BUKAN kursi c
+    harus(a.keluar && ctx.slotBebas('rapat') === 0, `kursi 0 tidak lepas sesudah pamit (slotBebas = ${ctx.slotBebas('rapat')})`);
+    c.goTo('rapat');                // yang dilakukan Peserta.update() sesudah jeda 2 detik
+    harus(c.slotIdx === 2 && c.antre === 0,
+      `pulang ke kursi ${c.slotIdx} (antre ${c.antre}), harusnya kursi 2 miliknya`);
+    harus(c.kursi === -1, `pesanannya tidak dilepas sesudah dipakai (kursi = ${c.kursi})`);
+    const ujung = c.path[c.path.length - 1];
+    const tx = STATIONS.rapat.x + slotKe(2, STATIONS.rapat.step);
+    harus(ujung && Math.abs(ujung.x - tx) < 1 && Math.abs(ujung.y - STATIONS.rapat.y) < 1,
+      `jalurnya berujung di ${ujung ? Math.round(ujung.x) + ',' + Math.round(ujung.y) : '-'}, bukan kursi 2 (${tx},${STATIONS.rapat.y})`);
+    tiba(c);
+    harus(duduk(c) && c.slotIdx === 2, 'sesudah tiba tidak duduk di kursi 2');
+  });
+
+  // Bentuk bocor yang dulu merah di uji-ulang --benih 2 (frame 5177): meja
+  // punya antrean DAN satu kursi kosong. Yang antre tidak dihitung, jadi
+  // kursiKosong() menjawab 1 dan tiap SubagentStart melahirkan undangan baru
+  // yang ikut antre di belakangnya.
+  uji('antrean + satu kursi kosong: undangan baru tidak lahir', () => {
+    bersih();
+    const r = rombongan(KURSI_TOTAL);
+    const c = r.find((p) => p.slotIdx === KURSI_N - 1);
+    harus(c, `tidak ada yang duduk di kursi ${KURSI_N - 1}`);
+    kerja(c, 'Read');
+    tiba(c);
+    RUANGAN.kursiDipinjam = KURSI_N - 1;   // kursi-tambahan-ditarik menyeret kursinya
+    c.goTo('rapat');
+    harus(c.station === 'rapat' && c.antre === 1, `kursinya diseret: seharusnya antre 1, dapat antre ${c.antre}`);
+    RUANGAN.kursiDipinjam = -1;            // kursinya kembali; antreannya belum maju
+    harus(ctx.kursiKosong() === 0, `kursiKosong() = ${ctx.kursiKosong()}, harusnya 0 (yang antre ikut memegang kursi)`);
+    const n = peserta.length;
+    harus(datang('ag-kesepuluh') === null && peserta.length === n,
+      `SubagentStart melahirkan undangan ke-${peserta.length} untuk ${KURSI_TOTAL} kursi`);
+    ctx.bukaRapat({ session: SESI, tool: 'Task', peserta: ['Telaah berkas'] });
+    harus(peserta.length === n, 'bukaRapat() melahirkan undangan padahal meja penuh');
+    c.tickAntre();
+    harus(duduk(c) && c.slotIdx === KURSI_N - 1, `antrean maju ke kursi ${c.slotIdx}, harusnya ${KURSI_N - 1}`);
+  });
+
+  uji('yang bubar di stasiun tool melepas pesanannya', () => {
+    bersih();
+    const [a] = rombongan(1);
+    kerja(a, 'Read');
+    tiba(a);
+    harus(ctx.kursiKosong() === KURSI_TOTAL - 1 && ctx.slotBebas('rapat') === 1, 'pesanan kursi 0 tidak terpasang');
+    pamit(a);
+    harus(ctx.kursiKosong() === KURSI_TOTAL, `sesudah pamit kursiKosong() = ${ctx.kursiKosong()}, harusnya ${KURSI_TOTAL}`);
+    harus(ctx.slotBebas('rapat') === 0, `kursi 0 masih tertahan pesanan orang yang sudah pamit (slotBebas = ${ctx.slotBebas('rapat')})`);
+  });
+
+  // Penjaga !(k >= 0) di Peserta.slotOffset: kursi yang tidak berisi angka
+  // berarti tidak memesan. Dengan `k < 0`, undefined lolos sebagai pesanan dan
+  // slotIdx/jalurnya jadi undefined/NaN.
+  uji('kursi tanpa angka (undefined) jatuh ke jalur biasa, bukan NaN', () => {
+    bersih();
+    const [a] = rombongan(1);
+    kerja(a, 'Read');
+    tiba(a);
+    a.kursi = undefined;
+    a.goTo('rapat');
+    harus(Number.isInteger(a.slotIdx) && a.slotIdx >= 0, `slotIdx = ${a.slotIdx}`);
+    harus(a.path.length && a.path.every((t) => Number.isFinite(t.x) && Number.isFinite(t.y)),
+      'jalur pulangnya berisi NaN: ' + JSON.stringify(a.path.slice(-2)));
+  });
+
+  bersih();
+  return kasus;
+}
+
 /* -------------------------------------------------------------- laporan --- */
 function cetakSatu(hasil) {
   const { def, syarat, smoke, temuan } = hasil;
@@ -1174,17 +1336,21 @@ function cetakRingkas(hasil) {
   for (const p of hasil.temuan.peringatan) console.log(kuning('    ⚠ ' + p));
 }
 
-function cetakPenjadwal(kasus) {
-  console.log(tebal('Uji penjadwal (bentrok / panggung / aktor / lanjutan) — fungsi asli room.js:'));
+function cetakPenjadwal(kasus, judul = 'Uji penjadwal (bentrok / panggung / aktor / lanjutan) — fungsi asli room.js:') {
+  console.log(tebal(judul));
   for (const k of kasus) {
     console.log((k.lulus ? hijau('  ✓ ') : merah('  ✗ ')) + k.nama + (k.lulus ? '' : merah('  — ' + k.pesan)));
   }
   return kasus.every((k) => k.lulus);
 }
+const cetakKursi = (kasus) => cetakPenjadwal(kasus, 'Uji kursi rapat (pesanan peserta ke stasiun tool) — fungsi asli room.js:');
 
 /* -------------------------------------------------------------------- CLI */
 function main() {
   const argv = process.argv.slice(2);
+  // sandboxnya sendiri (lihat ujiKursiRapat), jadi tidak perlu ctx di bawah
+  if (argv.includes('--kursi')) process.exit(cetakKursi(ujiKursiRapat()) ? 0 : 1);
+
   const ctx = muatKonteks();
   const { EVENT_ACAK, eventById } = ctx.__jembatan__;
   const pristine = buatPristine(ctx);
@@ -1226,7 +1392,9 @@ function main() {
     if (totalPeringatan) console.log(kuning(`${totalPeringatan} peringatan (tidak menggagalkan).`));
     console.log();
     const lulusPenjadwal = cetakPenjadwal(ujiPenjadwal(ctx, pristine));
-    process.exit(adaGagal || !lulusPenjadwal ? 1 : 0);
+    console.log();
+    const lulusKursi = cetakKursi(ujiKursiRapat());
+    process.exit(adaGagal || !lulusPenjadwal || !lulusKursi ? 1 : 0);
   }
 
   const id = argv[0];
@@ -1235,6 +1403,7 @@ function main() {
     console.log('  node uji-event.mjs <id>          satu event, detail lengkap');
     console.log('  node uji-event.mjs --semua       sapu semua event + uji penjadwal, ringkas + exit code');
     console.log('  node uji-event.mjs --penjadwal   cuma uji aturan bentrok/panggung/aktor');
+    console.log('  node uji-event.mjs --kursi       cuma uji pemesanan kursi rapat');
     console.log('  node uji-event.mjs --daftar      cetak semua id yang valid');
     process.exit(1);
   }

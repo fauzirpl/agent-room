@@ -422,7 +422,15 @@ daftarEvent(
       if (E.aktor[0]) { E.aktor[0].pose = null; E.aktor[0].bawa = null; }
     });
   },
-  selesai(E) { for (const a of E.aktor) { a.pose = null; a.bawa = null; } },
+  selesai(E) {
+    // dibatalkan sebelum detik 17 (matikanEvent): gelasnya tetap ditegakkan dan
+    // nodanya tertinggal, seperti akhir biasa — bukan rebah selamanya
+    if (RUANGAN.gelasGuling != null) {
+      RUANGAN.nodaKopi.push({ x: RUANGAN.gelasGuling - 4, y: 209, lebar: 8 });
+      RUANGAN.gelasGuling = null;
+    }
+    for (const a of E.aktor) { a.pose = null; a.bawa = null; }
+  },
 },
 
 {

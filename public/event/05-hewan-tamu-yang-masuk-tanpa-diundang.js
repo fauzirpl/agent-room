@@ -115,10 +115,14 @@ daftarEvent(
     if (E.data.terbang) return;
     const x = 228, y = JENDELA.y + JENDELA.h - 4;
     const toleh = Math.sin(now / 1500) > 0 ? 1 : -1;
-    r(x, y, 4, 3, '#8a6844');
-    r(x + (toleh > 0 ? 3 : 0), y - 2, 2, 2, '#7a5c3e');
-    r(x + (toleh > 0 ? 5 : -1), y - 2, 1, 1, '#d9b96a');   // paruh
-    r(x + 1, y + 3, 1, 1, '#5c4530'); r(x + 3, y + 3, 1, 1, '#5c4530');
+    // di dalam kaca, berdiri di kusen bawah: lewat lapis kaca, kalau tidak
+    // tertimbun langit drawWindow
+    klipJendela(() => {
+      r(x, y, 4, 3, '#8a6844');
+      r(x + (toleh > 0 ? 3 : 0), y - 2, 2, 2, '#7a5c3e');
+      r(x + (toleh > 0 ? 5 : -1), y - 2, 1, 1, '#d9b96a');   // paruh
+      r(x + 1, y + 3, 1, 1, '#5c4530'); r(x + 3, y + 3, 1, 1, '#5c4530');
+    });
   },
 },
 

@@ -593,7 +593,12 @@ Tiga harness Node nol-dependency, semuanya dijalankan `npm test` dan CI:
   tidak muncul. Rantai `lanjutan` diikuti sampai kedalaman 3 di ruangan yang
   sama, seperti `matikanEvent()` sungguhan. Aturan `bentrok()`/`kelas
   panggung`/`perluAktor`/`pinjamAktor` diuji lewat fungsi asli `room.js`
-  terhadap definisi sintetis — bukan salinan aturannya. Bug gambar yang
+  terhadap definisi sintetis — bukan salinan aturannya. Bagian kursi rapat
+  (`node uji-event.mjs --kursi`, juga jalan di `--semua`) memakai `handle()`
+  asli: peserta yang pergi ke stasiun tool tetap dihitung `kursiKosong()`,
+  kursinya dipesan dan tidak diberikan ke undangan baru, sepulangnya ia duduk di
+  kursi yang sama tanpa antre, dan meja berantrean plus satu kursi kosong tidak
+  melahirkan undangan baru. Bug gambar yang
   diketahui tapi belum diperbaiki dicatat di `DIKETAHUI` supaya CI hijau tanpa
   bug-nya hilang dari laporan.
 - **`uji-zorder.mjs`** memanggil `frame()` asli dengan pegawai fixture di

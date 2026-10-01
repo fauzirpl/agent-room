@@ -638,6 +638,8 @@ daftarEvent(
   id: 'kupu-kupu-tanda-tamu',
   kelas: 'latar', bobot: B.jarang, cooldown: 1500, durasi: 30,
   syarat: (S) => S.jam > 8 && S.jam < 15,
+  // cuma waktu hinggap di tembok (300,16); terbangnya boleh melewati garis lantai
+  atasDiDinding: (E) => E.data.tahap === 1,
   mulai(E) { E.data.x = JENDELA.x; E.data.y = JENDELA.y + 20; E.data.tahap = 0; E.data.t = 0; },
   tick(E, dt) {
     const D = E.data;
@@ -797,6 +799,7 @@ daftarEvent(
   id: 'tamu-merokok-ditegur-rambu',
   kelas: 'latar', bobot: B.sedang, cooldown: 1500, durasi: 14,
   syarat: (S) => S.orang.some((o) => o.station === 'idle' && o.diam),
+  atasDiDinding: true,          // kedip rambu di tembok, bukan di atas tamu
   mulai(E, S) {
     const t = S.orang.find((o) => o.station === 'idle' && o.diam);
     if (!t) { E.selesaiCepat = true; return; }

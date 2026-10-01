@@ -200,7 +200,8 @@ daftarEvent(
   },
   gambarDinding(E) {
     if (E.umur > 12) return;
-    // kepulan asap tipis di balik siluet kota, naik lalu memudar
+    // kepulan asap tipis naik lalu memudar — di DEPAN siluet kota: isi klipJendela
+    // dari gambarDinding dilukis di lapis kaca, sesudah langit & kota (lukisKaca)
     klipJendela(() => {
       const y = JENDELA.y + JENDELA.h - 6 - E.umur * 2;
       ctx.globalAlpha = Math.max(0, 0.2 - E.umur * 0.015);

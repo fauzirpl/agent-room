@@ -51,6 +51,7 @@ daftarEvent(
   id: 'sapuan-lampu-mobil-malam',
   kelas: 'latar', bobot: B.sering, cooldown: 180, durasi: 3,
   syarat: (S) => S.lampu > 0.6,
+  atasDiDinding: true,          // sorotnya jatuh di tembok belakang (y 0..70)
   gambarAtas(E) {
     const x = W + 30 - (E.umur / 3) * (W + 90);
     ctx.globalAlpha = 0.06;
@@ -66,6 +67,7 @@ daftarEvent(
   kelas: 'latar', bobot: B.jarang, cooldown: 1200, durasi: 7,
   bentrokDengan: ['sapuan-lampu-mobil-malam'],
   syarat: (S) => !S.petir,
+  atasDiDinding: true,          // kilasan merah-biru di tembok belakang (y 0..110)
   tick(E, dt, S) {
     pada(E, 0.5, () => menoleh(S.orang, 212, 40, 1200));
   },

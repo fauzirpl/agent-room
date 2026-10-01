@@ -251,6 +251,7 @@ daftarEvent(
   id: 'gerhana-sebagian',
   kelas: 'panggung', bobot: B.langka, cooldown: 10800, durasi: 80,
   syarat: (S) => S.jam > 10 && S.jam < 14 && S.luar > 0.7 && CUACA.hujan < 0.1,
+  atasDiDinding: true,          // bayang gerhana di matahari dalam kaca
   mulai(E) {
     E.data.orang = pinjamAktor(E, 3);
     E.data.orang.forEach((a, i) => a.goToXY(200 + i * 14, 138, 'up'));
