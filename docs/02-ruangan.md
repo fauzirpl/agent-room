@@ -2191,6 +2191,40 @@ duduk (±33) tenggelam di bawah ambang jendela (35), jadi dari ruang utama dia
 tidak akan kelihatan. Setelan bukaan `mati` tetap berarti nol jejak: lubangnya
 disumbat potongan lukisan dinding yang sama dan ruangannya tidak digambar.
 
+**Pintu WC dan gudang sungguhan.** Di 2D kedua pintu itu juga lukisan: yang
+datang berdiri di ambang lalu memudar, dan isi ruangannya dilukis di daun pintu
+selama terbuka. Di 3D tembok bersamanya kini satu kisi yang boleh berlubang
+berapa saja — jendela kadis, pintu WC, pintu gudang — masing-masing dengan
+kusen dan ambangnya. Daunnya sungguhan: berengsel di tepi kiri, mengayun ke
+dalam selama `bukaSampai` simulasi (dilunakkan; langsung kalau
+`prefers-reduced-motion`), dan muka depannya lukisan pintu **tertutup** dari `drawPintuWC()`/
+`drawPintuGudang()` yang sama, jadi plang pria·WC·wanita, kisi yang berpendar
+waktu terisi, slot ISI/KOSONG, strip hazard, dan gemboknya tetap terbaca. Di
+balik pintunya ada ruangannya:
+
+- **WC** berplafon, isinya cuma kelihatan lewat pintu yang terbuka: dinding
+  keramik biru, bak mandi dan gayung, kloset jongkok, lampu plafon yang
+  menyala selama ada orangnya atau pintunya terbuka (lampu titik kelima di
+  shader, putih dingin).
+- **Gudang** terbuka ke atas seperti seluruh maket: dua rak besi empat susun
+  berisi kardus ATK dan rim kertas, balok melintang dengan bohlam telanjang
+  (lampu titik keenam, kuning), dan tiga barang bekas pertama
+  `RUANGAN.isiGudang` di lantainya sebagai voxel sesuai jenisnya (keset
+  gulung, piala, plang lama, buku tamu, kursi rusak). Yang ke-4 dst. menumpuk
+  di kanan pintu di atas palet kayu — paletnya juga yang menutup cetakan
+  lukisan 2D tumpukan itu di tekstur lantai. Dua kardus kosong di depan
+  pintunya jadi kotak sungguhan yang hilang selama gudangnya terisi, persis
+  `drawDusGudang()`.
+
+Simulasinya tidak disentuh: pegawai tetap berdiri di ambang dengan alpha
+1→0→1. `tampilanKhusus()` menerjemahkan pudar itu jadi **langkah** — selama
+`masuk` dia melangkah dari ambang ke dalam (WC 28, gudang 40 satuan), selama
+`keluar` kembali. Di WC dia tetap memudar seperti di 2D, sambil melewati
+pintunya. Di gudang dia tidak memudar: kelihatan meraih rak di dalam
+(bergantian dengan diam), lalu keluar membawa kardus yang di simulasi baru
+diberikan sesudah dia sampai di ambang. Boneka, balon, klik, dan partikelnya
+ikut lewat `posisiOrang()` yang sama dengan tamu kadis.
+
 **Pajangan dinding timbul.** Papan nama dinas, kubah CCTV, bagan struktur
 organisasi, monitor CRT, AC, plakat nilai, foto pejabat, Garuda, plang KEPALA
 DINAS, papan kinerja, papan pengumuman, kotak P3K, poster BerAKHLAK, papan
@@ -2229,8 +2263,9 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
   yang sama;
 - gambar event bertebal, tapi tetap satu lapis: kucing voxel dari samping
   terbaca sebagai kucing, papan yang miring di 2D tetap papan pipih yang miring;
-- pintu WC dan gudang masih lukisan di dinding; yang masuk ke sana tetap
-  memudar di ambangnya seperti di 2D, bukan berjalan ke ruangan di baliknya.
+- ruangan di balik tembok (kadis, WC, gudang) cuma kelihatan lewat bukaannya
+  atau dari kamera yang didongakkan tinggi: tembok belakang tetap setinggi
+  aslinya, tidak ikut dipotong rendah seperti dinding samping.
 
 Waktu per tahap (lukis dinding, lantai, kulit, kartu, susun mesh) bisa dilihat
 dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (150 frame, `SS` 2,

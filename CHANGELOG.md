@@ -8,6 +8,17 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: pintu WC dan gudang sungguhan.** Tembok belakang kini juga
+  berlubang di kedua pintu itu, dan daunnya pintu berengsel yang mengayun ke
+  dalam setiap ada yang masuk atau keluar — tetap bergambar plang pria·WC·
+  wanita, kisi yang berpendar waktu terisi, strip hazard, dan gembok. Di
+  baliknya ada ruangannya: WC berkeramik biru dengan bak mandi, gayung, kloset
+  jongkok, dan lampu yang menyala selama dipakai; gudang terbuka ke atas
+  dengan rak besi berisi kardus ATK & rim kertas, bohlam telanjang, dan
+  barang bekas yang disimpan (keset, piala, plang lama, buku tamu, kursi
+  rusak) — yang tidak muat menumpuk di palet kayu di samping pintu. Yang ke
+  WC melangkah masuk sambil memudar; yang mengambil ATK kelihatan meraih rak
+  dari atas, lalu keluar membawa kardusnya.
 - **Tampilan 3D, bagian yang dulu masih datar.** Ruang kadis kini ruangan
   sungguhan di balik dinding: dindingnya dilubangi di bingkai bukaan (kusen jati
   bertebal, ambang menjorok), dan di baliknya ada kantor kadis lengkap — foto

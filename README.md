@@ -53,9 +53,10 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 - **Maket 3D**: kantornya bisa diputar dan dilihat dari sudut mana pun —
   perabot yang benar-benar berdiri, pegawai voxel yang duduk di kursi rapat
   dan mengetik di mejanya, ruang kadis sungguhan di balik jendela dinding,
-  debu di berkas cahaya, bayangan dan lampu neon yang ikut jam. WebGL2
-  ditulis sendiri, tanpa pustaka; dinding, lantai, dan 360 event-nya tetap
-  dilukis kode pixel-art yang sama. Tombol **3D / 2D** di bilah bawah, atau
+  WC dan gudang yang pintunya benar-benar mengayun terbuka, debu di berkas
+  cahaya, bayangan dan lampu neon yang ikut jam. WebGL2 ditulis sendiri,
+  tanpa pustaka; dinding, lantai, dan 360 event-nya tetap dilukis kode
+  pixel-art yang sama. Tombol **3D / 2D** di bilah bawah, atau
   `?tampilan=2d`
 - Balon pikiran & kotak kabar — isi transkrip beneran, bukan cuma nama tool
 - **Serah terima antar sesi**: sesi Claude yang baru masuk di folder yang
@@ -174,10 +175,11 @@ removes it, `--coba` only shows what would be run).
 - **A 3D model of the office**: orbit around it and look from any angle — real
   standing furniture, voxel civil servants who sit at the meeting table and
   type at their desks, the head of office's room behind a real window in the
-  wall, dust in the light beams, shadows and neon lights that follow the clock.
-  Hand-written WebGL2, no libraries; walls, floor, and all 360 events are still
-  painted by the same pixel-art code. Toggle with the **3D / 2D** button in the
-  bottom bar, or `?tampilan=2d`
+  wall, a restroom and a storeroom whose doors actually swing open, dust in the
+  light beams, shadows and neon lights that follow the clock. Hand-written
+  WebGL2, no libraries; walls, floor, and all 360 events are still painted by
+  the same pixel-art code. Toggle with the **3D / 2D** button in the bottom
+  bar, or `?tampilan=2d`
 - Thought bubbles & a news box — actual transcript content, not just tool names
 - **Shift handover between sessions**: a Claude session starting work in a
   folder someone else just left can see what happened there in the last few
