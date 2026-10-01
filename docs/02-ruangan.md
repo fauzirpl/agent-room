@@ -2217,6 +2217,29 @@ kali mengitari tiangnya. Barang di atas taplak yang belum bermodel tidak jatuh
 ke lantai: kartu event ber-`sortY` 249..255 yang isinya habis di dalam bidang
 meja berdiri di atas meja 3D (`zRapat()`).
 
+**Gelombang kedua** menyusul untuk yang paling janggal sebagai kartu: barang
+yang semestinya tergeletak — kain dagangan pedagang, barisan semut yang merayap
+di lantai lalu memanjat ke bungkus gorengan di meja kerja, terminal colokan
+berkabel di kolong meja, dus arsip yang terguling dan berkasnya tercecer, dus
+auditor, petak silau matahari sore yang hangat di lantai — dan bawaan orang
+luar: kantong kopi ojol, topi dan senter satpam, galon yang dipanggul rebah di
+bahu, tiga nasi kotak di bahu pengantarnya (lalu bertumpuk di ujung meja rapat
+dan dibagikan ke depan tiap peserta), kotak dana sosial yang didekap. Yang
+dipanggul menempel ke matriks badan bonekanya (`st.kepala`), jadi ikut arah
+hadapnya. Perangkat yang berulah ikut bertubuh: telepon berdering, busur wifi
+di atas rak server, stabilizer bermeter jarum, laci fotokopi yang tertarik,
+kertas "KUOTA" di muka printer, silau dan logo di layar rak server, vakum di
+kakinya, kaca pintu kadis yang menyala selama kadis rapat tertutup; juga ayam
+kampung yang mematuk dan lomba makan kerupuk bertiang bambu. Tiga sengaja
+digeser dari letak 2D-nya karena di 3D tempat itu sudah diisi benda pejal:
+stabilizer menempel di tembok (lantainya milik ember penadah AC dan tangga
+teknisi), telepon di tepi depan meja stempel (2D-nya menimpa baki surat), dus
+auditor di depan ujung kiri meja rapat (2D-nya menimpa kursi sisi dekat).
+Cahaya monitor lembur tidak lagi berupa cakram kartu: layar 3D-nya sudah
+memancar sendiri. Tamu event yang berpindah kini melangkah dan menghadap arah
+jalannya — gambar 2D-nya selalu `idle` menghadap penonton, gaya yang di 3D
+jadi meluncur menyamping; begitu berhenti, dia kembali menghadap penonton.
+
 **Ruang kadis sungguhan.** Di 2D ruang kadis adalah bukaan berbingkai — lukisan
 ruangan mini yang diklip ke kotak 72x46 di dinding. Di 3D dindingnya benar-benar
 **dilubangi** di bingkai itu (kusen jati bertebal, ambang yang menjorok ke ruang

@@ -8,6 +8,15 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: barang event gelombang kedua.** Kain dagangan pedagang,
+  barisan semut yang merayap ke bungkus gorengan, colokan di kolong meja, dus
+  arsip yang terguling, silau matahari sore di lantai, kantong kopi ojol, topi
+  dan senter satpam, galon yang dipanggul, nasi kotak, kotak dana sosial,
+  telepon berdering, wifi yang megap-megap, stabilizer, laci fotokopi, kertas
+  "KUOTA" di printer, layar rak server, vakum, kaca pintu kadis yang menyala,
+  ayam kampung, dan lomba makan kerupuk kini benda 3D sungguhan. Tamu event
+  yang berjalan kini melangkah dan menghadap arah jalannya, tidak lagi meluncur
+  menyamping sambil menatap penonton.
 - **Tampilan 3D: lihat dari mata pegawai.** Klik seorang pegawai di maket 3D
   dan kameranya meluncur ke depan wajahnya: pandangannya ikut tinggi duduknya,
   arah hadapnya, dan langkahnya. Pegawai yang sedang di meja kerja langsung
