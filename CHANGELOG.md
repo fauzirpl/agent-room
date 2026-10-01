@@ -8,6 +8,15 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: jendela berlubang, akuarium berair, lemari kaca.** Jendela
+  kantor kini lubang sungguhan di tembok: kacanya di punggung tembok tetap
+  menampilkan langit, matahari, bulan, kota & Monas, hujan, dan kilat yang sama,
+  dengan ambang yang menjorok dan gorden hijau berlipat (yang kanan ikut
+  melebar kalau ditarik waktu silau sore). Akuarium jadi tangki berair tembus
+  pandang dengan arwana emas yang berenang dan gelembung yang naik; lemari
+  piala berpintu kaca memajang piala, medali, plakat, piagam, dan foto bersama
+  sebagai benda sungguhan. Rak buku dan rak koran pojok baca ikut dibangun —
+  korannya menguning kalau masih edisi kemarin.
 - **Tampilan 3D: perabot yang tadinya pipih jadi voxel.** Lemari arsip kini
   rak terbuka sungguhan berisi ordner berlabel dan bundel bertali (bundel yang
   dipinjam bolong dari raknya, yang kepenuhan menyembul dan bertumpuk dus di

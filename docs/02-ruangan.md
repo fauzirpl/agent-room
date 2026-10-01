@@ -2096,7 +2096,8 @@ kanvas tekstur berskala 3 texel per piksel dunia:
 
 - **dinding** = seluruh bidang dinding 2D (baris 0..110): `drawWall`,
   `gambarDinding` event, dan prop yang memang menempel di dinding. Jam dinding
-  tetap berdetak, cuaca di jendela tetap sungguhan, bukaan ruang kadis tetap
+  tetap berdetak, cuaca di jendela tetap sungguhan (kacanya kini di punggung
+  tembok — lihat **Perabot voxel**), bukaan ruang kadis tetap
   terlihat. Fungsi yang menggambar dua hal sekaligus dipanggil di dalam klip
   bagian dindingnya saja: `drawWindow` (jendela, tanpa meja printer di
   bawahnya) dan `drawFiling` (bagan struktur organisasi, tanpa kabinetnya);
@@ -2105,15 +2106,16 @@ kanvas tekstur berskala 3 texel per piksel dunia:
   meja lesehan, dan bantal duduk "ditimbulkan" — kotak rendah yang tutupnya
   memakai lukisan lantai di tapaknya sendiri;
 - **kulit perabot** = muka depan filing kabinet, rak server (LED-nya tetap
-  berkedip), badan fotokopi, lemari piala, akuarium (arwananya tetap
-  berenang), dan seterusnya, masing-masing dilukis fungsi gambarnya sendiri di
-  dalam klip kotaknya. Warna samping & tutup kotaknya dicicip dari tepi kulit
-  itu sendiri: lemari kayu dapat samping kayu tanpa tabel warna kedua. Yang
-  bukan "muka sebuah kotak" — rak terbuka, tanaman, barang di atas meja — tidak
-  dilukis, tapi dibangun (lihat **Perabot voxel** di bawah).
+  berkedip), badan fotokopi, printer, dispenser, penghancur kertas, dan
+  seterusnya, masing-masing dilukis fungsi gambarnya sendiri di dalam klip
+  kotaknya. Warna samping & tutup kotaknya dicicip dari tepi kulit itu
+  sendiri: lemari kayu dapat samping kayu tanpa tabel warna kedua. Yang bukan
+  "muka sebuah kotak" — rak terbuka, tanaman, barang di atas meja, akuarium,
+  lemari kaca — tidak dilukis, tapi dibangun (lihat **Perabot voxel** di bawah).
 
 Dinding dilukis ulang 20 kali sedetik, lantai 7 kali, tiap kulit menurut
-lajunya sendiri (rak server 12, akuarium 15, lemari piala sekali sedetik).
+lajunya sendiri (rak server 12, fotokopi 6, lemari piala kecil ruang kadis
+sekali sedetik).
 Mode ringan menyeparuhkan semuanya dan mematikan peta bayangan.
 
 **Proyeksi oblik sebagai kamus.** Gambar 2D ruangan ini proyeksi oblik: titik
@@ -2226,8 +2228,10 @@ diberikan sesudah dia sampai di ambang. Boneka, balon, klik, dan partikelnya
 ikut lewat `posisiOrang()` yang sama dengan tamu kadis.
 
 **Perabot voxel.** Benda yang di putaran awal masih kartu tegak (lukisan 2D
-yang berdiri, atau dua kartu bersilang untuk tanaman) sekarang dibangun dari
-kotak, mengikuti gambar 2D-nya piksel demi piksel — tiap `r(x, y, w, h)` jadi
+yang berdiri, atau dua kartu bersilang untuk tanaman), atau cuma lukisan di
+muka sebuah kotak padahal isinya bervolume (jendela, akuarium, lemari kaca),
+sekarang dibangun dari kotak, mengikuti gambar 2D-nya piksel demi piksel —
+tiap `r(x, y, w, h)` jadi
 kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
 
 - **Lemari arsip** jadi rak terbuka sungguhan: rangka jati, empat papan, ordner
@@ -2263,15 +2267,37 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
   `RUANGAN.xbanner.sudut`, berputar pada tepi belakang kakinya; kainnya selalu
   lukisan banner tegak (dilukis dengan sudut ditahan 0), jadi yang memendek
   adalah sudut pandangnya, bukan gambarnya.
+- **Jendela kantor** dilubangi seperti jendela ruang kadis: kacanya mundur ke
+  punggung tembok dan tetap memakai potongan lukisan dinding yang sama —
+  langit ikut jam, matahari, bulan & bintang, awan, kota & Monas, hujan, kilat,
+  kaca berkabut, dan event yang menggambar di kaca semuanya tetap hidup. Kusen
+  aluminium & tiang silangnya timbul tepat di atas yang terlukis, ambangnya
+  menjorok ke ruangan, dan gordennya jadi kain berlipat: lambrequin bergerigi
+  berpita emas, panel kiri, dan panel kanan selebar `RUANGAN.gordenKanan`
+  (ikut melebar waktu ditarik karena silau sore).
+- **Akuarium arwana**: kabinet bertombol kuningan, tangki berbingkai dengan
+  lampu penutup yang menyala, pasir, tanaman air, batu aerator yang
+  menggelembung, dan arwana emas yang berenang bolak-balik dengan rumus 2D yang
+  sama — di balik air yang tembus pandang.
+- **Lemari piala** berpintu kaca: piala emas & perak, plakat, dua medali
+  bertali merah-putih yang tersemat di punggung lemari, piagam dan foto
+  bersama yang berdiri bersandar, piala voli kalau `RUANGAN.piala` — di balik
+  kaca berkilap miring. Lemari kecil di ruang kadis tetap lukisannya.
+- **Rak pojok baca**: rak buku pendek dua susun (satu buku dicabut separuh) dan
+  rak koran bertongkat penjepit; korannya kekuningan kalau masih edisi kemarin
+  (`koranBasi()`).
 
 Isi yang ikut keadaan `RUANGAN` masuk satu grup sendiri yang dibangun ulang
 **hanya waktu `tandaPerabot()` berubah** (kusut dihitung per lapis, layu
-dibulatkan ke 1/20), jadi tidak menambah kerja per frame; yang memang bergerak
-— X-banner, lampu fotokopi, cap basah — disusun tiap frame. Stasiun yang
-sedang dipakai mendapat pendar kuning sayup di tepi papan rak arsip atau bibir
-meja stempel, pengganti `glow()` 2D yang dulu terlukis di kartunya. Enam belas
-kulit yang tidak terpakai lagi (termasuk tujuh kartu meja kerja) ikut dibuang,
-jadi melukis kulit malah lebih ringan dari sebelumnya.
+dibulatkan ke 1/20, lebar gorden ke 0,5), jadi tidak menambah kerja per frame;
+yang memang bergerak — X-banner, lampu fotokopi, cap basah, arwana — disusun
+tiap frame. Air akuarium dan pintu kaca lemari piala digambar tembus pandang di
+lintasan pudar, tapi **tidak ikut peta bayangan**: kaca yang membayangi isinya
+sendiri menggelapkan piala di baliknya. Stasiun yang sedang dipakai mendapat
+pendar kuning sayup di tepi papan rak arsip atau bibir meja stempel, pengganti
+`glow()` 2D yang dulu terlukis di kartunya. Sembilan belas kulit yang tidak
+terpakai lagi (termasuk tujuh kartu meja kerja) ikut dibuang, jadi melukis
+kulit malah lebih ringan dari sebelumnya.
 
 **Pajangan dinding timbul.** Papan nama dinas, kubah CCTV, bagan struktur
 organisasi, monitor CRT, AC, plakat nilai, foto pejabat, Garuda, plang KEPALA
