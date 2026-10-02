@@ -53,7 +53,8 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 - **Maket 3D**: kantornya bisa diputar dan dilihat dari sudut mana pun —
   perabot dan tanaman voxel yang benar-benar berdiri (sampai isi rak arsip dan
   pernak-pernik tiap meja), akuarium berair dengan arwana yang berenang,
-  pegawai voxel yang duduk di kursi rapat dan mengetik di mejanya (tamu,
+  pegawai voxel yang duduk di kursi rapat, mengetik di mejanya, hormat, dan
+  menguap (tamu,
   kucing kantor, dan barang-barang event juga voxel), jendela
   berlubang dengan langit yang ikut jam, ruang kadis sungguhan di balik
   jendela dinding, pintu WC, gudang, dan ruang kadis yang benar-benar mengayun,
@@ -181,8 +182,8 @@ removes it, `--coba` only shows what would be run).
 - **A 3D model of the office**: orbit around it and look from any angle — real
   standing voxel furniture and plants (down to the binders on the archive
   shelf and the knick-knacks on each desk), a water-filled aquarium with a
-  swimming arowana, voxel civil servants who sit at the meeting table and type
-  at their desks (visitors, the office cat, and event props are voxel too), a recessed
+  swimming arowana, voxel civil servants who sit at the meeting table, type
+  at their desks, salute, and yawn (visitors, the office cat, and event props are voxel too), a recessed
   window whose sky follows the clock, the head of
   office's room behind a real window in the wall, restroom, storeroom, and
   office doors that actually swing open, dust in the light beams, shadows and

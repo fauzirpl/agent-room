@@ -8,6 +8,30 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: lengan bersiku.** Lengan boneka kini lengan atas, lengan
+  bawah, dan telapak. Pose yang tangannya punya sasaran langsung sampai ke sana:
+  hormat di alis dengan siku membuka ke samping, salam melambai di samping
+  kepala, hp di telinga dengan teleponnya terjepit, usap tengkuk, menutup
+  hidung, menutup mulut yang menguap, lengan bersilang di dada, tepuk tangan
+  yang bertemu lalu membuka, berkipas, dan mengelap. Yang menunggu disposisi
+  memegang tepi mapnya, tidak lagi mengacungkan dua lengan lurus ke depan.
+  Barang di tangan ikut telapaknya.
+- **Tampilan 3D: wajah yang berekspresi.** Pegawai yang menunggu keputusanmu
+  melotot dengan tetes keringat di pipi, yang baru lega tersenyum ^ ^, yang
+  bekerja menyipit fokus, yang kehabisan tenaga berkelopak berat. Keadaan
+  wajah dari event ikut: mulut menganga saat menguap atau bersin (kepalanya
+  sedikit mendongak, jadi terbaca juga dari belakang), peci melorot, masker
+  kabut asap, kacamata dilepas waktu dilap, dan bolpoin terselip di telinga.
+- **Tampilan 3D: kursi ikut bergerak.** Pegawai yang bersandar mengayun kursi
+  kini rebah ke belakang bersama dudukan dan sandaran kursi putarnya — dulu
+  badannya berguling ke samping sementara kursinya diam. Kursi tambahan yang
+  diseret petugas ikut di belakangnya sepanjang jalan, dan kursi meja kerja
+  mundur sedikit saat penghuninya bangkit.
+- **Tampilan 3D: barang di badan tamu, dan tamu anak.** Tumpukan undangan
+  caraka, tanda tanya tamu nyasar, kamera wartawan, dan gulungan laporan
+  audit kini benda voxel yang menempel di boneka pemiliknya, bukan guntingan
+  kertas yang melayang. Dua tamu tenar anak (bocah berdestar, bintang jersey
+  merah muda nomor sepuluh) kini boneka voxel berukuran anak.
 - **Tampilan 3D: jongkok sungguhan.** Pose `jongkok`, pose event yang paling
   sering muncul, kini benar-benar jongkok: pinggul turun, paha & betis
   terlipat, telapak tetap rata di lantai, badan condong, dan kedua tangan

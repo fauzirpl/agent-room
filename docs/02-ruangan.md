@@ -2162,14 +2162,23 @@ mejanya masing-masing.
 **Pegawai voxel, 1,4 kali sprite-nya.** Sprite 2D setinggi 28 px itu gaya
 chibi, sementara perabot 2D (meja 18, meja stempel 24, pintu 80..86) diukur
 untuk orang yang lebih besar — di skala 1 pegawainya jadi anak kecil di kantor
-raksasa. Bonekanya dibangun dari kotak berendi (paha-betis, lengan di bahu,
-kepala di leher) dengan palet jabatan yang sama: PDH putih/batik Rabu/batik
+raksasa. Bonekanya dibangun dari kotak berendi (paha-betis, lengan atas-lengan
+bawah bersiku, kepala di leher) dengan palet jabatan yang sama: PDH putih/batik Rabu/batik
 Jumat, seragam satpam (topi pet bermonogram, tali bahu, lambang merah di
 lengan pendek) dan OB (kemeja dua warna), rompi kantor cabang dengan tanda
-pangkatnya, rambut/peci/jilbab/topi dari `kepalaEfektif()`, kacamata, kumis,
-dan kedip mata. Posenya dibaca dari sumber yang sama dengan 2D: langkah dari
-`phase`, lengan kerja dari `workArms()`, pose event dari `posEvent()`, map
-disposisi terangkat waktu menunggu keputusanmu, barang bawaan di tangan,
+pangkatnya, rambut/peci/jilbab/topi dari `kepalaEfektif()`, kacamata (dilepas
+waktu dilap), kumis, kedip mata, dan wajah yang mengikuti `ekspresi()` 2D:
+tegang melotot berkeringat (yang menunggu keputusanmu menghadap kamera), lega
+^ ^, fokus menyipit, lelah berkelopak berat — plus keadaan wajah dari event:
+mulut menganga saat menguap/bersin dengan kepala sedikit mendongak, peci
+melorot miring, masker kabut asap (`a.masker`/`MOD.masker`), dan bolpoin di
+telinga. Posenya dibaca dari sumber yang sama dengan 2D: langkah dari
+`phase`, lengan kerja dari `workArms()`, pose event dari `posEvent()` —
+kecuali pose yang tangannya punya sasaran di `POSE_3D` (hormat di alis, salam
+di samping kepala, hp di telinga, usap tengkuk, hidung, nguap, silang, tepuk,
+kipas, mengipas, lap), yang telapaknya dibawa IK dua sendi ke sasarannya dengan
+siku menekuk ke luar — map disposisi dipegang di kedua tepinya waktu menunggu
+keputusanmu, barang bawaan di tangan,
 terkapar waktu ditekel satpam. Bedanya: di 3D mereka **duduk sungguhan**
 — di kursi rapat (mengikuti `turunDuduk()`), di kursi meja kerjanya, di kursi
 lipat pos (satpam yang berjaga; bangkit waktu berjalan, dipinjam event,
@@ -2178,7 +2187,10 @@ pose `jongkok` melipat paha dan betis dengan telapak tetap rata di lantai,
 badan condong, dan tangan meraih lantai; pemeran event yang terdaftar di
 `RAIH_MEJA` (id event → tinggi sasaran) membungkuk berdiri dengan tangan ke
 tinggi meja atau mesinnya. Yang berpose `ngantuk` mengangguk pelan (gerak
-dikurangi: tunduk diam). Meja kerja 3D sengaja setinggi 15, bukan 18: papan
+dikurangi: tunduk diam). Yang bersandar mengayun kursi (`a.miring` sambil
+duduk di meja kerja) rebah ke belakang bersama dudukan dan sandaran kursi
+putarnya, berporos di puncak tiang; kaki bintangnya diam. Kursi meja kerja
+mundur sedikit saat penghuninya bangkit. Meja kerja 3D sengaja setinggi 15, bukan 18: papan
 setinggi 18 jatuh di bahu orang yang duduk.
 
 Pegawai standby (0,55) dan yang memudar di ambang pintu digambar **tembus
@@ -2208,7 +2220,9 @@ jatuh lurus ke ember yang di 3D berdiri tepat di bawah AC-nya.
 **Tamu event jadi boneka.** Semua sosok orang di gambar event lewat satu
 pintu, `drawPerson()` — dipanggil `gambarOrangLuar` (kurir, tamu salah alamat,
 pegawai baru lapor diri, dan belasan lainnya), `TAMU_BIROKRASI.gambar`, dan
-`TOKOH.gambar` (tamu tenar). Di kartu, sosok itu berdiri di kedalaman `sortY`
+`TOKOH.gambar` (tamu tenar) — juga `TOKOH.anak`, sosok 20 px tamu tenar anak
+yang dicegat dengan cara yang sama dan dibangun jadi boneka berskala anak
+(`SKALA_ANAK`). Di kartu, sosok itu berdiri di kedalaman `sortY`
 milik EVENT, bukan di tempat orangnya, jadi tamu yang lewat di lajur lain
 terbaca sebagai guntingan kertas di tempat yang salah. Sekarang ±30 kali
 sedetik gambar tiap event dijalankan sekali di **kanvas hampa** (semua perintah
@@ -2248,7 +2262,9 @@ licin"; kerucut licin dan payung lipat ada yang ditaruh dan ada yang dijinjing;
 laba-laba turun dari plafon di atas meja rapat; ember kedua menadah atap bocor;
 toa terpasang di atas lambrequin gorden. Kursi kosong yang "berputar sendiri" —
 di 2D cuma sandaran yang menyempit-melebar — di sini benar-benar berputar dua
-kali mengitari tiangnya. Barang di atas taplak yang belum bermodel tidak jatuh
+kali mengitari tiangnya. Kursi tambahan yang diseret petugas standby ikut di
+belakang petugasnya sepanjang jalan, seperti gandengan (di 2D ia lenyap lalu
+muncul di tujuan). Barang di atas taplak yang belum bermodel tidak jatuh
 ke lantai: kartu event ber-`sortY` 249..255 yang isinya habis di dalam bidang
 meja berdiri di atas meja 3D (`zRapat()`).
 
@@ -2270,6 +2286,13 @@ digeser dari letak 2D-nya karena di 3D tempat itu sudah diisi benda pejal:
 stabilizer menempel di tembok (lantainya milik ember penadah AC dan tangga
 teknisi), telepon di tepi depan meja stempel (2D-nya menimpa baki surat), dus
 auditor di depan ujung kiri meja rapat (2D-nya menimpa kursi sisi dekat).
+
+**Barang yang menempel di badan orang** juga menumpang matriks badan
+bonekanya, dan kartu propnya tidak dilukis lagi: tumpukan undangan caraka di
+kedua tangannya (menipis tiap meja yang kebagian), tanda tanya tamu nyasar di
+atas kepalanya, kamera wartawan (di dada waktu berjalan, di depan mata waktu
+memotret), dan gulungan audit-token yang menjuntai dari tangan auditor lalu
+terbentang di lantai. Nyamuk dan lalat satu piksel tetap kartu.
 Cahaya monitor lembur tidak lagi berupa cakram kartu: layar 3D-nya sudah
 memancar sendiri. Tamu event yang berpindah kini melangkah dan menghadap arah
 jalannya — gambar 2D-nya selalu `idle` menghadap penonton, gaya yang di 3D
@@ -2543,7 +2566,8 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
   yang sama;
 - gambar event selain orang, hewan, dan barang bermodel tetap kartu bertebal
   satu lapis: papan yang miring di 2D tetap papan pipih yang miring, dan
-  properti yang digambar di samping tamu (tali pemanjat, misalnya) tetap
+  properti yang digambar di samping tamu dan belum bermodel (tali pemanjat,
+  nyamuk yang mengitari kepala) tetap
   berdiri di kedalaman `sortY` event, bukan menempel di bonekanya;
 - ruangan di balik tembok (kadis, WC, gudang, lorong pintu kadis) cuma
   kelihatan lewat bukaannya atau dari kamera yang didongakkan tinggi: tembok
