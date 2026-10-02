@@ -909,6 +909,37 @@ void main() { hasil = vec4(1.0); }`;
     ]);
     kotak(S, mx + 12.6, mx + 13.6, cH + 3, cH + 13, zf, zf + 1.1, warna('#8d9498'), { sisi: SEMUA });   // gagang batang
   }
+  /* Radio transistor (RADIO, drawRadio 2D) duduk di tutup microwave (cH 14 +
+     16), di tengah tapaknya. Badan, pelat, kisi, kenop & antena statis
+     (radioBadan); lampu skala, kerucut speaker, dan pendarnya ikut
+     radioKeadaan() tiap frame (radioPantri). Baris 2D ke-dy dari puncak
+     badan jatuh di tinggi y0 + 7 - dy .. y0 + 8 - dy, x satu banding satu. */
+  const RADIO_3D = { y0: 30, z0: PANTRI.y + 7.5, z1: PANTRI.y + 12.5 };
+  function radioBadan(S) {
+    const x0 = RADIO.x, x1 = RADIO.x + RADIO.w, { y0, z0, z1 } = RADIO_3D, y1 = y0 + RADIO.h, kulit = warna('#6b4128');
+    kotak(S, x0, x1, y0, y1, z0, z1, kulit, { sisi: SEMUA, w: { atas: gelapkan(kulit, 1.35) } });
+    kotak(S, x0 + 1, x1 - 1, y0 + 1, y0 + 6, z1, z1 + 0.2, warna('#bfb8a4'), { sisi: S_DEPAN | S_ATAS | S_KIRI | S_KANAN });   // pelat depan perak
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {                                   // kisi speaker; yang tengah kerucutnya (dinamis)
+        if (i === 1 && j === 1) continue;
+        kotak(S, x0 + 1 + i * 2, x0 + 2 + i * 2, y0 + 1 + j * 2, y0 + 2 + j * 2, z1 + 0.2, z1 + 0.25, warna('#4a4436'), { sisi: S_DEPAN });
+      }
+    }
+    kotak(S, x0 + 8, x0 + 10, y0 + 1, y0 + 3, z1 + 0.2, z1 + 1, warna('#8d8574'), { sisi: SEMUA, w: { atas: warna('#e8e2cf') } });   // kenop
+    batangM(S, A3.satu(), x0 + 9.5, y1, x0 + 5.5, y1 + 9, z0 + 2.3, z0 + 2.7, 0.4, warna('#c9ced4'));                             // antena teleskop
+    kotak(S, x0 + 5.2, x0 + 5.8, y1 + 8.7, y1 + 9.3, z0 + 2.2, z0 + 2.8, warna('#f2f4f6'), { sisi: SEMUA });
+  }
+  function radioPantri(S) {
+    const k = radioKeadaan(), x0 = RADIO.x, { y0, z1 } = RADIO_3D, zd = z1 + 0.2, nyala = !!k.jenis;
+    kotak(S, x0 + 6, x0 + 10, y0 + 4, y0 + 6, zd, zd + 0.1, nyala ? warna(k.warna) : warna('#3a3426'), { sisi: S_DEPAN, e: nyala ? 1 : 0 });   // lampu skala
+    kotak(S, x0 + 7, x0 + 7.5, y0 + 4, y0 + 6, zd + 0.1, zd + 0.15, warna(nyala ? '#7a2a18' : '#5a5040'), { sisi: S_DEPAN });                // jarum
+    // kerucut speaker maju sejauh denyutnya (gerak dikurangi: diam di tempat)
+    const maju = geraKurang3.matches ? 0 : Math.min(1, k.denyut) * 0.8;
+    kotak(S, x0 + 2.6, x0 + 4.4, y0 + 2.6, y0 + 4.4, zd, zd + 0.15 + maju, warna('#3b342a'), { sisi: SEMUA });
+    if (!nyala) return;
+    kotak(G.sinar, x0 + 5, x0 + 11, y0 + 3, y0 + 7, zd + 0.2, zd + 0.21, warna(k.warna, 0.3), { sisi: S_DEPAN, e: 1 });     // pendar di depan skala
+    kotak(G.sinar, x0 + 3, x0 + 12, y0 + 0.03, y0 + 0.04, z1, z1 + 2.4, warna(k.warna, 0.16), { sisi: S_ATAS, e: 1 });       // genangan di tutup microwave
+  }
   /* Lemari bawah counter pantri: dua daun pintu laminasi menonjol dari
      kusennya, masing-masing bertarikan logam. */
   function konterRelief(S, s, px, cz1, cH) {
@@ -1113,6 +1144,7 @@ void main() { hasil = vec4(1.0); }`;
     kotak(S, px + 19, px + 21, cH, cH + 9, cz0 + 1, cz0 + 3, warna('#b6bec4'));                          // keran leher angsa
     kotak(S, px + 15, px + 21, cH + 7, cH + 9, cz0 + 1, cz0 + 3, warna('#b6bec4'));
     microwaveRelief(S, K_.microwave, px, cz0, cH);
+    radioBadan(S);                                                                                         // lampu & kerucutnya: radioPantri
     kotak(S, px + 57, px + 63, cH, cH + 8, cz0 + 3, cz0 + 8, warna('#dfe3e6'), { w: { atas: warna('#ffffff') } });   // teko listrik
     for (let i = 0; i < 3; i++) kotak(S, px + 50 + i * 3, px + 51.5 + i * 3, cH + 9, cH + 17, py + 5.2, py + 6.5, warna('#eef0ea'), { sisi: SEMUA });  // rak piring
     // kardus arsip pindahan di sudut sekat
@@ -2155,16 +2187,17 @@ void main() { hasil = vec4(1.0); }`;
         [0.86, 0.95, 1, 0.18 * (1 - t) * Math.min(1, t * 5)], { sisi: SEMUA, e: 1 });   // berpendar: di bayangan badan AC tanpa itu jadi noda kelabu
     }
   }
-  /* Kubah CCTV di pojok kiri-atas (drawWall 2D, 4..14 x y4..12): pelat dinding,
+  /* Kubah CCTV di pojok kanan-atas (drawWall 2D, W-14..W-4 x y4..12; dulu di
+     kiri-atas, di atas lemari arsip yang menutupi pandangan lensanya): pelat dinding,
      lengan, rumah kubah, dan lensa yang MENOLEH — membidik titik sapuan selama
      cctv-menyapu-ruangan, pegawai yang kartunya dibuka, atau orang terdekat
      yang sedang berjalan; tanpa sasaran ia menyapu pelan sendiri. LED merahnya
      berkedip seperti 2D. */
-  const CCTV = { yaw: 0.7, pitch: 0.45, x: 9, y: 100.4, z: DINDING_Z + 5.5 };
+  const CCTV = { yaw: -0.7, pitch: 0.45, x: W - 9, y: 100.4, z: DINDING_Z + 5.5 };
   function kubahCCTV(S, dt) {
     const C = CCTV, abu = warna('#9aa1a6'), kubah = warna('#2c3038');
-    kotak(S, 4, 14, 101.6, 106.4, DINDING_Z, DINDING_Z + 1.2, warna('#7c838a'), { sisi: SEMUA });
-    kotak(S, 8.3, 9.7, 102.6, 104, DINDING_Z + 1.2, C.z, abu, { sisi: SEMUA });
+    kotak(S, W - 14, W - 4, 101.6, 106.4, DINDING_Z, DINDING_Z + 1.2, warna('#7c838a'), { sisi: SEMUA });
+    kotak(S, W - 9.7, W - 8.3, 102.6, 104, DINDING_Z + 1.2, C.z, abu, { sisi: SEMUA });
     tabung(S, C.x, C.z, 3.7, 101.4, 102.8, abu, { segmen: 12 });
     tabung(S, C.x, C.z, 3.5, 100.5, 101.4, kubah, { segmen: 12 });
     tabung(S, C.x, C.z, 3.0, 99.7, 100.5, kubah, { segmen: 12 });
@@ -2182,7 +2215,7 @@ void main() { hasil = vec4(1.0); }`;
         if (d < jarak) { jarak = d; sasaran = [px, 20, pz]; }
       }
     }
-    let yaw = 0.7 + 0.45 * Math.sin(now / 5200), pitch = 0.42;
+    let yaw = -0.7 + 0.45 * Math.sin(now / 5200), pitch = 0.42;   // menyapu ke arah ruangan (ke kiri)
     if (sasaran) {
       const dx = sasaran[0] - C.x, dy = sasaran[1] - C.y, dz = sasaran[2] - C.z;
       yaw = Math.atan2(dx, dz); pitch = Math.atan2(-dy, Math.hypot(dx, dz));
@@ -2190,11 +2223,21 @@ void main() { hasil = vec4(1.0); }`;
     const k = geraKurang3.matches ? 1 : Math.min(1, Math.max(0, dt) * 2.5);
     C.yaw += Math.atan2(Math.sin(yaw - C.yaw), Math.cos(yaw - C.yaw)) * k;
     C.pitch += (pitch - C.pitch) * k;
-    const m = A3.kali(A3.geser(C.x, C.y, C.z), A3.kali(A3.putarY(C.yaw), A3.putarX(C.pitch)));
+    const m = matriksLensa();
     kotakM(S, m, -1.15, 1.15, -1.15, 1.15, 1.9, 2.5, warna('#5a6068'));                                // cincin lensa
     kotakM(S, m, -0.8, 0.8, -0.8, 0.8, 2.5, 3.3, warna('#101418'), 0.15);                              // lensa
     const led = Math.sin(now / 1000) > 0;
     kotakM(S, m, 1.3, 1.8, 0.9, 1.4, 2.2, 2.6, warna(led ? P.red : '#5c2222'), led ? 1 : 0);
+  }
+  // sumbu lensa: +z lokal kubah, diputar CCTV.yaw (mendatar) lalu CCTV.pitch (menunduk)
+  const matriksLensa = () => A3.kali(A3.geser(CCTV.x, CCTV.y, CCTV.z), A3.kali(A3.putarY(CCTV.yaw), A3.putarX(CCTV.pitch)));
+  /* Mata pantauan CCTV: tepat di muka kaca lensanya, memandang sepanjang
+     sumbu lensa — jadi ikut menyapu sendiri dan menoleh ke orang yang
+     berjalan, persis kubahnya (bentuknya sama dengan mataOrang). */
+  function mataCCTV() {
+    const m = matriksLensa(), d = norm3(m[2], m[6], m[10]);
+    return { mata: [m[2] * 3.4 + m[3], m[6] * 3.4 + m[7], m[10] * 3.4 + m[11]],
+      hadap: Math.atan2(d[0], d[2]), angguk: Math.asin(Math.max(-1, Math.min(1, d[1]))) };
   }
   /* Monitor CRT bekas di rak dinding (drawCRT 2D, 159..177 x y45..64): layarnya
      kulit hidup sendiri (bar gulingnya waktu MOD.crtAktif) dan sedikit
@@ -2621,10 +2664,44 @@ void main() { hasil = vec4(1.0); }`;
     KAM.dasar = hi;
   }
 
+  // jepit sudut putar maket: tidak sampai ke balik dinding belakang, tidak di bawah lantai
+  const jepitSudut = (yaw, pitch) => [Math.max(-1.3, Math.min(1.3, yaw)), Math.max(0.1, Math.min(1.45, pitch))];
+
+  /* Sinematik 3D = maket gedung di lobi dinas. Tiap singgahan keliling
+     sinematik (KAMERA_RUTE room.js) dilihat dari sudutnya sendiri, [yaw,
+     pitch]: yaw < 0 dari kiri, > 0 dari kanan; pitch kecil rendah dari depan,
+     besar dari atas. Selama singgah maketnya mengayun pelan ±AYUN_SINEMATIK.yaw
+     sekali tiap `periode` ms, berpangkal di sudut itu tiap kali tiba. Mode
+     ringan: sudutnya tetap, ayunannya tidak. Gerak dikurangi tidak pernah
+     sampai ke sini — kameraSinematikBoleh() room.js sudah menutup
+     sinematiknya. Stasiun yang tidak terdaftar = sudut penonton. */
+  const SUDUT_SINGGAH = {
+    read:   [-0.6, 0.55],   // lemari arsip dari kiri
+    search: [-0.35, 0.8],   // filing kabinet dari kiri atas: lacinya kelihatan
+    web:    [-0.15, 0.5],
+    edit:   [0.25, 0.65],
+    server: [0.6, 0.5],     // rak PC server dari kanan
+    agent:  [0.4, 1.05],    // pintu kadis dari kanan atas: ruangannya tampak di balik tembok
+    rapat:  [0.1, 1.25],    // meja rapat dari atas
+    think:  [-0.45, 0.95],  // meja kerja: melongok dari balik punggung pegawainya
+    idle:   [0, 0.28],      // ruang tunggu dari depan, rendah
+  };
+  const AYUN_SINEMATIK = { yaw: 0.12, periode: 10000 };
+  function sudutSinematik() {
+    if (KAMERA.mode !== 'sinematik' || !kameraSinematikBoleh() || KAMERA.sinematikIdx < 0) return null;
+    const s = SUDUT_SINGGAH[KAMERA_RUTE[KAMERA.sinematikIdx]];
+    if (!s) return null;
+    const ayun = ringanAktif() || geraKurang3.matches ? 0
+      : Math.sin((now - KAMERA.sinematikSejak) / AYUN_SINEMATIK.periode * 2 * Math.PI) * AYUN_SINEMATIK.yaw;
+    const [yaw, pitch] = jepitSudut(s[0] + (hingga(ayun) ? ayun : 0), s[1]);
+    return { yaw, pitch };
+  }
+
   /* Bidikan: kamera 2D (tickKamera) tetap yang memutuskan KE MANA melihat —
      mode ikut, sinematik, klik barang, X-banner, bukaan ruang kadis. Di sini
      cuma diterjemahkan ke titik 3D. Tanpa bidikan, kembali ke tampak orang
-     yang memegang tetikus. */
+     yang memegang tetikus. Sudut putar tetap milik penonton, kecuali
+     singgahan sinematik: yang itu membawa yaw/pitch-nya sendiri. */
   function fokus3D() {
     const kotakKe = (b) => {
       const kaki = b.y + b.h;
@@ -2639,7 +2716,7 @@ void main() { hasil = vec4(1.0); }`;
       return { titik: kotakKe(K2), zoom: Math.min(3.2, zoomBarang(K2) * 0.9) };
     }
     if (KAMERA.targetZoom > 1.01) {
-      return { titik: [KAMERA.targetX, 16 * SKALA_ORANG, KAMERA.targetY + 13], zoom: KAMERA.targetZoom * 0.95 };
+      return { titik: [KAMERA.targetX, 16 * SKALA_ORANG, KAMERA.targetY + 13], zoom: KAMERA.targetZoom * 0.95, ...sudutSinematik() };
     }
     return null;
   }
@@ -2651,7 +2728,11 @@ void main() { hasil = vec4(1.0); }`;
      Bonekanya sendiri tidak digambar selama kamera di dalam kepalanya.
      Selesai kalau kartunya ditutup (klik tempat kosong, ✕), Esc, tombol di
      pita bawah, atau orangnya pergi; klik orang lain yang kelihatan = pindah
-     ke matanya. Peralihan maket <-> mata ±0,45 detik. */
+     ke matanya. Peralihan maket <-> mata ±0,45 detik. Mata yang sama juga
+     dibuka tombol "lihat dari matanya" di kartu pegawai (TIGA.pov) dan ‹ ›
+     di pita (pindahMata). Kubah CCTV punya mata juga: POV.orang = CCTV
+     (TIGA.cctv) — pantauan langsung dari lensanya, yang cuma berhenti lewat
+     Esc, tombol pita, atau pindah ke 2D, dan kubahnya tidak digambar. */
   const POV = { orang: null, bekas: null, t: 0, lirikYaw: 0, lirikPitch: 0, otomatis: true, fov: 58 * Math.PI / 180 };
   const SUSUN_HAMPA = { sudut() {}, segi() {}, tri() {} };   // susunOrang tanpa geometri: cuma keadaannya yang maju
   function mulaiPov(a) {
@@ -2716,6 +2797,20 @@ void main() { hasil = vec4(1.0); }`;
     KAM.sasaranK = hingga(...sasaran) ? [...sasaran] : [...KAM_AWAL.sasaran];
   }
 
+  /* Penonton tetap pemegang kendali: seret, cubit, roda, atau klik dua kali
+     di maket menghentikan sudut sinematik & ayunannya selama
+     TAHAN_SINEMATIK_MS sejak sentuhan terakhir. Maketnya dipegang di sudut
+     yang SEDANG tampak (versi lunak disalin ke sudut penonton), tidak meloncat
+     ke sudut lamanya. Di luar sinematik cuma jamnya yang dicatat. */
+  const TAHAN_SINEMATIK_MS = 10000;
+  let sinematikDitahanSampai = 0, sudutOtomatis = false;
+  function pegangMaket() {
+    // sekali saja per pegangan: pointermove berikutnya sebelum tick tidak menimpa geseran seretnya
+    if (sudutOtomatis) [KAM.yaw, KAM.pitch] = jepitSudut(KAM.yawK, KAM.pitchK);
+    sudutOtomatis = false;
+    sinematikDitahanSampai = now + TAHAN_SINEMATIK_MS;
+  }
+
   function tickKamera3D(dt) {
     ukurKanvas();
     if (!hingga(KAM.yaw, KAM.pitch, KAM.zoom, ...KAM.sasaran)) { laporKameraRusak('tujuan'); kameraAwal(); }
@@ -2724,8 +2819,11 @@ void main() { hasil = vec4(1.0); }`;
     const jarak = KAM.dasar / (f ? Math.max(KAM.zoom, f.zoom) : KAM.zoom);
     // dt dijepit >= 0: pelunakan dengan k negatif menjauh dari tujuan dan meledak
     const k = geraKurang3.matches ? 1 : 1 - Math.exp(-Math.max(0, dt) * 7);
-    KAM.yawK += (KAM.yaw - KAM.yawK) * k;
-    KAM.pitchK += (KAM.pitch - KAM.pitchK) * k;
+    // sudut singgahan sinematik (fokus3D), kecuali penonton baru saja memegang maketnya
+    sudutOtomatis = !!f && f.yaw != null && now >= sinematikDitahanSampai;
+    const yaw = sudutOtomatis ? f.yaw : KAM.yaw, pitch = sudutOtomatis ? f.pitch : KAM.pitch;
+    KAM.yawK += (yaw - KAM.yawK) * k;
+    KAM.pitchK += (pitch - KAM.pitchK) * k;
     KAM.jarakK += (jarak - KAM.jarakK) * k;
     for (let i = 0; i < 3; i++) KAM.sasaranK[i] += (sasaran[i] - KAM.sasaranK[i]) * k;
     if (!lunakSehat()) { laporKameraRusak('lunak'); salinLunak(jarak, sasaran); }
@@ -2734,10 +2832,12 @@ void main() { hasil = vec4(1.0); }`;
     const m = matriksKamera(KAM.yawK, KAM.pitchK, KAM.jarakK, s);
 
     // POV menyatu dengan kamera maket lewat POV.t (0 = maket, 1 = mata)
-    if (POV.orang && (terpilih !== POV.orang || !masihDiRuangan(POV.orang) || lenyapDiAmbang(POV.orang))) keluarPov();
+    if (POV.orang && POV.orang !== CCTV
+      && (terpilih !== POV.orang || !masihDiRuangan(POV.orang) || lenyapDiAmbang(POV.orang))) keluarPov();
     const tuju = POV.orang ? 1 : 0;
     POV.t = geraKurang3.matches ? tuju : POV.t + Math.max(-dt * 2.2, Math.min(dt * 2.2, tuju - POV.t));
-    const siapa = POV.orang || POV.bekas, mp = POV.t > 0 && siapa ? mataOrang(siapa) : null;
+    const siapa = POV.orang || POV.bekas, lensa = siapa === CCTV;
+    const mp = POV.t > 0 && siapa ? (lensa ? mataCCTV() : mataOrang(siapa)) : null;
     if (!mp) {
       if (POV.t <= 0) POV.bekas = null;
       KAM.mata = m.mata; KAM.v = m.v; KAM.p = m.p; KAM.vp = m.vp;
@@ -2747,12 +2847,15 @@ void main() { hasil = vec4(1.0); }`;
       laporKameraRusak('POV');
       POV.lirikYaw = 0; POV.lirikPitch = 0; POV.otomatis = true; POV.fov = 58 * Math.PI / 180;
     }
-    if (POV.otomatis) {
+    if (POV.otomatis && !lensa) {
       const [ly, lp] = lirikOtomatis(siapa, mp), kl = geraKurang3.matches ? 1 : 1 - Math.exp(-Math.max(0, dt) * 3);
       POV.lirikYaw += Math.atan2(Math.sin(ly - POV.lirikYaw), Math.cos(ly - POV.lirikYaw)) * kl;
       POV.lirikPitch += (lp - POV.lirikPitch) * kl;
     }
-    const h = mp.hadap + POV.lirikYaw, p = Math.max(-1.1, Math.min(0.9, mp.angguk - 0.1 + POV.lirikPitch));
+    // lensa CCTV memandang persis sepanjang sumbunya, tanpa lirikan penonton;
+    // menunduk curam ke orang di bawahnya boleh lebih dalam dari kepala orang
+    const h = mp.hadap + (lensa ? 0 : POV.lirikYaw);
+    const p = lensa ? Math.max(-1.45, mp.angguk) : Math.max(-1.1, Math.min(0.9, mp.angguk - 0.1 + POV.lirikPitch));
     const arah = [Math.sin(h) * Math.cos(p), Math.sin(p), Math.cos(h) * Math.cos(p)];
     const e = POV.t * POV.t * (3 - 2 * POV.t);
     const antara = (a, b) => [a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e, a[2] + (b[2] - a[2]) * e];
@@ -3642,9 +3745,10 @@ void main() { hasil = vec4(1.0); }`;
     if (POV.t > 0) tutupMaketPov(G.samping);
     WADAH.samping.isi(G.samping);
 
-    // pajangan dinding yang bergerak: sirip AC, lensa CCTV
+    // pajangan dinding yang bergerak: sirip AC, lensa CCTV. Selama kamera di
+    // lensanya (pantauan CCTV) kubahnya tidak digambar, lensanya tetap menoleh
     acSplit(S);
-    kubahCCTV(S, dt);
+    kubahCCTV(POV.t > 0.4 && (POV.orang || POV.bekas) === CCTV ? SUSUN_HAMPA : S, dt);
 
     // lampu neon gantung: tabung menyala sesuai kedipNeon
     NEON_X.forEach((cx, i) => {
@@ -3859,6 +3963,7 @@ void main() { hasil = vec4(1.0); }`;
       tabung(S, dx, 285, 6.5, 34, 45, warna('#7db8e8', 0.85), { segmen: 12, atas: warna('#5f9fd4') });
       tabung(S, dx, 285, 2, 45, 48, warna('#5f9fd4'), { segmen: 8 });
     }
+    radioPantri(S);
 
     // pegawai: yang pudar ke grup campur, sisanya pejal. Yang matanya sedang
     // dipakai kamera POV tidak digambar (keadaannya tetap maju lewat SUSUN_HAMPA)
@@ -5522,6 +5627,7 @@ void main() { hasil = vec4(1.0); }`;
     }
     if (kulitKotor) { gl.bindTexture(gl.TEXTURE_2D, TEK_KULIT); gl.generateMipmap(gl.TEXTURE_2D); kulitKotor = false; }
     const t3 = performance.now();
+    if (POV.orang === CCTV) jamMonitor();
     perbaruiKartu();
     const t4 = performance.now();
 
@@ -5775,6 +5881,7 @@ void main() { hasil = vec4(1.0); }`;
       const tengah = [(p.x + q.x) / 2, (p.y + q.y) / 2];
       if (POV.orang) lebarPandang(Math.max(20, seret.cubit) / d);       // POV: cubit = lebar pandang
       else {
+        pegangMaket();
         KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * d / Math.max(20, seret.cubit)));
         geserSasaran(tengah[0] - seret.tengah[0], tengah[1] - seret.tengah[1]);
       }
@@ -5790,10 +5897,10 @@ void main() { hasil = vec4(1.0); }`;
       POV.otomatis = false;
       POV.lirikYaw = Math.max(-Math.PI, Math.min(Math.PI, POV.lirikYaw - dx * 0.005));
       POV.lirikPitch = Math.max(-0.95, Math.min(0.8, POV.lirikPitch - dy * 0.004));
-    } else if (seret.geser) geserSasaran(dx, dy);
-    else {
-      KAM.yaw = Math.max(-1.3, Math.min(1.3, KAM.yaw - dx * 0.006));
-      KAM.pitch = Math.max(0.1, Math.min(1.45, KAM.pitch + dy * 0.005));
+    } else {
+      pegangMaket();                                // sudut & ayunan sinematik berhenti dulu
+      if (seret.geser) geserSasaran(dx, dy);
+      else [KAM.yaw, KAM.pitch] = jepitSudut(KAM.yaw - dx * 0.006, KAM.pitch + dy * 0.005);
     }
     seret.x = x; seret.y = y;
   });
@@ -5820,12 +5927,14 @@ void main() { hasil = vec4(1.0); }`;
   kanvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (POV.orang) { lebarPandang(Math.exp(e.deltaY * 0.001)); return; }
+    pegangMaket();
     KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * Math.exp(-e.deltaY * 0.0012)));
   }, { passive: false });
   const lebarPandang = (kali) => { POV.fov = Math.max(0.6, Math.min(1.5, POV.fov * kali)); };   // ±34°..86°
   kanvas.addEventListener('dblclick', () => {
     // POV: kembali memandang lurus ke depan orangnya (maketnya tidak disentuh)
     if (POV.orang) { POV.otomatis = true; POV.fov = 58 * Math.PI / 180; return; }
+    pegangMaket();
     kameraAwal();
     if (!lunakSehat()) salinLunak(KAM.dasar / KAM_AWAL.zoom, KAM_AWAL.sasaran);   // yang sehat tetap meluncur pulang
   });
@@ -5871,6 +5980,36 @@ void main() { hasil = vec4(1.0); }`;
     if (simpan) ingatan.tulis('tampilan', aktif ? '3d' : '2d');
     if (aktif) { lebarCss = -1; ukurKanvas(); tunjukkanPetunjuk(); }
     else { keluarPov(); fit(); petunjuk.classList.remove('tampak'); }
+    // kartu yang sedang terbuka dibangun ulang: tombol 3D-nya (lihat dari
+    // matanya / dari CCTV) cuma ada selama 3D menyala
+    if (terpilih) bukaKartu(terpilih); else if (barangTerpilih) bukaKartuBarang(barangTerpilih);
+  }
+
+  /* Monitor pos satpam selama pantauan CCTV: maketnya hitam-putih kontras
+     (kelas .cctv di kanvas — kanvasnya di-clear transparan, jadi latarnya
+     dihitamkan di sana juga), garis pindai, cap "CAM 01", tanggal, dan jam
+     yang berjalan. MURNI pantauan langsung: tak satu piksel pun dibaca
+     balik, disangga, atau disimpan — tidak ada rekaman untuk diputar ulang.
+     Dipasang sebelum petunjuk & pita POV: garis pindainya di bawah keduanya. */
+  const monitor = document.createElement('div');
+  monitor.className = 'cctv-3d';
+  monitor.hidden = true;
+  monitor.innerHTML = '<span class="cctv-cap">CAM 01 · POJOK KANAN-ATAS</span>'
+    + '<span class="cctv-langsung">● LANGSUNG</span><span class="cctv-waktu"></span>';
+  stageInner.appendChild(monitor);
+  const waktuMonitor = monitor.querySelector('.cctv-waktu');
+  const HARI_CCTV = ['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'];
+  let teksMonitor = '';
+  // cap waktu kamera: jam sungguhan, ditulis ulang cuma kalau detiknya berganti
+  // (sekalian mode ringan: tanpa pita terang yang bergulir)
+  function jamMonitor() {
+    const d = new Date(), dua = (n) => String(n).padStart(2, '0');
+    const teks = HARI_CCTV[d.getDay()] + ' ' + dua(d.getDate()) + '-' + dua(d.getMonth() + 1) + '-' + d.getFullYear()
+      + '  ' + dua(d.getHours()) + ':' + dua(d.getMinutes()) + ':' + dua(d.getSeconds());
+    if (teks === teksMonitor) return;
+    teksMonitor = teks;
+    waktuMonitor.textContent = teks;
+    monitor.classList.toggle('ringan', ringanAktif());
   }
 
   // Petunjuk kendali, sekali tiap masuk 3D, memudar sendiri: orang yang baru
@@ -5880,19 +6019,57 @@ void main() { hasil = vec4(1.0); }`;
   petunjuk.textContent = 'seret: putar maket · klik kanan / shift+seret: geser · roda: dekat–jauh · klik dua kali: tampak awal · klik pegawai: lihat dari matanya';
   stageInner.appendChild(petunjuk);
 
-  // Pita POV: mata siapa yang sedang dipakai, cara menoleh, dan jalan pulang ke maket
+  // Pita POV: mata siapa yang sedang dipakai, ‹ › pindah mata, cara menoleh,
+  // dan jalan pulang ke maket
   const hudPov = document.createElement('div');
   hudPov.className = 'pov-3d';
   hudPov.hidden = true;
-  hudPov.innerHTML = '<span class="pov-judul"></span>'
-    + '<span class="pov-kunci">seret: menoleh · roda: lebar pandang · klik orang lain: pindah · Esc: keluar</span>'
+  hudPov.innerHTML = '<button type="button" class="pov-pindah pov-mundur" title="mata pegawai sebelumnya">‹</button>'
+    + '<span class="pov-judul"></span>'
+    + '<button type="button" class="pov-pindah pov-maju" title="mata pegawai berikutnya">›</button>'
+    + '<span class="pov-kunci"></span>'
     + '<button type="button" class="pov-keluar">kembali ke maket</button>';
   stageInner.appendChild(hudPov);
   hudPov.querySelector('.pov-keluar').addEventListener('click', keluarPov);
+  hudPov.querySelector('.pov-mundur').addEventListener('click', () => pindahMata(-1));
+  hudPov.querySelector('.pov-maju').addEventListener('click', () => pindahMata(1));
+  const judulPov = hudPov.querySelector('.pov-judul'), kunciPov = hudPov.querySelector('.pov-kunci');
   function perbaruiHudPov() {
+    const lensa = POV.orang === CCTV;
     hudPov.hidden = !POV.orang;
-    if (POV.orang) hudPov.querySelector('.pov-judul').textContent = 'dari mata ' + namaTampil(POV.orang);
-    if (POV.orang) petunjuk.classList.remove('tampak');
+    if (POV.orang) {
+      judulPov.textContent = lensa ? 'CCTV pojok kanan-atas · pantauan langsung' : 'dari mata ' + namaTampil(POV.orang);
+      kunciPov.textContent = lensa ? 'lensa menoleh sendiri · roda: zoom · klik orang / ‹ ›: pindah ke matanya · Esc: keluar'
+        : 'seret: menoleh · roda: lebar pandang · klik orang lain / ‹ ›: pindah · Esc: keluar';
+      petunjuk.classList.remove('tampak');
+    }
+    // rupa monitor CCTV cuma selama kamera di lensa
+    kanvas.classList.toggle('cctv', lensa);
+    monitor.hidden = !lensa;
+    if (lensa) { teksMonitor = ''; jamMonitor(); }
+  }
+  /* Putaran ‹ › dan tombol kartu: mata yang boleh dipakai = orang yang memang
+     tampak di maket, urut penghuni() (sesi, peserta rapat, standby). Tamu
+     ruang kadis IKUT selama ruangannya tampil di 3D — sama seperti mengkliknya
+     lewat jendela, dan justru merekalah yang paling sulit diketuk; kalau
+     bukaannya mati, tubuhnya tidak punya tempat di maket. Yang di dalam WC
+     atau sudah lenyap di pintu samping dilewati. */
+  function bolehDipov(a) {
+    if (!a || !masihDiRuangan(a) || lenyapDiAmbang(a)) return false;
+    if (a.diKadis && (!KADIS_SIAP || !sisipBoleh())) return false;
+    return alfaOrang(a) > 0.02;
+  }
+  // POV keluar sendiri kalau orang terpilih berganti, jadi kartunya dulu
+  function keMata(a) {
+    if (terpilih !== a) bukaKartu(a);
+    mulaiPov(a);
+  }
+  // dari lensa CCTV (tak ada di daftar): › ke orang pertama, ‹ ke yang terakhir
+  function pindahMata(arah) {
+    const daftar = [...penghuni()].filter(bolehDipov);
+    if (!daftar.length) return;
+    const i = daftar.indexOf(POV.orang);
+    keMata(daftar[i < 0 ? (arah > 0 ? 0 : daftar.length - 1) : (i + arah + daftar.length) % daftar.length]);
   }
   let petunjukTimer = 0;
   function tunjukkanPetunjuk() {
@@ -5920,6 +6097,11 @@ void main() { hasil = vec4(1.0); }`;
   };
   TIGA.keLayar = keLayar3D;
   TIGA.tampak = tampak3D;
+  // Tombol kartu room.js. Klik baris kru sendiri tetap cuma membuka kartu —
+  // kamera baru pindah lewat tombol "lihat dari matanya" ini.
+  TIGA.pov = (a) => { if (TIGA.aktif && bolehDipov(a)) keMata(a); };
+  // "lihat dari CCTV": kartu inventarisnya ditutup, kamera meluncur ke lensa
+  TIGA.cctv = () => { if (!TIGA.aktif) return; tutupKartuBarang(); mulaiPov(CCTV); };
   // Galat yang lolos sampai sini berarti 3D-nya tidak bisa dipercaya lagi:
   // pulang ke 2D saja, jangan biarkan ruangan membeku.
   function gagalTotal(e) {

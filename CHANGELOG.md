@@ -8,6 +8,33 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Pantauan langsung dari kubah CCTV (3D).** Kartu inventaris Kamera CCTV
+  Kubah punya tombol "lihat dari CCTV": kamera meluncur ke lensa kubah di pojok
+  kanan atas dan memandang sepanjang sumbunya — ikut menyapu sendiri dan menoleh
+  ke orang yang berjalan. Rupanya monitor pos satpam: hitam-putih kontras, garis
+  pindai, cap "CAM 01", hari, tanggal, dan jam berjalan. Esc, "kembali ke
+  maket", atau pindah ke 2D memulihkan semuanya. Murni pantauan langsung —
+  tidak ada yang direkam atau bisa diputar ulang. Kubahnya pindah ke pojok kanan
+  atas: di kiri atas lensanya duduk persis di atas lemari arsip yang menutupi
+  separuh pandangan; kerucut sapuan event CCTV kini juga memancar dari kubahnya.
+- **"Lihat dari matanya" di kartu pegawai dan ‹ › di pita POV (3D).** Tombol di
+  kartu pegawai (juga kartu yang dibuka dari baris kru) memindah kamera ke mata
+  orang itu; klik barisnya sendiri tetap tidak memindah kamera. ‹ › berpindah ke
+  mata pegawai sebelumnya/berikutnya; yang di WC atau sudah keluar dilewati, dan
+  tamu ruang kadis ikut selama bukaannya tampil.
+- **Radio kantor di pantri.** Musik akhirnya punya benda yang memutarnya: radio
+  transistor kulit cokelat di atas microwave pantri, di 2D maupun 3D. Lampu
+  skalanya menyala selama ada yang diputar — beat lofi, lagu kantor, atau
+  Indonesia Raya terjadwal — dengan warna menurut jenisnya (amber jam kerja,
+  nila kantor malam, toska hujan, merah Indonesia Raya, …), dan kerucut
+  speakernya berdenyut dari satu sadapan di bus musik (diam bila gerak
+  dikurangi). Selama musik mati skalanya gelap.
+- **Tampilan 3D: sinematik "maket lobi".** Di mode kamera sinematik (dipilih di
+  ⚙️; bawaannya tetap mati), tiap singgahan keliling punya sudutnya sendiri —
+  lemari arsip dari kiri, rak server dari kanan, meja rapat dari atas, ruang
+  tunggu dari depan — dan maketnya mengayun pelan seperti maket gedung di lobi
+  dinas. Seret, roda, cubit, atau klik dua kali menghentikan sudut otomatis 10
+  detik di sudut yang sedang tampak. Mode kamera lain tidak berubah.
 - **Tampilan 3D: lengan bersiku.** Lengan boneka kini lengan atas, lengan
   bawah, dan telapak. Pose yang tangannya punya sasaran langsung sampai ke sana:
   hormat di alis dengan siku membuka ke samping, salam melambai di samping

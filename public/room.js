@@ -1387,7 +1387,7 @@ function tabelBayangDinding() {
   const J = JENDELA;
   bayangDindingTabel = [
     { x: 18,  y: 7,  w: 134, h: 15 },                              // papan nama dinas
-    { x: 4,   y: 4,  w: 10,  h: 8, cctv: true },                   // kubah CCTV (3D: bayangannya sungguhan)
+    { x: W - 14, y: 4, w: 10,  h: 8, cctv: true },                   // kubah CCTV pojok kanan-atas (3D: bayangannya sungguhan)
     { x: J.x - 8, y: J.y - 8, w: J.w + 16, h: J.h + 12 },          // ceruk jendela
     { x: 159, y: 45, w: 18,  h: 16 },                              // monitor CRT
     { x: 158, y: 54, w: 16,  h: 20 },                              // kalender dinding
@@ -1541,17 +1541,20 @@ function drawWall() {
   r(427, 43, 6, 1, '#3a3f45');
   ctx.beginPath(); ctx.moveTo(427, 47); ctx.lineTo(433, 41); ctx.stroke();
 
-  // CCTV kubah pojok kiri-atas, sebelum spanduk mulai — LED merah tetap
-  // berkedip pelan di luar event, kerucut sapuannya cuma muncul saat event.
-  // Di 3D kubahnya benda sendiri yang lensanya menoleh (TIGA.tanpaCCTV)
+  // CCTV kubah pojok kanan-atas. Dulu di kiri-atas, tapi di 3D kubah di sana
+  // duduk tepat di atas lemari arsip yang menutupi separuh pandangan lensanya;
+  // sudut kanan-atas lowong (sapu-ruang: nol penggambar, nol rute). LED merah
+  // tetap berkedip pelan di luar event, kerucut sapuannya cuma muncul saat
+  // event. Di 3D kubahnya benda sendiri yang lensanya menoleh (TIGA.tanpaCCTV)
   if (!TIGA.tanpaCCTV) {
-    r(4, 4, 10, 8, '#7c838a');
-    r(4, 4, 10, 2, '#9aa1a6');
-    r(7, 10, 4, 2, '#5a6068');
-    r(8, 11, 2, 1, Math.sin(now / 1000) > 0 ? P.red : '#5c2222');
+    const cx = W - 14;
+    r(cx, 4, 10, 8, '#7c838a');
+    r(cx, 4, 10, 2, '#9aa1a6');
+    r(cx + 3, 10, 4, 2, '#5a6068');
+    r(cx + 4, 11, 2, 1, Math.sin(now / 1000) > 0 ? P.red : '#5c2222');
   }
 
-  drawPintuWC();            // pojok kiri, di bawah CCTV — cermin pintu kadis
+  drawPintuWC();            // pojok kiri — cermin pintu kadis
   drawPintuGudang();        // bentang pilar kedua (576..672), dinding belakang
   drawPapanKinerja();       // antara jendela dan bukaan kadis — grafiknya hidup
   drawPapanUmum();          // sayap timur, di atas mesin fotokopi
@@ -3614,6 +3617,41 @@ function drawTongSampah() {
   }
 }
 
+/* Radio transistor di atas microwave (keadaannya: radioKeadaan, blok musik).
+   x551..561 y188..195: celah antara papan PANTRI (berhenti x549) dan rak
+   piring (mulai x563), antenanya naik ke lantai kosong di atas sekat.
+   sortY-nya sama dengan counter yang ditumpanginya (drawPantry, 270) — di
+   ujung PROPS ia jatuh tepat sesudahnya. */
+const RADIO = { x: PANTRI.x + 41, y: PANTRI.y - 8, w: 11, h: 8 };
+function drawRadio() {
+  const { x, y, w, h } = RADIO, k = radioKeadaan();
+  const kulit = '#6b4128';
+  ctx.globalAlpha = 0.35;
+  r(x, y + h, w, 1, '#1b2620');                           // bayangan di tutup microwave
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < 8; i++) r(x + 9 - (i >> 1), y - 1 - i, 1, 1, '#c9ced4');   // antena teleskop
+  r(x + 5, y - 9, 1, 1, '#f2f4f6');
+  r(x, y, w, h, kulit);
+  r(x, y, w, 1, sh(kulit, 1.35));
+  r(x, y + h - 1, w, 1, sh(kulit, 0.7));
+  r(x + 1, y + 2, w - 2, 5, '#bfb8a4');                   // pelat depan perak
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) r(x + 1 + i * 2, y + 2 + j * 2, 1, 1, '#4a4436');   // kisi speaker
+  // kerucut speaker di tengah kisi: berdenyut = cincin terangnya mengembang
+  const d = geraKurang.matches ? 0 : k.denyut;
+  if (d > 0.04) {
+    ctx.globalAlpha = Math.min(1, d);
+    r(x + 2, y + 4, 3, 1, '#e8e2cf');
+    r(x + 3, y + 3, 1, 3, '#e8e2cf');
+    ctx.globalAlpha = 1;
+  }
+  r(x + 3, y + 4, 1, 1, '#3b342a');
+  r(x + 6, y + 2, 4, 2, k.jenis ? k.warna : '#3a3426');   // lampu skala
+  r(x + 7, y + 2, 1, 2, k.jenis ? '#7a2a18' : '#5a5040'); // jarum
+  r(x + 8, y + 5, 2, 2, '#8d8574');                       // kenop
+  r(x + 8, y + 5, 1, 1, '#e8e2cf');
+  if (k.jenis) glow(x + 8, y + 3, 7, k.warna, 0.3);
+}
+
 /* ===================================================== perabot pengisi ===
    Letak & alasannya: blok PAPAN_UMUM dkk. di kepala berkas. Tiga benda dinding
    (papan pengumuman, kotak P3K, papan kinerja) digambar dari drawWall; sisanya
@@ -4678,6 +4716,7 @@ const PROPS = [
   // Pos satpam: kursi DI BELAKANG garis kaki satpam (298), meja DI DEPANNYA.
   { sortY: 296, station: null, draw: drawPosSatpamKursi },
   { sortY: 318, station: null, draw: drawPosSatpam },
+  { sortY: 270, station: null, draw: drawRadio },          // di atas counter pantri, sesudah drawPantry
 ];
 
 /* --------------------------------------------------- persona / jabatan ---
@@ -8049,6 +8088,7 @@ const started = Date.now();
 let sound = false;
 let audio = null;
 let busEfek = null, busNotif = null, busMusik = null;
+let radioSadap = null;   // AnalyserNode radio pantri, disadap dari busMusik — lihat radioKeadaan()
 /* Level mixer per komponen (0..1) — BEDA dari nyala/mati (`sound`/`notifOn`/
    `musikNyala` di bawah) yang sengaja tidak diingat browser: angka ini cuma
    pengali relatif, jadi aman diingat lewat localStorage. Dibaca ulang dari
@@ -8079,6 +8119,8 @@ function pastikanAudio() {
   busEfek = audio.createGain();  busEfek.gain.value = VOL.efek;  busEfek.connect(audio.destination);
   busNotif = audio.createGain(); busNotif.gain.value = VOL.notif; busNotif.connect(audio.destination);
   busMusik = audio.createGain(); busMusik.gain.value = VOL.musik; busMusik.connect(audio.destination);
+  // satu sadapan untuk ketiga sumber musik (lofi, lagu kantor, Indonesia Raya): semuanya lewat busMusik
+  radioSadap = audio.createAnalyser(); radioSadap.fftSize = 256; busMusik.connect(radioSadap);
   return audio;
 }
 
@@ -8898,6 +8940,47 @@ setInterval(cekJadwalLagu, 20000);
 
 // Buat dicoba dari konsol tanpa menunggu jam 10, sejajar mainkanIndonesiaRaya()
 window.mainkanLaguKantor = mainkanLaguKantor;
+
+/* ---------- radio kantor (pantri) ----------
+   Benda yang memutar semua musik di atas: radio transistor di atas microwave
+   pantri (drawRadio, dan kembarannya di ruang3d.js). Ketiga sumbernya sudah
+   lewat busMusik, jadi SATU sadapan di bus itu (radioSadap, dipasang
+   pastikanAudio) cukup — tidak ada sambungan per sumber.
+
+   Lampu skala = keadaan dunia (ada yang sedang diputar), bukan bunyi yang
+   sampai ke speakermu: Indonesia Raya terjadwal yang dibisukan autoplay tetap
+   "diputar", barisannya pun tetap berdiri. Denyut kerucut speaker = bunyi
+   sungguhan dari sadapan, jadi yang dibisukan tidak berdenyut. Diam total
+   (lofi tidak diingat antar muat ulang, AudioContext belum ada) = skala gelap
+   dan kerucut diam, tanpa galat. Gerak dikurangi diurus penggambarnya. */
+const RADIO_WARNA = {
+  apel: '#ffe27a', kerja: '#ffb54a', gaduh: '#ff8a3d', istirahat: '#a8e07a',
+  pulang: '#ff9a8a', lembur: '#8fb6ff', malam: '#7b86ff', libur: '#ff9fd0',
+  hujan: '#6fd3d9', badai: '#c08cff', tegang: '#ff4f8b',
+  lagu: '#fff1c4', raya: '#ff3b30',
+};
+const RADIO_KINI = { jenis: '', warna: '', denyut: 0 };   // dipakai ulang tiap frame
+const radioSampel = new Float32Array(256);
+let radioPuncak = 0, radioWaktu = 0;
+function radioKeadaan() {
+  const k = RADIO_KINI;
+  k.jenis = rayaSedangMain ? 'raya' : laguMain ? 'lagu' : musikNyala && musikGayaAktif ? musikGayaAktif.nama : '';
+  k.warna = k.jenis ? RADIO_WARNA[k.jenis] || RADIO_WARNA.kerja : '';
+  const dt = (now - radioWaktu) / 1000;
+  if (dt <= 0) return k;                                  // 2D & 3D boleh bertanya di frame yang sama
+  radioWaktu = now;
+  let rms = 0;
+  if (radioSadap && audio && audio.state === 'running') {
+    radioSadap.getFloatTimeDomainData(radioSampel);
+    for (const v of radioSampel) rms += v * v;
+    rms = Math.sqrt(rms / radioSampel.length);
+  }
+  // Penguat otomatis: patokannya puncak yang turun pelan (2 dtk), jadi beat
+  // lofi yang pelan dan berkas lagu kantor yang keras sama-sama berdenyut penuh.
+  radioPuncak = Math.max(rms, radioPuncak * Math.exp(-dt / 2), 0.02);
+  k.denyut = Math.max(k.jenis ? rms / radioPuncak : 0, k.denyut * Math.exp(-dt / 0.12));
+  return k;
+}
 
 function blip(freq, dur) {
   if (!sound || !audio) return;
@@ -9847,6 +9930,15 @@ function bukaKartu(a) {
     bHapus.onclick = () => hapusPegawai(a);
     aksi.appendChild(bHapus);
   }
+  // 3D: kamera ke matanya (TIGA.pov) — juga dari kartu yang dibuka lewat baris
+  // kru, yang klik barisnya sendiri tetap tidak memindah kamera
+  if (TIGA.aktif && TIGA.pov) {
+    const bPov = document.createElement('button');
+    bPov.type = 'button';
+    bPov.textContent = 'lihat dari matanya';
+    bPov.onclick = () => TIGA.pov(a);
+    aksi.appendChild(bPov);
+  }
   perbaruiKartu();
   taruhKartu();
   renderCrew();
@@ -10195,7 +10287,7 @@ function daftarBarang() {
       uraian: 'pelat resmi DINAS AI KLOD — bukan spanduk kain',
       kondisi: () => (RUANGAN.spanduk ? ['RR', 'satu huruf lepas, ditempel ulang miring'] : ['B']) },
     { id: 'cctv', nama: 'Kamera CCTV Kubah', kode: '3.06.02.05.011', nup: 1, tahun: 2021,
-      lokasi: 'pojok kiri-atas', kotak: k(3, 3, 12, 10),
+      lokasi: 'pojok kanan-atas', kotak: k(W - 15, 3, 12, 10),
       uraian: 'merekam 24 jam; LED merahnya berkedip pelan',
       isi: () => [['rekaman', 'aktif, disimpan 7 hari (katanya)']] },
     { id: 'wc', nama: 'Pintu WC', kode: '1.03.01.01.014', nup: 2, tahun: 2009,
@@ -10506,6 +10598,17 @@ function bukaKartuBarang(b) {
     '<div class="kartu-tugas">' + esc(b.uraian) + '</div>' +
     '<div class="kartu-info" id="kibInfo"></div>';
   document.getElementById('kartuTutup').onclick = tutupKartuBarang;
+  // 3D: melihat langsung lewat lensa kubahnya (TIGA.cctv) — pantauan, bukan rekaman
+  if (b.id === 'cctv' && TIGA.aktif && TIGA.cctv) {
+    const aksi = document.createElement('div');
+    aksi.className = 'kartu-aksi';
+    const bLihat = document.createElement('button');
+    bLihat.type = 'button';
+    bLihat.textContent = 'lihat dari CCTV';
+    bLihat.onclick = () => TIGA.cctv();
+    aksi.appendChild(bLihat);
+    kartuEl.appendChild(aksi);
+  }
   perbaruiKartuBarang();
   taruhKartu();
 }
@@ -12686,8 +12789,12 @@ const kameraSinematikBoleh = () => !geraKurang.matches;
      tampak(x, y)        pengganti kameraTampak() untuk balon
      tanpaNeon           drawWall melewatkan tabung neon: di 3D neon itu benda gantung
      tanpaCCTV           drawWall melewatkan kubah CCTV & bayangan tempelnya: di 3D
-                         kubahnya benda yang menoleh dan berbayang sungguhan */
-const TIGA = { aktif: false, kamera: null, gambar: null, keLayar: null, tampak: null, tanpaNeon: false, tanpaCCTV: false };
+                         kubahnya benda yang menoleh dan berbayang sungguhan
+     pov(a)              tombol kartu pegawai "lihat dari matanya" (cuma di 3D)
+     cctv()              tombol kartu Kamera CCTV Kubah "lihat dari CCTV": pantauan
+                         langsung dari lensanya (cuma di 3D; tanpa rekaman) */
+const TIGA = { aktif: false, kamera: null, gambar: null, keLayar: null, tampak: null, tanpaNeon: false, tanpaCCTV: false,
+  pov: null, cctv: null };
 
 // titik dunia → px CSS relatif stageInner (yang dipakai DOM di overlay).
 // `kaki` = garis kaki benda yang memuat titik itu (bawaan: titik itu sendiri);

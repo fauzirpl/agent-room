@@ -342,7 +342,13 @@ berlaminasi pucat (dilihat dari depan) — sengaja **bukan** kayu, karena dua
 cokelat bertumpuk membuat lemarinya terbaca sebagai bagian dari sekat dan
 counter-nya melayang lagi; wastafelnya bak tertanam dengan rim terang dan
 lubang buangan, bukan kotak gelap yang ditempel; dan yang dulu disebut "oven"
-digambar sebagai apa yang bentuknya memang: microwave meja.
+digambar sebagai apa yang bentuknya memang: microwave meja. Di atas microwave itu
+duduk radio transistor (`RADIO`, `drawRadio`, di celah antara papan PANTRI dan
+rak piring), satu-satunya benda yang memutar musik `busMusik`: lampu skalanya
+menyala selama lofi, lagu kantor, atau Indonesia Raya diputar, dengan warna
+menurut jenisnya (`RADIO_WARNA`), dan kerucut speakernya berdenyut dari satu
+AnalyserNode yang disadap di bus itu (`radioSadap`). `sortY`-nya 270, sama
+dengan counter yang ditumpanginya, di ujung `PROPS`.
 
 Lantai di dalam pantri dibuat keramik 12 px, beda dari terazo 24 px sisa
 ruangan, dan digambar di **lapisan lantai** — bukan di `drawPantry()`. Prop
@@ -2478,7 +2484,8 @@ relief:
   dengan sirip yang mengayun pelan selama AC menyala dan merapat waktu
   `MOD.acMati`. Dari mulutnya turun kepulan hawa dingin pucat; tetesnya tetap
   partikel yang jatuh ke ember.
-- **Kubah CCTV** di pojok kiri atas: pelat, lengan, rumah, kubah bertingkat,
+- **Kubah CCTV** di pojok kanan atas (dulu kiri atas, tapi di sana atap lemari
+  arsip menutupi separuh pandangan lensanya): pelat, lengan, rumah, kubah bertingkat,
   dan lensa yang **menoleh** — membidik titik sapuan selama event
   `cctv-menyapu-ruangan`, pegawai yang kartunya dibuka, atau orang terdekat
   yang sedang berjalan; tanpa sasaran ia menyapu pelan sendiri. LED merahnya
@@ -2533,7 +2540,11 @@ empat daun di lantai (tidak untuk gerak dikurangi).
 **Kamera 2D tetap yang memutuskan ke mana melihat.** Mode ikut, sinematik,
 klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
 `tickKamera()`; di 3D bidikannya diterjemahkan jadi titik sasaran dan jarak,
-sementara sudut putar tetap milik orang yang memegang tetikus. Dinding samping
+sementara sudut putar tetap milik orang yang memegang tetikus — kecuali di mode
+sinematik: tiap singgahan membawa sudutnya sendiri (`SUDUT_SINGGAH`: arsip dari
+kiri, server dari kanan, rapat dari atas, ruang tunggu dari depan) dan maketnya
+mengayun pelan selama singgah; seret, roda, cubit, atau klik dua kali
+menghentikannya 10 detik di sudut yang sedang tampak. Dinding samping
 yang membelakangi kamera dipotong rendah, seperti maket arsitek. Keduanya
 berpintu: ambang berkusen jati dengan lampu KELUAR hijau, kiri di lajur bawah
 dan kanan di lajur atas. Pegawai baru dan peserta rapat masuk lewat pintu kiri
@@ -2557,8 +2568,13 @@ yang digambar, jadi dari kamera maket keduanya tidak pernah kelihatan. Ambang
 pintu samping ikut disumbat lorong pendek, dan mata POV tidak pernah ikut keluar
 lewat pintu itu: begitu orangnya lenyap di ambang, POV selesai sendiri. Keluar
 lewat Esc, tombol "kembali ke maket" di pita bawah, menutup kartunya, atau klik
-tempat kosong. POV cuma dari klik di ruangan 3D — klik baris kru di panel tetap
-membuka kartu tanpa memindah kamera.
+tempat kosong. POV dibuka dari klik di ruangan 3D atau tombol "lihat dari
+matanya" di kartu pegawai — klik baris kru sendiri tetap membuka kartu tanpa
+memindah kamera; ‹ › di pita pindah ke mata pegawai sebelumnya/berikutnya (tamu
+ruang kadis ikut selama bukaannya tampil). Kartu Kamera CCTV Kubah punya "lihat
+dari CCTV": mesin POV yang sama dengan mata di lensa kubah, rupa monitor pos
+satpam (hitam-putih, garis pindai, "CAM 01", jam berjalan), tanpa rekaman apa
+pun.
 
 Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 

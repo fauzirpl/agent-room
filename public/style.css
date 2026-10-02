@@ -110,19 +110,48 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
 .pov-3d {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; max-width: calc(100% - 16px);
-  padding: 4px 5px 4px 12px; border-radius: 12px;
+  padding: 4px 5px; border-radius: 12px;
   background: rgba(20, 15, 10, .8); color: var(--khaki-muda); font-size: 11px; white-space: nowrap;
 }
 .pov-3d[hidden], body:not(.tampil-3d) .pov-3d { display: none; }
 .pov-3d .pov-judul { font-weight: 700; color: #f6ecd0; overflow: hidden; text-overflow: ellipsis; }
 .pov-3d .pov-kunci { opacity: .75; overflow: hidden; text-overflow: ellipsis; }
-.pov-3d .pov-keluar {
+.pov-3d .pov-keluar, .pov-3d .pov-pindah {
   font: inherit; color: inherit; cursor: pointer; flex: none;
   background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .25);
   border-radius: 8px; padding: 2px 9px;
 }
-.pov-3d .pov-keluar:hover { background: rgba(255, 255, 255, .18); }
+.pov-3d .pov-pindah { padding: 2px 7px; font-weight: 700; }
+.pov-3d .pov-keluar:hover, .pov-3d .pov-pindah:hover { background: rgba(255, 255, 255, .18); }
 @media (max-width: 640px) { .pov-3d .pov-kunci { display: none; } }
+
+/* Pantauan CCTV 3D (kartu Kamera CCTV Kubah → "lihat dari CCTV"): kamera di
+   lensa kubah, rupanya monitor pos satpam — maket hitam-putih kontras, garis
+   pindai, cap kamera & jam berjalan. Kanvasnya di-clear transparan, jadi
+   latarnya dihitamkan di sini supaya panel kayu tidak ikut kelihatan. */
+#room3d { transition: filter .45s ease, background-color .45s ease; }
+#room3d.cctv { filter: grayscale(1) contrast(1.45) brightness(1.08); background-color: #0b0d0c; }
+.cctv-3d {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+  font: 700 12px/1 var(--mono); color: #f2f2ea; letter-spacing: .08em;
+  text-shadow: 1px 1px 0 #000, 0 0 3px #000;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, .22) 0 1px, transparent 1px 3px);
+}
+.cctv-3d[hidden], body:not(.tampil-3d) .cctv-3d { display: none; }
+.cctv-3d .cctv-cap { position: absolute; left: 16px; top: 14px; }
+.cctv-3d .cctv-langsung { position: absolute; left: 16px; top: 32px; color: #ff6a5c; animation: cctv-kedip 1.6s steps(2, end) infinite; }
+.cctv-3d .cctv-waktu { position: absolute; right: 16px; top: 14px; white-space: pre; }
+/* pita terang yang bergulir pelan seperti monitor analog; mode ringan tanpa ini */
+.cctv-3d::after {
+  content: ""; position: absolute; left: 0; right: 0; top: -18%; height: 18%;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, .07), transparent);
+  animation: cctv-gulir 7s linear infinite;
+}
+.cctv-3d.ringan::after { display: none; }
+@keyframes cctv-gulir { to { transform: translateY(660%); } }
+@keyframes cctv-kedip { 50% { opacity: 0; } }
+/* tombol "lihat dari CCTV" di bawah kolom kartu inventaris */
+.kartu.kib .kartu-aksi { margin-top: 8px; }
 
 /* speech bubbles live in the overlay, drawn in CSS px so text stays crisp.
    Tiga baris, bukan satu: kalimat sungguhan agen (`ucap`) jarang muat dalam

@@ -183,7 +183,7 @@ daftarEvent(
   tick(E, dt, S) {
     const frac = (E.umur % 9) / 9;
     const t = frac < 0.5 ? frac * 2 : (1 - frac) * 2;
-    E.data.sapuX = 466 - t * 400;
+    E.data.sapuX = W - 40 - t * (W - 100);   // dari bawah kubahnya (pojok kanan-atas) sampai ujung kiri ruangan
     if (!E.data.melambai) {
       const kena = S.orang.find((o) => !o.adaTugas && o.y > 100 && Math.abs(o.x - E.data.sapuX) < 26);
       if (kena) {
@@ -196,10 +196,10 @@ daftarEvent(
     if (E.data.melambai && E.data.lambaiSampai && E.umur > E.data.lambaiSampai) { E.data.melambai.pose = null; E.data.melambai = null; }
   },
   gambarLantai(E) {
-    const x = E.data.sapuX == null ? 466 : E.data.sapuX;
+    const x = E.data.sapuX == null ? W - 40 : E.data.sapuX;
     ctx.globalAlpha = 0.06;
     ctx.beginPath();
-    ctx.moveTo(466, 18);
+    ctx.moveTo(W - 9, 12);                    // lensa kubah CCTV (drawWall)
     ctx.lineTo(x - 30, 356); ctx.lineTo(x + 30, 356);
     ctx.closePath();
     ctx.fillStyle = '#ffffff'; ctx.fill();
