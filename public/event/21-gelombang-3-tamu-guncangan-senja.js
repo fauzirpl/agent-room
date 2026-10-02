@@ -420,7 +420,7 @@ daftarEvent(
     for (let i = 0; i < 10; i++) spawn('lembar', 212, 84);
   },
   tick(E) {
-    if (E.umur < 6) MOD.gordenLepas = true;      // gorden terangkat, ditulis tiap frame
+    if (E.umur < 6) MOD.gordenLepas = 'angin';   // gorden berkibar, ditulis tiap frame
     if (E.umur < 5) MOD.kipas = 1.6;
     const a = E.data.a;
     // berhenti menyuruh begitu pinjamannya dilepas (tool call nyata menariknya)

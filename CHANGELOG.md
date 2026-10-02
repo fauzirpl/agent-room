@@ -8,6 +8,31 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: aksesori tamu tenar jadi voxel.** Kupluk, helm, blangkon,
+  destar, topeng, kacamata, rambut penutup wajah, raket & karung di punggung,
+  tongsis, tongkat, sarung tangan, jersey bernomor, singlet, tas menyilang, gaun,
+  dan gitar ke-24 tamu tenar kini menempel di kepala, badan, telapak, atau kaki
+  bonekanya — ikut berbalik, ikut pudar di pintu samping, dan tidak lagi pipih
+  atau melayang dari kamera yang diputar atau POV. Tongsis terangkat waktu
+  merekam, raket naik waktu menepuk, kiper menangkap di depan dada.
+- **Tampilan 3D: bayangan kontak di kaki.** Pegawai, tamu event, dan kucing
+  kantor kini menapak: cakram gelap lembut di bawah kakinya, kembaran elips
+  bayangan kaki 2D, ikut permukaan pijaknya (karpet, bantal pojok baca, ambang
+  pintu samping). Mengecil waktu terangkat, memanjang waktu terkapar, ikut
+  pudar, dan tidak ada untuk yang duduk. Paling terasa di mode ringan, saat
+  peta bayangan mati.
+- **Gorden yang tertiup angin dan lepas kait kini kelihatan, di 2D maupun 3D.**
+  Angin kencang membuat panel gorden kiri berkibar; gorden lepas kait membuat
+  ujung atasnya melorot miring sampai pegawai mengaitkannya lagi. Dulu
+  benderanya tidak dibaca siapa pun, lukisan kainnya tertimbun gorden, dan
+  gorden yang sudah dikaitkan tetap "lepas" sampai event habis.
+- **Tampilan 3D: barang event & bekas ruangan gelombang ketiga.** Kabel LAN yang
+  lepas tidak lagi terbenam di tiang rak server; kain penutup dispenser Ramadan
+  menyelubungi dispensernya; barbel tamu lifter tergeletak di lantai pantri
+  dengan galon di tangannya; ember bocor arsip di lantai dan ember bocor rapat
+  di atas taplak. Bekas ruangan yang dulu hilang di 3D kini terlihat: kabel UTP
+  rak server (lurus & berklem sesudah dirapikan), kartu inspeksi APAR, menara
+  gelas kertas di atas galon dispenser, dan isi tong sampah yang menyembul.
 - **Pantauan langsung dari kubah CCTV (3D).** Kartu inventaris Kamera CCTV
   Kubah punya tombol "lihat dari CCTV": kamera meluncur ke lensa kubah di pojok
   kanan atas dan memandang sepanjang sumbunya — ikut menyapu sendiri dan menoleh
@@ -429,6 +454,11 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diubah
 
+- **Tampilan 3D: lantai siang tidak lagi putih rata.** Muka atas menerima ±1,24×
+  cahaya muka tegak, sehingga ubin terazo, kertas, dan taplak terpotong putih.
+  Shader kini memakai bahu lembut mulai 0,8: yang lebih gelap tidak berubah,
+  ubin dan bintik pucatnya terbedakan lagi, dan benda yang memancar tetap
+  warnanya. `RUANG3D.bahu.ambang = 1` di konsol mengembalikan potongan lama.
 - **Papan “Tentang kantor ini” muncul di tengah layar**, bukan lagi rata kanan.
   Rata kanan dulu dipilih supaya papan berdampingan dengan banner yang terjepit
   di sepertiga kiri layar, tapi di layar lebar itu menaruhnya menempel di tepi —

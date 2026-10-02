@@ -2014,6 +2014,9 @@ function drawWindow(active) {
   // gorden kanan bisa ditarik lebih lebar (silau sore, matahari kena rak
   // server) — lebarnya persisten di RUANGAN, kiri selalu 6
   for (const [gx, lebar] of [[x - 8, 6], [x + w + 2, RUANGAN.gordenKanan]]) {
+    // kiri yang lepas (MOD.gordenLepas): gordenKiriLepas; di 3D dia benda
+    // dinamis sendiri (gordenKiri, ruang3d.js), dinding di belakangnya polos
+    if (gx < x && MOD.gordenLepas) { if (!TIGA.aktif) gordenKiriLepas(gx, y, h); continue; }
     r(gx, y - 2, lebar, h + 6, '#3e6b4f');
     r(gx + 1, y - 2, 1, h + 6, '#5f9068');
     r(gx + lebar - 2, y - 2, 1, h + 6, '#2c4e38');
@@ -2040,6 +2043,33 @@ function drawWindow(active) {
     : MOD.internetMati ? '#c22b2b'                            // putus: merah tetap
     : (Math.sin(now / 500) > 0 ? '#57d06a' : '#2c5c38'));
   if (active) glow(x + w / 2, y + h / 2, 44, P.blueL, 0.2);
+}
+
+/* Panel gorden kiri yang lepas (MOD.gordenLepas). 'angin' (angin-kencang-
+   gorden): lipatannya mengembang, bagian di bawah ikat melambai ke kaca —
+   makin ke bawah makin jauh — dan ujungnya terangkat; gerak dikurangi: pose
+   kibarnya diam. Selain itu (gorden-lepas-kait): kait sisi kaca lepas, ujung
+   atasnya melorot miring dari kait luar yang tersisa sampai dikaitkan lagi. */
+function gordenKiriLepas(gx, y, h) {
+  const pita = (px, py, lebar, tinggi) => {
+    r(px, py, lebar, tinggi, '#3e6b4f');
+    r(px + 1, py, 1, tinggi, '#5f9068');
+    r(px + lebar - 2, py, 1, tinggi, '#2c4e38');
+  };
+  if (MOD.gordenLepas === 'angin') {
+    pita(gx, y - 2, 7, 28);
+    for (let j = 0; j < 5; j++) {
+      const ayun = geraKurang.matches ? 0.8 : 0.6 + 0.4 * Math.sin(now / 110 + j * 0.9);
+      pita(gx + Math.round((j + 1) * 0.8 * ayun), y + 29 + j * 3, 7 + (j >> 1), 3);
+    }
+    r(gx, y + 26, 7, 3, P.gold);                           // ikat gorden
+    return;
+  }
+  for (let i = 0; i < 6; i++) {
+    const turun = i * 3;                                   // kolom 0 masih di kaitnya
+    r(gx + i, y - 2 + turun, 1, h + 6 - turun, i === 1 ? '#5f9068' : i === 4 ? '#2c4e38' : '#3e6b4f');
+  }
+  r(gx, y + 26, 6, 3, P.gold);                             // ikat gorden
 }
 
 function drawStempel(active) {
@@ -14126,7 +14156,7 @@ const MOD = {
   acMati: false,
   internetMati: false,
   jamGetar: false,   // baterai sekarat: jarum detik gemetar sebelum diam
-  gordenLepas: false,
+  gordenLepas: false, // panel gorden kiri: true = lepas kait, melorot; 'angin' = berkibar (drawWindow, gordenKiri 3D)
   wifiLemahSlot: -1, // indeks meja kerja yang sinyalnya hilang
   // gelombang 2 lanjutan
   lajuGlobal: 1,     // pengali kecepatan jalan SEMUA penghuni (ramadan, lembur malam, senyap magrib)

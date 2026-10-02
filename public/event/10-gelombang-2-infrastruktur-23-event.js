@@ -221,8 +221,9 @@ daftarEvent(
     if (a) { a.doingEvent = 'silau kena cahaya'; a.goTo('web'); }
   },
   tick(E) {
-    MOD.gordenLepas = true;
-    MOD.sinar = 1.4;
+    // sampai dikaitkan lagi (MOD_selesaiGorden); kain melorotnya dilukis
+    // drawWindow & gordenKiri 3D dari bendera ini, bukan gambarDinding
+    if (!E.data.tutup) { MOD.gordenLepas = true; MOD.sinar = 1.4; }
     const a = E.aktor[0];
     if (masihMain(E, a) && a.diam) {
       pada(E, 1, () => { if (masihMain(E, a)) { a.pose = 'usap'; a.say('silau, Mas.'); } });
@@ -234,10 +235,6 @@ daftarEvent(
       else if (masihMain(E, a)) { a.doingEvent = 'mengaitkan gorden'; a.goToXY(212, 148, 'up'); }
     });
     pada(E, 14, () => { if (E.data.b) E.data.b.pose = null; MOD_selesaiGorden(E); });
-  },
-  gambarDinding(E) {
-    if (E.umur > (E.data.tutup || 999)) return;
-    r(178, 18, 6, 20, '#5f9068');            // ujung kain melorot, kaca lebih terbuka
   },
   selesai(E) { for (const a of E.aktor) a.pose = null; },
 },

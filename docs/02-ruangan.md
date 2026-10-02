@@ -2149,7 +2149,9 @@ kanvas tekstur berskala 3 texel per piksel dunia:
 Dinding dilukis ulang 20 kali sedetik, lantai 7 kali, tiap kulit menurut
 lajunya sendiri (rak server 12, fotokopi 6, daun pintu WC & gudang 3, daun
 pintu kadis 2).
-Mode ringan menyeparuhkan semuanya dan mematikan peta bayangan.
+Mode ringan menyeparuhkan semuanya dan mematikan peta bayangan; orang tetap
+menapak lewat bayangan kontak — cakram lembut di bawah kakinya yang di mode
+biasa tinggal penebal tipis.
 
 **Proyeksi oblik sebagai kamus.** Gambar 2D ruangan ini proyeksi oblik: titik
 bertinggi h di kedalaman z jatuh di layar pada `y = z - h`. Balikannya —
@@ -2236,9 +2238,11 @@ gambar tidak melakukan apa-apa) sambil `drawPerson` diganti pencatat. Tiap
 sosok yang tercatat — palet, hadap, melangkah atau diam, barang bawaan,
 `globalAlpha`-nya — berdiri sebagai boneka voxel di `(x, y)`-nya sendiri,
 segaya pegawai, berbayang, ikut pudar. Waktu kartunya dilukis, sosoknya
-dilewati, jadi kartu tinggal berisi properti event. Aksesori tamu tenar (topi,
-helm, kacamata hitam, raket di punggung, nomor jersey) dilukis ke **stiker**
-kecilnya sendiri, diperbesar `SKALA_ORANG` di sekitar titik kakinya, dan
+dilewati, jadi kartu tinggal berisi properti event. Aksesori tamu tenar (kupluk,
+helm, blangkon, raket di punggung, tongsis, nomor jersey, dan lainnya)
+dipasang sebagai voxel di matriks kepala, badan, telapak, atau kaki bonekanya
+lewat satu tabel `AKSESORI_3D`, termasuk pose lengannya. Yang belum tercantum
+di tabel tetap dilukis ke **stiker** kecilnya sendiri, diperbesar `SKALA_ORANG` di sekitar titik kakinya, dan
 menempel di depan bonekanya mengikuti posisinya tiap frame. Tamu yang kakinya
 jatuh di jalur perabot dinding (y < 121, misalnya pemanjat lemari arsip)
 ditaruh di muka perabot dan diangkat setinggi selisihnya.
@@ -2299,6 +2303,14 @@ kedua tangannya (menipis tiap meja yang kebagian), tanda tanya tamu nyasar di
 atas kepalanya, kamera wartawan (di dada waktu berjalan, di depan mata waktu
 memotret), dan gulungan audit-token yang menjuntai dari tangan auditor lalu
 terbentang di lantai. Nyamuk dan lalat satu piksel tetap kartu.
+
+**Gelombang ketiga** membereskan kartu yang salah tempat: kabel LAN yang lepas
+dulu terbenam di tiang kanan rak server, kini menggantung lurus berkonektor di
+muka tiangnya; kain penutup dispenser Ramadan menyelubungi kotak dispensernya
+sampai baki tetes; barbel lifter tergeletak di lantai pantri dan galon yang
+diangkatnya ikut di tangannya; ember bocor arsip berdiri di lantai, ember bocor
+rapat di atas taplak, karena titik 2D-nya di 3D jatuh di bawah dudukan kursi
+sisi jauh.
 Cahaya monitor lembur tidak lagi berupa cakram kartu: layar 3D-nya sudah
 memancar sendiri. Tamu event yang berpindah kini melangkah dan menghadap arah
 jalannya — gambar 2D-nya selalu `idle` menghadap penonton, gaya yang di 3D
@@ -2418,7 +2430,9 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
   aluminium & tiang silangnya timbul tepat di atas yang terlukis, ambangnya
   menjorok ke ruangan, dan gordennya jadi kain berlipat: lambrequin bergerigi
   berpita emas, panel kiri, dan panel kanan selebar `RUANGAN.gordenKanan`
-  (ikut melebar waktu ditarik karena silau sore).
+  (ikut melebar waktu ditarik karena silau sore); panel kiri berkibar ke depan
+  waktu angin kencang dan melorot miring waktu kaitnya lepas
+  (`MOD.gordenLepas`: `'angin'` / `true`), lalu kembali ke tempatnya.
 - **Akuarium arwana**: kabinet bertombol kuningan, tangki berbingkai dengan
   lampu penutup yang menyala, pasir, tanaman air, batu aerator yang
   menggelembung, dan arwana emas yang berenang bolak-balik dengan rumus 2D yang
@@ -2452,7 +2466,10 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
   timbul. Uji: `?tema=agustusan|korpri|tahun-anggaran|ramadan`.
 
 Isi yang ikut keadaan `RUANGAN` — termasuk isi taplak meja rapat: tumpukan
-notulen sisa, noda kopi, dan gelas yang terguling di genangannya — masuk satu
+notulen sisa, noda kopi, dan gelas yang terguling di genangannya; juga bekas
+yang di 2D terlukis di samping perabotnya: kabel UTP rak server (berklem waktu
+`kabelRapi`), kartu inspeksi APAR, menara gelas kertas di atas galon
+dispenser, dan isi tong sampah yang menyembul — masuk satu
 grup sendiri yang dibangun ulang
 **hanya waktu `tandaPerabot()` berubah** (kusut dihitung per lapis, layu
 dibulatkan ke 1/20, lebar gorden ke 0,5), jadi tidak menambah kerja per frame;
@@ -2501,8 +2518,8 @@ relief:
   wajah pegawainya. Siang nyaris tak terasa; malam ada genangan cahaya hangat
   bertingkat di papan meja.
 
-Genangan lampu, pantulan layar laptop, kepulan AC, genangan senter, dan petak
-silau matahari tinggal di grup `sinar`:
+Genangan lampu, pantulan layar laptop, kepulan AC, genangan senter, petak silau
+matahari, dan bayangan kontak di kaki orang & kucing tinggal di grup `sinar`:
 tembus pandang dan dicampur di lintasan pudar, tetapi **tidak berbayang** —
 cahaya yang ikut peta bayangan malah menggelapkan permukaan yang ia terangi.
 
@@ -2535,7 +2552,10 @@ sirene merah-biru yang lewat — dua terakhir meluncur di dekat dinding jendela
 mengikuti sapuan 2D-nya; ketiganya padam di siang terang. Malam jadi temaram
 kebiruan dengan genangan cahaya hangat di bawah tiap lampu; kilat menerangi
 seluruh ruangan dan sesaat menyalakan berkas jendela seukuran kaca, plus petak
-empat daun di lantai (tidak untuk gerak dikurangi).
+empat daun di lantai (tidak untuk gerak dikurangi). Yang diterangi melewati
+bahu lembut (`RUANG3D.bahu`, ambang 0,8): muka atas siang menerima ±1,24×
+cahaya muka tegak, dan tanpa itu ubin terazo, kertas, dan taplak terpotong
+putih rata; di bawah ambang tidak berubah, yang memancar tetap warna dasarnya.
 
 **Kamera 2D tetap yang memutuskan ke mana melihat.** Mode ikut, sinematik,
 klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung

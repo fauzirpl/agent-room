@@ -108,8 +108,8 @@
 //      gambarProp-nya tidak lagi melukis warna barang itu ke kanvas kartu;
 //      tamu tenar anak (TOKOH.anak) jadi boneka berskala anak di titik
 //      tamunya — lebih pendek dari pegawai, badannya tak tercetak di kartu,
-//      goyang jogetnya bukan langkah, stiker aksesorinya tidak dibuat ulang
-//      tiap frame.
+//      goyang jogetnya bukan langkah, tak ada kanvas yang dibuat ulang tiap
+//      frame.
 //  24. pantauan langsung dari kubah CCTV: tombol "lihat dari CCTV" cuma di
 //      kartu inventaris Kamera CCTV Kubah selama 3D; mata kamera di lensanya,
 //      pandangannya ikut lensa yang menoleh ke orang berjalan / kartu yang
@@ -139,6 +139,51 @@
 //      tampak penuh, gerak dikurangi — sudutnya kembali & tetap milik
 //      penonton; seret (dipegang di sudut yang sedang tampak), roda, cubit,
 //      dan klik dua kali menghentikan ayunan selama tahanannya; angka hingga.
+//  27. aksesori tamu tenar jadi voxel di matriks bonekanya (tabel AKSESORI_3D,
+//      dibaca dari teks berkasnya): tiap tamu tenar beraksesori di registri
+//      tercantum dan sebaliknya; tiap aksesorinya ada di dekat badan, ikut
+//      berpindah (x DAN lajur) dan berbalik arah bersama bonekanya, dan tidak
+//      lagi dilukis ke stiker (dobel); kepala di kepala (kupluk di atas
+//      ubun-ubun, visor helm di muka), punggung di punggung (raket, nomor
+//      jersey), tangan di telapak (tongsis diangkat merekam lalu turun, helm
+//      dijinjing, tongkat sampai lantai lalu menunjuk); kontrol: aksesori yang
+//      belum bermodel tetap ke stiker, tanpa kanvas baru tiap frame.
+//  28. gorden kiri yang lepas (MOD.gordenLepas, dulu ditulis dua event tanpa
+//      pembaca): 'angin' (angin-kencang-gorden) memindah panel kiri dari grup
+//      perabot ke grup dinamis — lipatannya mengembang (maju, melebar ke
+//      kaca, ujung terangkat) bertahap lalu bergoyang antar frame (gerak
+//      dikurangi & mode ringan: pose statis); true (gorden-lepas-kait) —
+//      kolom luar masih di kaitnya, kolom sisi kaca melorot & condong ke
+//      depan, diam; padam: kembali pelan lalu persis ke perabot. 2D
+//      drawWindow membaca bendera yang sama (di 3D panel kiri tidak dilukis
+//      ke dinding), gorden-lepas-kait memadamkannya begitu dikaitkan lagi,
+//      dan kain melorotnya tidak lagi dilukis dobel di gambarDinding.
+//  29. bayangan kontak & bahu lembut cahaya: cakram gelap (#20301f, elips
+//      bayangan kaki 2D) tepat di bawah kaki pegawai yang berdiri — sol
+//      sepatunya di inti pekat, muka menghadap atas — di lantai, karpet
+//      rapat, bantal lesehan, dan plat ambang pintu samping; mengecil &
+//      menipis saat terangkat (a.angkat, loncatan senam), memanjang ke arah
+//      badan yang rebah, sepudar badannya (standby, ambang); tidak ada untuk
+//      yang duduk di kursi meja kerja & lesehan; kucing tidur di karpet
+//      ikut; jauh lebih tipis saat peta bayangan menyala. bahu() FS yang
+//      dijalankan sebagai JS: apa adanya di bawah ambang, monoton, tidak
+//      lewat 1, ambang 1 = potong keras lama; dari uniform siang muka atas
+//      ±1,24x muka tegak — ubin & kertas yang dulu sama-sama terpotong putih
+//      kini berbeda, krem dinding nyaris tak tersentuh, malam tidak berubah.
+//  30. barang event & bekas ruangan gelombang ketiga: kabel LAN lepas
+//      menggantung di MUKA tiang kanan rak server (bukan terbenam di tiangnya),
+//      kain penutup dispenser Ramadan menyelubungi kotak dispenser (bukan
+//      melayang di depan & di atasnya), barbel lifter tergeletak di lantai dan
+//      galon di tangannya ikut badannya, ember bocor arsip (dan atap) di
+//      lantai tempat lukisannya, ember bocor rapat di taplak meja rapat (titik
+//      2D-nya di 3D jatuh di bawah dudukan kursi) — semuanya voxel di wadah dinamis dan
+//      gambarProp-nya tidak dilukis ke kanvas kartu (kontrol: def yang sama
+//      tanpa model tetap jadi kartu); bekas RUANGAN di luar persegi kulit
+//      perabotnya — kabel UTP rak server (kabelRapi: lurus, pendek, berklem),
+//      kartu inspeksi APAR (ikut aparAngkat, hilang selagi aparDiangkat),
+//      menara gelas dispenser (gelasDispenser, MOD.galonLepas), isi tong
+//      (tongPenuh) — voxel di wadah perabot: tiap perubahan membangun ulang
+//      grup itu, dan dikosongkan lagi kembali ke geometri semula.
 //
 // Pakai:
 //   node uji-tiga.mjs
@@ -2555,7 +2600,7 @@ const ringkas = (ps) => ps.length + ' titik, alfa ' + [...new Set(ps.map((p) => 
   pasang('bintang-jersey-merah-muda-sepuluh', { t: tJersey });
   tahan();
   const j1 = ukuran(titik('#f19ec2', sekitar(250, 300, 12))), kepalaJ = ukuran(titik(KULIT_TAMU, sekitar(250, 300, 12))), tinggiDewasa = dewasa();
-  const kartuJersey = keKartu(['#f19ec2', '#e07aa6']), stikerJersey = keStiker(['#f7f2f4']);
+  const kartuJersey = keKartu(['#f19ec2', '#e07aa6']), stikerJersey = keStiker(['#f7f2f4']), voxelJersey = titik('#f7f2f4', sekitar(250, 300, 12)).length;
   Object.assign(tJersey, { x: 300, y: 276 });
   tahan();
   const j2 = ukuran(titik('#f19ec2', sekitar(300, 276, 12)));
@@ -2564,8 +2609,9 @@ const ringkas = (ps) => ps.length + ' titik, alfa ' + [...new Set(ps.map((p) => 
     'tamu anak (bintang jersey merah muda): boneka voxel di titik tamunya, ikut berpindah', `${teks(j1)} | sesudah pindah ${teks(j2)}`);
   cek(rasio > 0.72 && rasio < 0.84 && Number.isFinite(tinggiDewasa),
     'tamu anak: bonekanya ±20/26 tinggi pegawai berdiri', `puncak kepala anak ${kepalaJ.y1.toFixed(2)} vs pegawai ${tinggiDewasa.toFixed(2)} (rasio ${rasio.toFixed(3)})`);
-  cek(kartuJersey === 0 && stikerJersey > 0, 'tamu anak: badannya tidak lagi tercetak di kartu event; jersey-nya dilukis ke stiker aksesori',
-    `${kartuJersey} fillRect badan ke kartu, ${stikerJersey} fillRect jersey ke stiker`);
+  cek(kartuJersey === 0 && stikerJersey === 0 && voxelJersey > 0,
+    'tamu anak: badannya tidak lagi tercetak di kartu event; nomor jersey-nya voxel di bonekanya, bukan stiker (bagian 27)',
+    `${kartuJersey} fillRect badan ke kartu, ${stikerJersey} fillRect jersey ke stiker, ${voxelJersey} titik jersey voxel`);
 
   // bocah berdestar: digambar lewat salinan TOKOH.anak({ ...B3, y: B3.y - goyang }) tiap frame
   const tBocah = Object.assign(ctx.__bocah, { x: 332, y: 234, wp: [], fase: 'joget', hadap: 'right' });
@@ -2581,12 +2627,14 @@ const ringkas = (ps) => ps.length + ' titik, alfa ' + [...new Set(ps.map((p) => 
     zBadan.push(bocah.z);
   }
   const lebar = (v) => Math.max(...v) - Math.min(...v);
-  cek(bocah.n > 0 && bocah.hingga && Math.abs(bocah.x - 332) < 1 && keKartu(['#2e6b4f']) === 0 && keStiker(['#7a2c2c']) > 0,
-    'bocah berdestar: boneka anak di titiknya, tak tercetak di kartu; destarnya di stiker', `${teks(bocah)}, ${keKartu(['#2e6b4f'])} fillRect badan ke kartu`);
+  const destar = titik('#7a2c2c', sekitar(332, 234, 14)).length;
+  cek(bocah.n > 0 && bocah.hingga && Math.abs(bocah.x - 332) < 1 && keKartu(['#2e6b4f']) === 0 && keStiker(['#7a2c2c']) === 0 && destar > 0,
+    'bocah berdestar: boneka anak di titiknya, tak tercetak di kartu; destarnya voxel, bukan stiker',
+    `${teks(bocah)}, ${keKartu(['#2e6b4f'])} fillRect badan ke kartu, ${keStiker(['#7a2c2c'])} destar ke stiker, ${destar} titik destar`);
   cek(lebar(zBadan) > 0.5 && lebar(rentangKaki) < 0.05,
     'bocah berdestar: goyang jogetnya (y-1) bukan langkah — kakinya tidak berayun',
     `z badan ${lebar(zBadan).toFixed(2)} bergoyang, rentang x sepatu ${rentangKaki.map((v) => v.toFixed(2)).join(' ')}`);
-  cek(kanvasBaru === kanvasAwal, 'bocah berdestar: stiker aksesorinya tidak dibuat ulang tiap frame walau tokohnya salinan baru',
+  cek(kanvasBaru === kanvasAwal, 'bocah berdestar: tidak ada kanvas yang dibuat ulang tiap frame walau tokohnya salinan baru',
     `${kanvasBaru - kanvasAwal} kanvas baru dalam 20 frame`);
 
   H.eventHidup.length = 0;
@@ -3162,6 +3210,901 @@ const ringkas = (ps) => ps.length + ' titik, alfa ' + [...new Set(ps.map((p) => 
   cek(angka.length > 0 && angka.every(Number.isFinite) && !galat.length,
     `semua angka kamera hingga (${angka.length} nilai: yawK, pitchK, jarakK, sasaranK, matriks vp) dan jaring NaN tidak turun tangan`,
     galat.join(' | '));
+}
+
+// ------------------------------------------------------------------ 27
+/* Aksesori tamu tenar jadi voxel. Dulu seluruhnya dilukis ke stiker datar
+   (KARTU_AKSESORI) 4,5 di depan boneka yang selalu menghadap +z: dari kamera
+   yang diputar atau POV pipih dan melayang. Sekarang tabel AKSESORI_3D —
+   kuncinya dibaca dari teks berkasnya, tanpa nama global baru — memasang
+   voxel di matriks boneka pemiliknya. Tiap tamu tenar beraksesori di
+   registri dinyalakan lewat mulai() aslinya lalu dipindah ke dua tempat (x
+   DAN lajur) dan dibalik arahnya; aksesorinya dicari lewat warna sidik yang
+   tidak dipakai palet tamunya. fillRect ke kanvas seukuran STIKER dicatat
+   lewat document.createElement yang dibungkus. */
+{
+  console.log(tebal('\n3D: aksesori tamu tenar jadi voxel di bonekanya'));
+  const { ctx, H, galat, bingkai, titik } = nyalakan3D();
+  const [, LBR_STIKER, TGI_STIKER] = (SRC_3D.match(/const STIKER = \{ lebar: (\d+), tinggi: (\d+)/) || []).map(Number);
+  const lukisStiker = [];
+  let kanvasBaru = 0;
+  const buatAsli = ctx.document.createElement;
+  ctx.document.createElement = (tag) => {
+    const el = buatAsli(tag);
+    if (String(tag).toLowerCase() !== 'canvas') return el;
+    kanvasBaru++;
+    const k = el.getContext('2d'), fr = k.fillRect;
+    k.fillRect = function (...a) {
+      if (el.width === LBR_STIKER && el.height === TGI_STIKER) lukisStiker.push(String(k.fillStyle).toLowerCase());
+      return fr.apply(this, a);
+    };
+    return el;
+  };
+  const blok = (SRC_3D.match(/const AKSESORI_3D = \{([\s\S]*?)\n {2}\};/) || [])[1] || '';
+  const TABEL = [...blok.matchAll(/^ {4}'([a-z0-9-]+)': \{/gm)].map((m) => m[1]);
+  const S = buatS(ctx, { jam: 12, hujan: 0, petir: false, ramai: false });
+  const pristine = buatPristine(ctx);
+  const tamuDari = (E) => Object.values(E.data).flatMap((v) => [].concat(v))
+    .filter((o) => o && typeof o === 'object' && typeof o.aksesori === 'function');
+
+  // --- tabel <-> registri: tiap tamu tenar yang membawa aksesori tercantum, dan sebaliknya
+  const beraksesori = [];
+  for (const def of H.EVENT_ACAK.filter((d) => d.tamuTenar)) {
+    const E = buatE(def);
+    try { def.mulai(E, S); } catch { continue; }
+    if (tamuDari(E).length) beraksesori.push(def.id);
+  }
+  resetRuangan(ctx, pristine);
+  const tanpaTabel = beraksesori.filter((id) => !TABEL.includes(id)), tanpaEvent = TABEL.filter((id) => !beraksesori.includes(id));
+  cek(TABEL.length >= 20 && !tanpaTabel.length && !tanpaEvent.length,
+    `AKSESORI_3D memuat tiap tamu tenar beraksesori di registri (${TABEL.length}/${beraksesori.length}), tanpa id yang salah ketik`,
+    `belum bermodel: ${tanpaTabel.join(', ') || '-'}; tak ada eventnya: ${tanpaEvent.join(', ') || '-'}`);
+
+  // warna sidik aksesori tiap tamu: tidak dipakai palet tamunya sendiri. Vokalis:
+  // rambutnya sewarna poni — yang dibaca juntaian sisi di bawah rambut boneka (dunia y < 25)
+  const SIDIK = {
+    'pemusik-bandana-harmonika': '#b8443a', 'pemusik-jas-berkilau-gitar-elektrik': '#8c1f2a',
+    'penyanyi-gaun-bunga-legalisir': '#e0577f', 'rapper-polo-merah-muda': '#16181c',
+    'kreator-berhijab-rekam-jalan': '#4a5058', 'duo-bapak-anak-konten': '#c9452f',
+    'kiper-sarung-tangan-timnas': '#f2efe2', 'bek-lemparan-dua-tangan': '#f4f2e8',
+    'lifter-singlet-merah-putih': '#22262c', 'pebulutangkis-raket-di-punggung': '#d8dde2',
+    'pemanjat-harness-kapur': '#e8b23a', 'rombongan-pembersih-sungai': '#f07a20',
+    'bintang-jersey-nomor-tujuh': '#1c3f7a', 'bintang-jersey-merah-muda-sepuluh': '#f7f2f4',
+    'pembalap-wearpack-helm-tak-dibuka': '#1a1d24', 'bos-jaket-kulit-hitam': '#5a5f68',
+    'pahlawan-setelan-merah-biru': '#f4f6f8', 'peserta-training-hijau-empat-lima-enam': '#f2f0e6',
+    'pemburu-jaket-kuning-kepang-ungu': '#a8871a', 'pendongeng-blangkon-bertongkat': '#6b4a2a',
+    'pesulap-rambut-menutup-wajah': '#2b2533', 'vokalis-poni-menutup-sebelah-mata': '#171219',
+    'suara-berat-di-lorong-malam': '#12141b', 'bocah-destar-kacamata-hitam': '#7a2c2c',
+  };
+  const saringSidik = (id) => (id === 'vokalis-poni-menutup-sebelah-mata' ? (p) => p.y < 25 : () => true);
+  const sekitar = (x, z, r) => (p) => Math.abs(p.x - x) < r && Math.abs(p.z - z) < r;
+  const ukuran = (ps) => {
+    const u = { n: ps.length, hingga: ps.every((p) => [p.x, p.y, p.z].every(Number.isFinite)) };
+    for (const k of ['x', 'y', 'z']) {
+      const v = ps.map((p) => p[k]);
+      u[k + '0'] = Math.min(...v); u[k + '1'] = Math.max(...v); u[k] = (u[k + '0'] + u[k + '1']) / 2;
+    }
+    return u;
+  };
+  const teks = (u) => (u.n ? `${u.n} titik, x ${u.x0.toFixed(1)}..${u.x1.toFixed(1)} y ${u.y0.toFixed(1)}..${u.y1.toFixed(1)} z ${u.z0.toFixed(1)}..${u.z1.toFixed(1)}` : 'tak ada titik');
+  const R = 18;                                         // jangkauan baca di sekitar tamu pertama
+  const A = [120, 300], B = [196, 270];
+
+  // kontrol: tanpa event, tak satu pun warna sidik di bidang yang dibaca
+  H.eventHidup.length = 0;
+  for (let i = 0; i < 3; i++) bingkai();
+  const kotor = [];
+  for (const [x, y] of [A, B]) for (const [id, hex] of Object.entries(SIDIK)) if (titik(hex, (p) => sekitar(x, y, R)(p) && saringSidik(id)(p)).length) kotor.push(`${hex} di (${x}, ${y})`);
+  cek(!kotor.length, 'kontrol: tanpa event, warna sidik aksesori tidak ada di bidang yang dibaca', kotor.join(', '));
+
+  // satu tamu tenar hidup lewat mulai() aslinya; tamunya berdiri diam di (x, y)
+  // menghadap `hadap` (rombongan berjajar 40 ke kanan, di luar jangkauan baca)
+  const pasang = (def, [x, y], hadap = 'down', keadaan = {}, n = 3) => {
+    H.eventHidup.length = 0;
+    resetRuangan(ctx, pristine);
+    const E = buatE(def);
+    def.mulai(E, S);
+    const tamu = tamuDari(E);
+    tamu.forEach((o, i) => Object.assign(o, { x: x + i * 40, y, wp: [], hadap }, keadaan));
+    H.eventHidup.push(E);
+    lukisStiker.length = 0;
+    for (let i = 0; i < n; i++) bingkai();
+    return tamu;
+  };
+  const baca = (id, [x, y], tamu) => ({
+    badan: ukuran(titik(tamu[0].pal.main, sekitar(x, y, 12))),
+    kulit: ukuran(titik(tamu[0].pal.skin, sekitar(x, y, 12))),
+    aks: ukuran(titik(SIDIK[id], (p) => sekitar(x, y, R)(p) && saringSidik(id)(p))),
+    stiker: lukisStiker.length,
+  });
+
+  // --- tiap tamu: voxel di dekat badannya, ikut pindah & berbalik, tak berstiker
+  const gagalAda = [], gagalIkut = [], gagalBalik = [], gagalStiker = [], hasil = {};
+  for (const id of TABEL) {
+    const def = H.eventById.get(id);
+    if (!def || !SIDIK[id]) { gagalAda.push(id + ' (tanpa def/sidik)'); continue; }
+    const a = baca(id, A, pasang(def, A));
+    const b = baca(id, B, pasang(def, B));
+    const k = baca(id, A, pasang(def, A, 'right', {}, 6));
+    hasil[id] = a;
+    if (!(a.aks.n && a.aks.hingga && a.badan.n && Math.hypot(a.aks.x - a.badan.x, a.aks.z - a.badan.z) < 12)) gagalAda.push(`${id}: ${teks(a.aks)}`);
+    const gb = [b.badan.x - a.badan.x, b.badan.z - a.badan.z], ga = [b.aks.x - a.aks.x, b.aks.z - a.aks.z];
+    if (!(b.aks.n && Math.abs(gb[0] - (B[0] - A[0])) < 1.2 && Math.abs(gb[1] - (B[1] - A[1])) < 1.2
+      && Math.abs(ga[0] - gb[0]) < 0.4 && Math.abs(ga[1] - gb[1]) < 0.4)) gagalIkut.push(`${id}: badan ${gb.map((v) => v.toFixed(2))}, aksesori ${ga.map((v) => v.toFixed(2))}`);
+    // hadap kanan = yaw +90°: selisih lokal (dx, dz) hadap depan jadi (dz, -dx)
+    const d0 = [a.aks.x - a.badan.x, a.aks.z - a.badan.z], d1 = [k.aks.x - k.badan.x, k.aks.z - k.badan.z];
+    if (!(k.aks.n && Math.abs(d1[0] - d0[1]) < 0.8 && Math.abs(d1[1] + d0[0]) < 0.8)) gagalBalik.push(`${id}: depan ${d0.map((v) => v.toFixed(2))}, kanan ${d1.map((v) => v.toFixed(2))}`);
+    if (a.stiker + b.stiker + k.stiker) gagalStiker.push(`${id}: ${a.stiker + b.stiker + k.stiker} fillRect`);
+  }
+  cek(!gagalAda.length, `tiap aksesori (${TABEL.length} tamu) jadi voxel di dekat badan bonekanya, angkanya hingga`, gagalAda.join(' | '));
+  cek(!gagalIkut.length, 'aksesorinya bergeser persis sejauh badannya (x DAN lajur): menempel di matriks boneka', gagalIkut.join(' | '));
+  cek(!gagalBalik.length, 'aksesorinya ikut berbalik waktu tamunya menghadap kanan — bukan stiker yang selalu menghadap +z', gagalBalik.join(' | '));
+  cek(!gagalStiker.length, 'aksesori yang sudah bermodel tidak lagi dilukis ke stiker (dobel)', gagalStiker.join(' | '));
+
+  // --- kepala di kepala
+  const kp = hasil['duo-bapak-anak-konten'];
+  cek(kp && kp.aks.y0 > 0.85 * kp.kulit.y1 && kp.aks.y1 > kp.kulit.y1 + 3,
+    'kupluk duduk di garis rambut dan mahkotanya menjulang di atas ubun-ubun', kp && `kupluk ${teks(kp.aks)}, puncak kepala ${kp.kulit.y1.toFixed(1)}`);
+  const PEMBALAP = H.eventById.get('pembalap-wearpack-helm-tak-dibuka'), VISOR = SIDIK['pembalap-wearpack-helm-tak-dibuka'];
+  const visorDi = (hadap, keadaan) => {
+    const t = pasang(PEMBALAP, A, hadap, keadaan, 6);
+    return { visor: ukuran(titik(VISOR, sekitar(A[0], A[1], R))), badan: ukuran(titik(t[0].pal.pants, (p) => sekitar(A[0], A[1], 12)(p) && p.y < 10)) };
+  };
+  const vd = visorDi('down'), vk = visorDi('right'), vl = visorDi('down', { helmDilepas: true });
+  const puncak = hasil['pembalap-wearpack-helm-tak-dibuka'].kulit.y1;
+  cek(vd.visor.z > vd.badan.z + 5 && vk.visor.x > vk.badan.x + 5 && vd.visor.y0 > 0.7 * puncak,
+    'visor helm pembalap ada di mukanya setinggi mata, dan ikut menoleh waktu dia menghadap kanan',
+    `depan: visor ${teks(vd.visor)} vs kaki z ${vd.badan.z.toFixed(1)}; kanan: visor x ${vk.visor.x.toFixed(1)} vs kaki x ${vk.badan.x.toFixed(1)}`);
+  cek(vl.visor.n > 0 && vl.visor.y1 < 0.45 * puncak,
+    'helm yang dilepas dijinjing di tangannya (rendah, di sisi badan), bukan lenyap atau tetap di kepala', `visor ${teks(vl.visor)}, puncak ${puncak.toFixed(1)}`);
+
+  // --- punggung di punggung
+  const RAKET = H.eventById.get('pebulutangkis-raket-di-punggung'), SR = SIDIK['pebulutangkis-raket-di-punggung'];
+  const rk = hasil['pebulutangkis-raket-di-punggung'];
+  pasang(RAKET, A, 'down', { ayunSampai: 1 }, 6);
+  const rAyun = ukuran(titik(SR, sekitar(A[0], A[1], R)));
+  cek(rk.aks.z < rk.badan.z - 3 && rk.aks.y1 > 0.6 * rk.kulit.y1 && rAyun.y1 > rk.kulit.y1 + 5,
+    'raket tersandang di punggung (di belakang badan, menyembul di atas bahu), dan naik di atas kepala waktu menepuk',
+    `punggung: ${teks(rk.aks)} vs badan z ${rk.badan.z.toFixed(1)}; menepuk: ${teks(rAyun)}, puncak ${rk.kulit.y1.toFixed(1)}`);
+  const j7 = hasil['bintang-jersey-nomor-tujuh'];
+  pasang(H.eventById.get('bintang-jersey-nomor-tujuh'), A);
+  const nomor = ukuran(titik(SIDIK['bintang-jersey-nomor-tujuh'], (p) => sekitar(A[0], A[1], R)(p) && Math.abs(p.x - j7.badan.x) < 3));
+  cek(nomor.n > 0 && nomor.z0 < j7.badan.z - 3.2 && nomor.z1 < j7.badan.z - 2.5, 'jersey nomor tujuh: angkanya di punggung, pitanya di tepi badan',
+    `angka ${teks(nomor)}, badan z ${j7.badan.z.toFixed(1)}`);
+
+  // --- tangan: tongsis, tongkat, sarung kiper
+  const KREATOR = H.eventById.get('kreator-berhijab-rekam-jalan'), HP = '#20242c';
+  const hpDi = (rekam) => { pasang(KREATOR, A, 'down', { rekam }, 6); return ukuran(titik(HP, sekitar(A[0], A[1], R))); };
+  const hpRekam = hpDi(true), hpMati = hpDi(false), kepalaK = hasil['kreator-berhijab-rekam-jalan'].kulit.y1;
+  cek(hpRekam.n > 0 && hpRekam.y0 > kepalaK && hpMati.n > 0 && hpMati.y1 < kepalaK && hpMati.y0 > 0.5 * kepalaK,
+    'tongsis di genggamannya: merekam = diangkat, HP-nya di atas kepala; ditegur = turun, HP setinggi bahu',
+    `merekam ${teks(hpRekam)}; mati ${teks(hpMati)}; puncak kepala ${kepalaK.toFixed(1)}`);
+  const TONGKAT = '#5b3f24', PENDONGENG = H.eventById.get('pendongeng-blangkon-bertongkat');
+  const tongkatDi = (angkat) => { pasang(PENDONGENG, A, 'down', { angkat }, 6); return ukuran(titik(TONGKAT, sekitar(A[0], A[1], R))); };
+  const tTegak = tongkatDi(false), tTunjuk = tongkatDi(true), kepalaP = hasil['pendongeng-blangkon-bertongkat'].kulit.y1;
+  cek(tTegak.n > 0 && tTegak.y0 < 1.5 && tTegak.y1 < 0.6 * kepalaP && tTunjuk.y1 > kepalaP,
+    'tongkat pendongeng: tegak di genggamannya sampai lantai, lalu terangkat menunjuk bagan di atas kepala',
+    `tegak ${teks(tTegak)}; menunjuk ${teks(tTunjuk)}; puncak ${kepalaP.toFixed(1)}`);
+  const KIPER = H.eventById.get('kiper-sarung-tangan-timnas'), SK = SIDIK['kiper-sarung-tangan-timnas'];
+  const kp1 = hasil['kiper-sarung-tangan-timnas'];
+  pasang(KIPER, A, 'down', { tangkapSampai: 1 }, 6);
+  const tangkap = ukuran(titik(SK, sekitar(A[0], A[1], R)));
+  cek(kp1.aks.x0 < kp1.badan.x - 5 && kp1.aks.x1 > kp1.badan.x + 5 && tangkap.y > kp1.aks.y + 5 && tangkap.z > kp1.aks.z + 3,
+    'sarung tangan kiper menelan kedua telapaknya, dan naik ke depan dada waktu menangkap',
+    `diam ${teks(kp1.aks)}; menangkap ${teks(tangkap)}`);
+
+  // --- kontrol: aksesori yang belum bermodel tetap lewat stiker (definisi
+  // salinan beri-id baru: tidak ada di tabel), tanpa kanvas baru tiap frame
+  const salin = (id, idBaru) => ({ ...H.eventById.get(id), id: idBaru });
+  pasang(salin('duo-bapak-anak-konten', 'uji-aksesori-belum-bermodel'), A, 'down', {}, 3);
+  const stikerKupluk = lukisStiker.filter((c) => c === '#c9452f').length, voxelKupluk = titik('#c9452f', sekitar(A[0], A[1], R)).length;
+  const kanvas0 = kanvasBaru;
+  for (let i = 0; i < 10; i++) bingkai();
+  cek(stikerKupluk > 0 && voxelKupluk === 0 && kanvasBaru === kanvas0,
+    'kontrol: tamu yang aksesorinya belum bermodel tetap dilukis ke stiker (bukan voxel), tanpa kanvas baru tiap frame',
+    `${stikerKupluk} fillRect kupluk ke stiker, ${voxelKupluk} titik voxel, ${kanvasBaru - kanvas0} kanvas baru dalam 10 frame`);
+  pasang(salin('bocah-destar-kacamata-hitam', 'uji-anak-belum-bermodel'), A, 'right', {}, 3);
+  const stikerDestar = lukisStiker.filter((c) => c === '#7a2c2c').length, kanvas1 = kanvasBaru;
+  for (let i = 0; i < 10; i++) bingkai();
+  cek(stikerDestar > 0 && kanvasBaru === kanvas1,
+    'kontrol: tamu anak berstiker (salinan tokoh baru tiap frame) tidak membuat kanvas stiker baru tiap frame',
+    `${stikerDestar} fillRect destar ke stiker, ${kanvasBaru - kanvas1} kanvas baru dalam 10 frame`);
+
+  H.eventHidup.length = 0;
+  cek(!galat.length, 'frame-frame uji aksesori tamu tenar tanpa galat', galat.join(' | '));
+}
+
+// ------------------------------------------------------------------ 28
+/* Gorden kiri yang lepas (MOD.gordenLepas; drawWindow & gordenKiriLepas di
+   room.js, gordenKiri & gordenKiriBebas di ruang3d.js). angin-kencang-gorden
+   menulis 'angin' selama 6 dtk pertama, gorden-lepas-kait true sampai
+   dikaitkan lagi. 3D dibaca dari WebGL2 perekam seperti 25 dengan penyangga
+   TERAKHIR per wadah — perabot cuma diunggah waktu dibangun ulang —, dan
+   ringanAktif & matchMedia dibayangi seperti 26. Panel = titik berwarna kain
+   gorden di x 176,5..196, tinggi 37..86; di perabot rumbai lambrequin
+   (82,6..85,2) ikut terbaca, jadi "panelnya pergi" = tak ada titik di bawah
+   82. Benderanya ditulis langsung ke MOD (TIGA.gambar() tidak lewat
+   resetMod). 2D: drawWindow, tick, dan gambarDinding event dipanggil
+   langsung di ctx palsu ketat; gerak dikurangi menyala di sandbox, jadi
+   kibar 2D yang terbaca adalah posenya yang diam. */
+{
+  console.log(tebal('\n3D & 2D: gorden kiri berkibar dan lepas kait (MOD.gordenLepas)'));
+  const ctx = muatKonteks();
+  ctx.__ctxPalsu.__kendali.ketat = false;
+  Object.assign(ctx, { WeakMap, Proxy, Infinity, NaN, undefined });
+  const rekam = { penyangga: [], unggah: [] };
+  pasang3D(ctx, glPalsu(rekam));
+  ctx.__panggung = { clientWidth: 800, clientHeight: 450, appendChild() {} };
+  ctx.__jendela = { devicePixelRatio: 1 };
+  ctx.__uji = { ringan: false, gerak: { matches: false } };
+  const log = konsol(() => jalankan(ctx, '((stageInner, window, ringanAktif, matchMedia) => {\n' + SRC_3D
+    + '\n})(__panggung, __jendela, () => __uji.ringan, () => __uji.gerak)'));
+  const H = ctx.__jembatan__;
+  resetRuangan(ctx, buatPristine(ctx));
+  const S = buatS(ctx, { jam: 12, hujan: 0, petir: false, ramai: false });
+  H.eventHidup.length = 0;
+  cek(jalankan(ctx, 'TIGA.aktif === true') && !log.length && rekam.penyangga.length === NAMA_WADAH.length,
+    'WebGL2 perekam menyala untuk uji gorden (ringanAktif & matchMedia dibayangi)', log.join(' | '));
+  const galat = [], terakhir = new Map();
+  const bingkai = (n = 1) => {
+    for (let k = 0; k < n; k++) {
+      rekam.unggah.length = 0;
+      galat.push(...konsol(() => jalankan(ctx, 'now += 100; TIGA.kamera(0.016); TIGA.gambar(new Set())')));
+      const nama = new Map(rekam.penyangga.map((b, i) => [b, NAMA_WADAH[i]]));
+      for (const [b, d] of rekam.unggah) terakhir.set(nama.get(b), d);
+    }
+  };
+  const KAIN = ['#5f9068', '#3e6b4f', '#2c4e38'];
+  const KAIN_RGB = KAIN.map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255));
+  const panel = (wadah) => {
+    const d = terakhir.get(wadah) || new Float32Array(0), ps = [];
+    for (let i = 0; i + LANGKAH <= d.length; i += LANGKAH) {
+      const p = { x: d[i], y: d[i + 1], z: d[i + 2] };
+      if (p.x < 176.5 || p.x > 196 || p.y < 37 || p.y > 86.01 || p.z < 99 || p.z > 125) continue;
+      if (KAIN_RGB.some((c) => c.every((v, j) => Math.abs(v - d[i + 6 + j]) < 2e-3))) ps.push(p);
+    }
+    return ps;
+  };
+  const rentang = (ps, k) => (ps.length ? [Math.min(...ps.map((p) => p[k])), Math.max(...ps.map((p) => p[k]))] : [NaN, NaN]);
+  const sidik = (ps) => ps.map((p) => [p.x, p.y, p.z].map((v) => v.toFixed(3)).join(',')).sort().join(' ');
+  const ket = (ps) => `${ps.length} titik, x ${rentang(ps, 'x').map((v) => v.toFixed(2))}, y ${rentang(ps, 'y').map((v) => v.toFixed(2))}`
+    + `, z ${rentang(ps, 'z').map((v) => v.toFixed(2))}`;
+  const pasang = (v) => { H.MOD.gordenLepas = v; };
+  const pergi = () => panel('perabot').every((p) => p.y > 82);
+  const zMaks = (n) => { const zs = []; for (let k = 0; k < n; k++) { bingkai(); zs.push(rentang(panel('dinamis'), 'z')[1]); } return zs; };
+  const lebar = (v) => Math.max(...v) - Math.min(...v);
+  const semua = [];
+
+  // --- biasa: panel kiri di grup perabot, grup dinamis tanpa kain gorden
+  bingkai(2);
+  const perabot0 = panel('perabot');
+  cek(rentang(perabot0, 'y')[0] < 38.01 && !panel('dinamis').length,
+    'kontrol: bendera padam — panel kiri statis di grup perabot (sampai tinggi 38), grup dinamis tanpa kain gorden',
+    'perabot ' + ket(perabot0) + '; dinamis ' + ket(panel('dinamis')));
+
+  // --- angin: mengembang bertahap lalu bergoyang ke depan
+  pasang('angin');
+  bingkai();
+  const awal = panel('dinamis');
+  bingkai(30);
+  const kibar = panel('dinamis'), [, zK] = rentang(kibar, 'z'), [, xK] = rentang(kibar, 'x'), [yK] = rentang(kibar, 'y');
+  semua.push(awal, kibar);
+  cek(pergi(), "'angin': panel kiri pindah dari grup perabot (yang tersisa di sana cuma rumbai lambrequin di atas 82)", ket(panel('perabot')));
+  cek(kibar.length > 0 && zK > 102.4 + 4 && xK > 184 + 1 && yK > 38 + 2,
+    "'angin': lipatannya mengembang di grup dinamis — maju > 4 ke depan, melebar ke kaca, ujung bawah terangkat", ket(kibar));
+  cek(awal.length > 0 && rentang(awal, 'z')[1] < 102.4 + 2.5,
+    "'angin': peralihannya bertahap — frame pertama baru sedikit maju", 'frame 1: ' + ket(awal));
+  const goyang = zMaks(6);
+  cek(lebar(goyang) > 0.5 && Math.min(...goyang) > 102.4 + 3,
+    "'angin': kainnya bergoyang ke depan antar frame dan tetap di depan", 'z depan ' + goyang.map((v) => v.toFixed(2)).join(' '));
+  for (const [nama, sakelar] of [['gerak dikurangi', (v) => { ctx.__uji.gerak.matches = v; }], ['mode ringan', (v) => { ctx.__uji.ringan = v; }]]) {
+    sakelar(true);
+    bingkai();
+    const a = panel('dinamis'), diam = zMaks(3);
+    bingkai();
+    const b = panel('dinamis');
+    sakelar(false);
+    semua.push(a, b);
+    cek(a.length > 0 && sidik(a) === sidik(b) && lebar(diam) < 1e-6 && rentang(a, 'z')[1] > 102.4 + 6,
+      `'angin' + ${nama}: pose mengembang penuh yang statis — tanpa ayunan`, ket(a) + '; z depan ' + diam.map((v) => v.toFixed(2)).join(' '));
+  }
+
+  // --- lepas kait: melorot miring dari kait luar, menjuntai ke depan, diam
+  pasang(true);
+  bingkai(40);
+  const lorot = panel('dinamis'), diX = (x) => lorot.filter((p) => Math.abs(p.x - x) < 0.01);
+  const luar = rentang(diX(178), 'y')[1], dalam = rentang(diX(184), 'y')[1], zDalam = rentang(diX(184), 'z')[1];
+  semua.push(lorot);
+  cek(pergi() && Math.abs(luar - 86) < 0.01 && dalam < 86 - 12 && rentang(lorot, 'y')[0] < 38.01,
+    'lepas kait: kolom luar masih tergantung di kaitnya (86), kolom sisi kaca melorot > 12, kainnya tetap menjuntai sampai bawah',
+    `puncak luar ${luar.toFixed(2)}, dalam ${dalam.toFixed(2)}; ${ket(lorot)}`);
+  cek(zDalam > 101.7 + 2, 'lepas kait: ujung yang melorot condong ke depan dari garis ikat', 'z depan kolom sisi kaca ' + zDalam.toFixed(2));
+  bingkai(3);
+  cek(sidik(panel('dinamis')) === sidik(lorot), 'lepas kait: tanpa ayunan — menjuntai diam sampai dikaitkan lagi');
+
+  // --- padam: kembali pelan, lalu persis ke grup perabot
+  pasang(false);
+  bingkai();
+  const pulang = panel('dinamis');
+  bingkai(40);
+  cek(pulang.length > 0 && !panel('dinamis').length && sidik(panel('perabot')) === sidik(perabot0),
+    'bendera padam: frame pertama panelnya masih kembali di grup dinamis, lalu persis ke grup perabot semula',
+    `pulang ${ket(pulang)}; perabot ${ket(panel('perabot'))} vs ${ket(perabot0)}; dinamis ${ket(panel('dinamis'))}`);
+  cek(semua.flat().every((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) && !galat.length,
+    'frame-frame uji gorden: semua titik hingga, tanpa galat', galat.join(' | '));
+
+  // --- 2D: drawWindow membaca bendera yang sama (ctx palsu ketat)
+  const J = JSON.parse(jalankan(ctx, 'JSON.stringify(JENDELA)'));
+  const rekam2D = (kode) => {
+    const k = buatCtxPalsu({ ketat: true }), isi = [], fr = k.fillRect;
+    k.fillRect = function (...a) { isi.push([...a, String(k.fillStyle)]); return fr.apply(this, a); };
+    ctx.__k2 = k;
+    let g = '';
+    try { jalankan(ctx, kode); } catch (e) { g = e.message; }
+    return { g, isi };
+  };
+  const lukis2D = (nilai, tiga = false) => {
+    pasang(nilai);
+    const { g, isi } = rekam2D(`TIGA.aktif = ${tiga}; try { gambarKe(__k2, () => drawWindow(false)); } finally { TIGA.aktif = true; }`);
+    pasang(false);
+    const kain = isi.filter(([x, y, , , c]) => x < J.x && y >= J.y - 2 && KAIN.includes(c));
+    const kolom = [0, 1, 2, 3, 4, 5].map((i) => J.x - 8 + i);
+    return { g, kain,
+      puncak: kolom.map((cx) => Math.min(...kain.filter(([x, , w]) => x <= cx && cx < x + w).map(([, y]) => y))),
+      kanan: Math.max(...kain.map(([x, , w]) => x + w)), dasar: Math.max(...kain.map(([, y, , h]) => y + h)) };
+  };
+  const d0 = lukis2D(false), dK = lukis2D(true), dA = lukis2D('angin');
+  const teks2D = (d) => d.g || `puncak ${d.puncak.join('/')}, kanan ${d.kanan}, dasar ${d.dasar}`;
+  cek(!d0.g && d0.puncak.every((y) => y === J.y - 2) && d0.kanan === J.x - 2 && d0.dasar === J.y + J.h + 4,
+    'kontrol 2D: bendera padam — panel kiri drawWindow utuh selebar 6 dari kait sampai bawah', teks2D(d0));
+  cek(!dK.g && dK.puncak[0] === J.y - 2 && dK.puncak.every((y, i) => !i || y > dK.puncak[i - 1])
+    && dK.puncak[5] - dK.puncak[0] >= 12 && dK.dasar === J.y + J.h + 4,
+    '2D lepas kait: kolom luar masih di kaitnya, makin ke kaca makin melorot (miring), kainnya tetap sampai bawah', teks2D(dK));
+  cek(!dA.g && dA.kanan > J.x - 2 + 2 && dA.dasar < J.y + J.h + 4 && dA.puncak.every((y) => y === J.y - 2),
+    "2D 'angin': lipatan di bawah ikat melambai ke kaca dan ujungnya terangkat (pose gerak dikurangi)", teks2D(dA));
+  const t0 = lukis2D(false, true), tL = lukis2D(true, true);
+  cek(!t0.g && !tL.g && t0.kain.length > 0 && !tL.kain.length,
+    'pelukis dinding 3D: panel kiri yang lepas tidak dilukis ke tekstur dinding (benda dinamis sendiri); bendera padam tetap dilukis',
+    `padam ${t0.kain.length} fillRect kain, lepas ${tL.kain.length}`);
+
+  // --- event: kapan benderanya menyala & padam, dan tidak ada kain dobel
+  const jalanEvent = (id, umur) => {
+    const def = H.eventById.get(id), E = buatE(def), jejak = [];
+    if (def.mulai) def.mulai(E, S);
+    for (const u of umur) {
+      jalankan(ctx, 'resetMod()');
+      E.umur = u;
+      def.tick(E, 0.1, S);
+      jejak.push(H.MOD.gordenLepas);
+    }
+    jalankan(ctx, 'resetMod()');
+    for (const a of E.aktor) { a.eventKerja = null; a.pose = null; }
+    return { E, jejak: JSON.stringify(jejak) };
+  };
+  const eKait = jalanEvent('gorden-lepas-kait', [1, 8.5, 13.9, 14.1, 15, 25]);
+  cek(eKait.jejak === '[true,true,true,false,false,false]',
+    'gorden-lepas-kait: bendera true sampai dikaitkan lagi (14 dtk), lalu padam sampai event selesai — tidak ditulis ulang tick', eKait.jejak);
+  const eAngin = jalanEvent('angin-kencang-gorden', [0.5, 3, 5.9, 6.1, 20]);
+  cek(eAngin.jejak === '["angin","angin","angin",false,false]',
+    "angin-kencang-gorden: bendera 'angin' selama 6 dtk pertama", eAngin.jejak);
+  eKait.E.umur = 5;
+  H.eventHidup.length = 0;
+  H.eventHidup.push(eKait.E);
+  const dinding = rekam2D('gambarKe(__k2, () => gambarLapis("gambarDinding"))');
+  H.eventHidup.length = 0;
+  const dobel = dinding.isi.filter(([x, y, w, h]) => x < J.x - 2 && x + w > J.x - 8 && y < J.y + 12 && y + h > J.y - 8);
+  cek(!dinding.g && !dobel.length,
+    'gorden-lepas-kait tidak lagi melukis kain melorot di gambarDinding (2D tertimbun ceruk, 3D dobel di balik panel)',
+    dinding.g || dobel.map((a) => a.join(',')).join(' | '));
+}
+
+// ------------------------------------------------------------------ 29
+/* Bayangan kontak (bayangKontak/kontakOrang/tinggiPijak) dan bahu lembut
+   (bahu() di FS). Seperti bagian 18: WebGL2 palsu yang mencatat isi
+   penyangga dibungkus supaya program melaporkan uniform cahaya & uBahu saja,
+   lokasinya membawa namanya, dan nilainya disalin; ringanAktif & matchMedia
+   dibayangi parameter untuk ruang3d.js saja (ringan = peta bayangan mati).
+   Gerak dikurangi menyala: duduk/bangkit & hadap langsung sampai. Cakram
+   dikenali dari rgb-nya (#20301f, warna elips bayangan kaki 2D, tidak
+   dipakai benda 3D lain); satu pegawai berpalet unik (bagian 15). Standby
+   bawaan sandbox sudah lenyap di ambang (x -14): tanpa cakram. Bahu lembut
+   dibaca dari teks FS — `float bahu(float x)` dijalankan sebagai JS (float →
+   let) — dan cahaya muka atas/tegak dihitung dari uniform rekaman dengan
+   rumus FS yang sama, tanpa bayangan (permukaan yang terkena cahaya kunci). */
+{
+  console.log(tebal('\n3D: bayangan kontak di kaki, bahu lembut cahaya siang'));
+  const ctx = muatKonteks();
+  const H = ctx.__jembatan__;
+  ctx.__ctxPalsu.__kendali.ketat = false;
+  Object.assign(ctx, { WeakMap, Proxy, Uint32Array, Uint8Array, Infinity, NaN, undefined });
+  jalankan(ctx, 'globalThis.window = globalThis; globalThis.devicePixelRatio = 1');
+  const penyangga = new Map(), uni = {}, kendali = { ringan: true };
+  const dasar = glPalsu(null, penyangga), AKTIF = ['uLangit', 'uTanah', 'uKunci', 'uArah', 'uLampuPos[0]', 'uLampuWarna[0]', 'uBahu'];
+  const gl = new Proxy({}, {
+    get(t, k) {
+      if (k === 'getProgramParameter') return (p, q) => (q === dasar.ACTIVE_UNIFORMS ? AKTIF.length : true);
+      if (k === 'getActiveUniform') return (p, i) => ({ name: AKTIF[i] });
+      if (k === 'getUniformLocation') return (p, nama) => ({ nama });
+      if (k === 'uniform4fv' || k === 'uniform3fv') return (loc, d) => { if (loc && loc.nama) uni[loc.nama] = Float32Array.from(d); };
+      if (k === 'uniform1f') return (loc, v) => { if (loc && loc.nama) uni[loc.nama] = v; };
+      return dasar[k];
+    },
+  });
+  pasang3D(ctx, gl);
+  ctx.__k29 = { ringan: () => kendali.ringan, media: (q) => ({ matches: /reduced-motion/.test(q), addEventListener() {} }) };
+  const galat = [];
+  const diam = (fn) => {
+    const [e, w] = [console.error, console.warn];
+    console.error = console.warn = (...a) => { galat.push(a.map(String).join(' ')); };
+    try { return fn(); } finally { [console.error, console.warn] = [e, w]; }
+  };
+  diam(() => jalankan(ctx, '((ringanAktif, matchMedia) => {\n' + SRC_3D + '\n})(__k29.ringan, __k29.media)'));
+  resetRuangan(ctx, buatPristine(ctx));
+  H.eventHidup.length = 0;
+  const setel = (jam) => { buatS(ctx, { jam, hujan: 0, petir: false, ramai: false }); jalankan(ctx, 'ambBasis = null'); };
+  setel(12);
+  const bingkai = () => diam(() => { penyangga.clear(); jalankan(ctx, 'now += 100; TIGA.kamera(0.016); TIGA.gambar(new Set())'); });
+  // titik (posisi, normal y, alfa) yang rgb-nya persis hex, dari frame terakhir, urut penyangganya
+  const titik = (hex, saring = () => true) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255), hasil = [];
+    for (const d of penyangga.values()) {
+      for (let i = 0; i + 13 <= d.length; i += 13) {
+        if (!(Math.abs(d[i + 6] - r) < 2e-3 && Math.abs(d[i + 7] - g) < 2e-3 && Math.abs(d[i + 8] - b) < 2e-3)) continue;
+        const p = { x: d[i], y: d[i + 1], z: d[i + 2], ny: d[i + 4], a: d[i + 9] };
+        if (saring(p)) hasil.push(p);
+      }
+    }
+    return hasil;
+  };
+  const KONTAK = '#20301f';
+  // cakram frame ini: pusat & jari-jari kotak pembatasnya, tinggi, alfa inti & tepi, arah mukanya
+  const cakram = () => {
+    const ps = titik(KONTAK);
+    if (!ps.length) return { n: 0, x: NaN, z: NaN, rx: NaN, rz: NaN, y: [], alfa: NaN, tepi: NaN, normalAtas: false, hadapAtas: false };
+    const rentang = (k) => [Math.min(...ps.map((p) => p[k])), Math.max(...ps.map((p) => p[k]))];
+    const [x0, x1] = rentang('x'), [z0, z1] = rentang('z');
+    // luas bertanda di bidang (x, z): negatif = berlawanan jarum jam dilihat dari atas,
+    // seperti tutup timbul() — lintasan pudar membuang muka punggung
+    let hadapAtas = ps.length % 3 === 0;
+    for (let i = 0; i + 2 < ps.length; i += 3) {
+      const [p, q, r] = [ps[i], ps[i + 1], ps[i + 2]];
+      if (!((q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x) < 0)) hadapAtas = false;
+    }
+    return { n: ps.length, x: (x0 + x1) / 2, z: (z0 + z1) / 2, rx: (x1 - x0) / 2, rz: (z1 - z0) / 2,
+      y: [...new Set(ps.map((p) => +p.y.toFixed(3)))], alfa: Math.max(...ps.map((p) => p.a)), tepi: Math.min(...ps.map((p) => p.a)),
+      normalAtas: ps.every((p) => p.ny === 1), hadapAtas };
+  };
+  const tulis = (c) => (c.n ? `${c.n} titik, pusat ${c.x.toFixed(2)}/${c.z.toFixed(2)}, jari ${c.rx.toFixed(2)}x${c.rz.toFixed(2)}, y ${c.y.join('/')}, alfa ${c.alfa.toFixed(3)}..${c.tepi.toFixed(3)}` : 'tanpa cakram');
+  const sama = (p, q, d = 0.01) => Math.abs(p - q) < d;
+  const f3 = (v) => (Number.isFinite(v) ? v.toFixed(3) : String(v));
+
+  bingkai();
+  const kosong = cakram();
+  const PAL = { main: '#5be0c9', pants: '#c95be0', skin: '#e0c95b' };      // tidak dipakai benda lain (bagian 15)
+  const a = Object.assign(buatSatuOrang(ctx), { x: 100, y: 252, phase: 0, face: 'down', hadap: 'down' });
+  a.pal = Object.assign({}, a.pal, PAL);
+  ctx.__orangUji = a;
+  jalankan(ctx, 'agents.set("uji-kontak", __orangUji)');
+  const [SEPATU, LANE_DOWN, MKX, MKY, BACA] = JSON.parse(jalankan(ctx, 'JSON.stringify([SEPATU, LANE_DOWN, MEJA_KERJA_X[0], MEJA_KERJA_Y, BACA])'));
+  // alfa badan (baju palet uji) di frame terakhir
+  const alfaBadan = () => { const b = titik(PAL.main); return b.length ? b[0].a : NaN; };
+
+  bingkai();
+  const berdiri = cakram();
+  cek(kosong.n === 0 && berdiri.n > 0 && berdiri.n % 9 === 0,
+    'bayangan kontak: satu cakram muncul bersama pegawai yang berdiri (kontrol: tanpa orang yang tampak, tidak ada)', `kosong ${tulis(kosong)}; berdiri ${tulis(berdiri)}`);
+  cek(sama(berdiri.x, a.x) && sama(berdiri.z, a.y) && berdiri.y.length === 1 && berdiri.y[0] > 0.05 && berdiri.y[0] < 0.15
+    && berdiri.normalAtas && berdiri.hadapAtas,
+    'cakram di lantai tepat di bawah kakinya: berpusat di titik kaki, di atas garis nat (0,05) & di bawah petak silau (0,15), menghadap atas', tulis(berdiri));
+  // sol tiap sepatu (titik sepatu terendah di dekatnya): pusatnya di inti pekat elips
+  const sol = titik(SEPATU, (p) => Math.abs(p.x - a.x) < 14 && Math.abs(p.z - a.y) < 16 && p.y < 0.5);
+  const jariSol = [-1, 1].map((s) => {
+    const ps = sol.filter((p) => Math.sign(p.x - a.x) === s);
+    if (!ps.length) return NaN;
+    const cx = ps.reduce((t, p) => t + p.x, 0) / ps.length, cz = ps.reduce((t, p) => t + p.z, 0) / ps.length;
+    return Math.hypot((cx - berdiri.x) / berdiri.rx, (cz - berdiri.z) / berdiri.rz);
+  });
+  cek(jariSol.every((r) => r < 0.5), 'kedua sol sepatunya di inti pekat cakram (jari-jari ternormal < 0,5)', jariSol.map(f3).join(', '));
+  cek(berdiri.alfa > 0.18 && berdiri.alfa < 0.45 && berdiri.tepi === 0,
+    'mode ringan (peta bayangan mati): intinya lebih pekat dari elips 2D (0,18 rata), tepinya landai sampai bening', tulis(berdiri));
+
+  kendali.ringan = false;
+  bingkai();
+  const nyala = cakram();
+  kendali.ringan = true;
+  cek(nyala.n === berdiri.n && sama(nyala.rx, berdiri.rx) && sama(nyala.rz, berdiri.rz) && nyala.alfa > 0 && nyala.alfa < 0.5 * berdiri.alfa,
+    'peta bayangan menyala: cakram yang sama jauh lebih tipis (< separuh mode ringan) — tidak menggelapkan dua kali',
+    `ringan ${f3(berdiri.alfa)}, nyala ${f3(nyala.alfa)}`);
+
+  a.angkat = 10;
+  bingkai();
+  const angkat = cakram();
+  a.angkat = 0;
+  a.slotY = 252; a.y = 248;                         // senam Jumat: 4 di atas slotY = loncat
+  bingkai();
+  const lompat = cakram();
+  a.slotY = null; a.y = 252;
+  const kecil = (c) => c.n > 0 && sama(c.y[0], berdiri.y[0]) && c.y.length === 1 && c.rx < berdiri.rx && c.rz < berdiri.rz && c.alfa < berdiri.alfa;
+  cek(kecil(angkat) && kecil(lompat) && sama(lompat.z, 252) && lompat.alfa > angkat.alfa,
+    'terangkat (a.angkat 10, loncatan senam): cakramnya tetap di lantai, mengecil & menipis — makin tinggi makin tipis',
+    `angkat ${tulis(angkat)}; lompat ${tulis(lompat)}; berdiri ${tulis(berdiri)}`);
+
+  a.rebah = Math.PI / 2;
+  bingkai();
+  const rebah = cakram();
+  a.rebah = 0;
+  cek(rebah.x > a.x + 10 && rebah.rx > 2.5 * berdiri.rx && sama(rebah.rz, berdiri.rz) && sama(rebah.alfa, berdiri.alfa, 1e-3),
+    'rebah (ditekel): cakramnya memanjang sepanjang badan yang terkapar ke +x, seperti elips 2D-nya', tulis(rebah));
+
+  a.standby = true;
+  bingkai();
+  const standby = cakram(), alfaStandby = alfaBadan();
+  a.standby = false;
+  a.x = -4; a.y = LANE_DOWN;
+  bingkai();
+  const ambang = cakram(), alfaAmbang = alfaBadan(), badanAmbang = titik(PAL.main);
+  cek(sama(alfaStandby, 0.55) && sama(standby.alfa, berdiri.alfa * alfaStandby, 1e-3)
+    && alfaAmbang > 0.1 && alfaAmbang < 0.9 && sama(ambang.alfa, berdiri.alfa * alfaAmbang, 1e-3),
+    'cakramnya sepudar badannya: standby 0,55, memudar di ambang pintu samping',
+    `standby badan ${f3(alfaStandby)} cakram ${f3(standby.alfa)}; ambang badan ${f3(alfaAmbang)} cakram ${f3(ambang.alfa)}`);
+  cek(ambang.n > 0 && sama(ambang.x, tengahX(badanAmbang), 0.3) && ambang.y[0] > 0.35 && ambang.y[0] < 0.5,
+    'di ambang: ikut badannya yang digeser ke teras, di atas plat ambang (0,35), tidak tenggelam di bawahnya',
+    `${tulis(ambang)}; badan x ${f3(tengahX(badanAmbang))}`);
+
+  a.x = 200; a.y = 230;                              // di atas karpet merah meja rapat
+  bingkai();
+  const karpet = cakram();
+  cek(karpet.n > 0 && karpet.y[0] > 0.8 && karpet.y[0] < 0.95 && sama(karpet.x, 200),
+    'di karpet meja rapat yang timbul: cakramnya di atas karpet (0,8), bukan di lantai di bawahnya', tulis(karpet));
+
+  Object.assign(a, { x: MKX, y: MKY, station: 'think', face: 'up', hadap: 'up' });
+  bingkai();
+  const duduk = cakram();
+  a.station = 'idle';
+  bingkai();
+  const bangkit = cakram();
+  Object.assign(a, { x: BACA.slot[1], y: BACA.titikY, pose: 'dudukLantai' });
+  bingkai();
+  const lesehan = cakram();
+  a.pose = null;                                     // rutinitas baca: sedetik menegakkan badan di bantal
+  bingkai();
+  const diBantal = cakram();
+  cek(duduk.n === 0 && lesehan.n === 0,
+    'yang duduk tidak bercakram: kursi meja kerja & bantal lesehan sudah menapak', `meja kerja ${tulis(duduk)}; lesehan ${tulis(lesehan)}`);
+  cek(bangkit.n > 0 && sama(bangkit.x, MKX) && diBantal.n > 0 && diBantal.y[0] > 3.5 && diBantal.y[0] < 3.65,
+    'kontrol: di titik yang sama tapi berdiri, cakramnya ada — di bantal lesehan di atas bantalnya (3,5)',
+    `meja kerja ${tulis(bangkit)}; bantal ${tulis(diBantal)}`);
+
+  jalankan(ctx, 'agents.delete("uji-kontak")');
+  H.eventHidup.push(buatE(H.eventById.get('kucing-tidur-di-karpet')));
+  bingkai();
+  const kucing = cakram();
+  H.eventHidup.length = 0;
+  cek(kucing.n > 0 && kucing.y[0] > 0.8 && kucing.y[0] < 0.95 && Math.hypot(kucing.x - 242, kucing.z - 246) < 3 && sama(kucing.alfa, berdiri.alfa, 1e-3),
+    'kucing tidur di karpet: cakram di bawah badannya yang meringkuk, di atas karpet', tulis(kucing));
+
+  // --- bahu lembut: fungsi FS sungguhan, dijalankan sebagai JS
+  const FS = (SRC_3D.match(/const FS = `([\s\S]*?)`;/) || [])[1] || '';
+  const tubuhBahu = (FS.match(/float bahu\(float x\) \{([\s\S]*?)\r?\n\}/) || [])[1];
+  let bahu = () => NaN;
+  try { if (tubuhBahu) bahu = new Function('x', 'uBahu', tubuhBahu.replace(/\bfloat\b/g, 'let')); } catch { /* bukan JS lagi: semua cek di bawah merah */ }
+  const ambangBahu = uni.uBahu;
+  cek(ambangBahu > 0.5 && ambangBahu < 1 && ambangBahu === jalankan(ctx, 'RUANG3D.bahu && RUANG3D.bahu.ambang'),
+    'uniform uBahu tiap frame = RUANG3D.bahu.ambang (pintu konsol untuk membandingkan), dan aktif (< 1)', String(ambangBahu));
+  cek(/terang = vec3\(bahu\(terang\.r\), bahu\(terang\.g\), bahu\(terang\.b\)\);/.test(FS)
+    && /vec3 rgb = mix\(terang, dasar, clamp\(vEmisi, 0\.0, 1\.0\)\);/.test(FS),
+    'FS: bahu cuma di bagian yang diterangi — yang memancar (vEmisi 1) tetap warna dasarnya persis');
+  const kurva = [];
+  for (let i = 0; i <= 1600; i++) kurva.push([i / 1000, bahu(i / 1000, ambangBahu)]);
+  const naikLandai = kurva.every(([, y], i) => !i || (y - kurva[i - 1][1] >= 0 && y - kurva[i - 1][1] <= 0.001 + 1e-9));
+  cek(kurva.every(([x, y]) => x > ambangBahu || y === x) && naikLandai && kurva.every(([, y]) => y <= 1) && bahu(2 - ambangBahu, ambangBahu) === 1,
+    `bahu(): apa adanya sampai ambang ${ambangBahu}, lalu naik landai (kemiringan 1 → 0, tak pernah turun) sampai tepat 1 di ${(2 - ambangBahu).toFixed(2)}`,
+    kurva.filter((_, i) => i % 100 === 0).map(([x, y]) => x.toFixed(1) + '→' + (+y).toFixed(4)).join(' '));
+  cek(kurva.every(([x]) => bahu(x, 1) === Math.min(x, 1)), 'ambang 1 = potong keras seperti dulu (mudah dicabut)');
+
+  // --- terukur: cahaya FS dari uniform rekaman, di lantai tengah (330, 0, 250)
+  cek(/vec3 cahaya = mix\(uTanah, uLangit, n\.y \* 0\.5 \+ 0\.5\);/.test(FS) && /cahaya \+= uKunci \* max\(dot\(n, uArah\), 0\.0\) \* bayang\(\);/.test(FS)
+    && /uLampuWarna\[i\] \* \(0\.35 \+ 0\.65 \* max\(dot\(n, d \/ jarak\), 0\.0\)\) \* redam;/.test(FS),
+    'rumus cahaya FS (belahan + kunci + 16 lampu titik) = rumus ukur uji ini');
+  const cahaya = (n, pos) => {
+    if (!AKTIF.every((k) => uni[k] != null)) return [NaN, NaN, NaN];
+    const t = n[1] * 0.5 + 0.5, dk = Math.max(0, n[0] * uni.uArah[0] + n[1] * uni.uArah[1] + n[2] * uni.uArah[2]);
+    const c = [0, 1, 2].map((i) => uni.uTanah[i] + (uni.uLangit[i] - uni.uTanah[i]) * t + uni.uKunci[i] * dk);
+    const P = uni['uLampuPos[0]'], L = uni['uLampuWarna[0]'];
+    for (let j = 0; j < 16; j++) {
+      const d = [0, 1, 2].map((i) => P[j * 4 + i] - pos[i]), jarak = Math.max(Math.hypot(...d), 0.001);
+      const redam = 1 / (1 + jarak * jarak * P[j * 4 + 3]), nd = Math.max(0, (n[0] * d[0] + n[1] * d[1] + n[2] * d[2]) / jarak);
+      for (let i = 0; i < 3; i++) c[i] += L[j * 3 + i] * (0.35 + 0.65 * nd) * redam;
+    }
+    return c;
+  };
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const [TILE, KERTAS, KREM] = JSON.parse(jalankan(ctx, 'JSON.stringify([P.tile, P.paper, P.cream])')).map(rgb);
+  const kali = (w, c) => w.map((v, i) => v * c[i]), teks = (v) => v.map((x) => x.toFixed(3)).join('/');
+  setel(12); bingkai();
+  const LANTAI = [330, 0, 250], atas = cahaya([0, 1, 0], LANTAI), depan = cahaya([0, 0, 1], LANTAI);
+  cek(atas[0] / depan[0] > 1.15 && atas[0] / depan[0] < 1.35 && depan.every((v) => v > 0.9 && v < 1.05),
+    `pukul 12: muka atas menerima ${teks(atas)}, muka tegak ${teks(depan)} (≈ 2D) — ${(atas[0] / depan[0]).toFixed(2)}x`);
+  const ubin = kali(TILE, atas), kertas = kali(KERTAS, atas);
+  const potong = (v) => v.map((x) => Math.min(x, 1)), lembut = (v) => v.map((x) => bahu(x, ambangBahu));
+  cek([ubin, kertas].every((v) => potong(v)[0] === 1 && potong(v)[1] === 1),
+    `kontrol (potong keras lama): ubin terazo ${teks(ubin)} dan kertas ${teks(kertas)} sama-sama terpotong putih di r/g`);
+  cek(lembut(ubin).every((x) => x < 1) && lembut(kertas).every((x, i) => x - lembut(ubin)[i] >= 2 / 255),
+    'bahu lembut: ubin tidak lagi terpotong, kertas tetap lebih terang darinya di tiap kanal (≥ 2/255)',
+    `ubin ${teks(lembut(ubin))}, kertas ${teks(lembut(kertas))}`);
+  const krem = kali(KREM, depan);
+  cek(lembut(krem).every((x, i) => x >= 0.98 * krem[i]), 'muka tegak: krem dinding belakang nyaris tak tersentuh (turun < 2%)',
+    `${teks(krem)} → ${teks(lembut(krem))}`);
+  setel(20); bingkai();
+  const ubinMalam = kali(TILE, cahaya([0, 1, 0], LANTAI));
+  setel(12);
+  cek(lembut(ubinMalam).every((x, i) => x === ubinMalam[i]), `pukul 20: ubin di muka atas ${teks(ubinMalam)} di bawah ambang — tidak berubah sebit pun`);
+  cek(!galat.length, 'frame-frame uji kontak & bahu tanpa galat', galat.join(' | '));
+}
+
+// ------------------------------------------------------------------ 30
+/* Barang event & bekas ruangan gelombang ketiga. Konteks seperti nyalakan3D
+   (window = global, supaya boneka tamu event tercatat lewat drawPerson),
+   tapi WebGL2 palsunya `rekam`: nama wadah dibaca dari literal WADAH seperti
+   bagian 9..12, jadi "di wadah yang tepat" bisa diperiksa — barang event di
+   dinamis (MODEL_EVENT disusun tiap frame), bekas RUANGAN di perabot (yang
+   cuma diunggah waktu tandaPerabot() berubah; isinya disimpan dari unggahan
+   terakhir). Kartu: fillRect kanvas document selama gambarProp, lewat
+   salinan def yang menandai diProp (seperti bagian 23); kontrolnya def yang
+   SAMA dengan id lain — tanpa model — yang memang dilukis ke kartu. */
+{
+  console.log(tebal('\n3D: barang event & bekas ruangan gelombang ketiga'));
+  const ctx = muatKonteks();
+  const H = ctx.__jembatan__;
+  ctx.__ctxPalsu.__kendali.ketat = false;
+  Object.assign(ctx, { WeakMap, Proxy, Uint32Array, Uint8Array, Infinity, NaN, undefined });
+  jalankan(ctx, 'globalThis.window = globalThis; globalThis.devicePixelRatio = 1');
+  const rekam = { penyangga: [], unggah: [] }, galat = [];
+  pasang3D(ctx, glPalsu(rekam));
+  const logMuat = konsol(() => jalankan(ctx, SRC_3D));
+  resetRuangan(ctx, buatPristine(ctx));
+  const S = buatS(ctx, { jam: 12, hujan: 0, petir: false, ramai: false });
+  H.eventHidup.length = 0;
+  cek(jalankan(ctx, 'TIGA.aktif === true') && rekam.penyangga.length === NAMA_WADAH.length && !logMuat.length,
+    'WebGL2 perekam menyala untuk uji gelombang ketiga, wadahnya terbaca dari literal WADAH',
+    `penyangga ${rekam.penyangga.length} vs WADAH ${NAMA_WADAH.length}; ${logMuat.join(' | ')}`);
+  const lukisan = [];
+  let diProp = false;
+  const buatAsli = ctx.document.createElement;
+  ctx.document.createElement = (tag) => {
+    const el = buatAsli(tag);
+    if (String(tag).toLowerCase() !== 'canvas') return el;
+    const k = el.getContext('2d'), fr = k.fillRect;
+    k.fillRect = function (...a) { if (diProp) lukisan.push(String(k.fillStyle).toLowerCase()); return fr.apply(this, a); };
+    return el;
+  };
+  const keKartu = (hex) => lukisan.filter((c) => hex.includes(c)).length;
+  // satu frame 3D: nama wadah -> isi yang diunggah frame itu
+  let wadah = new Map(), perabot = new Float32Array(0);
+  const bingkai = () => {
+    rekam.unggah.length = 0;
+    const [e, w] = [console.error, console.warn];
+    console.error = console.warn = (...a) => { galat.push(a.map(String).join(' ')); };
+    try { jalankan(ctx, 'now += 100; TIGA.kamera(0.016); TIGA.gambar(new Set())'); } finally { [console.error, console.warn] = [e, w]; }
+    const nama = new Map(rekam.penyangga.map((b, i) => [b, NAMA_WADAH[i]]));
+    wadah = new Map(rekam.unggah.map(([b, d]) => [nama.get(b), d]));
+    if (wadah.has('perabot')) perabot = wadah.get('perabot');
+    return wadah;
+  };
+  // titik yang warna rgb-nya persis hex di satu isi wadah
+  const titikDi = (d, hex, saring = () => true) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255), hasil = [];
+    for (let i = 0; d && i + LANGKAH <= d.length; i += LANGKAH) {
+      if (!(Math.abs(d[i + 6] - r) < 2e-3 && Math.abs(d[i + 7] - g) < 2e-3 && Math.abs(d[i + 8] - b) < 2e-3)) continue;
+      const p = { x: d[i], y: d[i + 1], z: d[i + 2] };
+      if (saring(p)) hasil.push(p);
+    }
+    return hasil;
+  };
+  const dinamis = (hex, saring) => titikDi(wadah.get('dinamis'), hex, saring);
+  const diPerabot = (hex, saring) => titikDi(perabot, hex, saring);
+  const ukuran = (ps) => {
+    const u = { n: ps.length };
+    for (const k of ['x', 'y', 'z']) {
+      const v = ps.map((p) => p[k]);
+      u[k + '0'] = Math.min(...v); u[k + '1'] = Math.max(...v);
+    }
+    return u;
+  };
+  const teks = (u) => (u.n ? `${u.n} titik, x ${u.x0.toFixed(2)}..${u.x1.toFixed(2)} y ${u.y0.toFixed(2)}..${u.y1.toFixed(2)} z ${u.z0.toFixed(2)}..${u.z1.toFixed(2)}` : 'tak ada titik');
+  const kira = (a, b, t = 0.06) => Math.abs(a - b) < t;
+  const sekitar = (x, z, r) => (p) => Math.hypot(p.x - x, p.z - z) < r;
+  // satu event uji hidup; idLain: def yang sama TANPA model (kontrol kartu)
+  const pasang = (id, data = {}, idLain = null) => {
+    const asli = H.eventById.get(id);
+    const def = { ...asli, id: idLain || id, gambarProp(E2, S2) { diProp = true; try { return asli.gambarProp.call(this, E2, S2); } finally { diProp = false; } } };
+    const E = buatE(def);
+    Object.assign(E.data, data);
+    H.eventHidup.length = 0;
+    H.eventHidup.push(E);
+    lukisan.length = 0;
+    return E;
+  };
+  const [DX, BX, TX] = JSON.parse(jalankan(ctx, 'JSON.stringify([pantriX(462), pantriX(424), pantriX(437) + 4.5])'));
+
+  // --- kabel LAN lepas di rak server (x 417 y 66..77, sortY 119; tiang kanan x 414..418 z 116,5..120)
+  const RAK = (p) => p.x > 411 && p.x < 424 && p.y > 36 && p.y < 74 && p.z > 118 && p.z < 124;
+  bingkai();
+  const lanAwal = dinamis('#3d7a4c', RAK).length;
+  pasang('kabel-lan-lepas', { beres: false });
+  bingkai();
+  const lan = ukuran(dinamis('#3d7a4c', RAK)), lanBawah = ukuran(dinamis('#3d7a4c', (p) => RAK(p) && p.y < 50));
+  const rj45 = ukuran(dinamis('#dfe4dc', RAK)), kartuLan = keKartu(['#3d7a4c']);
+  cek(lanAwal === 0 && lan.n > 0 && kira(lan.y0, 42) && kira(lan.y1, 54) && kira(lanBawah.x0, 417) && kira(lanBawah.x1, 418) && lanBawah.z0 > 120,
+    '3D kabel-lan-lepas: kabelnya voxel di wadah dinamis, menggantung lurus di MUKA tiang kanan (x 417, tinggi 42..54 = y 2D 78..66), tidak terbenam di tiang (z <= 120)',
+    `tanpa event ${lanAwal}; kabel ${teks(lan)}; ujung bawah ${teks(lanBawah)}`);
+  cek(rj45.n > 0 && kira(rj45.y0, 40.2) && rj45.z0 > 120 && !diPerabot('#3d7a4c', (p) => RAK(p) && p.z > 121).length,
+    '3D kabel-lan-lepas: berkonektor di ujungnya, dan tidak ikut tercetak ke grup perabot', teks(rj45));
+  cek(kartuLan === 0, '3D kabel-lan-lepas: gambarProp-nya tidak dilukis ke kanvas kartu', `${kartuLan} fillRect hijau kabel`);
+  pasang('kabel-lan-lepas', { beres: true });
+  bingkai();
+  const lanBeres = dinamis('#3d7a4c', RAK).length;
+  pasang('kabel-lan-lepas', { beres: false }, 'uji-kabel-tanpa-model');
+  bingkai();
+  const kontrolLan = keKartu(['#3d7a4c']), lanTanpaModel = dinamis('#3d7a4c', RAK).length;
+  cek(lanBeres === 0 && kontrolLan > 0 && lanTanpaModel === 0,
+    'kontrol: kabel yang sudah beres tak tergambar; gambarProp yang sama tanpa model tetap dilukis ke kartu (tanpa voxel)',
+    `beres ${lanBeres} titik; tanpa model ${kontrolLan} fillRect ke kartu, ${lanTanpaModel} titik`);
+
+  // --- kain penutup dispenser Ramadan (x DX..DX+18 y 254..288, sortY 300; dispenser z 280..290, baki tetes ke 290,6)
+  const DISP = (p) => p.x > DX - 4 && p.x < DX + 22 && p.z > 270 && p.z < 305 && p.y < 60;
+  pasang('ramadan-siang-sunyi');
+  bingkai();
+  const kain = ukuran(dinamis('#c9c3b0', DISP)), lipat = ukuran(dinamis('#b0a98e', DISP)), kartuKain = keKartu(['#c9c3b0', '#e2ddc8', '#b0a98e']);
+  cek(kain.n > 0 && kain.x0 <= DX && kain.x1 >= DX + 18 && kira(kain.y0, 0) && kain.y1 >= 34 && kain.y1 < 36 && kain.z0 <= 280 && kain.z1 > 290.6 && kain.z1 < 293,
+    '3D ramadan-siang-sunyi: kain menyelubungi kotak dispenser sampai baki tetesnya, dari lantai setinggi badannya — bukan kartu 10 di depan & 12 di atasnya',
+    `kain ${teks(kain)}, dispenser x ${DX}..${DX + 18}`);
+  cek(lipat.n > 0 && lipat.z0 >= kain.z1 - 0.01 && kira(lipat.x0, DX + 2) && kira(lipat.x1, DX + 13) && kira(lipat.y0, 4) && kira(lipat.y1, 30),
+    '3D ramadan-siang-sunyi: tiga lipatan tegak di muka kainnya (pantriX(464) + i*5, y 2D 258..284)', teks(lipat));
+  pasang('ramadan-siang-sunyi', {}, 'uji-kain-tanpa-model');
+  bingkai();
+  const kontrolKain = keKartu(['#c9c3b0', '#e2ddc8', '#b0a98e']);
+  cek(kartuKain === 0 && kontrolKain > 0, '3D ramadan-siang-sunyi: gambarProp-nya tidak dilukis ke kartu (kontrol tanpa model: dilukis)',
+    `${kartuKain} vs kontrol ${kontrolKain} fillRect kain`);
+
+  // --- lifter: barbel di lantai pantri (barbelX = pantriX(424), kaki y 270), galon di tangannya
+  const BARBEL = (p) => Math.abs(p.x - BX) < 12 && Math.abs(p.z - 266) < 6 && p.y < 10;
+  pasang('lifter-singlet-merah-putih', { barbelX: BX });
+  bingkai();
+  const barbel = ukuran(dinamis('#22262c', BARBEL)), kilau = dinamis('#4a5058', BARBEL).length, kartuBarbel = keKartu(['#22262c', '#4a5058']);
+  cek(barbel.n > 0 && kilau > 0 && kira(barbel.x0, BX - 10) && kira(barbel.x1, BX + 10) && kira(barbel.y0, 0, 0.01) && kira(barbel.y1, 8) && kira(barbel.z0, 262) && kira(barbel.z1, 270),
+    '3D lifter: barbel voxel tergeletak di lantai pantri — dua piringan bergaris tengah 8 menapak lantai, x-10..x+10, tepi depannya di kaki 2D (z 270)',
+    `barbel ${teks(barbel)}, x ${BX}`);
+  pasang('lifter-singlet-merah-putih', { barbelX: BX }, 'uji-barbel-tanpa-model');
+  bingkai();
+  const kontrolBarbel = keKartu(['#22262c', '#4a5058']);
+  cek(kartuBarbel === 0 && kontrolBarbel > 0, '3D lifter: barbelnya tidak dilukis ke kartu (kontrol tanpa model: dilukis)', `${kartuBarbel} vs kontrol ${kontrolBarbel}`);
+  const Eg = pasang('lifter-singlet-merah-putih');
+  H.eventById.get('lifter-singlet-merah-putih').mulai(Eg, S);
+  const T = Eg.data.t;
+  const galonDi = (x, y, diTangan = true) => {
+    Object.assign(T, { x, y, wp: [], fase: 'letak', hadap: 'right', galonDiTangan: diTangan, barbelDiBahu: false });
+    lukisan.length = 0;
+    bingkai(); bingkai(); bingkai();
+    return ukuran(dinamis('#7db8e8', sekitar(x + 10.5, y + 1, 8)));
+  };
+  const g1 = T ? galonDi(300, 270) : { n: 0 }, kartuGalon = keKartu(['#7db8e8', '#b8dcf4', '#5f9fd4']);
+  const g2 = T ? galonDi(360, 300) : { n: 0 }, gLepas = T ? galonDi(360, 300, false) : { n: 1 };
+  cek(g1.n > 0 && g2.n > 0 && kira(g2.x0 - g1.x0, 60, 0.3) && kira(g2.z0 - g1.z0, 30, 0.3) && kira(g1.y0, 28) && kira(g1.y1, 40)
+    && g1.x0 > 300 && g1.x1 < 300 + 16 && gLepas.n === 0 && kartuGalon === 0,
+    '3D lifter: galon di tangannya voxel di sisi badan setinggi kepala, ikut tamunya berpindah, hilang waktu dipasang; tidak dilukis ke kartu',
+    `di (300, 270) ${teks(g1)} | di (360, 300) ${teks(g2)} | tidak di tangan ${gLepas.n} titik; ${kartuGalon} fillRect galon ke kartu`);
+
+  // --- ember bocor: arsip r(93,130,9,7) sortY 137 & atap r(114,246,8,6) di lantai; rapat r(240,180,10,7)
+  // sortY 187 di taplak (bocornya di atas meja; titik 2D-nya di 3D = dudukan kursi sisi jauh ke-0)
+  // MEJA_RAPAT terkurung di IIFE ruang3d.js: dibaca dari literalnya
+  const mejaRapat = SRC_3D.match(/const MEJA_RAPAT = \{ x0: (\d+), x1: (\d+), z0: (\d+), z1: (\d+), h: (\d+) \}/) || [];
+  const MEJA_Z0 = +mejaRapat[3], MEJA_H = +mejaRapat[5];
+  for (const [id, kunci, cx, cz, r, tinggi, dasar, tempat] of [['bocor-baru-di-atas-arsip', 'emberArsip', 97.5, 133.5, 4.7, 7, 0, 'di lantai'],
+    ['bocor-baru-di-atas-rapat', 'emberRapat', 245, 216, 5.2, 7, MEJA_H, 'di taplak meja rapat, di x tetesnya, di pita kosong barang event'],
+    ['atap-bocor-musim-hujan', 'emberKedua', 118, 249, 4.2, 6, 0, 'di lantai']]) {
+    H.RUANGAN[kunci] = true;
+    pasang(id);
+    bingkai();
+    const e = ukuran(dinamis('#4a7fd0', sekitar(cx, cz, 10))), bibir = dinamis('#79b0e8', sekitar(cx, cz, 10)).length, kartuEmber = keKartu(['#4a7fd0', '#79b0e8']);
+    H.RUANGAN[kunci] = false;
+    bingkai();
+    const sesudah = dinamis('#4a7fd0', sekitar(cx, cz, 10)).length;
+    cek(e.n > 0 && bibir > 0 && kira(e.x0, cx - r) && kira(e.x1, cx + r) && kira((e.z0 + e.z1) / 2, cz, 0.3) && kira(e.y0, dasar) && kira(e.y1, dasar + tinggi)
+      && kartuEmber === 0 && sesudah === 0 && (!dasar || (e.z0 > MEJA_Z0 && e.z0 >= 209 && e.z1 <= 223)),
+      `3D ${id}: ember tabung ${tempat} (${cx}, ${cz}), setinggi ${tinggi}, cuma selagi RUANGAN.${kunci}; tidak dilukis ke kartu`,
+      `ember ${teks(e)}; ${kartuEmber} fillRect ke kartu; sesudah dikosongkan ${sesudah} titik`);
+  }
+
+  // --- bekas RUANGAN di luar persegi kulit perabot: grup perabot
+  H.eventHidup.length = 0;
+  const BEKAS0 = { kabelRapi: false, kartuAPAR: false, aparDiangkat: false, aparAngkat: 0, gelasDispenser: 6, tongPenuh: 0 };
+  const ukur = (ubah = {}) => {
+    Object.assign(H.RUANGAN, ubah);
+    const d = bingkai().get('perabot');
+    return d ? d.length / LANGKAH : null;
+  };
+  ukur(BEKAS0);
+  const diam = ukur(), n0 = perabot.length / LANGKAH;
+  cek(diam === null && n0 > 0, 'kontrol: tanpa perubahan RUANGAN grup perabot tidak dibangun ulang', `frame kedua ${diam}, isi ${n0} titik`);
+
+  // kabel UTP: [warna, y 2D pangkal, panjang menjuntai, panjang rapi]
+  const KABEL = [['#3d7a4c', 50, 24, 14], ['#3565b0', 53, 20, 12], ['#c9a03a', 56, 16, 10]];
+  const kabel = () => KABEL.map(([hex, ky]) => {
+    const ps = diPerabot(hex, RAK);
+    return { hex, semua: ukuran(ps), juntai: ukuran(ps.filter((p) => p.y < 120 - ky - 1.5)) };
+  });
+  const klem = () => ukuran(diPerabot('#4a5058', RAK));
+  const kusut = kabel(), klemKusut = klem();
+  cek(kusut.every((k, i) => k.semua.n > 0 && kira(k.semua.y0, 120 - KABEL[i][1] - KABEL[i][2]) && kira(k.semua.y1, 120 - KABEL[i][1])
+    && k.juntai.x1 - k.juntai.x0 >= 3 && k.juntai.z0 > 120 && k.semua.x0 < 414) && klemKusut.n === 0
+    && !dinamis('#3565b0', RAK).length,
+    '3D bekas kabel UTP rak server: tiga kabel voxel di wadah perabot, menjuntai berkelok di muka tiang kanan sepanjang lukisan 2D, pangkalnya masuk ke rak, tanpa klem',
+    kusut.map((k) => `${k.hex} ${teks(k.semua)} / juntai ${teks(k.juntai)}`).join(' | ') + `; klem ${teks(klemKusut)}`);
+  const nRapi = ukur({ kabelRapi: true }), rapi = kabel(), klemRapi = klem();
+  cek(nRapi !== null && rapi.every((k, i) => kira(k.semua.y0, 120 - KABEL[i][1] - KABEL[i][3]) && kira(k.juntai.x1 - k.juntai.x0, 1))
+    && klemRapi.n > 0 && kira(klemRapi.y0, 69, 0.1) && kira(klemRapi.y1, 71, 0.1),
+    '3D bekas kabelRapi: grup perabot dibangun ulang — kabelnya lurus & memendek, klem pengikat terpasang (y 2D 49..51)',
+    `${nRapi} titik; ` + rapi.map((k) => `${k.hex} ${teks(k.semua)} / juntai ${teks(k.juntai)}`).join(' | ') + `; klem ${teks(klemRapi)}`);
+  const nKusut = ukur({ kabelRapi: false });
+  cek(nKusut === n0, '3D bekas kabelRapi dicabut: kabel menjuntai lagi, geometri perabot kembali persis', `${n0} vs ${nKusut}`);
+
+  // kartu inspeksi APAR (APAR dinamis: tabung x 331..339 z 108..116)
+  const APAR = (p) => p.x > 329 && p.x < 347 && p.z > 107 && p.z < 117 && p.y < 40;
+  const kartuApar = () => ukuran(diPerabot('#e8cf6a', APAR));
+  const tanpaKartu = kartuApar();
+  const nKartu = ukur({ kartuAPAR: true }), k1 = kartuApar(), mano = diPerabot('#3e6b4f', APAR).length;
+  const tabungApar = ukuran(dinamis('#b02a2a', APAR)), kartuDinamis = dinamis('#e8cf6a', APAR).length;
+  cek(tanpaKartu.n === 0 && nKartu !== null && nKartu > n0 && k1.n > 0 && mano > 0 && kartuDinamis === 0
+    && kira(k1.x0, 339.2) && kira(k1.x1, 345) && kira(k1.y0, 9.2) && kira(k1.y1, 17) && k1.x0 >= tabungApar.x1 - 0.01,
+    '3D bekas kartuAPAR: kartu kuning (x 339..345, y 2D 101..109) bermanometer tergantung di sisi kanan APAR, voxel di wadah perabot',
+    `kartu ${teks(k1)}, manometer ${mano} titik, APAR ${teks(tabungApar)}; di dinamis ${kartuDinamis}`);
+  const nAngkat = ukur({ aparAngkat: 6 }), k2 = kartuApar();
+  const nDiangkat = ukur({ aparAngkat: 0, aparDiangkat: true }), k3 = kartuApar();
+  const nKembali = ukur({ aparDiangkat: false }), k4 = kartuApar();
+  cek(nAngkat !== null && kira(k2.y0, 15.2) && kira(k2.y1, 23) && nDiangkat !== null && k3.n === 0 && nKembali === nKartu && kira(k4.y0, 9.2),
+    '3D bekas kartuAPAR: ikut APAR-nya terangkat (aparAngkat 6), hilang selagi APAR-nya dibawa keliling (aparDiangkat), lalu kembali',
+    `angkat ${teks(k2)} | diangkat ${teks(k3)} | kembali ${teks(k4)}`);
+  const nTanpaKartu = ukur({ kartuAPAR: false });
+  cek(nTanpaKartu === n0 && kartuApar().n === 0, '3D bekas kartuAPAR dicabut: geometri perabot kembali persis', `${n0} vs ${nTanpaKartu}`);
+
+  // menara gelas kertas di atas tutup galon (tabung galon 34..45, tutup 45..48)
+  const GELAS = (p) => Math.abs(p.x - (DX + 9)) < 3 && Math.abs(p.z - 285) < 3 && p.y > 30;
+  const gelas = () => ukuran(['#f2f0e6', '#e4e0d2'].flatMap((h) => diPerabot(h, GELAS)));
+  const enam = gelas(), gelasDinamis = dinamis('#e4e0d2', GELAS).length;
+  const nDua = ukur({ gelasDispenser: 2 }), dua = gelas();
+  jalankan(ctx, 'MOD.galonLepas = true');
+  const nLepas = ukur(), lepas = gelas();
+  jalankan(ctx, 'MOD.galonLepas = false');
+  const nNol = ukur({ gelasDispenser: 0 }), nol = gelas();
+  const nEnam = ukur({ gelasDispenser: 6 });
+  cek(enam.n > 0 && gelasDinamis === 0 && kira(enam.y0, 48) && kira(enam.y1, 60) && enam.x1 - enam.x0 < 4.5,
+    '3D bekas gelasDispenser: menara 6 gelas kertas voxel (wadah perabot) di atas tutup galon, segaris sumbunya', `gelas ${teks(enam)}`);
+  cek(nDua !== null && kira(dua.y1, 52) && nLepas !== null && kira(lepas.y0, 34) && kira(lepas.y1, 38) && nNol !== null && nol.n === 0 && nEnam === n0,
+    '3D bekas gelasDispenser: tinggi menara ikut sisa gelasnya (2: sampai 52, 0: habis), galon dicabut: di kepala dispenser; diisi ulang kembali persis',
+    `2 gelas ${teks(dua)} | galon lepas ${teks(lepas)} | 0 gelas ${teks(nol)} | ${n0} vs ${nEnam}`);
+
+  // isi tong sampah pantri yang menyembul (tong: tabung r 5 setinggi 11 di (TX, 283))
+  const TONG = (p) => Math.hypot(p.x - TX, p.z - 283) < 9 && p.y > 9.5 && p.y < 20;
+  const isiTong = () => Object.fromEntries(['#f2f0e6', '#d9b96a', '#c9cdd1'].map((h) => [h, diPerabot(h, TONG)]));
+  const jariTong = (o) => Math.max(0, ...Object.values(o).flat().map((p) => Math.hypot(p.x - TX, p.z - 283)));
+  const tongKosong = Object.values(isiTong()).flat().length;
+  const nPenuh = ukur({ tongPenuh: 1 }), penuh = isiTong(), uPenuh = ukuran(Object.values(penuh).flat());
+  const nSedikit = ukur({ tongPenuh: 0.3 }), sedikit = isiTong();
+  const nSama = ukur({ tongPenuh: 0.33 });
+  const nTong0 = ukur({ tongPenuh: 0 });
+  cek(tongKosong === 0 && nPenuh !== null && Object.values(penuh).every((ps) => ps.length > 0) && kira(uPenuh.y0, 10) && kira(uPenuh.y1, 14.2)
+    && jariTong(penuh) < 5,
+    '3D bekas tongPenuh: isi tong menyembul dari tutupnya (voxel wadah perabot, di dalam jari-jari tong)', `penuh ${teks(uPenuh)}, jari-jari terjauh ${jariTong(penuh).toFixed(2)}`);
+  cek(nSedikit !== null && sedikit['#c9cdd1'].length === 0 && sedikit['#d9b96a'].length > 0 && nSama === null && nTong0 === n0,
+    '3D bekas tongPenuh: 0,3 = dua bungkus (ceil x5), 0,33 tidak membangun ulang (tanda sama), diangkut kembali persis',
+    `0,3: ${Object.values(sedikit).map((ps) => ps.length).join('/')} titik, 0,33 ${nSama}, kosong ${nTong0} vs ${n0}`);
+
+  // semuanya sekaligus, lalu kosong lagi
+  const nSemua = ukur({ kabelRapi: true, kartuAPAR: true, gelasDispenser: 3, tongPenuh: 0.7 }), nAkhir = ukur(BEKAS0);
+  cek(nSemua !== null && nSemua !== n0 && nAkhir === n0, '3D bekas ruangan: keempatnya sekaligus membangun ulang, dikosongkan kembali ke geometri semula',
+    `semua ${nSemua}, kosong ${nAkhir} vs ${n0}`);
+  cek(!galat.length, 'frame-frame uji gelombang ketiga tanpa galat', galat.join(' | '));
 }
 
 console.log('');
