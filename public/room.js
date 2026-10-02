@@ -1641,15 +1641,40 @@ function drawFloor() {
   drawDusGudang();
   bayangKaki();             // kaki perabot menapak, bukan menempel
 
-  // berkas cahaya jendela — warnanya ikut langit di luar
-  const A = ambien();
+  // berkas cahaya jendela — warnanya ikut langit di luar, bentuknya ikut
+  // letak matahari di kaca (petakSinar)
+  const A = ambien(), { dekat, jauh } = petakSinar(A.jam);
   ctx.globalAlpha = A.sinarA;
   ctx.fillStyle = A.sinar;
   ctx.beginPath();
-  ctx.moveTo(190, FLOOR_TOP); ctx.lineTo(240, FLOOR_TOP);
-  ctx.lineTo(266, 196); ctx.lineTo(164, 196);
+  ctx.moveTo(dekat.x0, dekat.y); ctx.lineTo(dekat.x1, dekat.y);
+  ctx.lineTo(jauh.x1, jauh.y); ctx.lineTo(jauh.x0, jauh.y);
   ctx.closePath(); ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+/* Petak sinar jendela di lantai, ikut matahari di kaca (drawWindow): pagi
+   mataharinya di kiri kaca, jadi petaknya condong ke kanan; sore sebaliknya,
+   persis cerminnya. Makin rendah matahari makin jauh petaknya menjangkau ke
+   dalam ruangan — tengah hari paling pendek. Dalam 0,7 jam lepas terbenam (dan
+   sebelum terbit) bentuknya berangsur ke cahaya bulan, yang diam di kanan atas
+   kaca. Warna & kekuatannya tetap dari ambien() (sinar, sinarA).
+   SATU-SATUNYA sumber bentuk petak: trapesium drawFloor, debu 2D, prisma
+   berkas & debu 3D (ruang3d.js), serta event yang menyentuh berkasnya
+   (karpet-rapat-digulung-dijemur, debu-menari-di-berkas, silau-sore-gorden)
+   semuanya membaca fungsi ini — jangan salin angkanya ke tempat lain, 2D dan
+   3D akan selisih begitu jam berjalan. dekat = tepi yang disinari bibir
+   bawah kaca, jauh = yang disinari bibir atasnya; bulat ke piksel. */
+function petakSinar(jam) {
+  const tJ = Math.max(0, Math.min(1, (jam - 5.7) / 12.6));      // 0 terbit .. 1 terbenam, sama dengan drawWindow
+  const bulan = Math.max(0, Math.min(1, Math.max(5.7 - jam, jam - 18.3) / 0.7));
+  const geser = (1 - 2 * tJ) * (1 - bulan) - 0.3 * bulan;         // +1 pagi (ke kanan) .. -1 sore (ke kiri)
+  const rendah = (1 - Math.sin(tJ * Math.PI)) * (1 - bulan) + 0.4 * bulan;   // 0 tengah hari .. 1 di ufuk
+  const tepi = (d) => {
+    const cx = 215 + geser * 0.5 * d, s = 25 + 0.25 * d;
+    return { x0: Math.round(cx - s), x1: Math.round(cx + s), y: Math.round(FLOOR_TOP + d) };
+  };
+  return { dekat: tepi(24 * rendah), jauh: tepi(62 + 70 * rendah) };
 }
 
 /* Lembaran & gumpalan kertas yang tercecer sepanjang hari. BUKAN
@@ -5783,8 +5808,12 @@ const DEBU_MAKS = 40;
 const debu = [];
 // setengah lebar kerucut neon i pada ketinggian y (trapesium 13→232)
 const kerucutSetengah = (y) => 17 + 23 * (y - 13) / 219;
-// setengah lebar berkas jendela pada y (trapesium FLOOR_TOP→196, pusat 215)
-const berkasSetengah = (y) => 25 + 26 * (y - FLOOR_TOP) / (196 - FLOOR_TOP);
+// rentang x berkas jendela pada y: petak sinar drawFloor (petakSinar), ikut
+// jam; null di luar petaknya
+const lebarPetak = ({ dekat, jauh }, y) => {
+  const v = (y - dekat.y) / (jauh.y - dekat.y);
+  return v >= 0 && v <= 1 ? [dekat.x0 + (jauh.x0 - dekat.x0) * v, dekat.x1 + (jauh.x1 - dekat.x1) * v] : null;
+};
 function debuSumber(A) {
   const s = [];
   if (A.lampu > 0.3) NEON_X.forEach((cx, i) => {
@@ -5796,7 +5825,7 @@ function debuSumber(A) {
 }
 function updateDebu(dt) {
   if (ringanAktif()) { debu.length = 0; return; }
-  const A = ambien();
+  const A = ambien(), petak = petakSinar(A.jam);
   const sumber = debuSumber(A);
   // lahir pelan-pelan: ~6 butir/detik sampai penuh, bukan 40 sekaligus
   if (sumber.length && debu.length < DEBU_MAKS && Math.random() < dt * 6) {
@@ -5806,8 +5835,9 @@ function updateDebu(dt) {
       y = 30 + Math.random() * 200;
       x = NEON_X[s.i] + (Math.random() * 2 - 1) * kerucutSetengah(y);
     } else {
-      y = FLOOR_TOP + Math.random() * (196 - FLOOR_TOP);
-      x = 215 + (Math.random() * 2 - 1) * berkasSetengah(y);
+      y = petak.dekat.y + Math.random() * (petak.jauh.y - petak.dekat.y);
+      const [x0, x1] = lebarPetak(petak, y);
+      x = x0 + Math.random() * (x1 - x0);
     }
     debu.push({ x, y, jenis: s.jenis, i: s.i, vx: (Math.random() - 0.5) * 2.4, vy: 0.6 + Math.random() * 1.8,
       fase: Math.random() * 6.28, umur: 0, life: 5 + Math.random() * 6 });
@@ -5819,7 +5849,7 @@ function updateDebu(dt) {
     d.y += d.vy * dt;
     let mati = d.umur >= d.life;
     if (d.jenis === 'neon') mati = mati || d.y > 232 || Math.abs(d.x - NEON_X[d.i]) > kerucutSetengah(d.y);
-    else mati = mati || d.y > 196 || Math.abs(d.x - 215) > berkasSetengah(d.y);
+    else { const L = lebarPetak(petak, d.y); mati = mati || !L || d.x < L[0] || d.x > L[1]; }
     if (mati) debu.splice(i, 1);
   }
 }

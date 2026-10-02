@@ -8,6 +8,41 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Tampilan 3D: jongkok sungguhan.** Pose `jongkok`, pose event yang paling
+  sering muncul, kini benar-benar jongkok: pinggul turun, paha & betis
+  terlipat, telapak tetap rata di lantai, badan condong, dan kedua tangan
+  meraih lantai, turun-naiknya halus seperti duduk. Event yang sebenarnya
+  meraih benda setinggi meja atau mesin (rim di atas fotokopi, kertas printer,
+  meja stempel, buku pinjam arsip) membungkuk berdiri dengan tangan ke tinggi
+  sasarannya. Peserta senam Jumat kini meloncat di tempat, tidak lagi
+  maju-mundur.
+- **Tampilan 3D: layar laptop ikut ulah event.** Layar meja kerja meredup dan
+  barisnya bernapas lalu hilang waktu kantor sepi lama, terang penuh waktu
+  kadis sidak, memutih sampai memancar waktu kedip serempak atau restart paksa,
+  dan tinggal empat titik waktu razia kata sandi. Meja yang goyang menggetarkan
+  layar & lampu mejanya, kipas yang macet ikut bergetar, dan malam hari layar
+  yang menyala memantulkan pendar biru tipis ke papan meja.
+- **Tampilan 3D: satpam duduk di kursi lipat posnya.** Selama berjaga dia tidak
+  lagi berdiri di depan kursinya sepanjang hari; dia bangkit waktu berangkat
+  patroli, dipinjam event, tersentak hormat, atau berdiri tegak untuk
+  Indonesia Raya, dan lirikannya jadi tolehan kepala. Yang berpose ngantuk
+  (jaga pos ketiduran, ketiduran di pojok baca, serapan anggaran) mengangguk
+  pelan lalu tersentak naik — tunduk diam bila gerak dikurangi.
+- **Tampilan 3D: cahaya malam yang bergerak.** Senter satpam yang berpatroli
+  menyala waktu gelap: ujungnya jadi lampu titik pendek dan pintu atau lantai
+  yang disorotnya mendapat genangan cahaya kecil yang ikut berpindah. Sorot
+  lampu mobil dan sirene yang lewat jalan depan jadi lampu titik yang meluncur
+  di dekat dinding jendela, menyapu dinding, perabot, dan wajah pegawai putih
+  kebiruan atau merah-biru — tanpa menenggelamkan neon. Siang padam; gerak
+  dikurangi membuat sirene berganti warna pelan tanpa berkedip.
+- **Sinar matahari ikut jam, di 2D maupun 3D.** Petak cahaya jendela di lantai
+  kini condong ke kanan waktu pagi, ke kiri waktu sore, memanjang saat matahari
+  rendah, dan paling pendek tengah hari. Satu fungsi, `petakSinar(jam)`, dibaca
+  trapesium `drawFloor`, debu 2D, prisma berkas & debu 3D, lantai yang
+  tersingkap saat karpet rapat digulung, debu yang menari di berkas, dan silau
+  sore — jadi semuanya bergeser bersama. Di 3D kilat menyalakan berkasnya
+  sekejap seukuran kaca dengan bayang kusen di lantai (tidak untuk gerak
+  dikurangi).
 - **Tampilan 3D: pajangan dinding yang hidup.** Sirip AC split kini mengayun
   pelan selama AC menyala (dan merapat waktu AC mati), dengan kepulan hawa
   dingin tipis yang turun dari mulutnya. Kubah CCTV di pojok menoleh mengikuti

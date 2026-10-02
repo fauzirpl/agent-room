@@ -1051,7 +1051,9 @@ Dijaga `uji-petugas.mjs`.
   menimpa `path` siapa pun, jadi otomatis berlaku untuk event apa saja,
   bukan cuma ini. Naik-turun badannya (`a.y = a.slotY + sin(a.phase*5)*amp`)
   dan lengan bergantiannya (pose `'tepuk'`, sudah ada) keduanya pose/posisi
-  yang sudah ada — tidak ada pose baru untuk event ini.
+  yang sudah ada — tidak ada pose baru untuk event ini. Di 3D loncatannya
+  (`a.y` di sekitar `a.slotY`) menjadi tinggi badan, bukan kedalaman: selama
+  pesertanya di slot, z diambil dari `slotY`.
 
 ## Kartu inventaris barang & zoom perabot
 
@@ -1600,7 +1602,10 @@ tidak ada loncatan suasana:
 
 Semuanya dihitung dari `FASE_HARI` di [public/room.js](../public/room.js) —
 patokan warna langit, selubung ruangan, intensitas lampu, dan berkas cahaya
-per jam. Mau memeriksa suasana tertentu tanpa menunggu jamnya tiba? Tambah
+per jam. Bentuk petak berkas jendela di lantai dihitung `petakSinar(jam)`:
+pagi condong ke kanan, sore ke kiri, memanjang saat matahari rendah; semua
+yang menggambar berkas itu (`drawFloor`, debu, prisma 3D, event karpet, debu
+menari, silau sore) membaca fungsi yang sama. Mau memeriksa suasana tertentu tanpa menunggu jamnya tiba? Tambah
 `?jam=18.4` di URL (boleh digabung: `?demo=1&jam=22`).
 
 ### Babak hari kerja
@@ -1965,8 +1970,8 @@ sepi, dan dimatikan kalau `prefers-reduced-motion` menyala.
 Dua sentuhan kecil yang membuat cahayanya terasa *mengisi* ruangan, bukan
 sekadar ditempel di atasnya. **Debu** (`debu[]`, `updateDebu`/`drawDebu`):
 paling banyak 40 butir 1 px, alpha rendah, melayang pelan sekali — dan hanya
-lahir *di dalam* berkas: kerucut neon waktu malam, berkas jendela di lantai
-waktu siang. Yang hanyut keluar dari berkasnya dibunuh, bukan dibiarkan
+lahir *di dalam* berkas: kerucut neon waktu malam, petak berkas jendela
+(`petakSinar`, ikut jam) waktu siang. Yang hanyut keluar dari berkasnya dibunuh, bukan dibiarkan
 melayang di gelap; debu memang ada di mana-mana, tapi cuma kelihatan waktu
 ditembus cahaya. Digambar sesudah selubung suasana supaya tidak ikut
 digelapkan.
@@ -2165,9 +2170,15 @@ pangkatnya, rambut/peci/jilbab/topi dari `kepalaEfektif()`, kacamata, kumis,
 dan kedip mata. Posenya dibaca dari sumber yang sama dengan 2D: langkah dari
 `phase`, lengan kerja dari `workArms()`, pose event dari `posEvent()`, map
 disposisi terangkat waktu menunggu keputusanmu, barang bawaan di tangan,
-terkapar waktu ditekel satpam. Bedanya satu: di 3D mereka **duduk sungguhan**
-— di kursi rapat (mengikuti `turunDuduk()`), di kursi meja kerjanya, dan
-lesehan di pojok baca. Meja kerja 3D sengaja setinggi 15, bukan 18: papan
+terkapar waktu ditekel satpam. Bedanya: di 3D mereka **duduk sungguhan**
+— di kursi rapat (mengikuti `turunDuduk()`), di kursi meja kerjanya, di kursi
+lipat pos (satpam yang berjaga; bangkit waktu berjalan, dipinjam event,
+'hormat', atau tegak), dan lesehan di pojok baca — dan **jongkok sungguhan**:
+pose `jongkok` melipat paha dan betis dengan telapak tetap rata di lantai,
+badan condong, dan tangan meraih lantai; pemeran event yang terdaftar di
+`RAIH_MEJA` (id event → tinggi sasaran) membungkuk berdiri dengan tangan ke
+tinggi meja atau mesinnya. Yang berpose `ngantuk` mengangguk pelan (gerak
+dikurangi: tunduk diam). Meja kerja 3D sengaja setinggi 15, bukan 18: papan
 setinggi 18 jatuh di bahu orang yang duduk.
 
 Pegawai standby (0,55) dan yang memudar di ambang pintu digambar **tembus
@@ -2460,13 +2471,22 @@ relief:
   wajah pegawainya. Siang nyaris tak terasa; malam ada genangan cahaya hangat
   bertingkat di papan meja.
 
-Genangan lampu, kepulan AC, dan petak silau matahari tinggal di grup `sinar`:
+Genangan lampu, pantulan layar laptop, kepulan AC, genangan senter, dan petak
+silau matahari tinggal di grup `sinar`:
 tembus pandang dan dicampur di lintasan pudar, tetapi **tidak berbayang** —
 cahaya yang ikut peta bayangan malah menggelapkan permukaan yang ia terangi.
 
+**Layar laptop meja kerja** mengikuti `drawMejaKerja()`: `MOD.layarPucat`
+meredupkannya dan barisnya bernapas lalu hilang, `MOD.sidak` menahannya terang
+penuh, `MOD.layarPutih` memutihkannya sampai memancar, dan `MOD.slotTerkunci`
+menggantinya dengan empat titik. `MOD.mejaGetar` menggoyang layar & lampu meja
+±1 selagi penghuninya mengetik (papan mejanya statis), dan `MOD.kipasGetar`
+menggetarkan kipas berdiri seperti `drawKipas()`.
+
 **Debu & berkas cahaya.** Pasangan 3D `drawDebu()`: debu yang cuma kelihatan
 waktu ditembus cahaya, hidup di volumenya sendiri — prisma berkas jendela (dari
-kaca turun ke petak sinar yang dilukis `drawFloor`) waktu siang, kerucut di
+kaca turun ke petak `petakSinar(jam)` yang sama dengan yang dilukis
+`drawFloor`, jadi ikut jam) waktu siang, kerucut di
 bawah tiap neon waktu malam. Kapan menyala dan seberapa kuat diambil dari
 `debuSumber()` yang sama, jadi debu 3D lahir & padam bersama debu 2D-nya.
 Berkas jendelanya sendiri digambar sebagai selubung cahaya aditif tipis yang
@@ -2478,9 +2498,14 @@ kiri-atas-depan yang melempar **bayangan sungguhan** (peta bayangan 2048,
 disaring 3x3), dan ketiga tabung neon jadi lampu titik yang ikut berkedip
 (`kedipNeon`) dan padam waktu mati lampu. Shader menampung enam belas lampu
 titik, masing-masing dengan redamannya sendiri: neon, lampu kadis, WC, dan
-gudang menjangkau jauh, tujuh lampu meja kerja cuma mejanya. Malam jadi
-temaram kebiruan dengan genangan cahaya hangat di bawah tiap lampu; kilat
-menerangi seluruh ruangan.
+gudang menjangkau jauh, tujuh lampu meja kerja cuma mejanya, dan tiga sisanya
+cahaya malam yang bergerak: senter satpam yang berpatroli (pintu atau lantai
+yang disorotnya mendapat genangan kecil), sorot lampu mobil yang menyapu, dan
+sirene merah-biru yang lewat — dua terakhir meluncur di dekat dinding jendela
+mengikuti sapuan 2D-nya; ketiganya padam di siang terang. Malam jadi temaram
+kebiruan dengan genangan cahaya hangat di bawah tiap lampu; kilat menerangi
+seluruh ruangan dan sesaat menyalakan berkas jendela seukuran kaca, plus petak
+empat daun di lantai (tidak untuk gerak dikurangi).
 
 **Kamera 2D tetap yang memutuskan ke mana melihat.** Mode ikut, sinematik,
 klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung

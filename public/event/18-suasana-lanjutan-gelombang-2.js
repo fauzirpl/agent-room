@@ -20,9 +20,16 @@ daftarEvent(
   kelas: 'latar', bobot: B.sering, cooldown: 20, durasi: 6,
   syarat: () => ambien().sinarA > 0.09,
   tick(E, dt, S) {
-    if (Math.random() < dt) spawn('dust', 164 + Math.random() * 100, 120 + Math.random() * 60);
+    // petak sinar drawFloor (petakSinar), ikut jam: debu & yang melintas
+    // dibaca di petak yang memang sedang disinari, bukan kotak tetap
+    const petak = petakSinar(ambien().jam);
+    if (Math.random() < dt) {
+      const y = petak.dekat.y + Math.random() * (petak.jauh.y - petak.dekat.y), [x0, x1] = lebarPetak(petak, y);
+      spawn('dust', x0 + Math.random() * (x1 - x0), y);
+    }
     if (!E.data.melintas) {
-      const lewat = S.orang.find((o) => o.path.length && o.x > 164 && o.x < 266 && o.y > 100 && o.y < 200 && o.laju === 1);
+      const diSinar = (o) => { const L = lebarPetak(petak, o.y); return !!L && o.x > L[0] && o.x < L[1]; };
+      const lewat = S.orang.find((o) => o.path.length && diSinar(o) && o.laju === 1);
       if (lewat) {
         E.data.melintas = lewat;
         for (let i = 0; i < 6; i++) spawn('dust', lewat.x, lewat.y);
@@ -290,9 +297,12 @@ daftarEvent(
   },
   gambarProp(E) {
     if (E.umur > 6) return;
+    // kipas silau di ujung jauh petak sinar (petakSinar, ikut jam) — bentuk
+    // lamanya digeser bersama tepi itu, jadi tetap menempel di berkasnya
+    const { jauh } = petakSinar(ambien().jam), cx = Math.round((jauh.x0 + jauh.x1) / 2);
     ctx.globalAlpha = 0.16 * Math.max(0, 1 - E.umur / 6);
     ctx.beginPath();
-    ctx.moveTo(186, 196); ctx.lineTo(238, 196); ctx.lineTo(300, 200); ctx.lineTo(150, 200);
+    ctx.moveTo(cx - 29, jauh.y); ctx.lineTo(cx + 23, jauh.y); ctx.lineTo(cx + 85, jauh.y + 4); ctx.lineTo(cx - 65, jauh.y + 4);
     ctx.closePath(); ctx.fillStyle = '#ffd88a'; ctx.fill();
     ctx.globalAlpha = 1;
   },

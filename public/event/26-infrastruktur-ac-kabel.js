@@ -465,16 +465,18 @@ daftarEvent(
     ctx.globalAlpha = 1;
 
     // berkas cahaya jendela dikembalikan di petak yang baru dicat ulang —
-    // karpet yang diangkat harusnya MENAMPAKKAN cahaya, bukan menelannya
+    // karpet yang diangkat harusnya MENAMPAKKAN cahaya, bukan menelannya.
+    // Bentuknya petakSinar(), sumber yang sama dengan drawFloor: ikut jam.
     const A = ambien();
     if (A.sinarA > 0.01) {
+      const { dekat, jauh } = petakSinar(A.jam);
       ctx.save();
       ctx.beginPath(); ctx.rect(x0, 173, w, 83); ctx.clip();
       ctx.globalAlpha = A.sinarA;
       ctx.fillStyle = A.sinar;
       ctx.beginPath();
-      ctx.moveTo(190, FLOOR_TOP); ctx.lineTo(240, FLOOR_TOP);
-      ctx.lineTo(266, 196); ctx.lineTo(164, 196);
+      ctx.moveTo(dekat.x0, dekat.y); ctx.lineTo(dekat.x1, dekat.y);
+      ctx.lineTo(jauh.x1, jauh.y); ctx.lineTo(jauh.x0, jauh.y);
       ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 1;
       ctx.restore();

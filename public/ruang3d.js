@@ -1436,15 +1436,17 @@ void main() { hasil = vec4(1.0); }`;
     if (n > 0) kotak(S, 64.4, 65, 9.2, 9.8, 291, 295.5, warna('#2f3640'), { sisi: SEMUA });
   }
 
-  // Kursi lipat pos satpam (drawPosSatpamKursi): sandaran menghadap ruangan,
-  // satpamnya berdiri di depannya.
+  // Kursi lipat pos satpam (drawPosSatpamKursi): sandaran menghadap ruangan.
+  // Di 2D satpamnya berdiri di depannya; di 3D dia duduk di sini selama
+  // berjaga (dudukDiPos) — papan dudukannya setinggi KURSI_POS.atas.
+  const KURSI_POS = { x: POS_SATPAM.titikX - 6, zs: 286, atas: 8.4 };
   function kursiLipatSatpam(S) {
-    const x = POS_SATPAM.titikX - 6, zs = 286, besi = warna('#5a626c');
+    const { x, zs, atas } = KURSI_POS, besi = warna('#5a626c');
     for (const kx of [x + 0.6, x + 10.6]) {
       kotak(S, kx, kx + 0.8, 0, 20, zs, zs + 0.8, besi);              // kaki belakang = tiang sandaran
-      kotak(S, kx, kx + 0.8, 0, 7, zs + 6, zs + 6.8, besi);           // kaki depan
+      kotak(S, kx, kx + 0.8, 0, atas - 1.4, zs + 6, zs + 6.8, besi);  // kaki depan
     }
-    kotak(S, x, x + 12, 7, 8.4, zs + 0.4, zs + 7, warna('#4a525c'), { sisi: SEMUA, w: { atas: warna('#56606a') } });
+    kotak(S, x, x + 12, atas - 1.4, atas, zs + 0.4, zs + 7, warna('#4a525c'), { sisi: SEMUA, w: { atas: warna('#56606a') } });
     kotak(S, x, x + 12, 13, 20, zs - 0.2, zs + 0.8, warna('#3a4048'), { sisi: SEMUA });
     kotak(S, x + 0.6, x + 11.4, 2.5, 3.1, zs + 0.2, zs + 0.8, besi);
   }
@@ -2790,8 +2792,20 @@ void main() { hasil = vec4(1.0); }`;
   function posisiOrang(a) {
     if ((a.diKadis || a === kadisNpc) && KADIS_SIAP) return [a.x, kadisZ(a.y)];
     const ganti = tampilanKhusus(a);
-    return ganti ? [ganti.x, ganti.z] : [a.x, a.y];
+    return ganti ? [ganti.x, ganti.z] : [a.x, diSlot(a) ? a.slotY : a.y];
   }
+  /* Senam Jumat (event/04) memalsukan loncatan lewat a.y di sekitar a.slotY:
+     di 3D a.y itu kedalaman, jadi pesertanya maju-mundur. Selama dia diam di
+     slotnya, z diambil dari slotY (posisiOrang) dan selisihnya jadi tinggi
+     (susunOrang) — separuh gelombang yang "di bawah" slot berarti mendarat,
+     bukan masuk lantai. slotY yang basi (aktornya direbut tool call di tengah
+     senam) tidak dipakai: yang berjalan atau sudah jauh dari slotnya kembali
+     ke a.y. */
+  const LOMPAT_MAKS = 6;                 // amplitudo senam: instruktur 4, peserta 2
+  function diSlot(a) {
+    return a.slotY != null && !(a.path && a.path.length) && Math.abs(a.y - a.slotY) <= LOMPAT_MAKS;
+  }
+  const tinggiLompat = (a) => (diSlot(a) ? Math.max(0, a.slotY - a.y) * SKALA_ORANG : 0);
   function titik3D(x, y, kaki) {
     const a = orangDi(x, kaki);
     if (a) { const [X, Z] = posisiOrang(a); return [X, (kaki - y) * SKALA_ORANG, Z]; }
@@ -2875,9 +2889,52 @@ void main() { hasil = vec4(1.0); }`;
       const n = LAMPU_MEJA[i] * (0.15 + 0.85 * lampu);
       pasangLampu(6 + i, cx - 28.5, MEJA_H + 6.5, 335.5, 0.9 * n, 0.72 * n, 0.42 * n, REDAM_MEJA);
     });
+    cahayaMalam(lampu);
     MALAM.lampu = lampu;
   }
   const MALAM = { lampu: 0 };      // 0 siang .. 1 malam, dari ambien() — dipakai genangan lampu meja
+
+  /* Tiga lampu terakhir: cahaya malam yang BERGERAK.
+     13 senter satpam yang berpatroli — dari matriks lengan pemegangnya,
+        dicatat susunDinamis (senterMenyala) dan dibaca di sini frame
+        berikutnya, pola yang sama dengan LAMPU_MEJA;
+     14 sapuan lampu mobil dan 15 sirene yang lewat jalan depan — dari umur
+        event-nya; rumus x-nya disalin dari gambarAtas 2D-nya
+        (public/event/09-suasana-efek-yang-bagus-karena-caranya-d.js).
+     Lampu mobil & sirene memang di jalan, tapi ditaruh DI DALAM ruangan dekat
+     dinding jendela: shader tidak kenal oklusi, lampu di luar tembok pun
+     bocor ke dalam, jadi letaknya sekalian di tempat cahayanya jatuh — tembok
+     yang dilukisi sapuannya (atasDiDinding, tetap), perabot di sepanjang
+     dinding, dan wajah pegawai yang menghadapnya. Redamannya lebih pendek
+     dari neon dan warnanya tipis: terasa menyapu, tidak menenggelamkan neon. */
+  const REDAM_SENTER = 0.012, REDAM_JALAN = 0.0006;
+  const SENTER = { ada: false, alfa: 0, pos: [0, 0, 0] };   // pemegang senter paling pejal frame lalu
+  // 0 siang .. 1 malam dari ambien().lampu; ambangnya ambang sorot senter 2D
+  // satpam-patroli (A.lampu < 0,45 = tidak ada sorot), penuh mulai 0,85.
+  // Siang cerah 0; hujan deras siang (lampu 0,55) baru sepersekian.
+  function gelapMalam(lampu) {
+    const t = Math.max(0, Math.min(1, (lampu - 0.45) / 0.4));
+    return t * t * (3 - 2 * t);
+  }
+  // selubung masuk/keluar event sepanjang durasinya: tidak muncul mendadak
+  const selubungEvent = (f, tepi) => Math.max(0, Math.min(1, f / tepi, (1 - f) / tepi));
+  function cahayaMalam(lampu) {
+    const gelap = gelapMalam(lampu);
+    const ks = SENTER.ada ? gelap * SENTER.alfa : 0;
+    pasangLampu(13, SENTER.pos[0], SENTER.pos[1], SENTER.pos[2], 0.62 * ks, 0.55 * ks, 0.36 * ks, REDAM_SENTER);
+    // sorot lampu mobil putih kebiruan: 2D x = W + 30 - umur/3 * (W + 90), selebar 26
+    const sapu = eventHidup.find((E) => E.def.id === 'sapuan-lampu-mobil-malam');
+    const fa = sapu ? sapu.umur / 3 : 0, ka = sapu ? gelap * selubungEvent(fa, 0.12) : 0;
+    pasangLampu(14, W + 30 - fa * (W + 90) + 13, 66, DINDING_Z + 12, 0.16 * ka, 0.19 * ka, 0.25 * ka, REDAM_JALAN);
+    // sirene: 2D x = W + 40 - umur/7 * (W + 120), selebar 40, biru selama
+    // sin(now / 140) > 0. Gerak dikurangi: tidak berkedip, merah dan biru
+    // berganti pelan (sekitar tujuh detik sekali putaran).
+    const sir = eventHidup.find((E) => E.def.id === 'sirene-lewat-jalan-depan');
+    const fr = sir ? sir.umur / 7 : 0, kr = sir ? (0.4 + 0.6 * gelap) * selubungEvent(fr, 0.08) : 0;
+    const biru = geraKurang3.matches ? 0.5 + 0.5 * Math.sin(now / 1100) : Math.sin(now / 140) > 0 ? 1 : 0;
+    pasangLampu(15, W + 40 - fr * (W + 120) + 20, 60, DINDING_Z + 12,
+      (0.36 - 0.27 * biru) * kr, (0.06 + 0.1 * biru) * kr, (0.06 + 0.28 * biru) * kr, REDAM_JALAN);
+  }
 
   // --------------------------------------------------------- peta bayangan
   const PETA_N = 2048;
@@ -2915,8 +2972,66 @@ void main() { hasil = vec4(1.0); }`;
   // ---------------------------------------------------------- pegawai 3D
   const keadaanOrang = new WeakMap();   // per pegawai: yaw halus, duduk halus
   const TURUN_DUDUK = 8.5 - 8 / SKALA_ORANG;   // pinggul lokal 8.5 → dudukan dunia 8
+  /* Kursi lipat pos: papannya cuma 1,4 tebalnya (jok kursi kerja 2,5), jadi
+     paha setebal 4,2 yang porosnya tepat di permukaan dudukan — cara
+     TURUN_DUDUK — menembus ke bawah papan: pinggulnya 1 di atas dudukan.
+     Kakinya di titik pos (z 298), 12 dari sandaran; mundur sepanjang paha
+     saja (4) menaruh pinggulnya di bibir depan dudukan (z 292,4), jadi di sini
+     mundurnya sampai punggung (sabuk 2,3 lokal) nyaris menyentuh sandaran. */
+  const TURUN_POS = 8.5 - (KURSI_POS.atas + 1) / SKALA_ORANG;
+  const MUNDUR_POS = (POS_SATPAM.titikY - KURSI_POS.zs - 0.8 - 3.5) / SKALA_ORANG;
   const YAW = { down: 0, up: Math.PI, right: Math.PI / 2, left: -Math.PI / 2 };
   const sudutLengan = (lift) => Math.max(-0.35, Math.min(1, -lift / 9)) * 2.5;
+
+  /* Pose 'jongkok' (pose event terbanyak) hampir selalu meraih lantai (kertas &
+     bolpoin jatuh, kabel kolong, ember, karpet yang digulung, kucing, laci
+     bawah fotokopi). Yang sebenarnya meraih benda setinggi meja/mesin disebut
+     di sini per id event, dengan tinggi dunia sasaran tangannya — dibaca dari
+     berkas event-nya, bukan ditebak dari letak orangnya. Di event itu pun yang
+     bukan pemerannya (E.aktor / E.data.a) tetap jongkok ke lantai. */
+  const RAIH_MEJA = {
+    'jatah-kuota-cair': FOTOKOPI.h - 12 + 1.5,       // menaruh rim di atas mesin fotokopi
+    'printer-macet-kertas': 20 + 2,                  // kertas tersangkut di printer (printerVoxel, meja h 20)
+    'ketuk-kertas-rata-di-meja': MEJA_STEMPEL_H,
+    'berkas-tumpah': MEJA_STEMPEL_H,                 // tumpukan berkas meja stempel disusun ulang
+    'arsiparis-minta-isi-buku-pinjam': MEJA_H + 3,   // tanda tangan di buku pinjam
+  };
+  // tinggi dunia sasaran tangan orang yang berpose jongkok: angka = meja, null = lantai
+  function tinggiRaih(a) {
+    for (const E of eventHidup) {
+      const h = RAIH_MEJA[E.def.id];
+      if (h != null && (E.aktor.includes(a) || E.data.a === a)) return h;
+    }
+    return null;
+  }
+  // sendi (radian): paha diangkat, lutut ditekuk; condong = badan di pinggul
+  const JONGKOK = { paha: 1.95, lutut: 2.5, condong: 0.8, condongDuduk: 0.45 };
+  const BUNGKUK = { paha: 0.25, lutut: 0.5, condong: 0.3 };
+  const RAIH_LANTAI = 2;               // pusat telapak tangan yang meraih lantai (lokal)
+  /* Satpam jaga pos. Di 2D dia berdiri di depan kursi lipatnya hampir
+     sepanjang hari (tickTetap betah di titik POS_SATPAM); di 3D kursinya ada,
+     jadi dia duduk. Bangkit begitu berjalan (berangkat patroli, pulang),
+     dipinjam event (menerima tamu, laporan ronda), tersentak 'hormat', atau
+     berdiri tegak saat Indonesia Raya. Yang terkantuk di pos tetap duduk —
+     jaga-pos-ketiduran, juga kalau pemerannya piket jaga pos tanpa peran
+     satpam (pemeran() jatuh ke siapa pun yang menganggur). */
+  function dudukDiPos(a, jalan, poseNama) {
+    if (jalan || (a.path && a.path.length)
+      || Math.hypot(a.x - POS_SATPAM.titikX, a.y - POS_SATPAM.titikY) > 3) return 0;
+    if (poseNama === 'ngantuk') return 1;
+    if (a.eventKerja || poseNama || a.tegak) return 0;
+    return a.tetap === 'satpam' || a.peran === 'satpam' ? 1 : 0;
+  }
+  /* Pose 'ngantuk' (jaga-pos-ketiduran, ketiduran-di-pojok-baca,
+     serapan-anggaran-akhir-tahun): kepala pelan-pelan jatuh lalu tersentak
+     naik, berulang tiap 3,4 detik — di 2D cuma lengannya yang turun. Gerak
+     dikurangi: tunduk diam. */
+  function anggukKantuk(t) {
+    if (geraKurang3.matches) return 0.3;
+    const f = ((t || 0) / 3.4 % 1 + 1) % 1;
+    const jatuh = f < 0.85 ? (f / 0.85) ** 2 : (1 - f) / 0.15;
+    return 0.06 + 0.4 * jatuh;
+  }
 
   /* ganti: tampilan pengganti dari tampilanKhusus() (posisi, hadap, langkah,
      pose, barang bawaan) — dipakai tanpa pernah menulis ke objek simulasinya. */
@@ -2930,21 +3045,27 @@ void main() { hasil = vec4(1.0); }`;
     const wajah = ganti && ganti.face ? ganti.face : a.face;
     const poseNama = ganti && ganti.pose !== undefined ? ganti.pose : a.pose;
     const bawaNama = ganti && ganti.bawa !== undefined ? ganti.bawa : a.bawa;
+    const jalan = ganti && ganti.jalan != null ? ganti.jalan : a.state === 'walk';
+    const dudukPos = ganti ? 0 : dudukDiPos(a, jalan, poseNama);
     let st = keadaanOrang.get(a);
-    if (!st) { st = { yaw: YAW[wajah] || 0, duduk: 0 }; keadaanOrang.set(a, st); }
-    // hadap: berbelok halus, lewat sudut terpendek
-    const tujuan = YAW[wajah] == null ? st.yaw : YAW[wajah];
+    if (!st) { st = { yaw: YAW[wajah] || 0, duduk: 0, toleh: 0, jongkok: 0, bungkuk: 0, raihMeja: 0 }; keadaanOrang.set(a, st); }
+    // hadap: berbelok halus, lewat sudut terpendek. Yang duduk di kursi lipat
+    // pos tetap menghadap depan kursinya (YAW.down = 0); lirikan tickTetap
+    // jadi tolehan kepala, bukan badan yang berputar menyamping di dudukan.
+    const tujuan = dudukPos ? YAW.down : YAW[wajah] == null ? st.yaw : YAW[wajah];
     let beda = tujuan - st.yaw;
     while (beda > Math.PI) beda -= Math.PI * 2;
     while (beda < -Math.PI) beda += Math.PI * 2;
     st.yaw += beda * (geraKurang3.matches ? 1 : Math.min(1, dt * 14));
+    const toleh = dudukPos ? Math.max(-1.1, Math.min(1.1, YAW[wajah] || 0)) : 0;
+    st.toleh += (toleh - st.toleh) * (geraKurang3.matches ? 1 : Math.min(1, dt * 8));
 
     const p = a.pal;
     const rc = a.mesin ? seragamCabang(a.mesin) : null;
     const t = a.phase;
-    const jalan = ganti && ganti.jalan != null ? ganti.jalan : a.state === 'walk';
     const kerja = !jalan && poseKerja(a);
-    // duduk: kursi rapat (turunDuduk), kursi meja kerja, lesehan pojok baca
+    // duduk: kursi rapat (turunDuduk), kursi meja kerja, kursi lipat pos satpam
+    // (dudukPos di atas), lesehan pojok baca
     const dudukRapat = a.station === 'rapat' && !jalan ? turunDuduk(a) / (DUDUK_PX * DUDUK_FRAME) : 0;
     const dudukMeja = a.station === 'think' && !a.path.length && !a.antre && !a.butuh && Math.abs(a.y - MEJA_KERJA_Y) < 3 ? 1 : 0;
     // di ruang kadis cuma kadisnya yang duduk. Tamu BERDIRI melapor di depan
@@ -2952,9 +3073,27 @@ void main() { hasil = vec4(1.0); }`;
     // di bawah ambang jendela (35): dari ruang utama dia tidak akan kelihatan.
     const dudukKadis = a === kadisNpc ? 1 : 0;
     const lesehan = poseNama === 'dudukLantai' ? 1 : 0;
-    const tujuanDuduk = Math.max(dudukRapat, dudukMeja, dudukKadis);
+    const tujuanDuduk = Math.max(dudukRapat, dudukMeja, dudukKadis, dudukPos);
     st.duduk += (tujuanDuduk - st.duduk) * (geraKurang3.matches ? 1 : Math.min(1, dt * 9));
+    // kursi mana yang sedang diduduki — dipegang sampai ada kursi lain, supaya
+    // yang bangkit dari kursi lipat tetap naik dari kursi lipat
+    if (tujuanDuduk) st.lipat = dudukPos > 0;
     const duduk = lesehan ? 0 : st.duduk;
+    /* jongkok ke lantai: paha naik, betis condong ke depan, badan condong,
+       lengan meraih lantai; event RAIH_MEJA: bungkuk berdiri, lengan terulur
+       ke tinggi mejanya. Yang duduk tidak jongkok — cuma condong dan meraih
+       dari kursinya. Turun & tegak halus seperti duduk; yang berjalan tegak. */
+    const jongkokPose = poseNama === 'jongkok' && !jalan;
+    const hRaih = jongkokPose ? tinggiRaih(a) : null;
+    if (hRaih != null) st.raihMeja = hRaih;
+    const lajuJongkok = geraKurang3.matches ? 1 : Math.min(1, dt * 9);
+    st.jongkok = jalan ? 0 : st.jongkok + ((jongkokPose && hRaih == null ? 1 : 0) - st.jongkok) * lajuJongkok;
+    st.bungkuk = jalan ? 0 : st.bungkuk + ((hRaih != null ? 1 : 0) - st.bungkuk) * lajuJongkok;
+    const tekuk = lesehan ? 0 : 1 - duduk;                 // bobot kaki yang ikut terlipat
+    const lipatPaha = (JONGKOK.paha * st.jongkok + BUNGKUK.paha * st.bungkuk) * tekuk;
+    const lipatTapak = ((JONGKOK.lutut - JONGKOK.paha) * st.jongkok + (BUNGKUK.lutut - BUNGKUK.paha) * st.bungkuk) * tekuk;
+    const condong = jalan ? (poseNama === 'jongkok' ? 0.25 : 0)
+      : (JONGKOK.condong * tekuk + JONGKOK.condongDuduk * duduk) * st.jongkok + BUNGKUK.condong * st.bungkuk;
 
     let ayun = 0, bob = 0, angkatL = 0, angkatR = 0;
     let lenganL = 0, lenganR = 0;
@@ -2970,12 +3109,13 @@ void main() { hasil = vec4(1.0); }`;
       bob = Math.sin(t * 1.7) > 0.6 ? 0.5 : 0;
     }
     if (a.stamina != null && a.stamina < STAMINA_LELAH) bob -= 0.8;
+    if (jongkokPose) bob = 0;                              // telapaknya menapak, tidak mengangguk
     const pose = a.butuh ? { l: -6, r: -6 } : poseNama ? posEvent({ pose: poseNama, phase: t }) : (kerja ? workArms(a) : null);
     if (pose) { lenganL = sudutLengan(pose.l); lenganR = sudutLengan(pose.r); }
 
-    // dasar: kaki di (x, 0, z) dunia (tamu event yang memanjat: terangkat),
-    // badan menghadap +z lokal, diskalakan
-    let dasar = A3.geser(px, a.angkat || 0, pz);
+    // dasar: kaki di (x, 0, z) dunia (tamu event yang memanjat dan peserta
+    // senam yang meloncat: terangkat), badan menghadap +z lokal, diskalakan
+    let dasar = A3.geser(px, (a.angkat || 0) + (ganti ? 0 : tinggiLompat(a)), pz);
     if (a.rebah) dasar = A3.kali(dasar, A3.putarZ(-a.rebah));
     dasar = A3.kali(dasar, A3.kali(A3.putarY(st.yaw), A3.skala(SKALA_ORANG)));
     if (a.miring) dasar = A3.kali(dasar, A3.putarZ(-0.18));
@@ -2984,26 +3124,33 @@ void main() { hasil = vec4(1.0); }`;
     const kulitC = c(p.skin), bajuC = c(p.main), celanaC = c(p.pants);
     // Pinggul turun ke dudukan kursi (DUDUKAN_Y dunia = 8.5 - TURUN_DUDUK lokal
     // dikali SKALA_ORANG) dan mundur sepanjang paha: kaki 2D-nya (a.x, a.y)
-    // tetap di tempat, badan yang duduk di atas kursi di belakangnya.
-    const pinggul = 8.5 - TURUN_DUDUK * duduk - (lesehan ? 6.9 : 0) + bob * 0.3;
-    const mundur = -4 * duduk;
+    // tetap di tempat, badan yang duduk di atas kursi di belakangnya. Kursi
+    // lipat pos punya ukurannya sendiri (TURUN_POS, MUNDUR_POS).
+    // Kaki terlipat (jongkok/bungkuk): rantai paha 4 + betis 3,3 + mata kaki
+    // 1,2 = 8,5 — pinggul turun & mundur persis sejauh telapaknya tetap rata
+    // di lantai, di tempat kaki 2D-nya.
+    const pinggul = 8.5 - (st.lipat ? TURUN_POS : TURUN_DUDUK) * duduk - (lesehan ? 6.9 : 0) + bob * 0.3
+      - 4 * (1 - Math.cos(lipatPaha)) - 3.3 * (1 - Math.cos(lipatTapak));
+    const mundur = -(st.lipat ? MUNDUR_POS : 4) * duduk - (4 * Math.sin(lipatPaha) - 3.3 * Math.sin(lipatTapak));
     const badan = A3.kali(dasar, A3.geser(0, pinggul - 8.5, mundur));
 
     // --- kaki: paha dari pinggul, betis dari lutut; duduk = paha mendatar
     const alas = c(a.sandal ? SANDAL : SEPATU);
     for (const [sisi, angkat, ayunKaki] of [[-1, angkatL, ayun], [1, angkatR, -ayun]]) {
       const hx = sisi * 2.3;
-      const sudutPaha = jalan ? ayunKaki * 0.55 : (lesehan ? 1.5 : duduk * 1.5);
-      const sudutLutut = jalan ? angkat * 0.7 : (lesehan ? 2.9 : duduk * 1.5);   // lesehan: betis terlipat di bawah paha
+      const sudutPaha = jalan ? ayunKaki * 0.55 : (lesehan ? 1.5 : duduk * 1.5 + lipatPaha);
+      const sudutLutut = jalan ? angkat * 0.7 : (lesehan ? 2.9 : duduk * 1.5 + lipatPaha + lipatTapak);   // lesehan: betis terlipat di bawah paha
       const paha = A3.kali(badan, A3.poros(hx, 8.5, 0, A3.putarX(-sudutPaha)));
       kotakM(S, paha, hx - 1.5, hx + 1.5, 4.5, 8.8, -1.5, 1.5, celanaC);
       const betis = A3.kali(paha, A3.poros(hx, 4.5, 0, A3.putarX(sudutLutut)));
       kotakM(S, betis, hx - 1.45, hx + 1.45, 1.6, 4.6, -1.45, 1.45, celanaC);
-      kotakM(S, betis, hx - 1.6, hx + 1.6, 0, 1.7, -1.8, 2.9, alas);
+      // betis yang condong: sepatunya diputar balik di mata kaki, rata di lantai
+      const tapak = lipatTapak ? A3.kali(betis, A3.poros(hx, 1.2, 0, A3.putarX(-lipatTapak))) : betis;
+      kotakM(S, tapak, hx - 1.6, hx + 1.6, 0, 1.7, -1.8, 2.9, alas);
     }
 
-    // --- badan
-    const tubuh = A3.kali(badan, A3.putarX(poseNama === 'jongkok' ? 0.25 : 0));
+    // --- badan: condong di pinggul
+    const tubuh = condong ? A3.kali(badan, A3.poros(0, 8.5, 0, A3.putarX(condong))) : badan;
     const sabuk = c(sh(p.pants, 0.7));
     kotakM(S, tubuh, -4.4, 4.4, 8, 9, -2.3, 2.3, sabuk);
     kotakM(S, tubuh, -0.8, 0.8, 8.1, 8.9, 2.3, 2.55, c(P.gold), 0.2);
@@ -3057,8 +3204,21 @@ void main() { hasil = vec4(1.0); }`;
       kotakM(S, m, lx - 0.95, lx + 0.95, 7.4, 9.4, -0.95, 0.95, kulitC);
       return m;
     };
+    // jongkok/bungkuk: lengan diarahkan dari bahu (6,9 di atas pinggul,
+    // sepanjang badan yang condong) ke sasarannya — lantai atau tinggi meja;
+    // sudut mutlak dari arah bawah, paling tinggi sedikit di atas mendatar
+    const raih = Math.max(st.jongkok, st.bungkuk);
+    if (raih > 0 && !a.butuh) {
+      const sasaran = (st.jongkok * RAIH_LANTAI + st.bungkuk * st.raihMeja / SKALA_ORANG) / (st.jongkok + st.bungkuk);
+      const bahu = pinggul + 6.9 * Math.cos(condong);
+      const sudut = Math.min(2, Math.acos(Math.max(-1, Math.min(1, (bahu - sasaran) / 7)))) + condong;
+      lenganL += (sudut - lenganL) * raih;
+      lenganR += (sudut - lenganR) * raih;
+    }
     const mL = lengan(-1, lenganL);
     const mR = lengan(1, lenganR);
+    // lengan yang menggenggam senter: ujung & arah sorotnya dibaca senterMenyala()
+    st.senter = !a.butuh && bawaNama === 'senter' ? mR : null;
 
     // --- barang di tangan
     if (a.butuh) {
@@ -3071,8 +3231,8 @@ void main() { hasil = vec4(1.0); }`;
     }
 
     // --- kepala
-    const ngantuk = a.ngantuk || 0;
-    const kepala = A3.kali(tubuh, A3.poros(0, 16.5, 0, A3.putarX(ngantuk * 0.12)));
+    const ngantuk = (a.ngantuk || 0) * 0.12 + (poseNama === 'ngantuk' ? anggukKantuk(t) : 0);
+    const kepala = A3.kali(tubuh, A3.poros(0, 16.5, 0, A3.kali(A3.putarY(st.toleh), A3.putarX(ngantuk))));
     st.kepala = kepala;                                   // mata kamera POV (mataOrang)
     const jenisKepala = kepalaEfektif(a);
     kotakM(S, kepala, -1, 1, 16, 17.2, -1, 1, kulitC);                                  // leher
@@ -3139,6 +3299,67 @@ void main() { hasil = vec4(1.0); }`;
     const [col, w, h, d] = b;
     const hx = 5.4;
     kotakM(S, mR, hx - w / 2, hx + w / 2, 8.2 - h / 2, 8.2 + h / 2, 1 - d / 2, 1 + d / 2, c(col));
+    // lensa senter di ujung yang menjauhi bahu, arah sorotnya: kuning pucat
+    // seperti lensa 2D-nya, berpendar waktu gelap
+    if (jenis === 'senter') {
+      kotakM(S, mR, hx - 0.55, hx + 0.55, SENTER_LENSA - 0.3, SENTER_LENSA, 0.45, 1.55, c('#e8d98a'), gelapMalam(MALAM.lampu));
+    }
+  }
+
+  /* Senter yang menyala di gelap: satpam berpatroli (bawa 'senter' sepanjang
+     putarannya), tamu satpam-patroli, petugas ronda yang mampir ke pos.
+     Sorotnya searah lengan, dari lensa di ujung yang menjauhi bahu: menjuntai
+     waktu berjalan (genangannya di dekat kaki, ikut terayun), lurus ke depan
+     waktu berpose nunjuk "menyorotkan senter" di pintu yang diperiksa. Yang
+     paling pejal dapat lampu titik slot 13 (cahayaMalam, frame berikutnya);
+     tiap pemegang dapat genangan kecil di titik yang disorotnya — di grup
+     sinar seperti genangan lampu meja, kecuali di mode ringan. */
+  const SENTER_LENSA = 8.2 - BAWAAN.senter[2] / 2;    // y lokal lengan: ujung senter yang menjauhi bahu
+  const JANGKAU_SENTER = 70;
+  function senterMenyala(a, alfa) {
+    const st = keadaanOrang.get(a), m = st && st.senter;
+    if (!m || !(alfa > 0.02)) return;
+    const ujung = [m[0] * 5.4 + m[1] * SENTER_LENSA + m[2] + m[3], m[4] * 5.4 + m[5] * SENTER_LENSA + m[6] + m[7],
+      m[8] * 5.4 + m[9] * SENTER_LENSA + m[10] + m[11]];
+    const arah = norm3(-m[1], -m[5], -m[9]);
+    if (!SENTER.ada || alfa > SENTER.alfa) {
+      // sedikit di depan lensa: yang paling terang yang disorot, bukan genggamannya
+      Object.assign(SENTER, { ada: true, alfa, pos: [ujung[0] + arah[0] * 3, ujung[1] + arah[1] * 3, ujung[2] + arah[2] * 3] });
+    }
+    const gelap = gelapMalam(MALAM.lampu);
+    if (gelap < 0.01 || ringanAktif()) return;
+    const kena = kenaSorot(ujung, arah);
+    if (!kena) return;
+    const r = Math.min(8, 1.6 + kena.t * 0.28), n = kena.n;
+    [[1, 0.1], [0.72, 0.18], [0.4, 0.28]].forEach(([s, al], j) => {
+      const g = 0.12 + j * 0.03;
+      cakram(G.sinar, [kena.p[0] + n[0] * g, kena.p[1] + n[1] * g, kena.p[2] + n[2] * g], n, r * s, warna('#ffe9b0', al * gelap * alfa));
+    });
+  }
+  // Bidang pertama yang kena sorot dalam jangkauan senter: lantai, dinding
+  // belakang (dari depannya), atau tembok samping. null = lepas ke udara.
+  function kenaSorot(p, d) {
+    let t = JANGKAU_SENTER, n = null;
+    const coba = (tt, nn) => { if (tt > 0 && tt < t) { t = tt; n = nn; } };
+    if (d[1] < -1e-3) coba(-p[1] / d[1], [0, 1, 0]);
+    if (d[2] < -1e-3 && p[2] > DINDING_Z) coba((DINDING_Z - p[2]) / d[2], [0, 0, 1]);
+    if (d[0] < -1e-3) coba(-p[0] / d[0], [1, 0, 0]);
+    if (d[0] > 1e-3) coba((W - p[0]) / d[0], [-1, 0, 0]);
+    return n && { t, n, p: [p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t] };
+  }
+  // Cakram tipis menghadap n: kipas segitiga berlawanan jarum jam dilihat
+  // dari arah n (lintasan sinar memakai culling)
+  function cakram(S, p, n, r, c, segmen = 14) {
+    const h = Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], uv = [0.5, 0.5];
+    const u = norm3(h[1] * n[2] - h[2] * n[1], h[2] * n[0] - h[0] * n[2], h[0] * n[1] - h[1] * n[0]);
+    const v = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+    let q0 = null;
+    for (let i = 0; i <= segmen; i++) {
+      const sd = (i / segmen) * Math.PI * 2, cs = Math.cos(sd) * r, sn = Math.sin(sd) * r;
+      const q = [p[0] + u[0] * cs + v[0] * sn, p[1] + u[1] * cs + v[1] * sn, p[2] + u[2] * cs + v[2] * sn];
+      if (q0) S.tri(p, q0, q, n, c, uv, uv, uv, 1);
+      q0 = q;
+    }
   }
 
   /* BAWAAN di tangan (a.bawa) digambar susunOrang sendiri — semata wayang
@@ -3257,29 +3478,58 @@ void main() { hasil = vec4(1.0); }`;
     // meja kerja: kursi (serong kalau kusut & kosong), layar laptop
     const terpakai = new Set();
     for (const a of penghuni()) if (a.station === 'think' && !a.path.length && !a.antre) terpakai.add(a.slotIdx);
-    MEJA_KERJA_X.forEach((cx, i) => {
+    MEJA_KERJA_X.forEach((cx0, i) => {
       const serong = kusutKini() > 0.42 && !terpakai.has(i) ? (KUSUT_KURSI[i] || 0) : 0;
-      kursi(S, cx + serong, 355.6, -1, false, true);
+      kursi(S, cx0 + serong, 355.6, -1, false, true);
       const h = MEJA_H;
       const nyala = (terpakai.has(i) || MOD.mejaHantu === i) && MOD.mejaPadam !== i;
       LAMPU_MEJA[i] = nyala ? 1 : 0;                         // lampu titik mejanya (hitungCahaya)
-      const layar = nyala ? campur(warna('#173a96'), warna('#9fc3ff'), 0.15 + 0.1 * Math.sin(now / 300 + i)) : warna('#20242c');
-      kotak(S, cx + 13, cx + 29, h + 1.6, h + 13.4, 336, 336.2, layar, { sisi: S_DEPAN, e: nyala ? 0.85 : 0 });
+      // meja yang kakinya belum diganjal (MOD.mejaGetar) bergoyang HANYA selagi
+      // penghuninya mengetik, seperti 2D. Papan & badan laptopnya statis, jadi
+      // yang bergoyang ±1 benda dinamis di atasnya: layar, barisnya, lampu meja.
+      const cx = cx0 + (MOD.mejaGetar === i && terpakai.has(i) ? (Math.sin(now / 70) > 0 ? 1 : -1) : 0);
+      // Layar mengikuti drawMejaKerja 2D: MOD.layarPucat meredupkannya ke
+      // #121a2c, barisnya bernapas lalu hilang di 0,95 (layar-mengantuk);
+      // MOD.sidak menahannya terang penuh (kadis lewat: semua kelihatan rajin);
+      // MOD.slotTerkunci menggelapkannya dengan empat titik, bukan baris;
+      // MOD.layarPutih memutihkannya sampai memancar (kedip serempak / restart).
+      const terkunci = MOD.slotTerkunci === i;
+      const pucat = MOD.sidak ? 0 : MOD.layarPucat;
+      const napas = MOD.sidak ? 1 : (MOD.layarPucat ? 0.45 + 0.25 * Math.sin(now / 900 + i) : 1);
+      const putih = nyala && MOD.layarPutih > 0.01 ? MOD.layarPutih : 0;
+      const adaBaris = nyala && !terkunci && (MOD.sidak || MOD.layarPucat < 0.95);
+      const biru = campur(warna('#173a96'), warna('#9fc3ff'), MOD.sidak ? 0.25 : 0.15 + 0.1 * Math.sin(now / 300 + i));
+      const layar = terkunci ? warna('#141a20') : !nyala ? warna('#20242c') : pucat ? campur(biru, warna('#121a2c'), pucat) : biru;
+      const e0 = MOD.sidak ? 1 : 0.85, eLayar = nyala ? e0 + (1 - e0) * putih : 0;
+      kotak(S, cx + 13, cx + 29, h + 1.6, h + 13.4, 336, 336.2, putih ? campur(layar, PUTIH, putih) : layar, { sisi: S_DEPAN, e: eLayar });
+      if (terkunci) {
+        const titik = putih ? campur(warna('#5a6068'), PUTIH, putih) : warna('#5a6068');
+        for (const dx of [17.5, 22.5]) for (const dy of [4.5, 8.5]) kotak(S, cx + dx, cx + dx + 2, h + dy, h + dy + 2, 336.2, 336.3, titik, { sisi: S_DEPAN, e: eLayar });
+      }
       // genangan cahaya lampu meja di papan meja: tiga cakram hangat bertingkat
       // (di lintasan pudar cuma yang teratas yang dicampur, jadi pinggirnya
       // memudar bertahap), cuma terasa waktu ruangan gelap
       if (nyala && MALAM.lampu > 0.05) {
         [[7.5, 0.1], [5.5, 0.18], [3, 0.28]].forEach(([r, al], j) => {
-          tabung(G.sinar, cx - 22, 339, r, h + 0.04 + j * 0.03, h + 0.06 + j * 0.03, [1, 0.86, 0.55, al * MALAM.lampu], { segmen: 14, e: 1 });
+          tabung(G.sinar, cx0 - 22, 339, r, h + 0.04 + j * 0.03, h + 0.06 + j * 0.03, [1, 0.86, 0.55, al * MALAM.lampu], { segmen: 14, e: 1 });
         });
+        // pantulan biru layar di papan meja & dek keyboard (pita 0,13 x napas
+        // di 2D); layar yang diputihkan memantulkan kilatnya juga
+        const kuat = ((adaBaris ? 0.13 * napas : 0) + 0.2 * putih) * MALAM.lampu;
+        if (kuat > 0.005) {
+          const p = campur(warna('#9fc3ff'), PUTIH, putih), c = [p[0], p[1], p[2], kuat];
+          kotak(G.sinar, cx0 + 9, cx0 + 32, h + 0.06, h + 0.07, 336, 347, c, { sisi: S_ATAS, e: 1 });
+          kotak(G.sinar, cx0 + 11, cx0 + 31, h + 1.25, h + 1.26, 336.2, 344, c, { sisi: S_ATAS, e: 1 });
+        }
       }
-      if (nyala) {
+      if (adaBaris) {
         for (let b = 0; b < 3; b++) {
           const lw = 3 + ((b * 5 + ((now * MOD.layar / 150) | 0) + i * 3) % 9);
-          kotak(S, cx + 14, cx + 14 + lw, h + 11 - b * 3, h + 11.6 - b * 3, 336.2, 336.3, warna(b ? '#bcd0ff' : '#ffffff'), { sisi: S_DEPAN, e: 1 });
+          const g = warna(b ? '#bcd0ff' : '#ffffff'), gn = napas < 1 ? campur(layar, g, napas) : g;   // napas = alfa baris di 2D
+          kotak(S, cx + 14, cx + 14 + lw, h + 11 - b * 3, h + 11.6 - b * 3, 336.2, 336.3, putih ? campur(gn, PUTIH, putih) : gn, { sisi: S_DEPAN, e: 1 });
         }
-        kotak(S, cx - 30.5, cx - 26.5, h + 9, h + 11, 332.5, 336.5, warna('#ffe9a0'), { sisi: SEMUA, e: 1 });   // bohlam lampu meja
       }
+      if (nyala) kotak(S, cx - 30.5, cx - 26.5, h + 9, h + 11, 332.5, 336.5, warna('#ffe9a0'), { sisi: SEMUA, e: 1 });   // bohlam lampu meja
       kotak(S, cx - 32, cx - 25, h + 11, h + 13.5, 332, 337, warna('#2c3440'), { sisi: S_ATAS | S_DEPAN | S_KIRI | S_KANAN });   // kap
     });
 
@@ -3402,10 +3652,12 @@ void main() { hasil = vec4(1.0); }`;
     // pegawai: yang pudar ke grup campur, sisanya pejal. Yang matanya sedang
     // dipakai kamera POV tidak digambar (keadaannya tetap maju lewat SUSUN_HAMPA)
     const tanpaBadan = POV.t > 0.4 ? POV.orang || POV.bekas : null;
+    SENTER.ada = false;                                       // diisi ulang senterMenyala di bawah
     for (const a of penghuni()) {
       const ganti = tampilanKhusus(a);                        // yang sedang masuk/keluar WC & gudang
       const alfa = alfaOrang(a, ganti);
       susunOrang(a === tanpaBadan ? SUSUN_HAMPA : alfa < 0.999 ? G.pudar : S, a, dt, alfa, ganti);
+      senterMenyala(a, alfa);
     }
     // tamu event (sosok drawPerson di gambar event): boneka voxel di tempatnya sendiri.
     // Yang datang/pergi lewat tepi ikut memudar di ambang pintu samping
@@ -3413,6 +3665,7 @@ void main() { hasil = vec4(1.0); }`;
     for (const { o } of ORANG_EVENT.daftar) {
       const al = alfaOrang(o);
       susunOrang(al < 0.999 ? G.pudar : S, o, dt, al);
+      senterMenyala(o, al);
     }
     // hewan & barang event yang bermodel: kucing kantor, tikus, isi meja rapat, tangga...
     for (const E of eventHidup) {
@@ -3556,7 +3809,8 @@ void main() { hasil = vec4(1.0); }`;
     const sapu = MOD.kipasSapu ? Math.sin(now / 1114) * MOD.kipasSapu : 0;
     const dasarCx = MOD.kipasCx || 400;
     const arah = MOD.kipasCx ? 0 : RUANGAN.kipasArah * 6;
-    const cx = dasarCx + (MOD.kipasCx ? 0 : sapu) + arah + Math.sin(now / 64) * MOD.kipasGoyang;
+    const cx = dasarCx + (MOD.kipasCx ? 0 : sapu) + arah + Math.sin(now / 64) * MOD.kipasGoyang
+      + (MOD.kipasGetar ? (Math.sin(now / 42) > 0 ? 1 : -1) * MOD.kipasGetar : 0);   // motor macet bergetar (drawKipas)
     const cz = 290;
     tabung(S, cx, cz, 9, 0, 2, warna('#7c838a'), { segmen: 14, atas: warna('#9aa1a6') });
     tabung(S, cx, cz, 1.2, 2, 34, warna('#c9ced4'), { segmen: 6 });
@@ -3666,25 +3920,32 @@ void main() { hasil = vec4(1.0); }`;
   const DEBU3D_MAKS = 48;
   const debu3d = [];
   const JEN = { x0: JENDELA.x, x1: JENDELA.x + JENDELA.w, hB: FLOOR_TOP - (JENDELA.y + JENDELA.h), hA: FLOOR_TOP - JENDELA.y };
-  const SINAR_DEKAT = { x0: 190, x1: 240, z: FLOOR_TOP }, SINAR_JAUH = { x0: 164, x1: 266, z: 196 };   // petak sinar drawFloor
-  // u melintang (0 kiri..1 kanan), v: 0 tepi bawah kaca..1 tepi atas, t: 0 di kaca..1 di lantai.
-  // Cahaya dari tepi bawah kaca jatuh di tepi dekat petak, dari tepi atas di tepi jauhnya.
-  function titikBerkas(u, v, t) {
+  /* Petak di ujung lantai prisma: petakSinar() room.js, sumber yang sama
+     dengan trapesium drawFloor yang dilukis ke tekstur lantai — prisma, debu,
+     dan petaknya ikut jam bersama, tidak bisa selisih. Selama kilat petaknya
+     sesaat seukuran kaca: cahaya langit yang jatuh hampir tegak, bukan
+     matahari yang miring. prefers-reduced-motion: tanpa kedip kilat. */
+  const PETAK_KILAT = { dekat: { x0: JEN.x0, x1: JEN.x1, y: FLOOR_TOP }, jauh: { x0: JEN.x0, x1: JEN.x1, y: FLOOR_TOP + JENDELA.h } };
+  const kilatBerkas = () => (kilat > 0 && !geraKurang3.matches ? kilat : 0);
+  // petak di lantai {dekat, jauh}; u melintang (0 kiri..1 kanan), v: 0 tepi bawah kaca..1 tepi
+  // atas, t: 0 di kaca..1 di lantai. Cahaya dari tepi bawah kaca jatuh di tepi dekat petak,
+  // dari tepi atas di tepi jauhnya.
+  function titikBerkas({ dekat, jauh }, u, v, t) {
     const kx = JEN.x0 + (JEN.x1 - JEN.x0) * u, kh = JEN.hB + (JEN.hA - JEN.hB) * v;
-    const lx0 = SINAR_DEKAT.x0 + (SINAR_JAUH.x0 - SINAR_DEKAT.x0) * v, lx1 = SINAR_DEKAT.x1 + (SINAR_JAUH.x1 - SINAR_DEKAT.x1) * v;
-    const lx = lx0 + (lx1 - lx0) * u, lz = SINAR_DEKAT.z + (SINAR_JAUH.z - SINAR_DEKAT.z) * v;
+    const lx0 = dekat.x0 + (jauh.x0 - dekat.x0) * v, lx1 = dekat.x1 + (jauh.x1 - dekat.x1) * v;
+    const lx = lx0 + (lx1 - lx0) * u, lz = dekat.y + (jauh.y - dekat.y) * v;
     return [kx + (lx - kx) * t, kh * (1 - t), DINDING_Z + (lz - DINDING_Z) * t];
   }
   function perbaruiDebu3D(dt) {
     if (ringanAktif()) { debu3d.length = 0; return; }
-    const sumber = debuSumber(ambien());
+    const A = ambien(), sumber = debuSumber(A);
     if (sumber.length && debu3d.length < DEBU3D_MAKS && Math.random() < dt * 7) {
       const s = sumber[(Math.random() * sumber.length) | 0];
       let p;
       if (s.jenis === 'neon') {
         const t = Math.random(), rr = (6 + 34 * t) * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
         p = [NEON_X[s.i] + Math.cos(a) * rr, (LAMPU_Y - 2) * (1 - t), LAMPU_Z + Math.sin(a) * rr];
-      } else p = titikBerkas(Math.random(), Math.random(), 0.08 + Math.random() * 0.84);
+      } else p = titikBerkas(petakSinar(A.jam), Math.random(), Math.random(), 0.08 + Math.random() * 0.84);
       debu3d.push({ p, jenis: s.jenis, i: s.i, v: [(Math.random() - 0.5) * 1.6, -(0.4 + Math.random()), (Math.random() - 0.5) * 1.6],
         fase: Math.random() * 6.28, umur: 0, life: 5 + Math.random() * 6 });
     }
@@ -3711,22 +3972,32 @@ void main() { hasil = vec4(1.0); }`;
   }
   // Selubung berkas jendela: empat muka prisma, dipotong empat irisan yang
   // makin pudar mendekati lantai, digambar aditif tanpa menulis kedalaman.
+  // Kilat menyalakannya sekejap putih kebiruan (warna kilat 2D) seukuran
+  // kaca, plus petaknya sendiri di lantai: empat daun kaca yang dipisah bayang
+  // kusen silang. Petak kilat tidak ikut tekstur lantai — lantai cuma dilukis
+  // ulang tiap 150 ms, kilatnya sudah lewat sebelum sempat kelihatan.
   function susunBerkas(S) {
     S.kosongkan();
-    const A = ambien();
-    const kuat = A.sinarA * Math.min(1, A.luar) * (1 - 0.6 * CUACA.hujan) * 0.9;
-    if (kuat < 0.006 || ringanAktif()) return;
-    const [r, g, b] = warna(A.sinar);
-    const muka = [
-      [(t) => titikBerkas(0, 0, t), (t) => titikBerkas(1, 0, t)],
-      [(t) => titikBerkas(1, 1, t), (t) => titikBerkas(0, 1, t)],
-      [(t) => titikBerkas(0, 1, t), (t) => titikBerkas(0, 0, t)],
-      [(t) => titikBerkas(1, 0, t), (t) => titikBerkas(1, 1, t)],
-    ];
+    if (ringanAktif()) return;
+    const A = ambien(), kl = kilatBerkas();
+    const kuat = kl ? 0.3 * kl : A.sinarA * Math.min(1, A.luar) * (1 - 0.6 * CUACA.hujan) * 0.9;
+    if (kuat < 0.006) return;
+    const petak = kl ? PETAK_KILAT : petakSinar(A.jam);
+    const [r, g, b] = warna(kl ? '#dfe8ff' : A.sinar);
+    const tb = (u, v) => (t) => titikBerkas(petak, u, v, t);
+    const muka = [[tb(0, 0), tb(1, 0)], [tb(1, 1), tb(0, 1)], [tb(0, 1), tb(0, 0)], [tb(1, 0), tb(1, 1)]];
     for (let k = 0; k < 4; k++) {
       const t0 = k / 4, t1 = (k + 1) / 4, f = kuat * (1 - t0 * 0.75);
       const c = [r * f, g * f, b * f, 1];
       for (const [kiri, kanan] of muka) S.segi(kiri(t1), kanan(t1), kanan(t0), kiri(t0), [0, 0, 1], c, UV_POLOS, 1);
+    }
+    if (!kl) return;
+    const f = 0.22 * kl, c = [r * f, g * f, b * f, 1];
+    const { dekat, jauh } = PETAK_KILAT, xt = (dekat.x0 + dekat.x1) / 2, zt = (dekat.y + jauh.y) / 2;
+    for (const [x0, x1] of [[dekat.x0, xt - 1], [xt + 1, dekat.x1]]) {
+      for (const [z0, z1] of [[dekat.y, zt - 1], [zt + 1, jauh.y]]) {
+        S.segi([x0, 0.12, z1], [x1, 0.12, z1], [x1, 0.12, z0], [x0, 0.12, z0], [0, 1, 0], c, UV_POLOS, 1);
+      }
     }
   }
 
@@ -4529,11 +4800,15 @@ void main() { hasil = vec4(1.0); }`;
         kotak(S, x + 3.5, x + 8, 4.5, 5.5, 256.1, 256.15, warna(P.paper), { sisi: S_DEPAN });                // label
       }
     },
-    // silau matahari sore menembus jendela: petak hangat di lantai, memudar 6 detik
+    // silau matahari sore menembus jendela: petak hangat di lantai, memudar 6 detik.
+    // Ikut petak sinar (petakSinar, sama dengan kipas 2D-nya): bentuk lamanya
+    // ditambatkan ke tengah tepi dekat & tepi jauh petak jam ini
     'silau-sore-gorden': (S, E) => {
       if (E.umur > 6) return;
       const c = warna('#ffd88a'), ca = [c[0], c[1], c[2], 0.26 * Math.max(0, 1 - E.umur / 6)];
-      G.sinar.segi([150, 0.15, 200], [300, 0.15, 200], [238, 0.15, 101], [186, 0.15, 101], [0, 1, 0], ca, UV_POLOS, 0.7);
+      const { dekat, jauh } = petakSinar(ambien().jam);
+      const cd = Math.round((dekat.x0 + dekat.x1) / 2), cj = Math.round((jauh.x0 + jauh.x1) / 2), zd = dekat.y - 9, zj = jauh.y + 4;
+      G.sinar.segi([cj - 65, 0.15, zj], [cj + 85, 0.15, zj], [cd + 23, 0.15, zd], [cd - 29, 0.15, zd], [0, 1, 0], ca, UV_POLOS, 0.7);
     },
     // cahaya monitor lembur sudah dipancarkan layar-layar 3D-nya sendiri
     'lembur-sampai-malam': () => {},
