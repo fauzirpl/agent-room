@@ -621,19 +621,55 @@ const SHELL_TOOL = /^(Bash|PowerShell|BashOutput|KillShell)$/;
 // Kegiatan berpikir — menyusun agenda, menyusun/mengajukan rencana, menunggu
 // arahan — dikerjakan di tempat yang sedang dia tempati: di meja rapat selagi
 // ada subagent yang benar-benar berjalan, di meja kerja kalau dia sendirian.
-// Sengaja hanya kelompok ini: perintah shell juga jatuh ke 'think' kalau bukan
-// urusan git, dan menjalankan perintah bukan berpikir.
+// Sengaja hanya kelompok ini: perintah shell dan peramban MCP juga jatuh ke
+// 'think', dan menjalankan perintah atau mengemudikan peramban bukan berpikir.
 const THINK_TOOL = /^(TodoWrite|ExitPlanMode|EnterPlanMode|AskUserQuestion)$/;
+/* Tool MCP dipilah menurut SERVER-nya (segmen di antara '__' pertama dan
+   kedua), tidak lagi semuanya menghadap kadis. Di buku agenda 24 hari (50.492
+   tool call) ada 5.801 panggilan MCP: 5.062 mengemudikan peramban/desktop dan
+   516 menanyai basis data. Kalau semuanya mengetuk pintu kadis, pintunya
+   buka-tutup sepanjang hari dan "menghadap kadis" tidak lagi terasa istimewa.
+   Dengan tabel ini yang masih menghadap tinggal 297 (223 MCP lain + Skill +
+   SendMessage).
+   Kuncinya `server` (semua tool server itu) atau `server__tool` (tool itu
+   saja). Map, bukan objek: nama server datang dari mesin orang, dan
+   'constructor' tidak boleh menemukan apa pun di prototipe.
+   - Peramban/desktop: dikerjakan di laptop mejanya sendiri, sama seperti
+     perintah shell non-git. Sengaja BUKAN 'web' — di meja printer tiap
+     panggilan mencetak selembar kertas (pakaiPrinter), dan sesi peramban
+     memanggil puluhan kali semenit.
+   - Basis data: ke rak server. Per TOOL, bukan per server: laravel-boost juga
+     punya search-docs, tinker, last-error yang bukan urusan basis data.
+   - Selebihnya, termasuk server bernama UUID: tetap menghadap kadis.
+   Isinya [stasiun, frasa kegiatan]; frasanya dipakai kegiatan(). */
+const MCP_MEJA = new Map([
+  ['Claude_Browser',   ['think', 'menjelajah web lewat']],
+  ['claude-in-chrome', ['think', 'menjelajah web lewat']],
+  ['chrome-devtools',  ['think', 'menjelajah web lewat']],
+  ['playwright',       ['think', 'menjelajah web lewat']],
+  ['puppeteer',        ['think', 'menjelajah web lewat']],
+  ['computer-use',     ['think', 'mengoperasikan komputer lewat']],
+  ['laravel-boost__database-query',  ['server', 'menanyai basis data lewat']],
+  ['laravel-boost__database-schema', ['server', 'membaca skema basis data lewat']],
+]);
+// [stasiun, frasa] untuk tool MCP yang ada di tabel, null kalau tidak ada
+function mejaMcp(tool) {
+  const b = String(tool).split('__');
+  return MCP_MEJA.get(b[1] + '__' + b.slice(2).join('__')) || MCP_MEJA.get(b[1]) || null;
+}
 const stationFor = (tool, label, session) => {
   if (!tool) return 'think';
   if (SHELL_TOOL.test(tool)) return segmenGit(label) ? 'server' : 'think';
   if (THINK_TOOL.test(tool) && session && sedangRapat(session)) return 'rapat';
-  return TOOL_STATION[tool] || (tool.startsWith('mcp__') ? 'agent' : 'think');
+  if (tool.startsWith('mcp__')) return (mejaMcp(tool) || ['agent'])[0];
+  return TOOL_STATION[tool] || 'think';
 };
 
 // Efek partikel yang menempel pada TOOL, bukan pada mejanya: satu meja kerja
-// bisa dipakai menyusun agenda (lampu ide) atau menjalankan perintah (glyph).
+// bisa dipakai menyusun agenda (lampu ide), menjalankan perintah (glyph),
+// atau mengemudikan peramban MCP (ping biru, sama dengan meja printer).
 const FX_TOOL = { Bash: 'glyph', PowerShell: 'glyph', BashOutput: 'glyph', KillShell: 'glyph' };
+const fxDiMeja = (tool) => FX_TOOL[tool] || (tool && tool.startsWith('mcp__') ? 'ping' : null);
 
 /* ------------------------------------------------- bahasa kegiatan ------ */
 /* Yang dibaca orang bukan nama tool, tapi apa yang lagi dikerjakan pegawainya. */
@@ -723,7 +759,10 @@ function kegiatan(tool, label) {
     if (!srv || /^[0-9a-f][0-9a-f ]{14,}$/i.test(srv)) srv = 'sistem luar';
     // nama tool-nya ikut: "Claude Browser · navigate", bukan cuma servernya
     const alat = tool.split('__').slice(2).join('__');
-    return ['berkoordinasi dengan', alat ? srv + ' · ' + alat : srv];
+    // frasanya ikut mejanya (MCP_MEJA): peramban dijelajahi, basis data
+    // ditanyai; cuma yang menghadap kadis yang "berkoordinasi"
+    const meja = mejaMcp(tool);
+    return [meja ? meja[1] : 'berkoordinasi dengan', alat ? srv + ' · ' + alat : srv];
   }
   if (tool === 'Bash' || tool === 'PowerShell') {
     const g = kegiatanGit(o);
@@ -2696,11 +2735,22 @@ function bantalBaca(cx, y) {
 const SISIP = { x: 290, y: 33, w: 72, h: 46 };          // bukaan luar termasuk bingkai
 const SISIP_DALAM = { x: 292, y: 39, w: 67, h: 36 };    // isi ruangan, di dalam clip
 const SISIP_BUKA_MS = 220, SISIP_TUTUP_MS = 180, SISIP_PUDAR_MS = 180;
-/* 6000, bukan 2500: `tool.startsWith('mcp__') ? 'agent'` memetakan SETIAP
-   tool MCP ke stasiun ini, ditambah Skill dan SendMessage. Stasiun ini
-   RAMAI, dan tahan 2,5 detik bikin gordennya berkedip sepanjang sesi.
-   Karena itu ONGKOSNYA DITULIS APA ADANYA — bukaan ini jauh lebih sering
-   terbuka daripada kesannya.
+/* 6000, bukan 2500. Angka ini lahir waktu `tool.startsWith('mcp__') ? 'agent'`
+   masih memetakan SETIAP tool MCP ke stasiun ini, ditambah Skill dan
+   SendMessage: stasiunnya RAMAI, dan tahan 2,5 detik bikin gordennya berkedip
+   sepanjang sesi. Sejak MCP_MEJA memindahkan peramban ke meja kerja dan query
+   basis data ke rak server, alasan itu nyaris habis. Diukur atas buku agenda
+   24 hari, dengan "jeda antar-panggilan ke stasiun ini lebih dari tahan"
+   sebagai taksiran satu kali buka:
+     pemetaan             panggilan   bukaan @2,5 dtk   bukaan @6 dtk
+     semua mcp__ ke kadis     5.875             5.230           3.989
+     MCP_MEJA                   297               276             260
+   Tahan 6 detik dibiarkan: selisihnya tinggal 16 bukaan dalam 24 hari, jadi
+   menurunkannya tidak menghemat apa-apa, dan tamu yang sekarang jarang
+   justru layak dipandang sedikit lebih lama.
+
+   ONGKOSNYA tetap DITULIS APA ADANYA — tabel di bawah berlaku per frame
+   selama bukaannya terbuka; yang berubah cuma seberapa sering ia terbuka.
 
    CARA MENGHITUNGNYA IKUT DITULIS, karena angkanya berbeda jauh tergantung
    apa yang disebut "panggilan gambar". Diukur di halaman sungguhan (rAF
@@ -2760,8 +2810,9 @@ function sisipSetel(v) {
   /* Yang sedang di dalam TIDAK CUKUP dikeluarkan: keluarKadis() menaruhnya di
      (452, LANE_UP) dengan path kosong, dan handle() cuma memanggil goTo saat
      STASIUNNYA berganti (`if (a.station !== st) a.goTo(st)`), jadi tool call
-     mcp__ berikutnya tidak akan memindahkannya — dia mematung di lajur sampai
-     ada tool call stasiun lain. Suruh dia berbaris lagi di ambang pintu. */
+     berikutnya yang juga menghadap kadis (Skill, SendMessage, mcp__ di luar
+     MCP_MEJA) tidak akan memindahkannya — dia mematung di lajur sampai ada
+     tool call stasiun lain. Suruh dia berbaris lagi di ambang pintu. */
   for (const a of penghuni()) {
     if (!a.diKadis && !a.sisipFase) continue;
     const st = a.station;
@@ -4934,8 +4985,14 @@ function rambutWarna(p) { return p.hair || RAMBUT_CADANGAN; }
    bawaan, "bebas"-nya cuma di atas, padahal yang diminta bebas dua-duanya.
    Sabtu/Minggu tidak diminta user; dipulangkan ke putih polos juga supaya
    tidak ada hari yang jatuh ke pal bawaan lama (sudah tidak valid karena
-   main/pants/pattern-nya ditimpa permanen oleh fungsi ini). */
+   main/pants/pattern-nya ditimpa permanen oleh fungsi ini).
+   Tanggal 17 tiap bulan mengalahkan semuanya: SERAGAM KORPRI biru sepanjang
+   hari, seperti ASN sungguhan di hari upacara Hari Kesadaran Nasional (apel
+   pagi hari itu jadi upacara, lihat jenisApel). Biru dan polosnya sama
+   dengan event hari-korpri dan spanduk HUT KORPRI. ?apel=hkn memaksa
+   upacaranya sekarang, jadi seragamnya ikut. */
 const SERAGAM_PUTIH = { main: '#f0ede2', pants: '#22293a', pattern: null };
+const SERAGAM_KORPRI = { main: '#28406b', pants: '#22293a', pattern: null };
 const SERAGAM_BATIK_RABU = { main: '#2f4470', pants: '#22293a', pattern: '#8fa8d8' };
 const SERAGAM_BATIK_JUMAT = [
   { main: '#6b4a2a', pattern: '#d9ab5e' },   // coklat klasik
@@ -4965,22 +5022,33 @@ const SERAGAM_PETUGAS = {
 };
 const TOPI_SATPAM = { isi: '#1f232b', tepi: '#0f1115', kilap: '#3a404b', lidah: '#121418', monogram: '#e6e6e0' };
 
-// Hari (0-6) yang terakhir diterapkan -- dicek ulang tiap poll (bukan cuma
-// sekali muat) supaya tab yang dibiarkan terbuka lewat tengah malam ikut
-// pindah seragam sendiri, seperti cekJadwalRaya di bawah.
+// Jenis seragam ('korpri'|'rabu'|'jumat'|'putih') yang terakhir diterapkan
+// -- dicek ulang tiap poll (bukan cuma sekali muat) supaya tab yang dibiarkan
+// terbuka lewat tengah malam ikut pindah seragam sendiri, seperti
+// cekJadwalRaya di bawah.
 let seragamHariTerpasang = null;
+const SERAGAM_KORPRI_PAKSA = jenisPaksaApel(new URLSearchParams(location.search).get('apel')) === 'hkn';
+
+// Fungsi murni dari satu Date supaya jadwalnya bisa diuji tanpa menunggu
+// tanggal 17 (uji-event.mjs --apel).
+function jenisSeragamHari(d) {
+  if (d.getDate() === 17 || SERAGAM_KORPRI_PAKSA) return 'korpri';
+  const hari = d.getDay();
+  return hari === 3 ? 'rabu' : hari === 5 ? 'jumat' : 'putih';
+}
 
 function terapkanSeragamHarian() {
-  const hari = new Date().getDay();
-  if (hari === seragamHariTerpasang) return;
-  seragamHariTerpasang = hari;
+  const jenis = jenisSeragamHari(new Date());
+  if (jenis === seragamHariTerpasang) return;
+  seragamHariTerpasang = jenis;
   for (const j of JABATAN) {
     if (j.pal.seragam) continue;         // satpam & OB: seragam petugas sendiri tiap hari (SERAGAM_PETUGAS)
-    const seragam = hari === 3 ? SERAGAM_BATIK_RABU
-      : hari === 5 ? SERAGAM_BATIK_JUMAT[(Math.random() * SERAGAM_BATIK_JUMAT.length) | 0]
+    const seragam = jenis === 'korpri' ? SERAGAM_KORPRI
+      : jenis === 'rabu' ? SERAGAM_BATIK_RABU
+      : jenis === 'jumat' ? SERAGAM_BATIK_JUMAT[(Math.random() * SERAGAM_BATIK_JUMAT.length) | 0]
       : SERAGAM_PUTIH;
     j.pal.main = seragam.main;
-    j.pal.pants = hari === 5 ? CELANA_JUMAT[(Math.random() * CELANA_JUMAT.length) | 0] : seragam.pants;
+    j.pal.pants = jenis === 'jumat' ? CELANA_JUMAT[(Math.random() * CELANA_JUMAT.length) | 0] : seragam.pants;
     j.pal.pattern = seragam.pattern || null;
   }
 }
@@ -5012,7 +5080,7 @@ setInterval(terapkanSeragamHarian, 30000);
    reload, dan sama juga di putar ulang agenda (server ikut mencatat ev.mesin).
 
    Warna dipilih supaya jarak RGB-nya >= 60 terhadap SELURUH warna baju harian
-   (putih, batik Rabu, kelima batik Jumat) dan >= 60 antar sesama rompi --
+   (putih, batik Rabu, Korpri tanggal 17, kelima batik Jumat) dan >= 60 antar sesama rompi --
    dijaga uji-seragam.mjs, jangan diubah dengan mata saja. Usul awal rancangan
    (#41603c hijau, #4f545c kelabu, #7a4f2e cokelat) semuanya JATUH di uji itu:
    masing-masing cuma berjarak 7 / 41 / 16 dari batik hijau Jumat, navy Rabu,
@@ -9156,15 +9224,16 @@ const FOLEY = {
   },
 };
 
-// stasiun -> nama bunyi. Perintah shell non-git jatuh ke 'think' (dikerjakan
-// di laptop meja kerjanya, lihat stationFor), tapi menjalankan perintah itu
-// mengetik, bukan berpikir — jadi dibedakan di sini.
+// stasiun -> nama bunyi. Perintah shell non-git dan peramban MCP jatuh ke
+// 'think' (dikerjakan di laptop meja kerjanya, lihat stationFor), tapi
+// keduanya mengetik, bukan berpikir — jadi dibedakan di sini.
 const FOLEY_STASIUN = {
   edit: 'stempel', read: 'arsip', search: 'arsip', server: 'server',
   rapat: 'rapat', think: 'pikir', web: 'ketik', agent: 'ketik',
 };
 function foleyUntuk(tool, st) {
   if (tool && SHELL_TOOL.test(tool)) return st === 'server' ? 'server' : 'ketik';
+  if (st === 'think' && tool && tool.startsWith('mcp__')) return 'ketik';
   return FOLEY_STASIUN[st] || 'ketik';
 }
 
@@ -10287,10 +10356,10 @@ const FUNGSI_STASIUN = {
   search: 'Grep, ToolSearch — mencari data',
   web: 'WebFetch, WebSearch — membuka situs',
   edit: 'Edit, Write, Artifact — merevisi & menyusun berkas',
-  server: 'perintah git (git, gh, jj) lewat Bash/PowerShell',
-  agent: 'Skill, SendMessage, semua mcp__* — menghadap kadis',
+  server: 'perintah git (git, gh, jj) lewat Bash/PowerShell, query basis data lewat MCP',
+  agent: 'Skill, SendMessage, mcp__* selain peramban & basis data — menghadap kadis',
   rapat: 'Task, Agent, Workflow — rapat dengan subagent',
-  think: 'TodoWrite, AskUserQuestion, perintah shell non-git',
+  think: 'TodoWrite, AskUserQuestion, perintah shell non-git, peramban MCP',
 };
 const KONDISI_BMN = { B: 'Baik', RR: 'Rusak Ringan', RB: 'Rusak Berat' };
 const TEMA_MEJA = ['meja rapi', 'meja berantakan', 'meja otaku', 'meja kpoper', 'meja tanaman',
@@ -10825,8 +10894,9 @@ function handle(ev) {
       // Pelakunya: peserta rapat kalau event ini memang miliknya, induk kalau
       // bukan. Yang bergerak dan yang dicatat harus orang yang sama.
       const p = pelakuUntuk(ev, a);
-      // di meja kerja, perintah shell memancarkan glyph, bukan lampu ide
-      p.fx = st === 'think' ? FX_TOOL[ev.tool] || null : null;
+      // di meja kerja, perintah shell memancarkan glyph dan peramban MCP
+      // ping biru, bukan lampu ide
+      p.fx = st === 'think' ? fxDiMeja(ev.tool) : null;
       const [v, o] = kegiatan(ev.tool, ev.label);
       p.busyUntil = now + 60000;
       p.adaTugas = true;
@@ -14584,7 +14654,7 @@ function pakaiPrinter() {
 const PEMAKAIAN_STASIUN = {
   search: { tiap: 30, event: 'laci-arsip-macet' },       // laci filing dibuka-tutup puluhan kali
   read:   { tiap: 40, event: 'arsip-hilang-satu-map' },  // makin sering dibaca, makin mungkin ada yang salah taruh
-  server: { tiap: 20, event: 'rak-server-kepanasan' },   // perintah git beruntun (stationFor: segmenGit)
+  server: { tiap: 20, event: 'rak-server-kepanasan' },   // git & query basis data beruntun (stationFor)
   rapat:  { tiap: 12, event: 'tumpahan-kopi-rapat' },    // delegasi panjang, kopinya keburu tumpah
 };
 const pakaiStasiun = Object.create(null);   // stasiun -> call nyata sejak pemicu terakhir
@@ -14861,18 +14931,184 @@ function lajuTokenMenit() {
      pulang     16:00-17:00
      lembur     17:00-22:00
      malam      22:00-06:00
-     libur      Sabtu/Minggu, hari kejepit (HARI_KEJEPIT, event-acak.js), dan
-                libur nasional di LIBUR_NASIONAL — sepanjang hari */
-const LIBUR_NASIONAL = new Set(['1-1', '1-5', '17-8', '25-12']);   // "tanggal-bulan"
-function hariLibur(d) {
-  const hari = d.getDay();
-  if (hari === 0 || hari === 6) return true;
-  const kunci = d.getDate() + '-' + (d.getMonth() + 1);
-  if (LIBUR_NASIONAL.has(kunci)) return true;
-  // HARI_KEJEPIT ada di event-acak.js yang dimuat SESUDAH berkas ini; dibaca
-  // saat dipanggil (bukan saat muat), jadi typeof-nya aman.
-  return typeof HARI_KEJEPIT !== 'undefined' && HARI_KEJEPIT.has(kunci);
+     libur      Sabtu/Minggu, tanggal merah, dan hari kejepit (hariLibur(),
+                kalender di bawah) — sepanjang hari */
+
+/* ------------------------------------------------- kalender tanggal merah ---
+   SATU-SATUNYA definisi hari libur di repo ini, dan sengaja di halaman:
+   server tidak tahu apa-apa soal tanggal merah (uji-kuota.mjs menagihnya).
+   Rumahnya room.js, bukan event-acak.js, karena dua-duanya membacanya:
+   babakHari(), kusut harian, dan apel pagi di berkas ini, plus event acak
+   yang dimuat SESUDAH berkas ini (hari-kejepit-nasional). Pintu masuknya
+   tetap dua: hariLibur(d) dan babakHari(jam, d). Yang mau tahu NAMA hari
+   liburnya bertanya ke tanggalMerah(d) (nama atau null); hariKejepit(d) dan
+   kalenderLibur(tahun) — seisi tahun, buat uji — tersedia juga.
+
+   Dulu cuma empat tanggal tetap plus himpunan "hari kejepit" yang sengaja
+   asal-asalan: Selasa 9 Juni 2026 libur, sementara Idulfitri, Iduladha,
+   Nyepi, Waisak, dan Jumat Agung tetap apel pagi dengan kantor yang kusut.
+
+   Empat sumber, dari yang paling pasti:
+     1. Tanggal tetap (TANGGAL_MERAH_TETAP).
+     2. Paskah DIHITUNG (algoritme Gregorius Meeus/Jones/Butcher): Wafat Yesus
+        Kristus = Paskah - 2, Kenaikan Yesus Kristus = Paskah + 39.
+     3. Hari besar Islam lewat taksirHijri() (aritmetik tabular, ±1 hari).
+        Tanggal resminya ditetapkan SKB dan bisa jatuh sehari dari taksiran;
+        KOREKSI_HIJRI mencatat selisih yang SUDAH diketahui per bulan
+        Hijriah. Bulan yang tidak tercatat dipercaya ke taksirannya, jadi
+        tahun yang SKB-nya belum terbit tetap libur, paling meleset sehari.
+     4. Tabel per tahun (TANGGAL_MERAH_TAHUNAN) untuk yang tidak bisa dihitung
+        dengan jujur di sini: Imlek (lunisolar Tionghoa), Nyepi (Saka Bali),
+        Waisak (purnama menurut Walubi). Tahun yang tidak ada di tabel =
+        ketiganya tidak libur. Bukan galat: kantornya cuma masuk kerja.
+
+   Acuannya SKB Menteri Agama, Menteri Ketenagakerjaan, dan Menteri PANRB
+   tentang Hari Libur Nasional dan Cuti Bersama:
+     2026  No. 1497/2025, 2/2025, 5/2025 (19 September 2025) — 17 hari
+     2027  No. 1205/2026, 3/2026, 2/2026 (15 September 2026) — 18 hari
+           (Isra Mikraj dua kali: 1448 H di Januari, 1449 H di Desember)
+   Hasil keempat sumber untuk kedua tahun itu dicocokkan tanggal demi tanggal
+   dengan SKB-nya di uji-event.mjs --kalender. CUTI BERSAMA sengaja tidak
+   ikut: itu cuti, bukan tanggal merah — hari kejepit di bawah sudah
+   menangkap yang paling kelihatan (Jumat sesudah Kenaikan, Senin sebelum
+   Imlek). Menambah tahun: salin tiga tanggal Imlek/Nyepi/Waisak dari SKB-nya,
+   lalu cocokkan lima hari besar Islam — yang beda dari taksiran masuk
+   KOREKSI_HIJRI. */
+const TANGGAL_MERAH_TETAP = {                   // "tanggal-bulan" -> nama
+  '1-1': 'Tahun Baru Masehi',
+  '1-5': 'Hari Buruh Internasional',
+  '1-6': 'Hari Lahir Pancasila',
+  '17-8': 'Proklamasi Kemerdekaan RI',
+  '25-12': 'Kelahiran Yesus Kristus (Natal)',
+};
+const TANGGAL_MERAH_TAHUNAN = {
+  2026: {
+    '17-2': 'Tahun Baru Imlek 2577 Kongzili',
+    '19-3': 'Hari Suci Nyepi (Tahun Baru Saka 1948)',
+    '31-5': 'Hari Raya Waisak 2570 BE',
+  },
+  2027: {
+    '6-2': 'Tahun Baru Imlek 2578 Kongzili',
+    '8-3': 'Hari Suci Nyepi (Tahun Baru Saka 1949)',
+    '20-5': 'Hari Raya Waisak 2571 BE',
+  },
+};
+// [bulan Hijriah, tanggal, nama dari tahun Hijriahnya]
+const HARI_BESAR_HIJRI = [
+  [7, 27, (h) => 'Isra Mikraj Nabi Muhammad SAW ' + h + ' H'],
+  [10, 1, (h) => 'Idulfitri ' + h + ' H'],
+  [10, 2, (h) => 'Idulfitri ' + h + ' H (hari kedua)'],
+  [12, 10, (h) => 'Iduladha ' + h + ' H'],
+  [1, 1, (h) => 'Tahun Baru Islam ' + h + ' H'],
+  [3, 12, (h) => 'Maulid Nabi Muhammad SAW ' + h + ' H'],
+];
+/* "tahunH-bulanH" -> berapa hari tanggal SKB jatuh SESUDAH taksirHijri()
+   (negatif = sebelum). Bulan yang hari besarnya cocok tidak dicatat. */
+const KOREKSI_HIJRI = {
+  '1447-10': 1,     // Idulfitri 21-22 Mar 2026, taksiran 20-21
+  '1448-1': -1,     // Tahun Baru Islam 16 Jun 2026, taksiran 17
+  '1448-3': -1,     // Maulid 25 Agu 2026, taksiran 26
+  '1448-7': -1,     // Isra Mikraj 5 Jan 2027, taksiran 6
+};
+
+// Taksiran kalender Hijriah (aritmetik tabular, akurasi ±1 hari) — cukup
+// buat menentukan "sedang bulan Ramadan atau bukan", bukan buat ibadah.
+// Pindahan dari event/00-dasar.js: kalender di atas membutuhkannya, dan
+// berkas event dimuat SESUDAH room.js. `tahun` ditambah untuk KOREKSI_HIJRI;
+// pemakai lama (tema ramadan, event Ramadan/Syawal) cukup bulan & tgl.
+function taksirHijri(d) {
+  const jd = Math.floor(d.getTime() / 86400000 + 2440587.5);
+  const l0 = jd - 1948440 + 10632;
+  const n = Math.floor((l0 - 1) / 10631);
+  const l1 = l0 - 10631 * n + 354;
+  const j = Math.floor((10985 - l1) / 5316) * Math.floor((50 * l1) / 17719)
+    + Math.floor(l1 / 5670) * Math.floor((43 * l1) / 15238);
+  const l2 = l1 - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50)
+    - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+  const bulan = Math.floor((24 * l2) / 709);
+  const tgl = l2 - Math.floor((709 * bulan) / 24);
+  return { tahun: 30 * n + j - 30, bulan, tgl };
 }
+
+// Minggu Paskah tahun `th` (kalender Gregorius): [bulan 1-12, tanggal].
+function paskah(th) {
+  const a = th % 19, b = Math.floor(th / 100), c = th % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const x = h + l - 7 * m + 114;
+  return [Math.floor(x / 31), (x % 31) + 1];
+}
+
+const KALENDER_LIBUR = new Map();     // tahun -> Map("tanggal-bulan" -> nama); HARI_MS dari blok masa pakai
+/* Seluruh tanggal merah satu tahun, dirakit sekali lalu disimpan: babakHari()
+   dipanggil tiap percobaan event dan tiap birama musik, sementara sisi
+   Hijriahnya menyapu 365 hari. Tanggalnya diwakili SIANG UTC, bukan jam
+   lokal: taksirHijri() membaca d.getTime(), jadi tengah malam WIB (masih
+   kemarin di UTC) akan menggeser hasilnya sehari — kalendernya harus sama
+   persis di WIB maupun di runner CI ber-UTC. */
+function kalenderLibur(th) {
+  let peta = KALENDER_LIBUR.get(th);
+  if (peta) return peta;
+  peta = new Map();
+  const tambah = (ms, nama) => {
+    const t = new Date(ms);
+    const k = t.getUTCDate() + '-' + (t.getUTCMonth() + 1);
+    peta.set(k, peta.has(k) ? peta.get(k) + ' & ' + nama : nama);   // dua hari besar sehari: dua-duanya disebut
+  };
+  const dariKunci = (tabel) => {
+    for (const [k, nama] of Object.entries(tabel)) {
+      const [tg, bl] = k.split('-').map(Number);
+      tambah(Date.UTC(th, bl - 1, tg, 12), nama);
+    }
+  };
+  dariKunci(TANGGAL_MERAH_TETAP);
+  const [pb, pt] = paskah(th);
+  const minggu = Date.UTC(th, pb - 1, pt, 12);
+  tambah(minggu - 2 * HARI_MS, 'Wafat Yesus Kristus (Jumat Agung)');
+  tambah(minggu, 'Kebangkitan Yesus Kristus (Paskah)');
+  tambah(minggu + 39 * HARI_MS, 'Kenaikan Yesus Kristus');
+  dariKunci(TANGGAL_MERAH_TAHUNAN[th] || {});
+  // Hari ms jatuh di hari besar Hijriah kalau taksiran hari (ms - geser) tepat
+  // di hari besar itu DAN geser memang koreksi bulannya. Geser cuma ±1:
+  // selisih SKB dengan taksiran tabular tidak pernah lebih dari sehari.
+  for (let ms = Date.UTC(th, 0, 1, 12); ms < Date.UTC(th + 1, 0, 1); ms += HARI_MS) {
+    for (const geser of [0, -1, 1]) {
+      const h = taksirHijri(new Date(ms - geser * HARI_MS));
+      if ((KOREKSI_HIJRI[h.tahun + '-' + h.bulan] || 0) !== geser) continue;
+      const hb = HARI_BESAR_HIJRI.find(([b, t]) => b === h.bulan && t === h.tgl);
+      if (hb) tambah(ms, hb[2](h.tahun));
+    }
+  }
+  KALENDER_LIBUR.set(th, peta);
+  return peta;
+}
+
+// Nama tanggal merah pada tanggal LOKAL d ("Iduladha 1447 H"), atau null.
+function tanggalMerah(d) {
+  return kalenderLibur(d.getFullYear()).get(d.getDate() + '-' + (d.getMonth() + 1)) || null;
+}
+function akhirPekan(d) { return d.getDay() === 0 || d.getDay() === 6; }
+
+/* Hari kejepit: hari kerja yang DIAPIT dua hari libur — kemarin dan besok
+   sama-sama akhir pekan atau tanggal merah. Hampir selalu Jumat sesudah
+   tanggal merah hari Kamis atau Senin sebelum tanggal merah hari Selasa;
+   bentuk lainnya hari di tengah dua tanggal merah (Selasa 9 Maret 2027,
+   di antara Nyepi dan Idulfitri). Tidak berantai: tetangganya diukur dengan
+   tanggal merah, bukan dengan hari kejepit lain. Dihitung, bukan ditulis —
+   pengganti himpunan HARI_KEJEPIT yang dulu ada di event-acak.js. */
+function hariKejepit(d) {
+  if (akhirPekan(d) || tanggalMerah(d)) return false;
+  const geser = (n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12);
+  const libur = (x) => akhirPekan(x) || tanggalMerah(x) !== null;
+  return libur(geser(-1)) && libur(geser(1));
+}
+
+function hariLibur(d) {
+  return akhirPekan(d) || tanggalMerah(d) !== null || hariKejepit(d);
+}
+const JAM_APEL = [7, 7.75];          // babak 'apel'; waktunyaApel() membacanya juga (17 Agustus)
 function babakHari(jam, d) {
   d = d || new Date();
   if (hariLibur(d)) return 'libur';
@@ -14880,7 +15116,7 @@ function babakHari(jam, d) {
   if (jam >= 17) return 'lembur';
   if (jam >= 16) return 'pulang';
   if (jam >= (d.getDay() === 5 ? 11.5 : 12) && jam < 13) return 'istirahat';
-  if (jam >= 7 && jam < 7.75) return 'apel';
+  if (jam >= JAM_APEL[0] && jam < JAM_APEL[1]) return 'apel';
   return 'kerja';
 }
 
@@ -15401,21 +15637,38 @@ function lukisKaca() {
 }
 
 /* -------------------------------------------------------------- apel pagi ---
-   Sekali sehari, saat babak 'apel' (07:00-07:45 hari kerja) dan halaman
-   terbuka: yang menganggur + standby berbaris dua saf di bawah tiang bendera
-   menghadap ke atas, bendera naik pelan (apelBendera → drawBendera),
-   Indonesia Raya kalau audio sudah dibuka pengguna, pembina apel memberi
-   amanat — ringkasan buku agenda kemarin (GET /agenda) kalau ada, kalimat
-   generik kalau tidak. Senin lebih formal: 40 detik + pembacaan Panca
-   Prasetya Korpri; hari lain 20 detik. Penanda tanggalnya di localStorage
-   (apelTerakhir) supaya tab yang dimuat ulang tidak apel dua kali.
+   Sekali sehari, di jam apel (07:00-07:45) pada hari yang ada apelnya
+   (jenisApel) dan selagi halaman terbuka: yang menganggur + standby berbaris
+   dua saf di bawah tiang bendera menghadap ke atas, bendera naik pelan
+   (apelBendera → drawBendera), Indonesia Raya kalau audio sudah dibuka
+   pengguna, lalu pembina apel membacakan naskahnya (naskahApel). Amanatnya
+   ringkasan buku agenda kemarin (GET /agenda) kalau ada, kalimat generik
+   kalau tidak. Penanda tanggalnya di localStorage (apelTerakhir) supaya tab
+   yang dimuat ulang tidak apel dua kali.
+
+   Tiga jenis:
+     biasa  20 detik: amanat + satu pesan.
+     senin  40 detik: + pembacaan Panca Prasetya Korpri.
+     hkn    UPACARA HARI KESADARAN NASIONAL, tanggal 17 tiap bulan yang hari
+            kerja, paling panjang (±73 detik): mengheningkan cipta, teks
+            Pancasila dibacakan, Panca Prasetya Korpri, amanat Hari Kesadaran
+            Nasional. Seragamnya Korpri biru sepanjang hari (jenisSeragamHari).
+            17 Agustus libur nasional — babaknya 'libur' — tapi upacaranya
+            TETAP, akhir pekan sekalipun: pengecualian eksplisit di jenisApel,
+            dan naskah hari itu ikut membacakan teks Proklamasi (±90 detik).
+   Hari nasional di tabel TEMA (Kesaktian Pancasila, Sumpah Pemuda, Hari
+   Pahlawan) menambahkan kalimat amanatnya sendiri ke apel jenis apa pun,
+   spanduknya lewat gambarTemaDinding; Hari Pahlawan dengan mengheningkan
+   cipta, Kesaktian Pancasila dengan pembacaan Pancasila.
 
    BUKAN event acak: tidak lewat penjadwal (jalan walau ?event=0), tidak
-   menaikkan statistik, tidak dilaporkan ke /ambien. Aturan 1 tetap mutlak:
-   pesertanya dipegang lewat eventKerja yang sama dengan event acak, jadi
-   handle() melepasnya persis seperti biasa begitu tool call datang, dan
-   destroy() ikut melepasnya — apel tidak pernah menahan siapa pun; barisan
-   yang bolong dibiarkan bolong. Uji: ?apel=1 (sekarang), ?apel=senin. */
+   menaikkan statistik, tidak dilaporkan ke /ambien. Upacara pun sama. Aturan 1
+   tetap mutlak: pesertanya dipegang lewat eventKerja yang sama dengan event
+   acak, jadi handle() melepasnya persis seperti biasa begitu tool call
+   datang, dan destroy() ikut melepasnya — apel tidak pernah menahan siapa
+   pun; barisan yang bolong dibiarkan bolong. Uji: ?apel=1 (sekarang),
+   ?apel=senin, ?apel=hkn (upacara + seragam Korpri); gabung dengan
+   ?tema=hari-pahlawan dkk. untuk naskah hari nasional. */
 const APEL_PAKSA = new URLSearchParams(location.search).get('apel');
 const APEL_TIANG_X = 132;                    // tiang bendera, sama dengan drawBendera
 const APEL_SAF_Y = [290, 306];               // dua saf di lantai bawah tiang, di atas baris meja kerja
@@ -15434,9 +15687,97 @@ const PANCA_PRASETYA = [
   'Empat: memelihara persatuan dan kesatuan bangsa serta kesetiakawanan Korpri.',
   'Lima: menegakkan kejujuran, keadilan, disiplin, serta meningkatkan kesejahteraan dan profesionalisme.',
 ];
-let apel = null;                             // { E, senin, durasi, pembina, amanat, umur, naikMulai, naikLama }
+const PANCASILA = [
+  'Pancasila. Satu: Ketuhanan Yang Maha Esa.',
+  'Dua: Kemanusiaan yang adil dan beradab.',
+  'Tiga: Persatuan Indonesia.',
+  'Empat: Kerakyatan yang dipimpin oleh hikmat kebijaksanaan dalam permusyawaratan/perwakilan.',
+  'Lima: Keadilan sosial bagi seluruh rakyat Indonesia.',
+];
+const PROKLAMASI = [
+  'Proklamasi. Kami bangsa Indonesia dengan ini menyatakan kemerdekaan Indonesia.',
+  'Hal-hal yang mengenai pemindahan kekuasaan dan lain-lain diselenggarakan dengan cara saksama dan dalam tempo yang sesingkat-singkatnya.',
+  'Jakarta, 17 Agustus 1945. Atas nama bangsa Indonesia, Soekarno-Hatta.',
+];
+const AMANAT_HKN = 'Hari Kesadaran Nasional. Disiplin bukan cuma datang tepat waktu, tapi juga menutup tugas tepat waktu.';
+const APEL_AMANAT = '@amanat';               // tempat amanat buku agenda di naskah: isinya baru tiba sesudah fetch
+const APEL_NAIK_MULAI = 3, APEL_NAIK_LAMA = 8;   // bendera mulai naik di detik 3, sampai puncak di detik 11
+const APEL_DURASI_MIN = { biasa: 20, senin: 40, hkn: 60 };
+let apel = null;                             // { E, jenis, naskah, pembina, amanat, umur, tunduk }
 let apelPaksaSudah = false;
 let apelCekBerikut = now + 2500;             // beri waktu sesi & standby lahir dulu
+
+/* Apel apa hari ini: 'hkn' | 'senin' | 'biasa', atau null (tidak ada apel).
+   Tanggal 17 yang hari kerja = upacara Hari Kesadaran Nasional. Tanggal 17
+   yang libur (akhir pekan, Imlek 17 Februari 2026, Iduladha 17 Mei 2027,
+   hari kejepit) tidak ada upacara — KECUALI 17 Agustus: libur nasional,
+   tapi upacara Proklamasi tetap jalan, hari Minggu sekalipun. */
+function jenisApel(d) {
+  if (d.getMonth() === 7 && d.getDate() === 17) return 'hkn';
+  if (hariLibur(d)) return null;
+  if (d.getDate() === 17) return 'hkn';
+  return d.getDay() === 1 ? 'senin' : 'biasa';
+}
+
+/* Jenis apel yang waktunya SEKARANG (jam desimal), atau null. Di hari kerja
+   ini persis babak 'apel' babakHari(); 17 Agustus babaknya 'libur'
+   sepanjang hari, jadi jendelanya dibaca langsung dari JAM_APEL — angka yang
+   sama dengan yang dipakai babakHari(), bukan salinannya. */
+function waktunyaApel(jam, d) {
+  const jenis = jenisApel(d);
+  return jenis && jam >= JAM_APEL[0] && jam < JAM_APEL[1] ? jenis : null;
+}
+
+// ?apel=senin|hkn memaksa jenisnya; nilai lain (?apel=1) = apel biasa. Deklarasi
+// function: blok seragam harian (jauh di atas) membacanya waktu berkas dimuat.
+function jenisPaksaApel(nilai) {
+  if (!nilai) return null;
+  return nilai === 'senin' || nilai === 'hkn' ? nilai : 'biasa';
+}
+
+/* Naskah apel: baris [{ t, teks }] (detik sejak apel mulai, naik), hening
+   (mengheningkan cipta, { mulai, lama } atau null), durasi, dan judul untuk
+   kartu pegawai. Fungsi murni dari jenis, tanggal, dan id tema kalender
+   supaya urutan upacaranya bisa diuji tanpa menunggu tanggal 17. Apel biasa
+   & Senin tanpa hari nasional SENGAJA sama persis dengan sebelum ada naskah:
+   amanat detik 12, pesan detik 17, Panca Prasetya mulai detik 21. */
+function naskahApel(jenis, d, temaId) {
+  const T = (temaId && TEMA_PER_ID.get(temaId)) || null;
+  const th = d.getFullYear();
+  const agustus17 = d.getMonth() === 7 && d.getDate() === 17;
+  const upacara = jenis === 'hkn';
+  const baris = [];
+  let t = APEL_NAIK_MULAI + APEL_NAIK_LAMA + 1;            // 12: bendera sudah di puncak
+  const ucap = (teks, jeda) => { baris.push({ t, teks }); t += jeda; };
+  let hening = null;
+  if (upacara || (T && T.hening)) {
+    ucap('Mengheningkan cipta, mulai.', 0.5);
+    hening = { mulai: t, lama: T && T.hening ? 10 : 7 };
+    t += hening.lama;
+    ucap('Selesai.', 1.5);
+  }
+  if (upacara || (T && T.pancasila)) {
+    ucap('Pembacaan teks Pancasila, diikuti seluruh peserta.', 3);
+    for (const s of PANCASILA) ucap(s, 3.6);
+  }
+  if (upacara && agustus17) {
+    ucap('Pembacaan teks Proklamasi.', 3);
+    for (const s of PROKLAMASI) ucap(s, 4.5);
+  }
+  if (upacara) for (const s of PANCA_PRASETYA) ucap(s, 3.6);
+  if (T && T.amanat) ucap(T.amanat(th), 5);
+  else if (upacara) {
+    ucap(agustus17 ? 'Dirgahayu Republik Indonesia ke-' + (th - 1945) + '. Isi kemerdekaan dengan kerja yang tuntas.' : AMANAT_HKN, 5);
+  }
+  ucap(APEL_AMANAT, 5);
+  ucap(APEL_PESAN[(Math.random() * APEL_PESAN.length) | 0], jenis === 'senin' ? 4 : 3);
+  if (jenis === 'senin') for (const s of PANCA_PRASETYA) ucap(s, 3.6);
+  return {
+    baris, hening,
+    durasi: Math.max(APEL_DURASI_MIN[jenis] || 20, Math.ceil(t)),
+    judul: !upacara ? 'apel pagi' : agustus17 ? 'upacara 17 Agustus' : 'upacara Hari Kesadaran Nasional',
+  };
+}
 
 const pangkat = (a) => { const i = JABATAN.findIndex((j) => j.id === a.peran); return i < 0 ? JABATAN.length : i; };
 // peserta apel: yang benar-benar menganggur (bisaDipinjam) dan bukan peserta rapat — mereka memang harus duduk
@@ -15449,16 +15790,17 @@ function pilihPembina(orang) {
   return tertinggi(orang.filter((a) => a.standby)) || tertinggi(orang);
 }
 
-function mulaiApel(senin, paksa) {
+function mulaiApel(jenis, paksa) {
   const orang = calonApel();
   if (!orang.length) return false;           // semua sibuk: dicoba lagi, penanda tidak ditulis
+  const naskah = naskahApel(jenis, new Date(), RUANGAN.tema);
   const E = { def: { id: 'apel-pagi' }, id: 'apel-pagi', umur: 0, sisa: 0, data: {}, aktor: [], tanda: new Set() };
   for (const a of orang) {
     a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
-    a.doingEvent = 'apel pagi';
+    a.doingEvent = naskah.judul;
   }
   const pembina = pilihPembina(orang);
-  apel = { E, senin, durasi: senin ? 40 : 20, pembina, amanat: null, umur: 0, naikMulai: 3, naikLama: 8 };
+  apel = { E, jenis, naskah, pembina, amanat: null, umur: 0, tunduk: new Set() };
   if (pembina) pembina.goToXY(APEL_TIANG_X + 18, 280, 'down');   // di samping tiang, menghadap barisan
   E.aktor.filter((a) => a !== pembina).forEach((a, i) => {
     const saf = ((i / APEL_PER_SAF) | 0) % 2, k = i % APEL_PER_SAF;
@@ -15515,24 +15857,48 @@ function tickApel(dt) {
   A.umur += dt;
   E.umur = A.umur;                            // pada() membaca E.umur
   // bendera naik pelan; yang sudah sampai di barisan hormat selama itu
-  const t = (A.umur - A.naikMulai) / A.naikLama;
+  const t = (A.umur - APEL_NAIK_MULAI) / APEL_NAIK_LAMA;
   apelBendera = t <= 0 ? 1 : t >= 1 ? 0 : 1 - t;
   if (t >= 0 && t < 1) for (const a of E.aktor) if (a.diam) a.pose = 'hormat';
-  pada(E, A.naikMulai, () => { if (audio && audio.state === 'running') mainkanIndonesiaRaya(); });
-  pada(E, A.naikMulai + A.naikLama, () => { for (const a of E.aktor) a.pose = null; });
-  const tAmanat = A.naikMulai + A.naikLama + 1;              // 12
-  pada(E, tAmanat, () => ucapPembina(A.amanat || APEL_PEMBUKA));
-  pada(E, tAmanat + 5, () => ucapPembina(APEL_PESAN[(Math.random() * APEL_PESAN.length) | 0]));
-  if (A.senin) {
-    PANCA_PRASETYA.forEach((baris, i) => pada(E, tAmanat + 9 + i * 3.6, () => ucapPembina(baris)));
+  pada(E, APEL_NAIK_MULAI, () => { if (audio && audio.state === 'running') mainkanIndonesiaRaya(); });
+  pada(E, APEL_NAIK_MULAI + APEL_NAIK_LAMA, () => { for (const a of E.aktor) a.pose = null; });
+  for (const b of A.naskah.baris) {
+    pada(E, b.t, () => ucapPembina(b.teks === APEL_AMANAT ? A.amanat || APEL_PEMBUKA : b.teks));
   }
-  if (A.umur >= A.durasi || !E.aktor.length) bubarApel();
+  tickHening(A);
+  if (A.umur >= A.naskah.durasi || !E.aktor.length) bubarApel();
+}
+
+/* Mengheningkan cipta: yang sudah tiba di barisan berdiri tegak (a.tegak,
+   napas ditahan seperti sikap sempurna Indonesia Raya) dan menunduk.
+   Tunduknya menumpang a.ngantuk, kanal "kepala turun" yang sudah dibaca
+   drawPerson (dagu turun beberapa piksel) dan boneka 3D (kepala condong);
+   pemakai lamanya cuma Peserta rapat yang ketiduran, dan Peserta tidak
+   pernah ikut apel (calonApel). Ruangannya ikut diam lewat MOD.hening —
+   partikel kerja berhenti, neon tidak berkedip; kosmetik, tool call tetap
+   jalan. Yang dilepas tool call (Aturan 1) mengangkat kepalanya di frame
+   berikutnya, yang lain begitu heningnya selesai. */
+function tickHening(A) {
+  const H = A.naskah.hening;
+  const kini = !!H && A.umur >= H.mulai && A.umur < H.mulai + H.lama;
+  if (kini) {
+    MOD.hening = true;
+    for (const a of A.E.aktor) if (a.diam && !A.tunduk.has(a)) { a.tegak = true; a.ngantuk = 2; A.tunduk.add(a); }
+  }
+  for (const a of A.tunduk) {
+    const ikut = A.E.aktor.includes(a);
+    if (kini && ikut) continue;
+    a.ngantuk = 0;
+    if (ikut) a.tegak = false;
+    A.tunduk.delete(a);
+  }
 }
 
 function bubarApel() {
   const A = apel;
   apel = null;
   apelBendera = 0;
+  for (const a of A.tunduk) a.ngantuk = 0;
   for (const a of [...A.E.aktor]) {
     lepaskanAktor(a);
     if (a.standby) {
@@ -15547,14 +15913,16 @@ function bubarApel() {
 function cekApel() {
   if (APEL_PAKSA && !apelPaksaSudah) {
     apelPaksaSudah = true;
-    mulaiApel(APEL_PAKSA === 'senin', true);   // paksa: abaikan babak & penanda, penanda tidak ditulis
+    mulaiApel(jenisPaksaApel(APEL_PAKSA), true);   // paksa: abaikan jam & penanda, penanda tidak ditulis
     return;
   }
   const d = new Date();
-  if (babakHari(ambien().jam, d) !== 'apel') return;
+  // bukan babakHari() langsung: 17 Agustus babaknya 'libur' tapi upacaranya tetap
+  const jenis = waktunyaApel(ambien().jam, d);
+  if (!jenis) return;
   if (document.hidden) return;                 // "halaman terbuka" — rAF-nya pun berhenti kalau tersembunyi
   if (ingatan.baca('apelTerakhir', '') === tanggalLokal(d)) return;
-  mulaiApel(d.getDay() === 1, false);
+  mulaiApel(jenis, false);
 }
 
 /* ----------------------------------------- sikap sempurna Indonesia Raya ---
@@ -15873,27 +16241,47 @@ function bubarRaya() {
    tahun-anggaran-baru) tetap jalan: dekor mereka tidak ada yang dobel dengan
    ini (sajadah ramadan di lantai vs jadwal di dinding, seragam korpri vs
    spanduk), jadi tidak perlu saling kunci. S.tema tersedia kalau suatu hari
-   perlu. Uji: ?tema=agustusan|ramadan|korpri|tahun-anggaran.
+   perlu. Uji: ?tema=agustusan|ramadan|korpri|tahun-anggaran, juga
+   ?tema=kesaktian-pancasila|sumpah-pemuda|hari-pahlawan.
+   Field opsional tiap baris: `spanduk(tahun)` + `warna` (kain di atas
+   jendela, digambar gambarSpanduk — 2D maupun kain 3D membacanya lewat
+   spandukTema()), dan untuk hari nasional yang diperingati dengan upacara
+   tapi BUKAN tanggal merah: `amanat(tahun)` (kalimat pembina di naskahApel),
+   `hening` (mengheningkan cipta), `pancasila` (teks Pancasila dibacakan).
+   Hari nasional ditaruh sebelum ramadan: spanduk sehari menang atas papan
+   imsakiyah sebulan. Hari Kesadaran Nasional tiap tanggal 17 sengaja tidak
+   di sini — itu upacara bulanan tanpa dekor (jenisApel).
    Dipoll sendiri (30 detik, sama dengan seragam harian), bukan dari
    terapkanSeragamHarian(): fungsi itu sudah dipanggil saat muat, jauh sebelum
    RUANGAN didefinisikan. */
 const TEMA_PAKSA = new URLSearchParams(location.search).get('tema');
 const TEMA = [
-  { id: 'agustusan',      syarat: (d) => d.getMonth() === 7 && d.getDate() <= 17 },
-  // taksirHijri ada di event-acak.js (dimuat sesudah berkas ini) — evaluasi
-  // pertama ditunda setTimeout(0) supaya dia sudah ada
-  { id: 'ramadan',        syarat: (d) => typeof taksirHijri === 'function' && taksirHijri(d).bulan === 9 },
-  { id: 'korpri',         syarat: (d) => d.getMonth() === 10 && d.getDate() === 29 },
-  { id: 'tahun-anggaran', syarat: (d) => d.getMonth() === 0 && d.getDate() <= 7 },
+  { id: 'agustusan',      syarat: (d) => d.getMonth() === 7 && d.getDate() <= 17,
+    spanduk: (th) => 'DIRGAHAYU RI KE-' + (th - 1945), warna: P.red },
+  { id: 'kesaktian-pancasila', syarat: (d) => d.getMonth() === 9 && d.getDate() === 1,
+    spanduk: () => 'KESAKTIAN PANCASILA', warna: '#7d1f24', pancasila: true,
+    amanat: () => 'Hari Kesaktian Pancasila. Pancasila bukan hafalan upacara; ia cara kita melayani.' },
+  { id: 'sumpah-pemuda',  syarat: (d) => d.getMonth() === 9 && d.getDate() === 28,
+    spanduk: (th) => 'SUMPAH PEMUDA KE-' + (th - 1928), warna: P.red,
+    amanat: (th) => 'Sumpah Pemuda ke-' + (th - 1928) + ': satu nusa, satu bangsa, satu bahasa. Laporan pun pakai bahasa Indonesia yang baik dan benar.' },
+  { id: 'hari-pahlawan',  syarat: (d) => d.getMonth() === 10 && d.getDate() === 10,
+    spanduk: () => 'HARI PAHLAWAN', warna: '#5a4632', hening: true,
+    amanat: () => 'Hari Pahlawan. Pahlawan hari ini bukan yang paling lama di kantor, tapi yang tugasnya tuntas.' },
+  // taksirHijri tinggal di blok kalender tanggal merah, di berkas ini juga
+  { id: 'ramadan',        syarat: (d) => taksirHijri(d).bulan === 9 },
+  { id: 'korpri',         syarat: (d) => d.getMonth() === 10 && d.getDate() === 29,
+    spanduk: (th) => 'HUT KORPRI KE-' + (th - 1971), warna: SERAGAM_KORPRI.main },
+  { id: 'tahun-anggaran', syarat: (d) => d.getMonth() === 0 && d.getDate() <= 7,
+    spanduk: (th) => 'TAHUN ANGGARAN ' + th, warna: '#3e6b4f' },
 ];
-const TEMA_ID = new Set(TEMA.map((t) => t.id));
+const TEMA_PER_ID = new Map(TEMA.map((t) => [t.id, t]));
 let temaHariTerpasang = null;
 function terapkanTema() {
   const d = new Date();
   const kunci = tanggalLokal(d);
   if (kunci === temaHariTerpasang) return;
   temaHariTerpasang = kunci;
-  const paksa = TEMA_PAKSA && TEMA_ID.has(TEMA_PAKSA) ? TEMA_PAKSA : null;
+  const paksa = TEMA_PAKSA && TEMA_PER_ID.has(TEMA_PAKSA) ? TEMA_PAKSA : null;
   RUANGAN.tema = paksa || (TEMA.find((t) => t.syarat(d)) || { id: null }).id;
   RUANGAN.temaTahun = d.getFullYear();
 }
@@ -15945,14 +16333,21 @@ function gambarPapanRamadan() {
   ctx.fillText(RAMADAN_BUKA[b], x + 2, y + 26);
 }
 
+// Spanduk tema `t` di tahun `th`: { teks, warna }, atau null kalau temanya
+// tanpa spanduk. Satu sumber untuk 2D (gambarTemaDinding) dan kain 3D.
+function spandukTema(t, th) {
+  const T = t && TEMA_PER_ID.get(t);
+  return T && T.spanduk ? { teks: T.spanduk(th), warna: T.warna } : null;
+}
+
 function gambarTemaDinding() {
   const t = RUANGAN.tema;
   if (!t) return;
   const th = RUANGAN.temaTahun || new Date().getFullYear();
-  if (t === 'agustusan') { gambarUmbulUmbul(); gambarSpanduk('DIRGAHAYU RI KE-' + (th - 1945), P.red); }
-  else if (t === 'korpri') gambarSpanduk('HUT KORPRI KE-' + (th - 1971), '#28406b');
-  else if (t === 'tahun-anggaran') gambarSpanduk('TAHUN ANGGARAN ' + th, '#3e6b4f');
-  else if (t === 'ramadan') gambarPapanRamadan();
+  if (t === 'agustusan') gambarUmbulUmbul();
+  const sp = spandukTema(t, th);
+  if (sp) gambarSpanduk(sp.teks, sp.warna);
+  if (t === 'ramadan') gambarPapanRamadan();
 }
 
 // Bendera kecil bertiang lidi di tiap meja kerja, di sebelah pot mini (x+33..37);

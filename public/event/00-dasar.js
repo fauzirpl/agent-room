@@ -219,21 +219,10 @@ function gambarOrangLuar(fx, fy, baju, motif, bawa, kepala) {
   });
 }
 
-// Taksiran kalender Hijriah (aritmetik tabular, akurasi ±1 hari) — cukup
-// buat menentukan "sedang bulan Ramadan atau bukan", bukan buat ibadah.
-function taksirHijri(d) {
-  const jd = Math.floor(d.getTime() / 86400000 + 2440587.5);
-  const l0 = jd - 1948440 + 10632;
-  const n = Math.floor((l0 - 1) / 10631);
-  const l1 = l0 - 10631 * n + 354;
-  const j = Math.floor((10985 - l1) / 5316) * Math.floor((50 * l1) / 17719)
-    + Math.floor(l1 / 5670) * Math.floor((43 * l1) / 15238);
-  const l2 = l1 - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50)
-    - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
-  const bulan = Math.floor((24 * l2) / 709);
-  const tgl = l2 - Math.floor((709 * bulan) / 24);
-  return { bulan, tgl };
-}
+// taksirHijri() (taksiran kalender Hijriah) pindah ke room.js, ke blok
+// kalender tanggal merah yang juga membutuhkannya — room.js dimuat duluan,
+// jadi semua berkas event tetap memanggilnya seperti biasa. Begitu juga
+// hari kejepit: tanya hariKejepit(d) / hariLibur(d), jangan bikin daftar sendiri.
 
 const KOORD = {
   jam: [168, 38], garuda: [300, 16], jendela: [212, 138], stempel: [286, 140],

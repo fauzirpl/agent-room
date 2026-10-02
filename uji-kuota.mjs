@@ -13,8 +13,10 @@
  * `hariKerja` — ditolak dengan dua alasan yang dua-duanya bisa diperiksa:
  *
  *   1. `babakHari()` di public/room.js SUDAH mendefinisikan jam kantor,
- *      lengkap dengan LIBUR_NASIONAL dan HARI_KEJEPIT yang server tidak tahu.
- *      Definisi kedua di sisi server tidak akan pernah sama jawabannya.
+ *      lengkap dengan kalender tanggal merah (`hariLibur()`/`tanggalMerah()`:
+ *      tanggal tetap, Paskah, hari besar Hijriah, Imlek/Nyepi/Waisak per
+ *      tahun) dan hari kejepit yang server tidak tahu. Definisi kedua di
+ *      sisi server tidak akan pernah sama jawabannya — kasus 1 menagihnya.
  *   2. docs/01-jalanin.md menulis lurus-lurus soal pagu: "tidak pernah menahan
  *      pegawai, MENAHAN ANTREAN, atau mengubah state siapa pun". Menahan
  *      antrean karena angka di jam dinding persis melakukan yang ketiga.
@@ -254,6 +256,13 @@ async function jalan() {
     sama('  KODE server tidak punya jamBuka/jamTutup/hariKerja',
       /jamBuka|jamTutup|hariKerja/.test(kode), false);
     sama('  dan tidak ada penjadwal loket', /loketJadwal|loketBuka/.test(kode), false);
+    /* Kalender tanggal merah cuma boleh ada di halaman (public/room.js). Satu
+       hari raya saja yang ikut ditulis di server sudah jadi sumber kebenaran
+       kedua: SKB tahun depan diperbarui di room.js, server tetap libur di
+       tanggal lama. Yang dicari nama fungsinya DAN nama hari rayanya. */
+    const libur = [...kode.matchAll(/\b(hariLibur|tanggalMerah|hariKejepit|kalenderLibur|babakHari|LIBUR_NASIONAL|HARI_KEJEPIT|Nyepi|Waisak|Imlek|Idul\s?fitri|Idul\s?adha|Paskah|Natal|Kenaikan|Maulid|Isra\s?Mi'?k?raj)\b/gi)]
+      .map((m) => m[0]);
+    sama('  dan tidak ada kalender libur di server (tanggal merah milik halaman)', libur.join(', '), '');
   }
 
   console.log(tebal('\nKasus 2 — proyek yang penuh kuota berhenti memblokir yang lain'));

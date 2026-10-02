@@ -38,6 +38,7 @@ Dokumen ini dipecah per tema ke folder `docs/` (bagian panjangnya sudah 1.800 ba
   - [Nota dinas keluar (webhook)](docs/02-ruangan.md#nota-dinas-keluar-webhook)
   - [Berpikir mengikuti tempatnya](docs/02-ruangan.md#berpikir-mengikuti-tempatnya)
   - [Kenapa perintah shell dipecah dua](docs/02-ruangan.md#kenapa-perintah-shell-dipecah-dua)
+  - [Kenapa MCP tidak semuanya menghadap kadis](docs/02-ruangan.md#kenapa-mcp-tidak-semuanya-menghadap-kadis)
 - [Ruang kadis](docs/02-ruangan.md#ruang-kadis)
 - [Peserta rapat](docs/02-ruangan.md#peserta-rapat)
   - [Kursi sementara, lalu diambil alih](docs/02-ruangan.md#kursi-sementara-lalu-diambil-alih)

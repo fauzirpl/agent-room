@@ -10,16 +10,18 @@
 | Filing kabinet | `Grep`, `ToolSearch` | laci ketarik, kaca pembesar |
 | Meja printer | `WebFetch`, `WebSearch` | di bawah jendela, Monas di kejauhan |
 | Meja stempel | `Edit`, `Write`, `Artifact` | CAP! stempel + cipratan tinta merah |
-| PC server | perintah **git** (`git`, `gh`, `jj`, …) lewat `Bash`/`PowerShell` | rak besi: patch panel, dua server, storage, switch, UPS, kabel UTP menjuntai, APAR di sampingnya |
+| PC server | perintah **git** (`git`, `gh`, `jj`, …) lewat `Bash`/`PowerShell`, dan **query basis data** lewat MCP | rak besi: patch panel, dua server, storage, switch, UPS, kabel UTP menjuntai, APAR di sampingnya |
 | Meja rapat | `Task`, `Agent`, `Workflow`, plus **kegiatan berpikir selagi ada subagent berjalan** | meja panjang bertaplak putih + rimpel hijau, 9 kursi, peserta undangan ikut duduk, ada yang bicara ada yang mencatat notulen |
-| Ruang kadis | `Skill`, `SendMessage`, `mcp__*` | ketuk pintu bawa map disposisi; kalau bukaannya terbuka, pegawainya benar-benar masuk ke dalam (lihat **Ruang kadis**) |
-| Meja kerja | `TodoWrite`, `AskUserQuestion`, **semua perintah shell non-git**, dan tempat pulang waktu menganggur | **7 meja** di baris depan, laptopnya menyala hanya di meja yang ditempati |
+| Ruang kadis | `Skill`, `SendMessage`, `mcp__*` **selain peramban & basis data** | ketuk pintu bawa map disposisi; kalau bukaannya terbuka, pegawainya benar-benar masuk ke dalam (lihat **Ruang kadis**) |
+| Meja kerja | `TodoWrite`, `AskUserQuestion`, **semua perintah shell non-git**, **peramban MCP**, dan tempat pulang waktu menganggur | **7 meja** di baris depan, laptopnya menyala hanya di meja yang ditempati |
 | Ruang tunggu | limpahan waktu empat meja penuh | berdiri ngopi dekat dispenser — baris depan tengah |
 
 Arahan baru dari kamu (`UserPromptSubmit`) memanggil pegawainya ke **meja rapat**
-untuk menerima briefing. Tool yang tidak dikenal jatuh ke meja kerja; apa pun
-berawalan `mcp__` menghadap kepala dinas. Kalau 7 detik tidak ada event,
-pegawainya balik ke **meja kerjanya sendiri**, bukan ke ruang tunggu — ruangan
+untuk menerima briefing. Tool yang tidak dikenal jatuh ke meja kerja; tool
+berawalan `mcp__` dipilah menurut servernya, dan server yang tidak dikenal
+menghadap kepala dinas (lihat **Kenapa MCP tidak semuanya menghadap kadis**).
+Kalau 7 detik tidak ada event, pegawainya balik ke **meja kerjanya sendiri**,
+bukan ke ruang tunggu — ruangan
 yang orangnya sibuk di mejanya masing-masing lebih enak dilihat daripada ruangan
 yang orangnya antre. Ruang tunggu tinggal jadi limpahan: dipakai hanya kalau
 empat meja sudah terisi semua, dan begitu ada meja yang kosong, yang menunggu
@@ -31,12 +33,13 @@ langsung dipanggil balik.
 cocok → dua field itu tidak ada, bukan tebakan), dan label bawaannya
 `<server> · <tool>` — `Claude_Browser · navigate`, bukan string pertama dari
 input-nya. Halaman menyusun kegiatannya dari nama tool yang sama:
-"berkoordinasi dengan Claude Browser · navigate". `PostToolUse` MCP yang
+"menjelajah web lewat Claude Browser · navigate". `PostToolUse` MCP yang
 `duration_ms`-nya lewat 8 detik ditandai `lambat: true` (ikut ke agenda) —
 tool luar yang lelet itu informasi, bukan kesalahan pegawainya. Buku induk
 menambah tabel `mcp: { <server>: jumlah }` per proyek, dibatasi 20 kunci,
-sisanya `(lain)`. Loket per server di kanvas sengaja belum: semua MCP masih
-menghadap kepala dinas.
+sisanya `(lain)`. Nama server yang sama juga menentukan meja di kanvas: peramban
+ke meja kerja, query basis data ke PC server, sisanya menghadap kepala dinas —
+lihat **Kenapa MCP tidak semuanya menghadap kadis**.
 
 **Kongsi seproyek.** Dua sesi nyata yang `cwd`-nya sama (cabang git boleh
 beda) duduk bersebelahan: waktu salah satunya kebagian meja kerja, yang dipilih
@@ -211,6 +214,47 @@ ditentukan **isi perintahnya**, bukan nama tool-nya:
 Pembungkus di depan perintah dibuang dulu, jadi `rtk git push` dan `sudo git pull`
 tetap terbaca git. `cat .git/config` tidak: yang dibaca programnya, bukan
 kata "git" di mana pun.
+
+### Kenapa MCP tidak semuanya menghadap kadis
+
+Dulu apa pun berawalan `mcp__` mengetuk pintu kepala dinas. Di buku agenda 24
+hari (50.492 tool call) ada 5.801 panggilan MCP, dan 5.062 di antaranya
+mengemudikan peramban atau desktop: pintu kadis buka-tutup sepanjang hari dan
+"menghadap kadis" tidak lagi terasa istimewa. Sekarang `MCP_MEJA` di `room.js`
+memilih meja menurut **nama server** — segmen di antara `__` pertama dan kedua,
+`mcp__Claude_Browser__navigate` → `Claude_Browser` — atau menurut server **dan**
+tool-nya kalau server itu mengerjakan macam-macam:
+
+| Server | Tool | Meja | Kartunya berbunyi |
+|---|---|---|---|
+| `Claude_Browser` | semua | meja kerja | menjelajah web lewat … |
+| `claude-in-chrome` | semua | meja kerja | menjelajah web lewat … |
+| `chrome-devtools` | semua | meja kerja | menjelajah web lewat … |
+| `playwright` | semua | meja kerja | menjelajah web lewat … |
+| `puppeteer` | semua | meja kerja | menjelajah web lewat … |
+| `computer-use` | semua | meja kerja | mengoperasikan komputer lewat … |
+| `laravel-boost` | `database-query` | PC server | menanyai basis data lewat … |
+| `laravel-boost` | `database-schema` | PC server | membaca skema basis data lewat … |
+
+Selebihnya — termasuk tool `laravel-boost` yang lain (`search-docs`, `tinker`,
+…) dan server yang bernama UUID — tetap menghadap kadis dan tetap
+"berkoordinasi dengan …". Dari 24 hari yang sama, yang masih mengetuk pintu
+kadis tinggal 297 panggilan (223 MCP lain, ditambah `Skill` dan `SendMessage`).
+
+Peramban dikerjakan di **laptop meja kerjanya sendiri**, sama seperti perintah
+shell non-git, dengan partikel ping biru dan bunyi tuts — bukan lampu ide dan
+bukan "tik" berpikir, karena mengemudikan peramban bukan berpikir (dan karena
+itu juga tidak ikut pindah ke meja rapat seperti kegiatan berpikir). Sengaja
+**bukan** meja printer: di sana tiap tool call mencetak selembar kertas, dan
+sesi peramban memanggil puluhan kali semenit. Query basis data berdiri ke
+**PC server** dan ikut menghitung pemakaian rak yang bisa membuatnya
+kepanasan.
+
+Fixture `uji-ulang` ikut menjaganya: baris MCP yang mejanya bukan kadis
+disamarkan dengan server *wakil* mejanya (`MCP_WAKIL` di `buat-fixture.mjs`),
+jadi hari yang diputar ulang mendarat di meja yang sama dengan hari aslinya.
+Tabel di atas diadu ke `MCP_MEJA` oleh `selaras-dokumen.mjs`: server yang
+ditambahkan ke sana tanpa barisnya di sini membuat pemeriksaan itu merah.
 
 ## Ruang kadis
 
@@ -1555,7 +1599,8 @@ satu dari empat, jadi satu mesin selalu berompi sama tanpa perlu didaftarkan.
 dari cabang", jadi mesin yang tidak menyebut namanya tidak dapat apa-apa.
 
 Rompi menumpang **di atas** seragam harian, tidak menggantikannya: batik Rabu
-dan Jumat tetap terlihat di baliknya. Karena itu warnanya dipilih dengan syarat
+dan Jumat — juga biru Korpri yang dipakai seisi kantor tiap tanggal 17, hari
+upacara Hari Kesadaran Nasional — tetap terlihat di baliknya. Karena itu warnanya dipilih dengan syarat
 keras dan dijaga `uji-seragam.mjs` — usulan awal rancangan (hijau `#41603c`,
 kelabu `#4f545c`, cokelat `#7a4f2e`) semuanya jatuh di uji itu karena masing-masing
 cuma berjarak 7, 41, dan 16 dari batik hijau Jumat, navy Rabu, dan batik cokelat
@@ -1572,7 +1617,7 @@ tidak" tidak boleh bergantung pada warna.
 ### Seragam satpam & OB
 
 Satpam dan OB **tidak ikut seragam harian** PNS (putih, batik Rabu, batik
-Jumat): jabatannya ber-`pal.seragam`, dan `terapkanSeragamHarian()`
+Jumat, Korpri biru tanggal 17): jabatannya ber-`pal.seragam`, dan `terapkanSeragamHarian()`
 melewatinya, jadi mereka memakai seragam lapangannya sendiri setiap hari
 (`SERAGAM_PETUGAS` di `room.js`).
 
@@ -1623,13 +1668,13 @@ event lewat `S.babak`:
 
 | Babak | Kapan |
 |---|---|
-| `apel` | 07:00–07:45 hari kerja |
+| `apel` | 07:00–07:45 hari kerja (17 Agustus babaknya `libur`, tapi upacaranya tetap jalan di jam ini — `waktunyaApel()`) |
 | `kerja` | 06:00–16:00 selebihnya |
 | `istirahat` | 12:00–13:00; Jumat 11:30–13:00 |
 | `pulang` | 16:00–17:00 |
 | `lembur` | 17:00–22:00 |
 | `malam` | 22:00–06:00 |
-| `libur` | Sabtu/Minggu, hari kejepit (`HARI_KEJEPIT`), libur nasional (`LIBUR_NASIONAL`) — sepanjang hari |
+| `libur` | Sabtu/Minggu, tanggal merah, dan hari kejepit (`hariLibur()`, lihat kalender di bawah) — sepanjang hari |
 
 `S.jam` dan `S.kerjaJam` **tetap ada**: tidak ada `syarat` event lama yang
 diubah. Babak cuma masuk lewat pintu kedua — field opsional `babak` pada
@@ -1641,6 +1686,42 @@ kerja; lembur-sampai-malam saat lembur; sandal jepit saat pulang/lembur.
 Pengali diterapkan di `pilihBerbobot`, bukan di `syarat`, supaya event yang
 bobotnya nol di satu babak tidak menghabiskan cooldown dan `uji-event.mjs`
 (yang merakit `S` sendiri tanpa `babak`) tetap jalan.
+
+### Kalender tanggal merah
+
+`hariLibur(d)` dan `babakHari(jam, d)` tetap satu-satunya pintu masuk "kantor
+buka atau tidak"; di belakangnya sekarang ada kalender sungguhan, bukan lagi
+empat tanggal tetap plus daftar hari kejepit karangan (yang dulu meliburkan
+Selasa 9 Juni tiap tahun, sementara Idulfitri, Iduladha, Nyepi, Waisak, dan
+Jumat Agung tetap apel pagi dengan kantor yang kusut sampai sore).
+
+Tanggal merahnya dirakit dari empat sumber, semuanya di
+[public/room.js](../public/room.js) — sengaja **di halaman**: server tidak
+menyimpan satu pun hari libur, dan `uji-kuota.mjs` menagihnya.
+
+| Sumber | Isi |
+|---|---|
+| tanggal tetap | Tahun Baru, Hari Buruh, Hari Lahir Pancasila (1 Juni), Proklamasi, Natal |
+| Paskah, **dihitung** | Wafat Yesus Kristus (Paskah − 2), Paskah, Kenaikan (Paskah + 39) |
+| `taksirHijri()` + `KOREKSI_HIJRI` | Isra Mikraj, Idulfitri (dua hari), Iduladha, Tahun Baru Islam, Maulid |
+| tabel per tahun | Imlek, Nyepi, Waisak — cuma tahun yang SKB-nya sudah dibaca (2026, 2027) |
+
+Taksiran Hijriah itu aritmetik tabular (±1 hari); tanggal resmi yang beda
+dari taksiran dicatat per bulan Hijriah di `KOREKSI_HIJRI`. Tahun yang belum
+ada di tabel tidak melempar apa-apa: Imlek/Nyepi/Waisak-nya saja yang tidak
+libur, hari besar Islam jatuh di taksirannya. Daftar 2026 dan 2027 dicocokkan
+tanggal demi tanggal dengan SKB 3 Menteri (2026: No. 1497/2025, 2/2025,
+5/2025; 2027: No. 1205/2026, 3/2026, 2/2026) di `node uji-event.mjs
+--kalender`. Cuti bersama sengaja tidak ikut — itu cuti, bukan tanggal merah.
+
+**Hari kejepit** dihitung, bukan ditulis: hari kerja yang kemarin dan
+besoknya sama-sama libur (akhir pekan atau tanggal merah) — Jumat sesudah
+Kenaikan, Senin sebelum Imlek, atau Selasa 9 Maret 2027 yang terjepit Nyepi
+dan Idulfitri. Ikut `libur`, tapi bukan tanggal merah. Event
+`hari-kejepit-nasional` membaca fungsi yang sama (`hariKejepit()`).
+
+Yang butuh nama harinya bertanya ke `tanggalMerah(d)` — `'Iduladha 1447 H'`,
+`'Hari Suci Nyepi (Tahun Baru Saka 1948)'`, atau `null`.
 
 ### Kekusutan harian
 
@@ -1730,6 +1811,21 @@ menempel di `RUANGAN.tema`, dievaluasi saat muat dan tiap ganti hari:
   dinding antara rak server dan pintu kadis — jam saja, taksiran per bulan
 - **`korpri`** (29 November): spanduk "HUT KORPRI KE-N"
 - **`tahun-anggaran`** (1–7 Januari): spanduk "TAHUN ANGGARAN <tahun>"
+- **hari nasional** yang bukan tanggal merah tapi diperingati dengan upacara —
+  spanduk sehari, plus kalimat amanat pembina di apel pagi hari itu (lihat
+  *Apel pagi* di [docs/04](04-event-acak.md)):
+  - **`kesaktian-pancasila`** (1 Oktober): "KESAKTIAN PANCASILA", apelnya
+    ikut membacakan teks Pancasila
+  - **`sumpah-pemuda`** (28 Oktober): "SUMPAH PEMUDA KE-N"
+  - **`hari-pahlawan`** (10 November): "HARI PAHLAWAN", apelnya dibuka
+    dengan mengheningkan cipta
+
+Spanduk, warnanya, dan isi apel hari nasional adalah field baris `TEMA`
+sendiri (`spanduk`, `warna`, `amanat`, `hening`, `pancasila`), dibaca lewat
+`spandukTema()` — 2D dan kain 3D sama-sama dari situ, jadi menambah hari
+nasional cukup satu baris. Teksnya maksimal 20 huruf supaya muat di kain
+74 px. Hari nasional ditaruh sebelum `ramadan`: spanduk sehari menang atas
+papan imsakiyah sebulan.
 
 Digambar oleh `gambarTemaDinding()` (satu baris di `drawWall`, di bawah
 neon) dan `gambarTemaMeja()` (satu baris di `drawMejaKerja`). Event acak
@@ -1738,7 +1834,9 @@ bertema sama — `hormat-bendera`, `ramadan-siang-sunyi`, `hari-korpri`,
 tidak ada yang dobel dengan ini (sajadah ramadan di lantai vs jadwal di
 dinding; seragam Korpri vs spanduk; hormat & beres-beres arsip tanpa dekor).
 `S.tema` tersedia kalau suatu hari ada yang dobel. Uji: `?tema=agustusan`,
-`?tema=ramadan`, `?tema=korpri`, `?tema=tahun-anggaran`.
+`?tema=ramadan`, `?tema=korpri`, `?tema=tahun-anggaran`,
+`?tema=kesaktian-pancasila`, `?tema=sumpah-pemuda`, `?tema=hari-pahlawan`
+(gabung `?apel=1` untuk melihat amanat & mengheningkan ciptanya).
 
 ### Hujan ikut cuaca sungguhan
 
@@ -2459,11 +2557,12 @@ kotak di tempat & tingginya sendiri, dengan kedalaman yang masuk akal:
   **papan PANTRI** yang kini bertebal di atas sekatnya — benda tegak terakhir
   yang tadinya kartu.
 - **Dekor tema kalender** (`RUANGAN.tema`): spanduk di atas jendela jadi kain
-  bergelombang bertali dan berpaku (agustusan, HUT KORPRI, tahun anggaran) —
-  mukanya tetap lukisan spanduk yang sama, termasuk angka tahunnya;
-  umbul-umbul merah putih bertali sepanjang tembok, menempel rapat supaya
-  perabot tinggi menutupinya persis seperti di 2D; papan imsakiyah Ramadan
-  timbul. Uji: `?tema=agustusan|korpri|tahun-anggaran|ramadan`.
+  bergelombang bertali dan berpaku (agustusan, HUT KORPRI, tahun anggaran,
+  hari nasional — tiap tema yang punya spanduk di registri `TEMA`, lewat
+  `spandukTema()`) — mukanya tetap lukisan spanduk yang sama, termasuk angka
+  tahunnya; umbul-umbul merah putih bertali sepanjang tembok, menempel rapat
+  supaya perabot tinggi menutupinya persis seperti di 2D; papan imsakiyah
+  Ramadan timbul. Uji: `?tema=agustusan|korpri|tahun-anggaran|ramadan|hari-pahlawan`.
 
 Isi yang ikut keadaan `RUANGAN` — termasuk isi taplak meja rapat: tumpukan
 notulen sisa, noda kopi, dan gelas yang terguling di genangannya; juga bekas

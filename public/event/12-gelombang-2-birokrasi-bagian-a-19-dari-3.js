@@ -455,7 +455,9 @@ daftarEvent(
 {
   id: 'hari-kejepit-nasional',
   kelas: 'panggung', bobot: B.sedang, cooldown: 300, durasi: 150,
-  syarat: (S) => HARI_KEJEPIT.has(S.tanggal + '-' + (new Date().getMonth() + 1)),
+  // hari kejepit yang DIHITUNG dari kalender tanggal merah di room.js — dulu
+  // himpunan tetap di bawah berkas ini yang berlaku ulang tiap tahun
+  syarat: () => hariKejepit(new Date()),
   mulai() {
     minDiLayarTimpa = 1;
     RUANGAN.propLantai.push({ x: 446, y: 146, jenis: 'map-menunggu' });
@@ -500,8 +502,3 @@ daftarEvent(
 },
 
 );
-
-/* Daftar hari kejepit sederhana: "tanggal-bulan". Cukup untuk demo/hiasan,
-   tidak berusaha jadi kalender libur nasional yang akurat. */
-const HARI_KEJEPIT = new Set(['2-5', '31-5', '9-6', '28-3', '3-1']);
-

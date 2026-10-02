@@ -300,8 +300,9 @@ menunggu klik pertamamu seperti bunyi lain. Dicoba tanpa menunggu jam 10:
 Efek suara tool call bukan lagi satu blip seragam, tapi **foley per stasiun**
 (`foley()` + kamus `FOLEY` di `room.js`): stempel yang thud lalu klik pegas
 untuk Edit/Write, laci arsip digeser untuk Read/Grep, desis kipas + bip HDD di
-rak server untuk git, kursi digeser atau ketukan pena di meja rapat, dua klik
-tuts untuk laptop/web/MCP, "deng" turun kalau gagal — mata sudah bisa
+rak server untuk git dan query basis data MCP, kursi digeser atau ketukan pena
+di meja rapat, dua klik tuts untuk laptop/web/MCP lainnya (termasuk peramban
+MCP di meja kerja), "deng" turun kalau gagal — mata sudah bisa
 membedakan meja, telinga seharusnya juga. Semua tetap disintesis, ≤250 ms,
 pelan. Tiga rem supaya sesi deras tidak jadi derau: jeda 220 ms per nama
 bunyi, pagu 6 bunyi/detik seluruh ruangan (kelebihannya dibuang, bukan

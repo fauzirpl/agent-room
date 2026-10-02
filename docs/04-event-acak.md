@@ -371,18 +371,47 @@ Isinya gosip kantor (rotasi, mutasi), bukan obrolan kopi biasa.
 
 ### Apel pagi
 
-Sekali sehari, di babak `apel` (07:00–07:45 hari kerja) dan hanya kalau
-halamannya sedang terbuka: pegawai nyata yang menganggur plus standby berbaris
-dua saf di bawah tiang bendera menghadap ke atas, bendera naik pelan dari
-kaki tiang (`apelBendera` di `drawBendera`), Indonesia Raya diputar lewat
-`mainkanIndonesiaRaya()` kalau audio sudah pernah dibuka pengguna, lalu
-pembina apel — kadis kalau ada personanya, kalau tidak standby berjabatan
-tertinggi — memberi amanat. Amanatnya dirakit di klien dari buku agenda
-kemarin (`GET /agenda?dari=<kemarin>&sampai=<kemarin>`): "Kemarin N tool
-call dari M sesi, terbanyak <tool>." — kalau kosong atau gagal, kalimat
-generik. Senin lebih formal: 40 detik dan ada pembacaan Panca Prasetya
-Korpri sebagai balon berurutan; hari lain 20 detik. Sesudah itu bubar ke
-tempat semula.
+Sekali sehari, di jam apel (07:00–07:45, babak `apel`) pada hari yang ada
+apelnya dan hanya kalau halamannya sedang terbuka: pegawai nyata yang
+menganggur plus standby berbaris dua saf di bawah tiang bendera menghadap ke
+atas, bendera naik pelan dari kaki tiang (`apelBendera` di `drawBendera`),
+Indonesia Raya diputar lewat `mainkanIndonesiaRaya()` kalau audio sudah
+pernah dibuka pengguna, lalu pembina apel — kadis kalau ada personanya, kalau
+tidak standby berjabatan tertinggi — membacakan naskahnya sebagai balon
+berurutan. Amanatnya dirakit di klien dari buku agenda kemarin
+(`GET /agenda?dari=<kemarin>&sampai=<kemarin>`): "Kemarin N tool call dari M
+sesi, terbanyak <tool>." — kalau kosong atau gagal, kalimat generik. Sesudah
+itu bubar ke tempat semula.
+
+Hari libur (kalender tanggal merah, lihat [docs/02](02-ruangan.md)) tidak
+ada apel. Jenisnya dipilih `jenisApel(d)`, naskahnya dirakit `naskahApel()`
+— fungsi murni dari jenis, tanggal, dan tema kalender:
+
+| Jenis | Kapan | Isi | Lama |
+|---|---|---|---|
+| biasa | hari kerja lain | amanat + satu pesan | 20 detik |
+| Senin | Senin | + Panca Prasetya Korpri | 40 detik |
+| **upacara Hari Kesadaran Nasional** | tanggal 17 yang hari kerja | mengheningkan cipta, teks Pancasila, Panca Prasetya Korpri, amanat HKN, amanat buku agenda | ±73 detik |
+| upacara 17 Agustus | 17 Agustus, hari apa pun | seperti HKN + teks Proklamasi, amanat "Dirgahayu RI ke-N" | ±90 detik |
+
+Tanggal 17 seisi kantor berseragam **Korpri biru** sepanjang hari (seragam
+harian, `jenisSeragamHari()`; biru yang sama dengan event `hari-korpri`).
+**17 Agustus** sengaja jadi pengecualian eksplisit: hari itu tanggal merah,
+babaknya `libur` sepanjang hari (kantor tidak kusut, event libur jalan),
+tapi upacaranya tetap — `cekApel()` bertanya ke `waktunyaApel()`, bukan ke
+babak. Tanggal 17 yang libur lainnya (akhir pekan, Imlek 17 Februari 2026,
+Iduladha 17 Mei 2027, hari kejepit) tidak ada upacara.
+
+Selama **mengheningkan cipta** peserta yang sudah di barisan berdiri tegak
+dan menunduk (menumpang `a.ngantuk`, kanal "kepala turun" yang sudah dibaca
+2D dan 3D), dan ruangannya ikut diam lewat `MOD.hening` — partikel kerja
+berhenti, neon tidak berkedip. Kosmetik: tool call tetap jalan.
+
+**Hari nasional** di registri `TEMA` (Kesaktian Pancasila 1 Oktober, Sumpah
+Pemuda 28 Oktober, Hari Pahlawan 10 November) menambahkan kalimat amanatnya
+sendiri ke apel jenis apa pun hari itu, dengan spanduknya di dinding lewat
+`gambarTemaDinding`; Hari Pahlawan dibuka dengan mengheningkan cipta,
+Kesaktian Pancasila ikut membacakan Pancasila.
 
 Kenapa **bukan event acak**: apel itu jadwal, bukan kebetulan — tidak boleh
 ikut undian bobot, tidak boleh kalah dari event `panggung` lain yang
@@ -392,7 +421,7 @@ kebetulan sedang jalan, dan tidak boleh dilaporkan ke arsip kliping
 sehari**: penanda tanggal di localStorage (`apelTerakhir`) — tab yang dimuat
 ulang jam 07:20 tidak apel dua kali, dan tab yang dibuka jam 9 tidak apel
 sama sekali; kalau semua orang sedang sibuk saat dicek, penandanya tidak
-ditulis dan dicoba lagi tiap detik selama babaknya masih `apel`.
+ditulis dan dicoba lagi tiap detik selama masih jam apel.
 
 Aturan 1 berlaku mutlak. Peserta apel dipegang lewat `eventKerja` yang sama
 dengan event acak, jadi `handle()` melepasnya persis seperti biasa begitu
@@ -401,8 +430,13 @@ dan barisan yang bolong dibiarkan bolong. Pembina yang dipanggil tool call
 digantikan yang tertinggi di sisa barisan, dari tempatnya berdiri. Satu
 pengecualian sengaja atas "standby tidak pernah bicara": pembina standby
 diberi balon lewat `Agent.prototype.say` selama apel saja — amanat tanpa
-balon bukan amanat. Uji: `?apel=1` memaksa apel sekarang, `?apel=senin`
-memaksa varian Senin (keduanya mengabaikan babak & penanda).
+balon bukan amanat. Yang sedang menunduk di tengah mengheningkan cipta pun
+dilepas saat itu juga, kepalanya terangkat di frame berikutnya. Upacara
+tetap **bukan event acak** sama seperti apel biasa. Uji: `?apel=1` memaksa
+apel sekarang, `?apel=senin` memaksa varian Senin, `?apel=hkn` memaksa
+upacara Hari Kesadaran Nasional sekaligus seragam Korpri-nya (ketiganya
+mengabaikan jam & penanda); gabung `?tema=hari-pahlawan` dkk. untuk naskah
+hari nasional. Diuji headless di `node uji-event.mjs --apel` (ikut `--semua`).
 
 ### Kenapa hujan tidak ada di daftar itu
 

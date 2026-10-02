@@ -33,7 +33,7 @@
 // `Date` di dalam sandbox DIPALSUKAN (lihat buatDatePalsu): dikunci ke Rabu
 // 15 April 2026, jamnya mengikuti S.jam. Tanpa ini, event yang syarat()/
 // mulai()-nya membaca `new Date()` langsung (ramadan-siang-sunyi lewat
-// taksirHijri(), hari-kejepit-nasional lewat HARI_KEJEPIT, hari-batik-
+// taksirHijri(), hari-kejepit-nasional lewat hariKejepit(), hari-batik-
 // nasional, hari-korpri, hormat-bendera, kembang-api-tahun-baru, tahun-
 // anggaran-baru, serapan-anggaran-akhir-tahun, jumat-bersih, jam-dinding-
 // mati, spanduk) ikut tanggal sungguhan hari itu — dan CI jadi merah/hijau
@@ -47,6 +47,8 @@
 //   node uji-event.mjs --semua       sapu semua event + uji penjadwal + uji kursi, ringkas
 //   node uji-event.mjs --penjadwal   cuma uji aturan bentrok/panggung/aktor
 //   node uji-event.mjs --kursi       cuma uji pemesanan kursi rapat (lihat ujiKursiRapat)
+//   node uji-event.mjs --kalender    cuma uji kalender tanggal merah (lihat ujiKalender)
+//   node uji-event.mjs --apel        cuma uji apel pagi & upacara tanggal 17 (lihat ujiApel)
 //   node uji-event.mjs --daftar      cetak semua id yang valid
 
 import fs from 'node:fs';
@@ -63,20 +65,33 @@ export const merah = cat(31), hijau = cat(32), kuning = cat(33), abu = cat(90), 
 
 /* ---------------------------------------------------------- Date palsu --- *
  * Tanggal acuan tetap: Rabu 15 April 2026 — hari kerja biasa, di luar
- * Ramadan 1447 (±18 Feb–19 Mar 2026), bukan tanggal HARI_KEJEPIT, bukan
- * 17-an, bukan Oktober–Desember (batik/korpri/serapan), bukan awal Januari
- * (tahun-anggaran-baru), bukan Senin/Jumat (hormat-bendera/jumat-bersih).
+ * Ramadan 1447 (±18 Feb–19 Mar 2026), bukan tanggal merah atau hari
+ * kejepit, bukan 17-an, bukan Oktober–Desember (batik/korpri/serapan),
+ * bukan awal Januari (tahun-anggaran-baru), bukan Senin/Jumat (hormat-
+ * bendera/jumat-bersih).
  * getDay()=3 dan getDate()=15 SENGAJA sama dengan S.hari=3/S.tanggal=15 di
  * buatS(), dan jamnya digeser lewat setJamPalsu(S.jam) supaya
  * `new Date().getHours()` di dalam event tidak bertentangan dengan S.jam.
  * Dibangun lewat komponen waktu LOKAL (bukan ISO/UTC) supaya getHours()/
- * getDay()/getDate() sama persis di WIB maupun di runner CI ber-UTC. */
-const TANGGAL_BEKU = { tahun: 2026, bulan: 3, tanggal: 15 };   // bulan 0-based -> April
-let msBeku = 0;
+ * getDay()/getDate() sama persis di WIB maupun di runner CI ber-UTC.
+ *
+ * setTanggalPalsu() menggeser TANGGALNYA — cuma untuk uji yang memang soal
+ * tanggal (ujiKalender: Idulfitri, hari kejepit, upacara tanggal 17).
+ * Pemanggilnya WAJIB memulihkan acuan lewat pulihkanTanggalPalsu() di
+ * finally: msBeku dibaca semua sandbox, bukan cuma miliknya. */
+const TANGGAL_ACUAN = { tahun: 2026, bulan: 3, tanggal: 15 };   // bulan 0-based -> April
+const TANGGAL_BEKU = { ...TANGGAL_ACUAN };
+let msBeku = 0, jamBeku = 10;
 export function setJamPalsu(jam) {
+  jamBeku = jam;
   const j = Math.floor(jam), m = Math.round((jam - j) * 60);
   msBeku = new Date(TANGGAL_BEKU.tahun, TANGGAL_BEKU.bulan, TANGGAL_BEKU.tanggal, j, m, 0, 0).getTime();
 }
+export function setTanggalPalsu(tahun, bulan, tanggal) {     // bulan 0-based, jamnya tetap
+  Object.assign(TANGGAL_BEKU, { tahun, bulan, tanggal });
+  setJamPalsu(jamBeku);
+}
+export const pulihkanTanggalPalsu = () => setTanggalPalsu(TANGGAL_ACUAN.tahun, TANGGAL_ACUAN.bulan, TANGGAL_ACUAN.tanggal);
 setJamPalsu(10);
 
 // Subclass Date asli: cuma konstruktor TANPA argumen dan Date.now() yang
@@ -1277,6 +1292,357 @@ export function ujiKursiRapat(ctx = muatKonteks()) {
   return kasus;
 }
 
+/* ---------------------------------------------- kalender tanggal merah --- *
+ * Kalender di public/room.js (kalenderLibur/tanggalMerah/hariKejepit/
+ * hariLibur) dicocokkan tanggal demi tanggal dengan SKB 3 Menteri tentang
+ * Hari Libur Nasional 2026 (No. 1497/2025, 2/2025, 5/2025) dan 2027
+ * (No. 1205/2026, 3/2026, 2/2026). Daftar di bawah DISALIN DARI SKB, bukan
+ * dari keluaran kode — kalau keduanya beda, yang salah kodenya.
+ *
+ * Kelas bugnya: kalender yang salah tidak melempar apa pun. Idulfitri yang
+ * meleset sehari cuma membuat kantor apel pagi di hari raya dan kusut sampai
+ * sore, dan itu baru ketahuan di hari rayanya sendiri.
+ *
+ * Sandbox-nya sendiri. Dua kasus membaca `new Date()` di dalam room.js
+ * (event hari-kejepit-nasional, kusut harian), jadi tanggal bekunya digeser
+ * lewat setTanggalPalsu() — dan SELALU dipulihkan di finally tiap kasus. */
+const SKB_LIBUR = {
+  2026: {
+    '1-1': /Tahun Baru Masehi/, '16-1': /Isra Mikraj.*1447/, '17-2': /Imlek 2577/,
+    '19-3': /Nyepi.*1948/, '21-3': /Idulfitri 1447/, '22-3': /Idulfitri 1447/,
+    '3-4': /Wafat Yesus/, '5-4': /Paskah/, '1-5': /Buruh/, '14-5': /Kenaikan/,
+    '27-5': /Iduladha 1447/, '31-5': /Waisak 2570/, '1-6': /Pancasila/,
+    '16-6': /Tahun Baru Islam 1448/, '17-8': /Proklamasi/, '25-8': /Maulid/,
+    '25-12': /Natal/,
+  },
+  2027: {
+    '1-1': /Tahun Baru Masehi/, '5-1': /Isra Mikraj.*1448/, '6-2': /Imlek 2578/,
+    '8-3': /Nyepi.*1949/, '10-3': /Idulfitri 1448/, '11-3': /Idulfitri 1448/,
+    '26-3': /Wafat Yesus/, '28-3': /Paskah/, '1-5': /Buruh/, '6-5': /Kenaikan/,
+    '17-5': /Iduladha 1448/, '20-5': /Waisak 2571/, '1-6': /Pancasila/,
+    '6-6': /Tahun Baru Islam 1449/, '15-8': /Maulid/, '17-8': /Proklamasi/,
+    '25-12': /Natal/, '26-12': /Isra Mikraj.*1449/,
+  },
+};
+// Hari kerja yang diapit dua hari libur (akhir pekan / tanggal merah) di
+// kalender SKB di atas — dihitung tangan dari kalender dinding, bukan dari kode.
+const KEJEPIT_SKB = {
+  2026: ['2-1', '16-2', '20-3', '15-5', '15-6', '24-8'],
+  2027: ['4-1', '9-3', '12-3', '7-5', '21-5', '31-5', '16-8'],
+};
+const tglSkb = (th, bl, tg) => new Date(th, bl - 1, tg, 12);    // bulan 1-12, terbaca seperti SKB
+const kunciTgl = (d) => d.getDate() + '-' + (d.getMonth() + 1);
+function setahun(th) {
+  const a = [];
+  for (let d = tglSkb(th, 1, 1); d.getFullYear() === th; d = tglSkb(th, d.getMonth() + 1, d.getDate() + 1)) a.push(d);
+  return a;
+}
+function kasusDenganTanggal() {
+  const kasus = [];
+  const uji = (nama, fn) => {
+    try { fn(); kasus.push({ nama, lulus: true }); }
+    catch (e) { kasus.push({ nama, lulus: false, pesan: e.message }); }
+    finally { pulihkanTanggalPalsu(); setJamPalsu(10); }
+  };
+  const harus = (kondisi, pesan) => { if (!kondisi) throw new Error(pesan); };
+  return { kasus, uji, harus };
+}
+
+export function ujiKalender(ctx = muatKonteks()) {
+  const { kasus, uji, harus } = kasusDenganTanggal();
+
+  for (const th of [2026, 2027]) {
+    const skb = SKB_LIBUR[th];
+    uji(`kalender ${th} sama persis dengan SKB 3 Menteri (${Object.keys(skb).length} tanggal merah, nama ikut)`, () => {
+      const peta = ctx.kalenderLibur(th);
+      const lebih = [...peta.keys()].filter((k) => !skb[k]);
+      const kurang = Object.keys(skb).filter((k) => !peta.has(k));
+      harus(!lebih.length && !kurang.length,
+        `tidak ada di SKB: ${lebih.map((k) => k + ' ' + peta.get(k)).join('; ') || '-'} | ada di SKB tapi hilang: ${kurang.join(', ') || '-'}`);
+      const tertukar = Object.entries(skb).filter(([k, pola]) => !pola.test(peta.get(k)));
+      harus(!tertukar.length, 'nama tertukar: ' + tertukar.map(([k]) => k + ' = ' + peta.get(k)).join('; '));
+    });
+  }
+
+  uji('tanggal merah hari kerja = babak libur sepanjang hari, jam apel pun (Iduladha Rabu 27/5/26, Jumat Agung 3/4/26, Nyepi 19/3/26, ...)', () => {
+    const salah = [];
+    for (const th of [2026, 2027]) {
+      for (const k of Object.keys(SKB_LIBUR[th])) {
+        const [t, b] = k.split('-').map(Number);
+        for (const jam of [7.2, 10, 15]) {
+          const babak = ctx.babakHari(jam, tglSkb(th, b, t));
+          if (babak !== 'libur') salah.push(`${k}-${th} jam ${jam}: ${babak}`);
+        }
+      }
+    }
+    harus(!salah.length, salah.slice(0, 6).join('; '));
+  });
+
+  uji('Selasa 9 Juni 2026 & Rabu 9 Juni 2027 hari kerja biasa: apel jam 7.2 (himpunan kejepit lama meliburkannya tiap tahun)', () => {
+    for (const d of [tglSkb(2026, 6, 9), tglSkb(2027, 6, 9)]) {
+      harus(!ctx.hariLibur(d), `${kunciTgl(d)}-${d.getFullYear()} masih libur`);
+      harus(ctx.babakHari(7.2, d) === 'apel', `${kunciTgl(d)}-${d.getFullYear()} jam 7.2: ${ctx.babakHari(7.2, d)}`);
+    }
+  });
+
+  uji('hari kejepit dihitung: 6 di 2026, 7 di 2027 (Selasa 9/3/27 di antara Nyepi & Idulfitri), libur tapi bukan tanggal merah', () => {
+    for (const th of [2026, 2027]) {
+      const dapat = setahun(th).filter((d) => ctx.hariKejepit(d)).map(kunciTgl);
+      harus(dapat.join() === KEJEPIT_SKB[th].join(), `${th}: dapat ${dapat.join(', ')}, harusnya ${KEJEPIT_SKB[th].join(', ')}`);
+      for (const k of dapat) {
+        const [t, b] = k.split('-').map(Number);
+        const d = tglSkb(th, b, t);
+        harus(ctx.hariLibur(d) && ctx.babakHari(7.2, d) === 'libur', `${k}-${th}: kejepit tapi tidak libur`);
+        harus(ctx.tanggalMerah(d) === null, `${k}-${th}: kejepit tapi dinamai tanggal merah "${ctx.tanggalMerah(d)}"`);
+      }
+    }
+  });
+
+  uji('tahun di luar tabel (2030): tidak melempar, tanpa Imlek/Nyepi/Waisak karangan, sisanya tetap dihitung', () => {
+    const peta = ctx.kalenderLibur(2030);
+    const nama = [...peta.values()];
+    harus(['1-1', '1-5', '1-6', '17-8', '25-12'].every((k) => peta.has(k)), 'tanggal tetap hilang: ' + [...peta.keys()].join(', '));
+    harus(nama.some((n) => /Paskah/.test(n)) && nama.some((n) => /Idulfitri/.test(n)) && nama.some((n) => /Iduladha/.test(n)),
+      'Paskah/Idulfitri/Iduladha hitungan hilang: ' + nama.join('; '));
+    const karangan = nama.filter((n) => /Imlek|Nyepi|Waisak/.test(n));
+    harus(!karangan.length, 'tahun tanpa tabel mengarang: ' + karangan.join('; '));
+    for (const d of setahun(2030)) ctx.babakHari(7.2, d);
+  });
+
+  uji('Paskah dihitung, bukan dihafal: 31/3/2024, 20/4/2025, 25/4/2038 (Jumat Agung dua hari sebelumnya)', () => {
+    for (const [th, b, t] of [[2024, 3, 31], [2025, 4, 20], [2038, 4, 25]]) {
+      harus(/Paskah/.test(ctx.tanggalMerah(tglSkb(th, b, t)) || ''), `${t}/${b}/${th}: ${ctx.tanggalMerah(tglSkb(th, b, t))}`);
+      harus(/Wafat Yesus/.test(ctx.tanggalMerah(tglSkb(th, b, t - 2)) || ''), `${t - 2}/${b}/${th}: ${ctx.tanggalMerah(tglSkb(th, b, t - 2))}`);
+    }
+  });
+
+  uji('event hari-kejepit-nasional membaca hari kejepit hitungan, dan tidak ada daftar kedua', () => {
+    const def = ctx.__jembatan__.eventById.get('hari-kejepit-nasional');
+    harus(def, 'event hari-kejepit-nasional tidak terdaftar');
+    const S = buatS(ctx, { jam: 10, hujan: 0, petir: false, ramai: false });
+    setTanggalPalsu(2026, 4, 15);                      // Jumat 15 Mei 2026, sesudah Kenaikan
+    harus(def.syarat(S) === true, 'Jumat 15/5/2026 (kejepit) tidak memicu syaratnya');
+    setTanggalPalsu(2026, 5, 9);                       // Selasa 9 Juni 2026
+    harus(def.syarat(S) === false, 'Selasa 9/6/2026 (hari kerja biasa) masih memicu syaratnya');
+    // Nama yang tidak dideklarasikan siapa pun jatuh ke dummy catch-all sandbox
+    // (typeof-nya 'function', bukan 'undefined'), jadi dibandingkan dengan
+    // nama lain yang pasti tidak ada: sama = HARI_KEJEPIT tidak dideklarasikan.
+    const hilang = new vm.Script('HARI_KEJEPIT === __namaYangPastiTidakAda__').runInContext(ctx);
+    harus(hilang === true, 'HARI_KEJEPIT masih didefinisikan: dua sumber hari kejepit');
+  });
+
+  uji('kantor tidak kusut di tanggal merah: Iduladha Rabu 27/5/2026 jam 16 <= 0,1 (hari kerja biasa jam 16 > 0,5)', () => {
+    setJamPalsu(16);
+    setTanggalPalsu(2026, 4, 27);
+    const raya = ctx.kusutSasaran();
+    setTanggalPalsu(2026, 5, 9);
+    const biasa = ctx.kusutSasaran();
+    harus(raya <= 0.1 && biasa > 0.5, `Iduladha ${raya.toFixed(2)}, hari kerja biasa ${biasa.toFixed(2)}`);
+  });
+
+  return kasus;
+}
+
+/* ------------------------------------------- apel & upacara tanggal 17 --- *
+ * Apel pagi bukan event acak (room.js: jenisApel/waktunyaApel/naskahApel/
+ * mulaiApel/tickApel/cekApel), jadi sapuan --semua tidak pernah
+ * menyentuhnya. Yang dijaga: upacara Hari Kesadaran Nasional di tanggal 17
+ * hari kerja; 17 Agustus yang libur tapi tetap upacara; naskah tiap jenis;
+ * seragam Korpri; hari nasional lewat registri TEMA; upacara tidak masuk
+ * penjadwal; dan Aturan 1 di tengah mengheningkan cipta.
+ *
+ * Pegawainya SUNGGUHAN (new Agent lewat jembatan, didaftarkan ke agents),
+ * karena calonApel() menyaring penghuni() dan handle() harus bisa
+ * menemukan sesinya. Jalannya tidak disimulasikan: tiba() menghabiskan path
+ * seketika, cukup untuk `diam` yang dibaca hormat & tunduk. */
+export function ujiApel(ctx = muatKonteks()) {
+  const { kasus, uji, harus } = kasusDenganTanggal();
+  const H = ctx.__jembatan__;
+  const lihat = (nama) => new vm.Script(nama).runInContext(ctx);   // let/const room.js
+  const isi = (n) => n.baris.map((b) => b.teks);
+  const SILA = lihat('PANCASILA'), PP = lihat('PANCA_PRASETYA');
+  let detikNow = 1e6, nomorSesi = 0, seq = 0;
+  // ambien() menyimpan jam per detik `now`; tanpa ini jam palsu baru tidak terbaca
+  const majuNow = () => { detikNow += 5000; H.setNow(detikNow); };
+  const pegawai = (n) => {
+    const a = [];
+    for (let i = 0; i < n; i++) {
+      const id = 'sesi-apel-' + ++nomorSesi;
+      const p = new H.Agent(id);
+      H.agents.set(id, p);
+      a.push(p);
+    }
+    return a;
+  };
+  const bersih = () => {
+    if (lihat('apel')) ctx.bubarApel();
+    H.agents.clear(); H.standby.length = 0; H.peserta.length = 0; H.eventHidup.length = 0;
+    H.RUANGAN.tema = null;
+  };
+  const tiba = (orang) => { for (const a of orang) while (a.path.length) { const t = a.path.shift(); a.x = t.x; a.y = t.y; } };
+  const detak = (dt = 0.05) => { ctx.resetMod(); ctx.tickApel(dt); };   // resetMod: seperti tickEvent tiap frame
+
+  uji('jenis apel: 17 hari kerja = upacara HKN; 17 Agustus libur (Senin 2026, Minggu 2025) tetap upacara; 17 yang libur (Imlek, Iduladha, Sabtu) & kejepit tidak apel', () => {
+    const daftar = [
+      [[2026, 9, 17], 'hkn'], [[2026, 8, 17], 'hkn'], [[2025, 8, 17], 'hkn'],
+      [[2026, 2, 17], null], [[2027, 5, 17], null], [[2026, 10, 17], null],
+      [[2026, 10, 19], 'senin'], [[2026, 9, 16], 'biasa'], [[2026, 5, 15], null],
+    ];
+    const salah = daftar.filter(([[th, b, t], harap]) => ctx.jenisApel(tglSkb(th, b, t)) !== harap)
+      .map(([[th, b, t], harap]) => `${t}/${b}/${th}: ${ctx.jenisApel(tglSkb(th, b, t))}, harusnya ${harap}`);
+    harus(!salah.length, salah.join('; '));
+  });
+
+  uji('17 Agustus: babak libur sepanjang hari, tapi waktunyaApel() memberi upacara di jam apel saja', () => {
+    const d = tglSkb(2026, 8, 17);
+    harus(ctx.babakHari(7.2, d) === 'libur', `babak 7.2 = ${ctx.babakHari(7.2, d)}`);
+    harus(ctx.waktunyaApel(7.2, d) === 'hkn', `waktunyaApel 7.2 = ${ctx.waktunyaApel(7.2, d)}`);
+    harus(ctx.waktunyaApel(6.9, d) === null && ctx.waktunyaApel(7.8, d) === null, 'upacara di luar jam apel');
+  });
+
+  uji('hari kerja: waktunyaApel() persis babak apel babakHari(), satu jendela jam', () => {
+    const salah = [];
+    for (const [th, b, t] of [[2026, 9, 16], [2026, 10, 19], [2026, 9, 17], [2026, 5, 27]]) {
+      for (let jam = 0; jam < 24; jam += 0.05) {
+        const d = tglSkb(th, b, t);
+        if ((ctx.waktunyaApel(jam, d) !== null) !== (ctx.babakHari(jam, d) === 'apel')) salah.push(`${t}/${b} jam ${jam.toFixed(2)}`);
+      }
+    }
+    harus(!salah.length, salah.slice(0, 5).join('; '));
+  });
+
+  uji('naskah: biasa 20 dtk & Senin 40 dtk persis seperti dulu; upacara HKN paling panjang — hening, Pancasila, Panca Prasetya, amanat HKN', () => {
+    const biasa = ctx.naskahApel('biasa', tglSkb(2026, 9, 16), null);
+    const senin = ctx.naskahApel('senin', tglSkb(2026, 10, 19), null);
+    const hkn = ctx.naskahApel('hkn', tglSkb(2026, 9, 17), null);
+    harus(biasa.durasi === 20 && biasa.baris.map((b) => b.t).join() === '12,17' && isi(biasa)[0] === lihat('APEL_AMANAT'),
+      `biasa: ${biasa.durasi} dtk, baris di ${biasa.baris.map((b) => b.t).join()}`);
+    const tPP = PP.map((s) => (senin.baris.find((b) => b.teks === s) || { t: NaN }).t.toFixed(1));
+    harus(senin.durasi === 40 && tPP.join() === '21.0,24.6,28.2,31.8,35.4', `Senin: ${senin.durasi} dtk, Panca Prasetya di ${tPP.join()}`);
+    harus(!biasa.hening && !senin.hening && !SILA.some((s) => isi(biasa).includes(s) || isi(senin).includes(s)),
+      'apel biasa/Senin ikut hening atau Pancasila');
+    harus(hkn.durasi > senin.durasi && hkn.hening && hkn.hening.lama >= 5, `HKN ${hkn.durasi} dtk, hening ${JSON.stringify(hkn.hening)}`);
+    harus(SILA.every((s) => isi(hkn).includes(s)) && PP.every((s) => isi(hkn).includes(s)) && isi(hkn).includes(lihat('AMANAT_HKN')),
+      'HKN tanpa Pancasila / Panca Prasetya / amanat HKN');
+    harus(hkn.judul === 'upacara Hari Kesadaran Nasional', 'judul ' + hkn.judul);
+    for (const n of [biasa, senin, hkn]) {
+      harus(n.baris.every((b, i) => b.t >= 12 && b.t < n.durasi && (!i || b.t > n.baris[i - 1].t)),
+        'baris tidak urut / di luar durasi: ' + n.baris.map((b) => b.t).join());
+    }
+  });
+
+  uji('naskah 17 Agustus: teks Proklamasi sesudah Pancasila, amanat Dirgahayu RI ke-81; 17 September tanpa Proklamasi', () => {
+    const PROK = lihat('PROKLAMASI');
+    const n = ctx.naskahApel('hkn', tglSkb(2026, 8, 17), 'agustusan');
+    harus(PROK.every((s) => isi(n).includes(s)) && isi(n).indexOf(PROK[0]) > isi(n).indexOf(SILA[4]), 'Proklamasi hilang / sebelum Pancasila');
+    harus(isi(n).some((s) => /Dirgahayu Republik Indonesia ke-81/.test(s)) && n.judul === 'upacara 17 Agustus', 'amanat/judul 17 Agustus');
+    harus(!PROK.some((s) => isi(ctx.naskahApel('hkn', tglSkb(2026, 9, 17), null)).includes(s)), 'Proklamasi bocor ke 17 September');
+  });
+
+  uji('hari nasional lewat registri TEMA (1 Okt, 28 Okt, 10 Nov): tema menempel, spanduk muat, amanat dibacakan; Pahlawan hening, Kesaktian Pancasila baca Pancasila', () => {
+    const TEMA_PER_ID = lihat('TEMA_PER_ID');
+    for (const [id, [th, b, t]] of [['kesaktian-pancasila', [2026, 10, 1]], ['sumpah-pemuda', [2026, 10, 28]], ['hari-pahlawan', [2026, 11, 10]]]) {
+      setTanggalPalsu(th, b - 1, t);
+      ctx.terapkanTema();
+      harus(H.RUANGAN.tema === id, `${t}/${b}: tema ${H.RUANGAN.tema}, harusnya ${id}`);
+      const sp = ctx.spandukTema(id, th);
+      harus(sp && sp.teks.length * 3.6 <= 74, `spanduk ${id} tidak muat 74 px: ${sp && sp.teks}`);
+      const n = ctx.naskahApel('biasa', tglSkb(th, b, t), id);
+      harus(isi(n).includes(TEMA_PER_ID.get(id).amanat(th)), `amanat ${id} tidak dibacakan`);
+      harus(!!n.hening === (id === 'hari-pahlawan'), `${id}: hening ${!!n.hening}`);
+      harus(SILA.every((s) => isi(n).includes(s)) === (id === 'kesaktian-pancasila'), `${id}: Pancasila tertukar`);
+    }
+  });
+
+  uji('seragam: tanggal 17 Korpri biru #28406b sepanjang hari (Rabu 17 Juni 2026 pun, bukan batik), Rabu lain batik', () => {
+    const pal = H.jabatanDari('pranata_muda').pal;
+    setTanggalPalsu(2026, 5, 17);
+    ctx.terapkanSeragamHarian();
+    harus(pal.main === '#28406b' && pal.pattern === null, `17 Juni: ${pal.main}/${pal.pattern}`);
+    harus(ctx.jenisSeragamHari(tglSkb(2026, 8, 17)) === 'korpri', '17 Agustus tidak berseragam Korpri');
+    setTanggalPalsu(2026, 5, 24);
+    ctx.terapkanSeragamHarian();
+    harus(pal.main !== '#28406b' && pal.pattern !== null, `Rabu 24 Juni: ${pal.main}/${pal.pattern}, harusnya batik Rabu`);
+  });
+
+  uji('?apel=hkn memaksa upacara (jenisPaksaApel): hkn/senin apa adanya, nilai lain apel biasa', () => {
+    const dapat = ['hkn', 'senin', '1', null].map((v) => ctx.jenisPaksaApel(v));
+    harus(dapat.join() === 'hkn,senin,biasa,', 'dapat ' + JSON.stringify(dapat));
+  });
+
+  uji('cekApel(): 17 Agustus 2026 jam 7.2 upacara walau babak libur; 17 September upacara HKN; Iduladha tidak apel; 9 Juni apel biasa', () => {
+    ctx.document.hidden = false;      // dummy sandbox itu truthy = "halaman tersembunyi"
+    const daftar = [[[2026, 8, 17], 'upacara 17 Agustus'], [[2026, 9, 17], 'upacara Hari Kesadaran Nasional'],
+      [[2026, 5, 27], null], [[2026, 6, 9], 'apel pagi']];
+    for (const [[th, b, t], judul] of daftar) {
+      bersih();
+      const orang = pegawai(3);
+      setTanggalPalsu(th, b - 1, t);
+      setJamPalsu(7.2);
+      majuNow();
+      ctx.cekApel();
+      const dapat = lihat('apel') ? orang[0].doingEvent : null;
+      harus(dapat === judul, `${t}/${b}/${th} jam 7.2: ${dapat || 'tidak ada apel'}, harusnya ${judul || 'tidak ada apel'}`);
+    }
+    bersih();
+  });
+
+  uji('upacara HKN berjalan: pembina membaca Pancasila & Panca Prasetya, peserta menunduk saat hening, tidak masuk penjadwal, bubar tepat di durasinya', () => {
+    bersih();
+    const orang = pegawai(4);
+    setTanggalPalsu(2026, 8, 17);
+    const ucapan = [];
+    const sayAsli = H.Agent.prototype.say;
+    H.Agent.prototype.say = function (t) { ucapan.push(String(t)); return sayAsli.call(this, t); };
+    try {
+      harus(ctx.mulaiApel('hkn', true) === true, 'mulaiApel tidak jalan');
+      const { hening, durasi } = lihat('apel').naskah;
+      tiba(orang);
+      let umur = 0, tunduk = false, diam = false;
+      while (lihat('apel') && umur < durasi + 5) {
+        detak();
+        umur += 0.05;
+        if (Math.abs(umur - (hening.mulai + hening.lama / 2)) < 0.03) {
+          tunduk = orang.every((a) => a.tegak && a.ngantuk > 0);
+          diam = H.MOD.hening === true;
+        }
+        harus(!H.eventHidup.length && !H.cooldownSampai.has('apel-pagi'), 'upacara masuk penjadwal event acak');
+      }
+      harus(tunduk && diam, `tengah hening: menunduk ${tunduk}, ruangan diam ${diam}`);
+      harus(SILA.every((s) => ucapan.includes(s)) && PP.every((s) => ucapan.includes(s)),
+        'pembina tidak membacakan semuanya: ' + ucapan.length + ' balon');
+      harus(!lihat('apel') && umur >= durasi && umur < durasi + 0.2, `bubar di umur ${umur.toFixed(2)}, durasi ${durasi}`);
+      harus(orang.every((a) => a.eventKerja === null && a.ngantuk === 0 && !a.tegak), 'sesudah bubar masih dipegang / tertunduk');
+    } finally {
+      H.Agent.prototype.say = sayAsli;
+      bersih();
+    }
+  });
+
+  uji('Aturan 1: tool call melepas peserta upacara saat itu juga, juga di tengah hening; bubar di tengah hening mengangkat semua kepala', () => {
+    bersih();
+    const orang = pegawai(3);
+    setTanggalPalsu(2026, 8, 17);
+    ctx.mulaiApel('hkn', true);
+    const A = lihat('apel');
+    tiba(orang);
+    for (let u = 0; u < A.naskah.hening.mulai + 2; u += 0.05) detak();
+    const [a, b] = orang;
+    harus(a.ngantuk > 0 && a.tegak, 'belum menunduk di tengah hening');
+    ctx.handle({ id: ++seq, ts: Date.now(), session: a.id, cwd: 'proyek-uji', kind: 'pre', tool: 'Read', label: 'berkas.md', ok: true });
+    harus(a.eventKerja === null && !A.E.aktor.includes(a) && !a.tegak && a.station !== 'acara',
+      `tool call tidak melepasnya (eventKerja ${a.eventKerja && a.eventKerja.id}, station ${a.station})`);
+    detak();
+    harus(a.ngantuk === 0, 'kepalanya masih tertunduk sesudah lepas');
+    harus(b.ngantuk > 0 && A.E.aktor.includes(b), 'yang lain ikut lepas');
+    ctx.bubarApel();
+    harus(orang.every((o) => o.ngantuk === 0 && !o.tegak), 'bubar di tengah hening meninggalkan kepala tertunduk');
+    bersih();
+  });
+
+  return kasus;
+}
+
 /* -------------------------------------------------------------- laporan --- */
 function cetakSatu(hasil) {
   const { def, syarat, smoke, temuan } = hasil;
@@ -1344,12 +1710,16 @@ function cetakPenjadwal(kasus, judul = 'Uji penjadwal (bentrok / panggung / akto
   return kasus.every((k) => k.lulus);
 }
 const cetakKursi = (kasus) => cetakPenjadwal(kasus, 'Uji kursi rapat (pesanan peserta ke stasiun tool) — fungsi asli room.js:');
+const cetakKalender = (kasus) => cetakPenjadwal(kasus, 'Uji kalender tanggal merah (SKB 2026/2027, Paskah, Hijriah, kejepit) — fungsi asli room.js:');
+const cetakApel = (kasus) => cetakPenjadwal(kasus, 'Uji apel pagi & upacara tanggal 17 (HKN, 17 Agustus, hari nasional, Aturan 1) — fungsi asli room.js:');
 
 /* -------------------------------------------------------------------- CLI */
 function main() {
   const argv = process.argv.slice(2);
-  // sandboxnya sendiri (lihat ujiKursiRapat), jadi tidak perlu ctx di bawah
+  // sandboxnya sendiri (lihat ujiKursiRapat/ujiKalender), jadi tidak perlu ctx di bawah
   if (argv.includes('--kursi')) process.exit(cetakKursi(ujiKursiRapat()) ? 0 : 1);
+  if (argv.includes('--kalender')) process.exit(cetakKalender(ujiKalender()) ? 0 : 1);
+  if (argv.includes('--apel')) process.exit(cetakApel(ujiApel()) ? 0 : 1);
 
   const ctx = muatKonteks();
   const { EVENT_ACAK, eventById } = ctx.__jembatan__;
@@ -1394,7 +1764,11 @@ function main() {
     const lulusPenjadwal = cetakPenjadwal(ujiPenjadwal(ctx, pristine));
     console.log();
     const lulusKursi = cetakKursi(ujiKursiRapat());
-    process.exit(adaGagal || !lulusPenjadwal || !lulusKursi ? 1 : 0);
+    console.log();
+    const lulusKalender = cetakKalender(ujiKalender());
+    console.log();
+    const lulusApel = cetakApel(ujiApel());
+    process.exit(adaGagal || !lulusPenjadwal || !lulusKursi || !lulusKalender || !lulusApel ? 1 : 0);
   }
 
   const id = argv[0];
@@ -1404,6 +1778,8 @@ function main() {
     console.log('  node uji-event.mjs --semua       sapu semua event + uji penjadwal, ringkas + exit code');
     console.log('  node uji-event.mjs --penjadwal   cuma uji aturan bentrok/panggung/aktor');
     console.log('  node uji-event.mjs --kursi       cuma uji pemesanan kursi rapat');
+    console.log('  node uji-event.mjs --kalender    cuma uji kalender tanggal merah');
+    console.log('  node uji-event.mjs --apel        cuma uji apel pagi & upacara tanggal 17');
     console.log('  node uji-event.mjs --daftar      cetak semua id yang valid');
     process.exit(1);
   }

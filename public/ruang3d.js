@@ -1831,7 +1831,8 @@ void main() { hasil = vec4(1.0); }`;
   }
 
   /* Dekor tema kalender (gambarTemaDinding): spanduk di atas jendela
-     (agustusan, HUT KORPRI, tahun anggaran) jadi KAIN — muka lukisan dinding
+     (agustusan, HUT KORPRI, tahun anggaran, hari nasional — semua tema yang
+     punya spanduk di registri TEMA) jadi KAIN — muka lukisan dinding
      yang sama dipotong lajur-lajur miring yang bergelombang, diikat tali ke
      paku; umbul-umbul merah putih bertali sepanjang tembok (agustusan), yang
      memutus di depan perabot tinggi persis seperti tertutup perabotnya di 2D;
@@ -1847,9 +1848,12 @@ void main() { hasil = vec4(1.0); }`;
     const t = RUANGAN.tema;
     if (!t) return;
     const uv = (x0, y0, x1, y1) => [x0 / W, y0 / FLOOR_TOP, x1 / W, y1 / FLOOR_TOP];
-    if (t === 'agustusan' || t === 'korpri' || t === 'tahun-anggaran') {
+    // tema mana yang berspanduk dan warnanya dibaca dari registri TEMA room.js
+    // (spandukTema), jadi spanduk hari nasional baru ikut jadi kain sendiri
+    const sp = spandukTema(t, RUANGAN.temaTahun);
+    if (sp) {
       const SP = SPANDUK, h0 = FLOOR_TOP - (SP.y + SP.h), h1 = FLOOR_TOP - SP.y, n = 10;
-      const c = warna(t === 'agustusan' ? P.red : t === 'korpri' ? '#28406b' : '#3e6b4f');
+      const c = warna(sp.warna);
       const zx = (x) => DINDING_Z + 0.9 + 0.35 * Math.sin((x - SP.x) * 0.35);
       for (let i = 0; i < n; i++) {
         const xa = SP.x + (SP.w / n) * i, xb = SP.x + (SP.w / n) * (i + 1), za = zx(xa), zb = zx(xb);

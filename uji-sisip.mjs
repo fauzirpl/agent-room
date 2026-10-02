@@ -498,6 +498,78 @@ console.log(tebal('\nAntrean stasiun agent'));
 }
 
 /* =======================================================================
+   4b. MCP DIPILAH PER SERVER — tidak semuanya antre di pintu kadis
+   -----------------------------------------------------------------------
+   Dulu SETIAP mcp__ menghadap kadis, padahal hampir semuanya peramban:
+   pintunya buka-tutup sepanjang hari. MCP_MEJA di room.js memindahkan
+   peramban/desktop ke meja kerja dan query basis data ke rak server.
+   Semuanya lewat handle() sungguhan, bukan stationFor() langsung: yang
+   dijaga ke mana pegawainya BERJALAN dan apa yang tertulis di kartunya.
+   ======================================================================= */
+console.log(tebal('\nMCP dipilah per server (MCP_MEJA)'));
+{
+  bersih();
+  // [tool, stasiun, frasa kegiatan yang membuka kartunya]
+  const KASUS = [
+    ['mcp__Claude_Browser__navigate', 'think', 'menjelajah web lewat'],
+    ['mcp__claude-in-chrome__computer', 'think', 'menjelajah web lewat'],
+    ['mcp__computer-use__screenshot', 'think', 'mengoperasikan komputer lewat'],
+    ['mcp__laravel-boost__database-query', 'server', 'menanyai basis data lewat'],
+    ['mcp__laravel-boost__database-schema', 'server', 'membaca skema basis data lewat'],
+    // server yang sama dengan basis data, tool-nya bukan: tetap ke kadis
+    ['mcp__laravel-boost__search-docs', 'agent', 'berkoordinasi dengan'],
+    ['mcp__5bc522fa-dc0d-448a-a9f3-fa64bbb6c635__execute_sql', 'agent', 'berkoordinasi dengan'],
+    ['mcp__ccd_session__mark_chapter', 'agent', 'berkoordinasi dengan'],
+    // nama yang hidup di prototipe objek tidak boleh menemukan meja apa pun
+    ['mcp__constructor__toString', 'agent', 'berkoordinasi dengan'],
+  ];
+  KASUS.forEach(([tool, st, frasa], i) => {
+    const a = agenBaru('mcp-' + i, tool);
+    sama(`${tool.slice(0, 40)} → ${st}`, a.station, st);
+    ok(`  kartunya "${frasa} …"`, a.doing.startsWith(frasa + ' '), a.doing);
+  });
+
+  bersih();
+  const { RUANG_KADIS: K } = R();
+  const b = agenBaru('mcp-peramban', 'mcp__Claude_Browser__javascript_tool');
+  tibaDiTujuan(b);
+  setJam(TS + 900);
+  ctx.tickSisip(0.4);
+  sama('peramban di mejanya tidak menyibak pintu kadis',
+    [ctx.pintuSibuk(), ctx.tamuKadis(), K.t], [0, 0, 0]);
+  sama('di meja kerja peramban memancarkan ping, bukan lampu ide', b.fx, 'ping');
+  sama('dan bunyinya ketukan tuts, bukan "tik" berpikir',
+    [ctx.foleyUntuk('mcp__Claude_Browser__navigate', 'think'), ctx.foleyUntuk('TodoWrite', 'think')],
+    ['ketik', 'pikir']);
+
+  // Sengaja BUKAN meja printer: di sana tiap panggilan mencetak selembar.
+  // WebFetch jadi pembanding supaya "kertas tidak berkurang" bukan karena
+  // printernya memang tidak pernah mencetak di harness ini.
+  const kertas = () => H.RUANGAN.kertasPrinter;
+  const preJauh = (sesi, tool) => ctx.handle({ id: ++seq, ts: Date.now() + 60000, kind: 'pre',
+    session: sesi, tool, label: 'uji', ok: true, cwd: 'proyek-uji' });
+  const k0 = kertas();
+  preJauh('mcp-kertas-a', 'mcp__Claude_Browser__navigate');
+  const k1 = kertas();
+  preJauh('mcp-kertas-b', 'WebFetch');
+  sama('peramban MCP tidak memakai kertas printer (WebFetch memakai satu)',
+    [k0 - k1, k1 - kertas()], [0, 1]);
+
+  // Tamu kadis yang lalu membuka peramban keluar ke mejanya, tidak
+  // dikerjakan di dalam ruang kadis.
+  bersih();
+  const c = agenBaru('mcp-dari-kadis', 'Skill');
+  tibaDiTujuan(c);
+  setJam(TS + 400);
+  ctx.tickSisip(0.4);
+  ok('(prasyarat) tamunya sudah di dalam ruang kadis', c.diKadis === true);
+  agenBaru('mcp-dari-kadis', 'mcp__Claude_Browser__navigate');
+  ok('peramban berikutnya mengeluarkannya ke meja kerja',
+    c.diKadis === false && c.station === 'think' && c.path.length > 0,
+    `station ${c.station}, path ${c.path.length}`);
+}
+
+/* =======================================================================
    5. SETELAN 'mati' & penjaga
    ======================================================================= */
 console.log(tebal('\nSetelan mati & penjaga'));

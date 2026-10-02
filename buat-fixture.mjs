@@ -53,10 +53,12 @@
 //
 //      Yang paling ketat dijaga: nama alat. Nama tool bukan isi pekerjaan, tapi
 //      ia membocorkan apa yang terpasang di mesin pemilik, jadi:
-//      tool mcp__ WAJIB jadi mcp__srv-N__alat-M, dan nama tool BIASA cuma boleh
-//      lewat apa adanya kalau ia ada di ALAT_SAH — daftar nama yang public/
-//      room.js sendiri sudah menyebut satu per satu. Nama di luar itu (tool
-//      dari plugin, skrip pribadi, apa pun) ikut jalur pseudonim `alat-N`.
+//      tool mcp__ WAJIB jadi mcp__srv-N__alat-M — kecuali yang mejanya bukan
+//      kadis, yang servernya diganti WAKIL mejanya (MCP_WAKIL) — dan nama tool
+//      BIASA cuma boleh lewat apa adanya kalau ia ada di ALAT_SAH — daftar
+//      nama yang public/room.js sendiri sudah menyebut satu per satu. Nama di
+//      luar itu (tool dari plugin, skrip pribadi, apa pun) ikut jalur
+//      pseudonim `alat-N`.
 //      Konsekuensinya: label baris MCP disimpan KOSONG (labelnya sendiri adalah
 //      nama server); lihat catatan di labelSintetis().
 //
@@ -216,6 +218,28 @@ export const ALAT_LUAR_MAKS = 4;    // gerbang di --uji-pagar: jangan jadi got
 
 export const ALAT_SAH = new Set([...ALAT_ROOM, ...ALAT_LUAR]);
 
+/* WAKIL MCP. room.js memilah tool MCP menurut servernya (MCP_MEJA: peramban
+ * ke meja kerja, query basis data ke rak server, sisanya menghadap kadis),
+ * jadi pseudonim `mcp__srv-N__alat-M` cuma setia untuk kelompok kadis —
+ * server tersamar tidak dikenal tabel itu, dan stationFor() menjawab 'agent'
+ * untuk semuanya. Baris MCP yang mejanya BUKAN kadis karena itu memakai
+ * server WAKIL mejanya: satu nama per meja, yang room.js sendiri tulis di
+ * MCP_MEJA. Yang terbaca dari fixture cuma mejanya — persis yang memang wajib
+ * dijaga fixture — bukan server mana yang terpasang: computer-use dan
+ * claude-in-chrome sama-sama jadi Claude_Browser.
+ *
+ * Bentuknya [server, alat]. alat null = mejanya ditentukan SERVER, jadi nama
+ * tool-nya tetap pseudonim alat-N (tool berbeda tetap terbedakan); alat
+ * terisi = mejanya ditentukan TOOL, jadi seluruh namanya diganti wakil utuh.
+ *
+ * Disalin tangan seperti ALAT_ROOM, tapi tidak dipercaya begitu saja:
+ * samarTool() melempar kalau pseudonimnya mendarat di meja lain dari tool
+ * aslinya, dan kasusPagar() menguji tiap wakil lewat stationFor() asli. */
+export const MCP_WAKIL = {
+  think: ['Claude_Browser', null],
+  server: ['laravel-boost', 'database-query'],
+};
+
 /* Pagu pengganti untuk nota anggaran. Bulat dan jelas-jelas karangan supaya
  * tidak ada yang salah membacanya sebagai serapan sungguhan; `pakai`
  * dihitung darinya menurut persen, jadi kalimat notanya tetap masuk akal. */
@@ -361,21 +385,22 @@ export function buatPenyamar(alat) {
 
     const asli = alat.stationFor(tool, labelAsli, '');
     let ganti;
-    switch (asli) {
+    // Baris MCP sengaja BERLABEL KOSONG, bukan berpseudonim, di meja mana pun
+    // ia mendarat: label baris MCP di buku agenda PERSIS nama servernya
+    // ('Claude_Browser · preview_start'), yaitu hal yang paling wajib
+    // disamarkan di berkas ini. Kosong aman karena tidak ada yang membacanya:
+    // stationFor() memilih meja tool mcp__ dari NAMANYA saja (MCP_MEJA), dan
+    // kegiatan() merakit keterangannya dari srv+alat, bukan dari label.
+    // Terukur pada fixture hari ini: 148 baris (74 pre + 74 post, yaitu SEMUA
+    // baris MCP) berlabel '' — itu disengaja, bukan bidang yang hilang waktu
+    // penyamaran.
+    if (/^mcp__/i.test(tool)) ganti = '';
+    else switch (asli) {
       case 'server': ganti = 'git ' + verbDari(labelAsli); break;
       case 'read': case 'edit': ganti = kolam.berkas(labelAsli) + '.js'; break;
       case 'search': ganti = kolam.pola(labelAsli); break;
       case 'web': ganti = kolam.kueri(labelAsli); break;
-      case 'rapat': ganti = kolam.tugas(labelAsli); break;
-      // Baris MCP sengaja BERLABEL KOSONG, bukan berpseudonim: label baris MCP
-      // di buku agenda PERSIS nama servernya ('Claude_Browser · preview_start'),
-      // yaitu hal yang paling wajib disamarkan di berkas ini. Kosong aman
-      // karena tidak ada yang membacanya: stationFor() menjawab 'agent' untuk
-      // tool mcp__ tanpa melihat label, dan kegiatan() merakit keterangannya
-      // dari srv+alat, bukan dari label. Terukur pada fixture hari ini: 148
-      // baris (74 pre + 74 post, yaitu SEMUA baris MCP) berlabel '' — itu
-      // disengaja, bukan bidang yang hilang waktu penyamaran.
-      case 'agent': ganti = /^mcp__/i.test(tool) ? '' : kolam.tugas(labelAsli); break;
+      case 'rapat': case 'agent': ganti = kolam.tugas(labelAsli); break;
       case 'think':
         ganti = SHELL.test(tool) ? 'node ' + kolam.skrip(labelAsli) + '.mjs' : kolam.tugas(labelAsli);
         break;
@@ -411,6 +436,10 @@ export function samarkan(barisAsli, alat) {
   // ikut jalur pseudonim yang sama, dengan penomoran yang sama pula: satu
   // `alat-N` tidak pernah dipakai dua nama berbeda, mau ia muncul sendirian
   // atau di dalam bentuk mcp__srv-K__alat-N.
+  //
+  // Tool MCP yang mejanya bukan kadis memakai server WAKIL (lihat MCP_WAKIL),
+  // dan pseudonimnya dihitung ulang lewat stationFor() asli: kalau mendarat
+  // di meja lain, pembuatan fixture GAGAL — sama dengan labelSintetis().
   const samarTool = (tool) => {
     if (!tool) return tool;
     if (!/^mcp__/i.test(tool)) {              // sama tidak peka kasusnya dengan RX.alat
@@ -421,9 +450,23 @@ export function samarkan(barisAsli, alat) {
     const bagian = tool.split('__');
     const srv = bagian[1] || '';
     const sisa = bagian.slice(2).join('__') || '';
-    if (!pSrv.has(srv)) pSrv.set(srv, 'srv-' + (pSrv.size + 1));
-    if (!pAlat.has(tool)) pAlat.set(tool, 'alat-' + (pAlat.size + 1));
-    return 'mcp__' + pSrv.get(srv) + '__' + (sisa ? pAlat.get(tool) : 'alat-0');
+    const meja = alat.stationFor(tool, '', '');
+    const wakil = Object.hasOwn(MCP_WAKIL, meja) ? MCP_WAKIL[meja] : null;
+    let hasil;
+    if (wakil && wakil[1]) hasil = 'mcp__' + wakil[0] + '__' + wakil[1];
+    else {
+      if (!wakil && !pSrv.has(srv)) pSrv.set(srv, 'srv-' + (pSrv.size + 1));
+      if (!pAlat.has(tool)) pAlat.set(tool, 'alat-' + (pAlat.size + 1));
+      hasil = 'mcp__' + (wakil ? wakil[0] : pSrv.get(srv)) + '__' + (sisa ? pAlat.get(tool) : 'alat-0');
+    }
+    const mejaSamar = alat.stationFor(hasil, '', '');
+    if (mejaSamar !== meja) {
+      throw new Error(
+        `pseudonim MCP memindah meja: '${tool}' di '${meja}' -> '${hasil}' di '${mejaSamar}'. `
+        + 'MCP_WAKIL di buat-fixture.mjs tidak sepadan dengan MCP_MEJA room.js.',
+      );
+    }
+    return hasil;
   };
 
   const keluar = [];
@@ -635,9 +678,20 @@ const RX = {
   tanggal: /^\d{4}-\d{2}-\d{2}$/,
 };
 
-/** Nama tool yang boleh berdiri di fixture: bawaan yang disebut room.js, atau
- *  pseudonim bernomor. Tidak ada cabang "nama bebas yang kelihatan sopan". */
-export const toolAman = (v) => typeof v === 'string' && (ALAT_SAH.has(v) || RX.alat.test(v));
+/** Wakil MCP yang sah: `mcp__<server wakil>__alat-N`, atau wakil utuh kalau
+ *  mejanya ditentukan tool. Server wakil dengan nama tool sungguhan tetap
+ *  DITOLAK — `mcp__Claude_Browser__navigate` itu nama asli, bukan wakil. */
+const wakilAman = (v) => Object.values(MCP_WAKIL).some(([srv, alat]) => {
+  const awal = 'mcp__' + srv + '__';
+  if (!v.startsWith(awal)) return false;
+  const sisa = v.slice(awal.length);
+  return alat ? sisa === alat : /^alat-\d+$/.test(sisa);
+});
+
+/** Nama tool yang boleh berdiri di fixture: bawaan yang disebut room.js,
+ *  pseudonim bernomor, atau wakil MCP. Tidak ada cabang "nama bebas yang
+ *  kelihatan sopan". */
+export const toolAman = (v) => typeof v === 'string' && (ALAT_SAH.has(v) || RX.alat.test(v) || wakilAman(v));
 
 function labelAman(nilai, verbGit) {
   if (LABEL_ENUM_SAH.has(nilai)) return true;
@@ -1125,9 +1179,10 @@ const jamHari = (ts) => {
  * jangkauan tugas yang menulis mode ini.
  *
  * @param {string[]} verbGit kunci KEGIATAN_GIT dari room.js asli
+ * @param {Function} stationFor stationFor() room.js asli, untuk MCP_WAKIL
  * @returns {{pagar:string, nama:string, harusTolak:boolean, benar:boolean, ket:string}[]}
  */
-export function kasusPagar(verbGit) {
+export function kasusPagar(verbGit, stationFor) {
   const verb = verbGit;
   const B = (over) => ({ ts: 1788442967738, kind: 'post', session: 'sesi-1', ok: true, ...over });
   const KAMUS_CONTOH = () => ({
@@ -1157,6 +1212,8 @@ export function kasusPagar(verbGit) {
     ['privasi', 'tool = curl (nama bebas non-mcp)', true, () => periksaPrivasi([B({ tool: 'curl' })], verb)],
     ['privasi', 'tool = KlienRahasiaPT', true, () => periksaPrivasi([B({ tool: 'KlienRahasiaPT' })], verb)],
     ['privasi', 'tool = sk_live_abcdef', true, () => periksaPrivasi([B({ tool: 'sk_live_abcdef' })], verb)],
+    ['privasi', 'tool = server wakil MCP + nama tool sungguhan', true,
+      () => periksaPrivasi([B({ tool: 'mcp__laravel-boost__search-docs' })], verb)],
     ['privasi', 'label = jalur Windows', true, () => periksaPrivasi([B({ label: JALUR })], verb)],
     ['privasi', 'cwd = jalur proyek sungguhan', true, () => periksaPrivasi([B({ cwd: 'I:\\NGODING\\JS\\agent-room' })], verb)],
     ['privasi', 'nama = nama orang', true, () => periksaPrivasi([B({ nama: 'Fauzi' })], verb)],
@@ -1170,6 +1227,10 @@ export function kasusPagar(verbGit) {
       ...periksaPrivasi([B({ tool: 'Bash', label: 'git status' })], verb),
       ...periksaPrivasi([B({ tool: 'mcp__srv-1__alat-2', label: '' })], verb),
       ...periksaPrivasi([B({ tool: 'alat-7', label: 'berkas-1.js' })], verb),
+    ]],
+    ['privasi', 'wakil MCP per meja (lihat MCP_WAKIL)', false, () => [
+      ...periksaPrivasi([B({ tool: 'mcp__Claude_Browser__alat-3', label: '' })], verb),
+      ...periksaPrivasi([B({ tool: 'mcp__laravel-boost__database-query', label: '' })], verb),
     ]],
     ['privasi', 'baris pagu & nama sintetis yang sah', false, () => [
       ...periksaPrivasi([B({
@@ -1233,6 +1294,27 @@ export function kasusPagar(verbGit) {
       .concat(ALAT_LUAR.size > ALAT_LUAR_MAKS
         ? [{ indeks: -1, jalur: 'ALAT_LUAR', nilai: `${ALAT_LUAR.size} entri, batas ${ALAT_LUAR_MAKS}` }] : [])]);
 
+  /* MCP_WAKIL juga disalin tangan, jadi diperiksa dari room.js — tapi lewat
+     stationFor() ASLI, bukan cuma "namanya masih disebut": wakil yang
+     servernya dicabut dari MCP_MEJA mendarat di kadis, dan baris peramban di
+     fixture diam-diam ikut antre di pintu kadis lagi. Tiap wakil juga harus
+     lolos pagar privasinya sendiri, supaya pembuat dan pemeriksa sepakat.
+     Tanpa stationFor kasus ini MERAH, bukan dilewati: pagar yang diam-diam
+     berhenti memeriksa adalah persis yang dilarang kepala tabel ini. */
+  kasus.push(['konsistensi', `MCP_WAKIL (${Object.keys(MCP_WAKIL).length} meja) mendarat di mejanya menurut room.js`, false, () => {
+    if (typeof stationFor !== 'function') {
+      return [{ indeks: -1, jalur: 'MCP_WAKIL', nilai: 'stationFor() room.js tidak diberikan ke kasusPagar()' }];
+    }
+    return Object.entries(MCP_WAKIL).flatMap(([meja, [srv, alat]]) => {
+      const contoh = 'mcp__' + srv + '__' + (alat || 'alat-1');
+      const dapat = stationFor(contoh, '', '');
+      return [
+        ...(dapat === meja ? [] : [{ indeks: -1, jalur: 'MCP_WAKIL.' + meja, nilai: `${contoh} mendarat di '${dapat}'` }]),
+        ...(toolAman(contoh) ? [] : [{ indeks: -1, jalur: 'MCP_WAKIL.' + meja, nilai: `${contoh} ditolak toolAman()` }]),
+      ];
+    });
+  }]);
+
   return kasus.map(([pagar, nama, harusTolak, jalan]) => {
     let langgar = [], lempar = null;
     try { langgar = jalan(); } catch (e) { lempar = e; }
@@ -1248,14 +1330,14 @@ export function kasusPagar(verbGit) {
 }
 
 /** Ringkas untuk pemanggil non-CLI (uji-ulang.mjs): daftar kasus yang meleset. */
-export function jalankanPagar(verbGit) {
-  return kasusPagar(verbGit).filter((k) => !k.benar);
+export function jalankanPagar(verbGit, stationFor) {
+  return kasusPagar(verbGit, stationFor).filter((k) => !k.benar);
 }
 
 function ujiPagar() {
   const alat = buatAlat();
   const verb = alat.verbGit;
-  const hasil = kasusPagar(verb);
+  const hasil = kasusPagar(verb, alat.stationFor);
   let gagal = 0, pagarLalu = '';
   for (const k of hasil) {
     if (k.pagar !== pagarLalu) { console.log(abu('  ' + k.pagar)); pagarLalu = k.pagar; }

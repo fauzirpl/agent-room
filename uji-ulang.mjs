@@ -986,8 +986,12 @@ function main() {
    * Jadi tabel kasus racun (kasusPagar() di buat-fixture.mjs) dijalankan di
    * sini, di harness yang MEMANG terdaftar di CI, bukan cuma di mode CLI yang
    * harus diingat orang. Kasusnya dua arah: yang HARUS ditolak dan yang HARUS
-   * lolos — tanpa yang kedua, pagar `() => false` lulus dengan gemilang. */
-  const pagarMeleset = jalankanPagar(verbGit);
+   * lolos — tanpa yang kedua, pagar `() => false` lulus dengan gemilang.
+   *
+   * stationFor() ikut diberikan: wakil MCP di fixture (MCP_WAKIL) harus
+   * mendarat di meja yang sama dengan yang dipilih room.js hari ini, kalau
+   * tidak baris peramban fixture diam-diam kembali antre di pintu kadis. */
+  const pagarMeleset = jalankanPagar(verbGit, alat.ada.stationFor);
   if (pagarMeleset.length) {
     console.log(merah(`\n✗ PAGAR PRIVASINYA SENDIRI RUSAK: ${pagarMeleset.length} kasus uji meleset`));
     for (const k of pagarMeleset.slice(0, 10)) {

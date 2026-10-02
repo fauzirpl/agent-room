@@ -8,6 +8,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Upacara Hari Kesadaran Nasional tiap tanggal 17.** Apel pagi tanggal 17
+  (hari kerja) menjadi upacara: mengheningkan cipta dengan kepala tertunduk,
+  pembacaan Pancasila dan Panca Prasetya Korpri, lalu amanat HKN — sekitar 73
+  detik, lebih panjang dari apel Senin. Seisi kantor berseragam Korpri biru
+  sepanjang hari itu. 17 Agustus tetap tanggal merah, tetapi upacaranya tetap
+  jalan, dengan pembacaan teks Proklamasi. Hari Kesaktian Pancasila, Sumpah
+  Pemuda, dan Hari Pahlawan mendapat spanduk (2D dan kain 3D) serta amanat
+  sendiri; Hari Pahlawan dengan mengheningkan cipta. Upacaranya tetap bukan
+  event acak, dan tool call sungguhan tetap melepas pesertanya seketika, juga
+  di tengah mengheningkan cipta. Uji di halaman: `?apel=hkn`.
 - **Tampilan 3D: aksesori tamu tenar jadi voxel.** Kupluk, helm, blangkon,
   destar, topeng, kacamata, rambut penutup wajah, raket & karung di punggung,
   tongsis, tongkat, sarung tangan, jersey bernomor, singlet, tas menyilang, gaun,
@@ -454,6 +464,30 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diubah
 
+- **Tool MCP tidak lagi semuanya menghadap kadis.** Sekitar 87% panggilan MCP
+  ternyata peramban otomatis, sehingga pintu kadis buka-tutup terus. Kini
+  dipilah menurut servernya (`MCP_MEJA` di `room.js`): peramban dan kendali
+  desktop (`Claude_Browser`, `claude-in-chrome`, `chrome-devtools`,
+  `playwright`, `puppeteer`, `computer-use`) dikerjakan di laptop meja kerja
+  dengan kartu "menjelajah web lewat …", ping biru, dan bunyi tuts — sengaja
+  bukan di meja printer supaya kertasnya tidak habis; `database-query` dan
+  `database-schema` dari `laravel-boost` berdiri ke PC server; sisanya,
+  termasuk server ber-UUID, tetap menghadap kadis. Dari 24 hari buku agenda,
+  ketukan di pintu kadis turun dari 5.875 jadi 297. Fixture `uji-ulang`
+  dibangkitkan ulang memakai server *wakil* per meja (`MCP_WAKIL`), dan
+  `selaras-dokumen` kini juga mencocokkan `MCP_MEJA` dengan tabelnya di
+  docs/02.
+- **Kalender tanggal merah yang sungguhan.** Dulu halaman cuma kenal empat
+  tanggal libur ditambah daftar hari kejepit yang ditulis asal, sehingga
+  Idulfitri, Iduladha, Nyepi, Waisak, dan Jumat Agung tetap ada apel pagi,
+  sedangkan Selasa 9 Juni 2026 malah libur. Kini `hariLibur()` membaca
+  kalender di halaman: tanggal tetap, Jumat Agung/Paskah/Kenaikan dari Paskah
+  yang dihitung, hari besar Islam lewat `taksirHijri()` (pindah ke
+  `room.js`) plus koreksi SKB, dan Imlek/Nyepi/Waisak per tahun — 2026 dan
+  2027 dicocokkan dengan SKB 3 Menteri. Hari kejepit dihitung dari harinya.
+  `tanggalMerah(d)` memberi nama harinya; server tetap tidak menyimpan hari
+  libur. Cuti bersama belum dimodelkan, dan mulai 2028 tabel Imlek/Nyepi/Waisak
+  perlu diisi dari SKB tahun itu.
 - **Tampilan 3D: lantai siang tidak lagi putih rata.** Muka atas menerima ±1,24×
   cahaya muka tegak, sehingga ubin terazo, kertas, dan taplak terpotong putih.
   Shader kini memakai bahu lembut mulai 0,8: yang lebih gelap tidak berubah,

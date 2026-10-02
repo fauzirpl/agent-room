@@ -10,7 +10,8 @@ daftarEvent(
   syarat: (S) => (new Date().getMonth() === 10 && S.tanggal === 29) || S.jam < 0,
   mulai(E, S) {
     E.data.asli = new Map();
-    for (const a of S.orang) { E.data.asli.set(a, a.pal); a.pal = { ...a.pal, main: '#28406b', pattern: null }; }
+    // biru Korpri yang sama dengan seragam tanggal 17 (SERAGAM_KORPRI, room.js)
+    for (const a of S.orang) { E.data.asli.set(a, a.pal); a.pal = { ...a.pal, main: SERAGAM_KORPRI.main, pattern: null }; }
     E.data.baris = S.orang.filter((o) => bisaDipinjam(o)).slice(0, 6);
     E.data.baris.forEach((a, i) => {
       a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);

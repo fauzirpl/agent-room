@@ -88,7 +88,9 @@ function bajuHarian() {
   };
   const blok = ROOM.match(/const SERAGAM_BATIK_JUMAT = \[([\s\S]*?)\];/);
   const jumat = blok ? [...blok[1].matchAll(/main: '(#[0-9a-f]{6})'/g)].map((m) => m[1]) : [];
-  return [...satu('SERAGAM_PUTIH'), ...satu('SERAGAM_BATIK_RABU'), ...jumat];
+  // SERAGAM_KORPRI ikut: tanggal 17 seisi kantor biru Korpri sepanjang hari,
+  // rompi cabang harus tetap terbaca di atasnya
+  return [...satu('SERAGAM_PUTIH'), ...satu('SERAGAM_BATIK_RABU'), ...satu('SERAGAM_KORPRI'), ...jumat];
 }
 const BAJU = bajuHarian();
 
@@ -140,7 +142,7 @@ for (let i = 0; i < CONTOH; i++) {
   ember.set(v.id, (ember.get(v.id) || 0) + 1);
 }
 {
-  ok('daftar baju harian terbaca dari sumber room.js', BAJU.length >= 7, BAJU.join(' '));
+  ok('daftar baju harian terbaca dari sumber room.js (+ Korpri)', BAJU.length >= 8, BAJU.join(' '));
   ok('sapuan 600 nama mesin menemukan ≥ 2 varian rompi', varian.size >= 2,
     varian.size + ' varian: ' + [...varian.keys()].join(', '));
   const paling = Math.min(...ember.values()) / CONTOH;

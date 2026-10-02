@@ -13,13 +13,15 @@
  * berkas ini TIDAK PERNAH MENULIS APA PUN. Katalog boleh dibangkitkan mesin;
  * prosa tidak. Yang bisa dilakukannya cuma melapor, dan `--periksa` menggagalkan.
  *
- * Empat pasangan, dipilih karena tiap sisinya berupa daftar literal di satu
+ * Enam pasangan, dipilih karena tiap sisinya berupa daftar literal di satu
  * tempat — bukan hasil sapuan regex atas 11.000 baris:
  *
  *   1. HOOK    install.mjs  vs  server.mjs  vs  docs/01
  *   2. UJI     berkas uji- & selaras-  vs  package.json  vs  uji.yml  vs  docs/06
  *   3. ENV     process.env.AGENT_ROOM_*  vs  seluruh docs/
  *   4. METRIK  metrik('agent_room_…')  vs  docs/01 + docs/05
+ *   5. PAPAN   string papan informasi room.js  vs  package.json
+ *   6. MCP     MCP_MEJA room.js  vs  tabel MCP di docs/02
  *
  * SENGAJA TIDAK DIPERIKSA: pasangan `kind` vs `case` di handle() room.js
  * (mengiris blok fungsi dari 11.300 baris dengan regex adalah persis kelas bug
@@ -330,6 +332,48 @@ function pasanganTentang() {
            : 'dependencies kosong — papan boleh (dan sebaiknya) menyebutnya');
 }
 
+/* ============================================================== 6. MCP ===== */
+/* MCP_MEJA di room.js memutuskan tool MCP mana yang dikerjakan di meja kerja,
+   mana yang ke PC server, dan sisanya menghadap kadis. docs/02 menabelkannya
+   untuk orang yang bertanya kenapa pegawainya di mejanya, bukan di pintu
+   kadis. Dua daftar literal, masing-masing di satu tempat — bentuk yang
+   memang dijaga berkas ini. Kuncinya `server` atau `server__tool`; di
+   dokumen, sel Tool yang tidak ber-backtick ("semua") berarti kunci server
+   saja. Yang diadu NAMANYA, dua arah; mejanya diuji uji-sisip.mjs lewat
+   handle() sungguhan. */
+function pasanganMcp() {
+  seksi('6. MCP — MCP_MEJA di room.js vs docs/02-ruangan.md');
+  const blok = baca('public/room.js').match(/const MCP_MEJA = new Map\(\[([\s\S]*?)\n\]\);/);
+  const kode = blok ? unik([...blok[1].matchAll(/^\s*\['([^']+)'/gm)].map((x) => x[1])) : [];
+
+  const doc = baca('docs/02-ruangan.md');
+  const judul = '### Kenapa MCP tidak semuanya menghadap kadis';
+  const i = doc.indexOf(judul);
+  let tabel = [];
+  if (i >= 0) {
+    const sisa = doc.slice(i + judul.length);
+    const batas = sisa.search(/\n#{2,3} /);
+    const bagian = batas < 0 ? sisa : sisa.slice(0, batas);
+    tabel = unik([...bagian.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(?:`([^`]+)`|[^|`]*?)\s*\|/gm)]
+      .map((x) => (x[2] ? x[1] + '__' + x[2] : x[1])));
+  }
+
+  if (!minimal('MCP_MEJA room.js', kode, 3)) return;
+  if (!minimal('tabel MCP docs/02', tabel, 3)) return;
+
+  const tanpaDoc = kurang(kode, tabel);
+  if (tanpaDoc.length) {
+    hanyut(`${tanpaDoc.length} kunci MCP_MEJA tidak ada di tabel docs/02`,
+      tanpaDoc.join(', ') + ' — tambahkan barisnya di "' + judul.slice(4) + '"');
+  } else oke(`${kode.length} kunci MCP_MEJA semuanya ada di tabel docs/02`);
+
+  const hantu = kurang(tabel, kode);
+  if (hantu.length) {
+    hanyut(`${hantu.length} baris tabel MCP docs/02 tidak ada di MCP_MEJA`,
+      hantu.join(', ') + ' — server yang sudah dicabut, atau salah ketik di dokumen');
+  } else oke('tidak ada server MCP hantu di tabel docs/02');
+}
+
 /* ------------------------------------------------------------- jalankan --- */
 
 console.log(tebal('selaras-dokumen') + abu(' — permukaan protokol di kode vs dokumentasinya'));
@@ -338,6 +382,7 @@ pasanganUji();
 pasanganEnv();
 pasanganMetrik();
 pasanganTentang();
+pasanganMcp();
 
 if (PENGECUALIAN.length) {
   seksi('Pengecualian yang sedang berlaku');
@@ -346,5 +391,5 @@ if (PENGECUALIAN.length) {
 
 console.log('\n' + (temuan
   ? merah(tebal(temuan + ' hanyut')) + (PERIKSA ? '' : abu('  (jalankan dengan --periksa untuk menggagalkan)'))
-  : hijau(tebal('SELARAS')) + abu(' — lima pasangan cocok')));
+  : hijau(tebal('SELARAS')) + abu(' — enam pasangan cocok')));
 process.exit(PERIKSA && temuan ? 1 : 0);

@@ -184,6 +184,10 @@
 //      menara gelas dispenser (gelasDispenser, MOD.galonLepas), isi tong
 //      (tongPenuh) — voxel di wadah perabot: tiap perubahan membangun ulang
 //      grup itu, dan dikosongkan lagi kembali ke geometri semula.
+//  31. spanduk tema kalender jadi kain 3D menurut registri TEMA room.js
+//      (spandukTema), bukan daftar id di ruang3d.js: spanduk hari nasional
+//      (Hari Pahlawan, Sumpah Pemuda, Kesaktian Pancasila) berkain persis
+//      sebanyak spanduk HUT KORPRI, tanpa tema tidak ada kain.
 //
 // Pakai:
 //   node uji-tiga.mjs
@@ -4105,6 +4109,33 @@ const ringkas = (ps) => ps.length + ' titik, alfa ' + [...new Set(ps.map((p) => 
   cek(nSemua !== null && nSemua !== n0 && nAkhir === n0, '3D bekas ruangan: keempatnya sekaligus membangun ulang, dikosongkan kembali ke geometri semula',
     `semua ${nSemua}, kosong ${nAkhir} vs ${n0}`);
   cek(!galat.length, 'frame-frame uji gelombang ketiga tanpa galat', galat.join(' | '));
+}
+
+// ------------------------------------------------------------------ 31
+/* Spanduk tema kalender: kainnya dibangun dari spandukTema() (registri TEMA
+   di room.js). Dulu ruang3d.js menyimpan daftar id sendiri — tema berspanduk
+   baru di room.js tampil di 2D tapi di 3D cuma lukisan datar di tembok,
+   tanpa kain, tali, dan paku. Diukur dari isi wadah temaDinding (kain yang
+   memakai tekstur dinding) di frame yang membangun ulang grup perabot. */
+{
+  console.log(tebal('\n3D: spanduk tema kalender dari registri TEMA'));
+  const U = muat3D();
+  const { H } = U;
+  cek(U.siap, 'WebGL2 perekam menyala untuk uji spanduk tema', U.ket);
+  const kain = (tema) => {
+    H.RUANGAN.tema = tema;
+    H.RUANGAN.temaTahun = 2026;
+    const d = U.satuFrame().get('temaDinding');
+    return d ? d.length / LANGKAH : 0;
+  };
+  const n = {};
+  const log = konsol(() => {
+    for (const t of [null, 'korpri', 'hari-pahlawan', 'sumpah-pemuda', 'kesaktian-pancasila', null]) n[String(t)] = kain(t);
+  });
+  cek(n.korpri > 0 && n.null === 0 && !log.length, 'kontrol: spanduk HUT KORPRI berkain 3D, tanpa tema tidak ada kain',
+    `korpri ${n.korpri}, tanpa tema ${n.null}; ${log.join(' | ')}`);
+  cek(['hari-pahlawan', 'sumpah-pemuda', 'kesaktian-pancasila'].every((t) => n[t] === n.korpri),
+    '3D spanduk: spanduk hari nasional berkain persis sebanyak HUT KORPRI', JSON.stringify(n));
 }
 
 console.log('');
