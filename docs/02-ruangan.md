@@ -2252,11 +2252,15 @@ diperingatkan di konsol: ruangannya jalan terus dan fotonya tidak dicoba ulang.
 seukuran piksel aslinya, ditempel di atas latar yang dilukis lebih dulu: kanvas
 3D di-clear bening dan panel kayu jati di belakangnya cuma latar CSS, jadi
 gradien `--kayu`/`--kayu-tua` milik `.stage` dilukis ulang di kanvas foto.
-Selama pantauan CCTV latarnya hitam monitor dan fotonya ikut filter hitam-putih
-`#room3d.cctv`, persis seperti di layar. Yang hidup di DOM **tidak** ikut —
-sengaja, di versi pertama ini: balon ucap & balon pikir (`#overlay`), kartu
-pegawai, petunjuk kendali 3D, pita POV, dan cap "CAM 01" monitor CCTV. Fotonya
-bersih.
+Selama pantauan CCTV — satu kamera maupun dinding monitor — latarnya hitam
+monitor dan fotonya ikut filter hitam-putih `#room3d.cctv`, persis seperti di
+layar; bingkai gelap di antara layar dinding monitor ikut, karena itu GL.
+Dinding monitor yang biasanya cuma digambar ±15 kali sedetik tetap digambar
+lengkap di frame foto: `frame()` meneruskan permintaannya sebagai
+`TIGA.gambar(stasiun, utuh)`. Yang hidup di DOM **tidak** ikut — sengaja, di
+versi pertama ini: balon ucap & balon pikir (`#overlay`), kartu pegawai,
+petunjuk kendali 3D, pita POV, cap kamera monitor CCTV, dan cap tiap layar
+dinding monitor. Fotonya bersih.
 
 **Mode panggung tetap aman.** Yang disalin persis yang sudah tampil, jadi di
 `?panggung=1` tidak ada satu huruf pun di foto yang belum terlihat di layar —
@@ -2297,8 +2301,11 @@ boleh membungkus jadi dua-tiga baris di panggung sempit alih-alih terpotong.
 di index.html), dan selama fokusnya di situ: **panah** memutar seperti menyeret
 ke arah itu, **shift+panah** menggeser, **+ / −** mendekat-menjauh, **0** tampak
 awal, **[ ]** pindah ke mata pegawai sebelumnya/berikutnya — dari maket, `]`
-masuk ke mata pegawai pertama, satu-satunya jalan ke POV tanpa tetikus — dan
-**Esc** keluar dari POV. Tombol yang dipakai di-`preventDefault` supaya
+masuk ke mata pegawai pertama, satu-satunya jalan ke POV tanpa tetikus; di
+lensa kamera CCTV `[ ]` pindah kamera — dan **Esc** keluar dari POV maupun
+dinding monitor. Di dinding monitor tidak ada maket untuk diputar: **1–6**
+membuka layar kamera itu, `]` kamera pertama, `[` yang terakhir, tombol lain
+dibiarkan lewat. Tombol yang dipakai di-`preventDefault` supaya
 halamannya tidak ikut bergulir. Diam total kalau fokusnya di tempat lain
 (kolom isian, select kartu pegawai), selama dialog `.dlg-latar` terbuka — klik
 X-banner membuka papan informasi sementara fokusnya masih di kanvas — dan
@@ -2315,9 +2322,10 @@ pegawai, rute, stasiun, antrean, event acak, dan Aturan 1 tetap milik
 menggambarnya, dan menempel lewat satu kait saja — objek `TIGA` di room.js:
 
 - `frame()` menjalankan seluruh pembaruan seperti biasa, lalu kalau
-  `TIGA.aktif` menyerahkan penggambarannya ke `TIGA.gambar()` alih-alih
-  `drawWall`/`drawFloor`/lapisan 2D. Yang digerbangi HANYA penggambaran — sama
-  seperti aturan bukaan ruang kadis.
+  `TIGA.aktif` menyerahkan penggambarannya ke `TIGA.gambar(stasiun, utuh)`
+  alih-alih `drawWall`/`drawFloor`/lapisan 2D. Yang digerbangi HANYA
+  penggambaran — sama seperti aturan bukaan ruang kadis. `utuh` = foto 📷
+  diminta frame ini: dinding monitor CCTV tidak boleh melewatkan frame itu.
 - `keLayar(x, y, kaki)` mendapat argumen ketiga: **garis kaki** benda yang
   memuat titik itu. 2D tidak membutuhkannya; 3D butuh untuk tahu seberapa jauh
   titiknya ke dalam. Balon ucap, balon pikir, lencana galat, dan kartu pegawai
@@ -2330,8 +2338,11 @@ menggambarnya, dan menempel lewat satu kait saja — objek `TIGA` di room.js:
   dipakai ulang tanpa tahu dirinya sedang dipakai 3D.
 - `TIGA.tanpaNeon`: `drawWall` melewatkan tabung neon, karena di 3D neon itu
   benda gantung sendiri yang sekaligus jadi sumber cahaya.
-- `TIGA.tanpaCCTV`: `drawWall` melewatkan kubah CCTV dan bayangan tempelnya,
-  karena di 3D kubahnya benda yang menoleh dan melempar bayangan sungguhan.
+- `TIGA.tanpaCCTV`: `drawWall` melewatkan kubah-kubah CCTV dinding belakang
+  (`drawKubahCCTV`) dan bayangan tempelnya, karena di 3D kubahnya benda yang
+  menoleh dan melempar bayangan sungguhan.
+- `TIGA.cctv(id)` dan `TIGA.dinding()`: dua tombol kartu inventaris kamera
+  CCTV — pantauan dari lensa kubah itu, dan dinding monitor semua kamera.
 
 Tanpa `ruang3d.js` (harness uji di VM), tanpa WebGL2, atau kalau konteks
 WebGL-nya dicabut peramban, `TIGA.aktif` tetap/kembali `false` dan ruangan
@@ -2732,12 +2743,14 @@ relief:
   dengan sirip yang mengayun pelan selama AC menyala dan merapat waktu
   `MOD.acMati`. Dari mulutnya turun kepulan hawa dingin pucat; tetesnya tetap
   partikel yang jatuh ke ember.
-- **Kubah CCTV** di pojok kanan atas (dulu kiri atas, tapi di sana atap lemari
-  arsip menutupi separuh pandangan lensanya): pelat, lengan, rumah, kubah bertingkat,
-  dan lensa yang **menoleh** — membidik titik sapuan selama event
-  `cctv-menyapu-ruangan`, pegawai yang kartunya dibuka, atau orang terdekat
-  yang sedang berjalan; tanpa sasaran ia menyapu pelan sendiri. LED merahnya
-  berkedip. Lukisan kubah 2D-nya dilewatkan waktu dinding 3D dilukis
+- **Kubah CCTV** — enam, di tiga dinding (lihat *Kamera CCTV & dinding
+  monitor* di bawah): pelat, lengan, rumah, kubah bertingkat, dan lensa yang
+  **menoleh** — CAM 01 membidik titik sapuan selama event
+  `cctv-menyapu-ruangan`; semuanya membidik pegawai yang kartunya dibuka atau
+  orang terdekat yang sedang berjalan, asal ada di bidangnya sendiri (dan cuma
+  sejauh rentang yang terbukti lega); tanpa
+  sasaran tiap lensa menyapu pelan sendiri dengan irama masing-masing. LED
+  merahnya berkedip. Lukisan kubah 2D-nya dilewatkan waktu dinding 3D dilukis
   (`TIGA.tanpaCCTV`), jadi tidak ada LED kedua di tembok di belakangnya.
 - **Monitor CRT** berdiri di papan rak kayu bersiku besi: dudukan, leher,
   tabung yang menirus ke tembok, dan bingkai. Layarnya kulit hidup sendiri
@@ -2824,10 +2837,77 @@ lewat Esc, tombol "kembali ke maket" di pita bawah, menutup kartunya, atau klik
 tempat kosong. POV dibuka dari klik di ruangan 3D atau tombol "lihat dari
 matanya" di kartu pegawai — klik baris kru sendiri tetap membuka kartu tanpa
 memindah kamera; ‹ › di pita (atau [ ]) pindah ke mata pegawai sebelumnya/berikutnya (tamu
-ruang kadis ikut selama bukaannya tampil). Kartu Kamera CCTV Kubah punya "lihat
-dari CCTV": mesin POV yang sama dengan mata di lensa kubah, rupa monitor pos
-satpam (hitam-putih, garis pindai, "CAM 01", jam berjalan), tanpa rekaman apa
-pun.
+ruang kadis ikut selama bukaannya tampil). Kartu tiap kamera CCTV punya "lihat
+dari kamera ini": mesin POV yang sama dengan mata di lensa kubahnya, rupa
+monitor pos satpam (hitam-putih, garis pindai, cap "CAM 0N · LOKASI", jam
+berjalan), tanpa rekaman apa pun — di sana ‹ › pindah ke kamera
+sebelumnya/berikutnya, dan tombol "dinding monitor" di pita membuka semuanya
+sekaligus.
+
+**Kamera CCTV & dinding monitor.** Kantor ini diawasi enam kamera kubah,
+semuanya dari satu tabel `KAMERA_CCTV` di room.js — lukisan kubah 2D, kartu
+inventaris BMN (kode 3.06.02.05.011, NUP 1–6), kubah 3D, pantauan dari
+lensanya, dan urutan layar dinding monitor tidak bisa saling berbeda:
+
+| Kamera | Dipasang di | Yang disorot |
+|---|---|---|
+| CAM 01 · POJOK KANAN-ATAS | dinding belakang, pojok kanan (2D: x 658..668 y 4..12) | seluruh ruangan ke arah kiri-depan; kerucut event `cctv-menyapu-ruangan` |
+| CAM 02 · DINDING KIRI-BELAKANG | dinding kiri, ujung belakang (z 135) | lajur atas, bangku tunggu, tiang bendera, meja rapat |
+| CAM 03 · DINDING KIRI-DEPAN | dinding kiri, ujung depan, di depan pos satpam (z 315) | baris meja kerja dari ujung kirinya, tiang bendera, meja rapat |
+| CAM 04 · PINTU KADIS | dinding kanan, ujung depan, di atas pot tanaman (z 335) | pintu kepala dinas, ruang tunggu tamu pimpinan |
+| CAM 05 · PANTRI | dinding kanan, di atas pojok baca (z 230) | pantri dari counter sampai meja kafe |
+| CAM 06 · RUANG RAPAT | dinding belakang, kanan pintu kadis (2D: x 489..499 y 4..12) | sofa tamu pimpinan dan meja rapat |
+
+Dinding samping cuma ada di 3D, jadi kubah di sana tidak punya lukisan 2D dan
+kartunya cuma bisa dibuka dengan mengklik kubahnya di maket (kartunya ditutup
+kalau pindah ke 2D). Kubah dinding samping ikut hilang selagi temboknya
+dipotong rendah. Letak dan arah tiap lensa dipilih supaya pandangannya
+**lega**: CAM 01 dulu di kiri atas, tepat di atas lemari arsip yang menutupi
+separuh pandangannya. Lensanya **menunduk** ±33–34° seperti kubah CCTV
+sungguhan (tunduk 0,58–0,6 rad), jadi layarnya berisi lantai, meja, dan orang —
+bukan plafon dan pita krem tembok. Tiap lensa cuma boleh menoleh di
+**rentang yang terbukti lega**: mendatar `hadap ± sapu`, tegak dari tunduk
+diamnya sampai 0,12 rad lebih menunduk (ke orang yang dekat) — tidak pernah
+mendongak. Orang yang dibidik di luar rentang itu cuma membuat lensanya berhenti
+di tepi rentang; orang yang berdiri tepat di bawah lensa (kurang dari 70
+satuan, mis. satpam di pos pintu masuk di bawah kamera dinding kiri) tidak
+dibidik sama sekali. `uji-tiga.mjs` bagian 35 membuktikannya dengan sinar ke
+segitiga 3D yang sungguh digambar — di arah diam dan di keenam tepi rentang
+itu, ≥ 95% sinar pandang tiap lensa tidak terhalang apa pun dalam 60 satuan; di
+arah diam ≤ 5% sinar jatuh di plafon atau tembok setinggi ≥ 70; ≥ 50% lantai
+terbuka di bidang pandangnya tampak; gabungan keenamnya menjangkau ≥ 95% lantai;
+dan orang berjalan di 28 titik lantai tidak pernah mendorong satu lensa pun
+keluar rentangnya — jadi perabot yang kelak digeser sampai membutakan sebuah
+kamera, atau lensa yang dibiarkan menatap plafon, langsung merah. Tidak ada
+kamera di WC, dan tak satu pun sinar pandangnya masuk ke sana. Muka lemari
+arsip tidak disorot kamera mana pun: dari dinding kiri itu berarti menatap
+sepanjang tembok (pandangannya terhalang), dari dinding belakang lemarinya
+terlihat dari samping. Kubah 2D cuma di bidang dinding yang kosong di kelima
+tema (`uji-tempat.mjs`).
+
+**Dinding monitor** (tombol **📹** di bilah bawah, atau "buka dinding monitor"
+di kartu kamera): ruang kontrol pos satpam — keenam kamera sekaligus, 3x2
+(panggung tegak atau sempit: 2x3), tiap layar gambar LANGSUNG dari lensanya
+sendiri tanpa kubahnya sendiri, bercap "CAM 0N · LOKASI" di pojok kiri-atas,
+dengan bingkai gelap di antaranya dan satu jam berjalan di pita kendali. Rupa
+monitornya (`#room3d.cctv`: abu-abu, kontras 1,18, terang 0,96) sengaja
+lunak: kontras 1,45 yang dulu memukul rata semua abu di atas ±0,79 jadi putih —
+lantai terazo dan tembok siang jadi bidang putih kosong — dan menghitamkan abu
+malam di bawah ±0,16.
+Penggambarannya hemat: satu lintasan bayangan per frame, lalu per layar
+`gl.viewport` + `gl.scissor` dengan pandangan kamera itu. Seperti monitor CCTV
+sungguhan ia disegarkan ±15 kali sedetik (mode ringan ±10): frame di antaranya
+tidak menyentuh kanvas sama sekali, jadi yang tampil tetap gambar terakhir —
+kecuali frame foto 📷 dan kanvas yang baru diubah ukurannya, yang selalu
+digambar lengkap. **Klik layar** (atau 1–6) = kamera itu sepenuh panggung,
+langsung tanpa peluncuran; ‹ › (atau [ ]) pindah kamera, "dinding monitor" di
+pita kembali ke dinding, dan **Esc** pulang ke maket dari mana pun. Seret dan
+roda di dinding monitor tidak memutar maket di belakangnya. Murni pantauan
+langsung: tidak ada rekaman, penyangga gambar lama, putar ulang, atau tanda
+REC; tak satu piksel pun dibaca balik. Yang tampil cuma ruangan yang memang
+tampil di maket, jadi `?panggung=1` tetap aman — teks di layarnya cuma label
+kamera dan jam, balon ucap tidak tampil, dan kartu yang sedang terbuka
+diparkir di tepi kiri.
 
 Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
 

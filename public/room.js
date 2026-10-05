@@ -157,7 +157,7 @@ function ruangRujukan() {
   return {
     W, H, FLOOR_TOP, LANE_UP, LANE_DOWN, LANE_L, LANE_R, PINTU_X,
     STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y, WC, GUDANG, BACA, FOTOKOPI_TITIK,
-    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE, PANEL_MCB, FOTOKOPI, NOMOR_ANTRE,
+    ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE, PANEL_MCB, FOTOKOPI, NOMOR_ANTRE, KAMERA_CCTV, kubah2D,
     POS_SATPAM: typeof POS_SATPAM === 'undefined' ? null : POS_SATPAM,
     TANAMAN: typeof TANAMAN === 'undefined' ? null : TANAMAN,
     route,
@@ -1441,6 +1441,59 @@ function bayangKaki() {
   ctx.imageSmoothingEnabled = false;
 }
 
+/* Kamera CCTV kubah kantor. SATU tabel untuk semuanya: lukisan kubah 2D di
+   dinding belakang (drawKubahCCTV + bayangDinding), kartu inventaris BMN (satu
+   NUP per kamera), kubah 3D yang menoleh, pantauan dari lensanya, dan dinding
+   monitor pos satpam (ruang3d.js) — urutan tabel = urutan layar di dinding itu.
+     dinding    'belakang' (sepanjang = x lukisannya), 'kiri' / 'kanan' (dinding
+                samping, sepanjang = kedalaman z). Dinding samping cuma ada di
+                3D, jadi kubah di sana tidak punya lukisan 2D.
+     hadap      arah diam lensanya, radian: 0 = lurus ke depan ruangan, + ke
+                kanan (x besar); tunduk + = menunduk; sapu = simpangan sapuan
+                pelannya ke kiri-kanan dari arah diam itu.
+     sapuanEvent  kamera yang disapu event cctv-menyapu-ruangan (kerucut 2D-nya
+                memancar dari lensa CAM 01).
+   Letak & arahnya dipilih supaya pandangan tiap lensa LEGA, dan dibuktikan
+   uji-tiga.mjs bagian 35 dengan sinar ke perabot 3D yang sungguh digambar:
+   CAM 01 dulu di kiri-atas, tepat di atas lemari arsip yang menutupi separuh
+   pandangannya. Tidak ada kamera di WC. Kubah 2D (10x8) cuma di bidang dinding
+   yang kosong di kelima tema — dijaga uji-tempat.mjs. */
+const KAMERA_CCTV = [
+  { no: 1, id: 'cctv', label: 'CAM 01 · POJOK KANAN-ATAS', dinding: 'belakang', sepanjang: W - 9,
+    hadap: -0.8, tunduk: 0.58, sapu: 0.16, sapuanEvent: true, tahun: 2021,
+    lokasi: 'pojok kanan-atas', uraian: 'merekam 24 jam; LED merahnya berkedip pelan' },
+  { no: 2, id: 'cctv-2', label: 'CAM 02 · DINDING KIRI-BELAKANG', dinding: 'kiri', sepanjang: 135,
+    hadap: 0.95, tunduk: 0.6, sapu: 0.22, tahun: 2024,
+    lokasi: 'dinding kiri, ujung belakang', uraian: 'menyorot lajur atas, bangku tunggu, tiang bendera, dan meja rapat' },
+  { no: 3, id: 'cctv-3', label: 'CAM 03 · DINDING KIRI-DEPAN', dinding: 'kiri', sepanjang: 315,
+    hadap: 1.85, tunduk: 0.6, sapu: 0.3, tahun: 2024,
+    lokasi: 'dinding kiri, ujung depan (depan pos satpam)', uraian: 'menyorot baris meja kerja dari ujung kirinya, tiang bendera, dan meja rapat' },
+  { no: 4, id: 'cctv-4', label: 'CAM 04 · PINTU KADIS', dinding: 'kanan', sepanjang: 335,
+    hadap: -2.15, tunduk: 0.6, sapu: 0.3, tahun: 2024,
+    lokasi: 'dinding kanan, ujung depan (atas pot tanaman)', uraian: 'membidik pintu kepala dinas dan ruang tunggu tamu pimpinan' },
+  { no: 5, id: 'cctv-5', label: 'CAM 05 · PANTRI', dinding: 'kanan', sepanjang: 230,
+    hadap: -1.45, tunduk: 0.6, sapu: 0.35, tahun: 2024,
+    lokasi: 'dinding kanan, atas pojok baca', uraian: 'menyorot pantri dari counter sampai meja kafe' },
+  { no: 6, id: 'cctv-6', label: 'CAM 06 · RUANG RAPAT', dinding: 'belakang', sepanjang: 494,
+    hadap: -0.65, tunduk: 0.6, sapu: 0.25, tahun: 2024,
+    lokasi: 'dinding belakang, kanan pintu kadis', uraian: 'menyorot sofa tamu pimpinan dan meja rapat' },
+];
+// kubah 2D di dinding belakang: badan 10x8 di y4..12, lensa di tengah bawahnya
+const kubah2D = (K) => ({ x: K.sepanjang - 5, y: 4, w: 10, h: 8 });
+function drawKubahCCTV() {
+  // di 3D kubahnya benda sendiri yang lensanya menoleh (TIGA.tanpaCCTV)
+  if (TIGA.tanpaCCTV) return;
+  const led = Math.sin(now / 1000) > 0 ? P.red : '#5c2222';
+  for (const K of KAMERA_CCTV) {
+    if (K.dinding !== 'belakang') continue;
+    const { x, y } = kubah2D(K);
+    r(x, y, 10, 8, '#7c838a');
+    r(x, y, 10, 2, '#9aa1a6');
+    r(x + 3, y + 6, 4, 2, '#5a6068');
+    r(x + 4, y + 7, 2, 1, led);
+  }
+}
+
 /* Bayangan benda yang MENGGANTUNG di dinding. Sengaja dua kotak pejal yang
    digeser, bukan elips kabur: bendanya persegi dan gaya ruangan ini pixel-art,
    jadi bayangan bertepi tajam justru yang benar. Yang bundar (jam dinding,
@@ -1455,7 +1508,8 @@ function tabelBayangDinding() {
   const J = JENDELA;
   bayangDindingTabel = [
     { x: 18,  y: 7,  w: 134, h: 15 },                              // papan nama dinas
-    { x: W - 14, y: 4, w: 10,  h: 8, cctv: true },                   // kubah CCTV pojok kanan-atas (3D: bayangannya sungguhan)
+    // kubah CCTV dinding belakang (KAMERA_CCTV; 3D: bayangannya sungguhan)
+    ...KAMERA_CCTV.filter((K) => K.dinding === 'belakang').map((K) => ({ ...kubah2D(K), cctv: true })),
     { x: J.x - 8, y: J.y - 8, w: J.w + 16, h: J.h + 12 },          // ceruk jendela
     { x: 159, y: 45, w: 18,  h: 16 },                              // monitor CRT
     { x: 158, y: 54, w: 16,  h: 20 },                              // kalender dinding
@@ -1609,18 +1663,13 @@ function drawWall() {
   r(427, 43, 6, 1, '#3a3f45');
   ctx.beginPath(); ctx.moveTo(427, 47); ctx.lineTo(433, 41); ctx.stroke();
 
-  // CCTV kubah pojok kanan-atas. Dulu di kiri-atas, tapi di 3D kubah di sana
-  // duduk tepat di atas lemari arsip yang menutupi separuh pandangan lensanya;
-  // sudut kanan-atas lowong (sapu-ruang: nol penggambar, nol rute). LED merah
-  // tetap berkedip pelan di luar event, kerucut sapuannya cuma muncul saat
-  // event. Di 3D kubahnya benda sendiri yang lensanya menoleh (TIGA.tanpaCCTV)
-  if (!TIGA.tanpaCCTV) {
-    const cx = W - 14;
-    r(cx, 4, 10, 8, '#7c838a');
-    r(cx, 4, 10, 2, '#9aa1a6');
-    r(cx + 3, 10, 4, 2, '#5a6068');
-    r(cx + 4, 11, 2, 1, Math.sin(now / 1000) > 0 ? P.red : '#5c2222');
-  }
+  // Kubah CCTV dinding belakang (KAMERA_CCTV): CAM 01 di pojok kanan-atas —
+  // dulu di kiri-atas, tapi di 3D kubah di sana duduk tepat di atas lemari
+  // arsip yang menutupi separuh pandangan lensanya — dan CAM 06 di kanan pintu
+  // kadis; keduanya di bidang yang lowong (sapu-ruang: nol penggambar). LED
+  // merah tetap berkedip pelan di luar event, kerucut sapuannya cuma muncul
+  // saat event. Kubah dinding samping cuma ada di 3D.
+  drawKubahCCTV();
 
   drawPintuWC();            // pojok kiri — cermin pintu kadis
   drawPintuGudang();        // bentang pilar kedua (576..672), dinding belakang
@@ -10343,11 +10392,16 @@ function taruhKartu() {
   // Barang: menempel di sisi kanan kotaknya (atau kiri kalau tidak muat), bukan
   // di titik tengah — kotak meja rapat selebar 188 px akan tertutup kartunya.
   const K = barangTerpilih && (barangKeRuangKadis(barangTerpilih) ? SISIP : barangTerpilih.kotak);
+  // kubah CCTV dinding samping (tanpa kotak 2D): bingkai layarnya dari penempat
+  // 3D papan nama (TIGA.papan); tak terlihat dari kamera = parkir di tepi kiri
+  const j = barangTerpilih && !K && TIGA.aktif && TIGA.papan ? TIGA.papan(barangTerpilih) : null;
   const [px, py] = K ? keLayar(K.x + K.w, K.y + K.h / 2, K.y + K.h)
-    : keLayar(terpilih.x, terpilih.y - 14, terpilih.y);   // ikut kamera, bukan offX/scale mentah
-  const pxKiri = K ? keLayar(K.x, K.y, K.y + K.h)[0] : px;
-  let left = px + (K ? 10 : 20);
-  if (left + w > stageInner.clientWidth - 8) left = pxKiri - (K ? 10 : 20) - w;
+    : barangTerpilih ? (j ? [j.x1, (j.atas + j.bawah) / 2] : [-1e4, stageInner.clientHeight / 2])
+      : keLayar(terpilih.x, terpilih.y - 14, terpilih.y);   // ikut kamera, bukan offX/scale mentah
+  const pxKiri = K ? keLayar(K.x, K.y, K.y + K.h)[0] : j ? j.x0 : px;
+  const jarak = barangTerpilih ? 10 : 20;
+  let left = px + jarak;
+  if (left + w > stageInner.clientWidth - 8) left = pxKiri - jarak - w;
   kartuEl.style.left =
     Math.round(Math.max(8, Math.min(left, stageInner.clientWidth - w - 8))) + 'px';
   kartuEl.style.top =
@@ -10424,10 +10478,13 @@ function daftarBarang() {
       lokasi: 'dinding utara', kotak: k(18, 7, 134, 15),
       uraian: 'pelat resmi DINAS AI KLOD — bukan spanduk kain',
       kondisi: () => (RUANGAN.spanduk ? ['RR', 'satu huruf lepas, ditempel ulang miring'] : ['B']) },
-    { id: 'cctv', nama: 'Kamera CCTV Kubah', kode: '3.06.02.05.011', nup: 1, tahun: 2021,
-      lokasi: 'pojok kanan-atas', kotak: k(W - 15, 3, 12, 10),
-      uraian: 'merekam 24 jam; LED merahnya berkedip pelan',
-      isi: () => [['rekaman', 'aktif, disimpan 7 hari (katanya)']] },
+    // satu kartu per kamera CCTV (KAMERA_CCTV), NUP 1..N. Kubah dinding samping
+    // tidak punya kotak 2D: cuma bisa diklik di 3D (kotak pilihnya di ruang3d.js)
+    ...KAMERA_CCTV.map((K) => ({
+      id: K.id, nama: 'Kamera CCTV Kubah ' + K.label.split(' · ')[0], kode: '3.06.02.05.011', nup: K.no, tahun: K.tahun,
+      lokasi: K.lokasi, uraian: K.uraian, kamera: K,
+      ...(K.dinding === 'belakang' ? { kotak: k(K.sepanjang - 6, 3, 12, 10) } : {}),
+      isi: () => [['layar', esc(K.label) + ' di dinding monitor pos satpam'], ['rekaman', 'aktif, disimpan 7 hari (katanya)']] })),
     { id: 'wc', nama: 'Pintu WC', kode: '1.03.01.01.014', nup: 2, tahun: 2009,
       lokasi: 'pojok kiri dinding belakang', kotak: k(WC.x, WC.y, WC.w, WC.h + 9),
       uraian: 'daun PVC berkisi, plang pria · WC · wanita, sandal jepit di depan pintu',
@@ -10675,7 +10732,8 @@ function daftarBarang() {
       mejaSlot: i,
     });
   });
-  for (const b of barang) b.luas = b.kotak.w * b.kotak.h;
+  // kubah dinding samping (tanpa kotak 2D) seluas kubah lukisannya
+  for (const b of barang) b.luas = b.kotak ? b.kotak.w * b.kotak.h : 120;
   barangCache = barang;
   return barang;
 }
@@ -10704,16 +10762,19 @@ function barangBidik() {
     return;
   }
   const K = b.kotak;
+  if (!K) return;                    // kubah CCTV dinding samping: 3D saja, bidikannya di fokus3D
   KAMERA.targetX = K.x + K.w / 2;
   KAMERA.targetY = K.y + K.h / 2;
   KAMERA.targetZoom = zoomBarang(K);
 }
+// barang = punya kotak 2D, atau kubah CCTV dinding samping yang cuma ada di 3D
+const adalahBarang = (s) => !!(s && (s.kotak || s.kamera));
 
 function barangDiTitik(cx, cy) {
   let kena = null;
   for (const b of daftarBarang()) {
     const K = b.kotak;
-    if (cx < K.x || cx > K.x + K.w || cy < K.y || cy > K.y + K.h) continue;
+    if (!K || cx < K.x || cx > K.x + K.w || cy < K.y || cy > K.y + K.h) continue;
     if (!kena || b.luas < kena.luas) kena = b;
   }
   return kena;
@@ -10736,15 +10797,18 @@ function bukaKartuBarang(b) {
     '<div class="kartu-tugas">' + esc(b.uraian) + '</div>' +
     '<div class="kartu-info" id="kibInfo"></div>';
   document.getElementById('kartuTutup').onclick = tutupKartuBarang;
-  // 3D: melihat langsung lewat lensa kubahnya (TIGA.cctv) — pantauan, bukan rekaman
-  if (b.id === 'cctv' && TIGA.aktif && TIGA.cctv) {
+  // 3D: melihat langsung lewat lensa kubah ini (TIGA.cctv), atau semua kamera
+  // sekaligus di dinding monitor (TIGA.dinding) — pantauan, bukan rekaman
+  if (b.kamera && TIGA.aktif && TIGA.cctv && TIGA.dinding) {
     const aksi = document.createElement('div');
     aksi.className = 'kartu-aksi';
-    const bLihat = document.createElement('button');
-    bLihat.type = 'button';
-    bLihat.textContent = 'lihat dari CCTV';
-    bLihat.onclick = () => TIGA.cctv();
-    aksi.appendChild(bLihat);
+    for (const [teks, fn] of [['lihat dari kamera ini', () => TIGA.cctv(b.kamera.id)], ['buka dinding monitor', () => TIGA.dinding()]]) {
+      const t = document.createElement('button');
+      t.type = 'button';
+      t.textContent = teks;
+      t.onclick = fn;
+      aksi.appendChild(t);
+    }
     kartuEl.appendChild(aksi);
   }
   perbaruiKartuBarang();
@@ -10800,7 +10864,7 @@ function tutupKartuBarang() {
 function drawSorotBarang() {
   const t = (Math.sin(now / 240) + 1) / 2;
   for (const [b, tebal] of [[barangHover, false], [barangTerpilih, true]]) {
-    if (!b || (!tebal && b === barangTerpilih)) continue;
+    if (!b || !b.kotak || (!tebal && b === barangTerpilih)) continue;
     const K = b.kotak;
     ctx.save();
     ctx.strokeStyle = P.amber;
@@ -10848,7 +10912,7 @@ const PAPAN_JARAK = 5;      // px CSS antara bingkai benda dan papannya
 const PAPAN_TEPI = 4;       // jarak papan ke tepi panggung
 
 function isiPapanTunjuk(s) {
-  if (s.kotak) {
+  if (adalahBarang(s)) {
     const bmn = s.kode !== '-';
     return { kelas: 'papan-tunjuk pt-barang', warna: P.gold,
       html: '<span class="pt-kop">' + (bmn ? 'MILIK NEGARA' : 'BARANG HABIS PAKAI') + '</span>'
@@ -10895,7 +10959,7 @@ function papanTunjuk(s) {
 // Gerbang 2D & 3D sekaligus; yang khusus 3D (POV, ambang pintu) di TIGA.papan
 function papanBoleh(s) {
   if (s === terpilih || s === barangTerpilih) return false;   // kartunya sendiri sudah terbuka
-  if (s.kotak) return true;
+  if (adalahBarang(s)) return !!(s.kotak || TIGA.aktif);        // kubah dinding samping: tak ada di 2D
   if (s.alpha != null && s.alpha <= 0.02) return false;         // di balik pintu WC / gudang
   for (const a of penghuni()) if (a === s) return true;
   return false;                                                 // sudah pulang
@@ -13075,7 +13139,9 @@ const kameraSinematikBoleh = () => !geraKurang.matches;
    langsung — jadi tanpa ruang3d.js (harness uji di VM, peramban tanpa WebGL2)
    semuanya jatuh ke jalur 2D yang lama tanpa satu baris pun berubah.
      kamera(dt)          tiap frame, sesudah tickKamera: kamera 3D ikut bidikan
-     gambar(stasiun)     menggantikan seluruh penggambaran 2D di frame()
+     gambar(stasiun, utuh)  menggantikan seluruh penggambaran 2D di frame();
+                         utuh = foto 📷 diminta frame ini: gambar lengkap, jangan
+                         dilewati (dinding monitor CCTV menyegarkan diri ±15 fps)
      keLayar(x, y, kaki) titik dunia 2D + garis kakinya → px CSS relatif stageInner
      tampak(x, y)        pengganti kameraTampak() untuk balon
      papan(s)            penempat 3D papan nama melayang: bingkai layar barang/orang s
@@ -13085,10 +13151,13 @@ const kameraSinematikBoleh = () => !geraKurang.matches;
      tanpaCCTV           drawWall melewatkan kubah CCTV & bayangan tempelnya: di 3D
                          kubahnya benda yang menoleh dan berbayang sungguhan
      pov(a)              tombol kartu pegawai "lihat dari matanya" (cuma di 3D)
-     cctv()              tombol kartu Kamera CCTV Kubah "lihat dari CCTV": pantauan
-                         langsung dari lensanya (cuma di 3D; tanpa rekaman) */
+     cctv(id)            tombol kartu kamera CCTV "lihat dari kamera ini": pantauan
+                         langsung dari lensa kubah id (KAMERA_CCTV; tanpa id: CAM 01)
+     dinding()           tombol kartu kamera CCTV "buka dinding monitor": semua
+                         kamera sekaligus, satu layar per kamera (cuma di 3D;
+                         dua-duanya tanpa rekaman) */
 const TIGA = { aktif: false, kamera: null, gambar: null, keLayar: null, tampak: null, tanpaNeon: false, tanpaCCTV: false,
-  pov: null, cctv: null };
+  pov: null, cctv: null, dinding: null };
 
 // titik dunia → px CSS relatif stageInner (yang dipakai DOM di overlay).
 // `kaki` = garis kaki benda yang memuat titik itu (bawaan: titik itu sendiri);
@@ -16570,7 +16639,8 @@ function gambarTemaMeja(x, y) {
    ditempel di atas latar yang dilukis lebih dulu: kanvas 3D di-clear
    transparan, dan panel kayu jati di belakangnya cuma latar CSS (.stage).
    Balon ucap/pikir (#overlay), kartu pegawai, petunjuk kendali, pita POV, dan
-   cap monitor CCTV semuanya DOM — TIDAK ikut, sengaja di versi pertama ini:
+   cap monitor CCTV (juga cap tiap layar dinding monitor) semuanya DOM — TIDAK
+   ikut, sengaja di versi pertama ini (bingkai dinding monitornya ikut: itu GL):
    fotonya bersih. Karena yang disalin persis yang sudah tampil, mode
    panggung (?panggung=1) aman: tidak satu huruf pun di foto yang belum ada di
    layar — malah lebih sedikit, isi balonnya tidak ikut. Capnya cuma nama
@@ -16580,7 +16650,7 @@ const JEPRET_CABUT_MS = 4000;       // URL objek dicabut sesudah unduhannya semp
 // Latar foto = latar panggung di style.css: --kayu/--kayu-tua (.stage), dan
 // rupa monitor #room3d.cctv selama pantauan CCTV. Dijaga uji-tiga.mjs bagian 33.
 const JEPRET_KAYU = '#4a3826', JEPRET_KAYU_TUA = '#241a11';
-const JEPRET_CCTV_LATAR = '#0b0d0c', JEPRET_CCTV_SARING = 'grayscale(1) contrast(1.45) brightness(1.08)';
+const JEPRET_CCTV_LATAR = '#0b0d0c', JEPRET_CCTV_SARING = 'grayscale(1) contrast(1.18) brightness(0.96)';
 const JEPRET = { minta: false, terakhir: -1e9 };
 const capFotoDokumentasi = (d) => 'DOKUMENTASI KEGIATAN · DINAS AI KLOD · '
   + tanggalID(d).toUpperCase() + ' ' + jam(d).slice(0, 5);
@@ -16749,7 +16819,7 @@ function frame(ts) {
   // Tampilan 3D: simulasi di atas sudah jalan apa adanya (Aturan 1 tidak
   // tahu-menahu soal tampilan); yang diganti cuma cara menggambarnya.
   if (TIGA.aktif) {
-    TIGA.gambar(activeStations);
+    TIGA.gambar(activeStations, JEPRET.minta);
     // foto 📷 SEKARANG, sebelum task ini selesai dan buffer WebGL-nya dikosongkan;
     // 3D yang mati di tengah gambar (gagalTotal) menyerahkannya ke frame 2D berikutnya
     if (TIGA.aktif) jepretSesudahGambar(true);

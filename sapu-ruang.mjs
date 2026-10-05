@@ -64,7 +64,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // atribusi, bukan kontrak.
 const PERABOT_DI_DALAM = {
   drawWall: ['drawPanelMcb', 'drawPintuWC', 'drawPintuGudang', 'drawPapanKinerja',
-    'drawPapanUmum', 'drawP3K', 'drawPosterAkhlak',
+    'drawPapanUmum', 'drawP3K', 'drawPosterAkhlak', 'drawKubahCCTV',
     // bayang semua perlengkapan dinding (tabelBayangDinding): dipisah supaya
     // bayangan perabot sendiri tidak dibaca sebagai tabrakan dengan drawWall
     'bayangDinding'],

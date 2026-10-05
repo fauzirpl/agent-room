@@ -116,13 +116,13 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
 .pov-3d[hidden], body:not(.tampil-3d) .pov-3d { display: none; }
 .pov-3d .pov-judul { font-weight: 700; color: #f6ecd0; overflow: hidden; text-overflow: ellipsis; }
 .pov-3d .pov-kunci { opacity: .75; overflow: hidden; text-overflow: ellipsis; }
-.pov-3d .pov-keluar, .pov-3d .pov-pindah {
+.pov-3d .pov-keluar, .pov-3d .pov-pindah, .pov-3d .pov-dinding {
   font: inherit; color: inherit; cursor: pointer; flex: none;
   background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .25);
   border-radius: 8px; padding: 2px 9px;
 }
 .pov-3d .pov-pindah { padding: 2px 7px; font-weight: 700; }
-.pov-3d .pov-keluar:hover, .pov-3d .pov-pindah:hover { background: rgba(255, 255, 255, .18); }
+.pov-3d .pov-keluar:hover, .pov-3d .pov-pindah:hover, .pov-3d .pov-dinding:hover { background: rgba(255, 255, 255, .18); }
 @media (max-width: 640px) { .pov-3d .pov-kunci { display: none; } }
 
 /* Kenyamanan kamera 3D. Petunjuk kendali boleh membungkus: satu baris
@@ -143,12 +143,17 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
 .awal-3d[hidden], body:not(.tampil-3d) .awal-3d { display: none; }
 #room3d:focus-visible { outline: 2px solid var(--emas); outline-offset: -3px; }
 
-/* Pantauan CCTV 3D (kartu Kamera CCTV Kubah → "lihat dari CCTV"): kamera di
+/* Pantauan CCTV 3D (kartu kamera CCTV → "lihat dari kamera ini"): kamera di
    lensa kubah, rupanya monitor pos satpam — maket hitam-putih kontras, garis
    pindai, cap kamera & jam berjalan. Kanvasnya di-clear transparan, jadi
-   latarnya dihitamkan di sini supaya panel kayu tidak ikut kelihatan. */
+   latarnya dihitamkan di sini supaya panel kayu tidak ikut kelihatan.
+   Kontras sengaja lunak: dulu 1,45 x terang 1,08 membuat semua abu di atas
+   ±0,79 putih rata — lantai terazo dan tembok siang jadi bidang putih tanpa
+   isi, dan abu malam di bawah ±0,16 hitam pekat. 1,18 x 0,96 masih jelas
+   hitam-putih monitor, putihnya berhenti di 0,96, gelap malam tetap terbaca
+   (dijaga uji-tiga bagian 35; room.js JEPRET_CCTV_SARING harus sama). */
 #room3d { transition: filter .45s ease, background-color .45s ease; }
-#room3d.cctv { filter: grayscale(1) contrast(1.45) brightness(1.08); background-color: #0b0d0c; }
+#room3d.cctv { filter: grayscale(1) contrast(1.18) brightness(0.96); background-color: #0b0d0c; }
 .cctv-3d {
   position: absolute; inset: 0; pointer-events: none; overflow: hidden;
   font: 700 12px/1 var(--mono); color: #f2f2ea; letter-spacing: .08em;
@@ -168,7 +173,30 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
 .cctv-3d.ringan::after { display: none; }
 @keyframes cctv-gulir { to { transform: translateY(660%); } }
 @keyframes cctv-kedip { 50% { opacity: 0; } }
-/* tombol "lihat dari CCTV" di bawah kolom kartu inventaris */
+/* Dinding monitor CCTV (📹, atau kartu kamera → "buka dinding monitor"): satu
+   layar per kamera, digambar GL di dalam #room3d — bingkai gelap di antara
+   layar ikut foto 📷. Yang di sini cuma cap tiap layar, bingkai tipisnya
+   (emas di bawah kursor), jam di pita kendali, dan tombol 📹 yang seperti
+   kendali 3D lainnya cuma ada selama 3D. */
+#cctvBtn[aria-pressed="true"] { color: var(--emas); border-color: #8a6a14; }
+body:not(.tampil-3d) #cctvBtn { display: none; }
+#room3d.dinding { cursor: pointer; }
+.cctv-3d .cctv-ubin { display: none; position: absolute; box-sizing: border-box; border: 1px solid rgba(242, 242, 234, .16); }
+.cctv-3d.dinding .cctv-ubin { display: block; }
+.cctv-3d.dinding .cctv-cap, .cctv-3d.dinding .cctv-langsung, .cctv-3d.dinding .cctv-waktu { display: none; }
+.cctv-3d .cctv-ubin.sorot { border-color: var(--emas); }
+.cctv-3d .cctv-ubin-cap {
+  position: absolute; left: 8px; top: 7px; max-width: calc(100% - 16px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
+}
+.pov-3d [hidden] { display: none; }
+.pov-3d .pov-jam { flex: none; white-space: pre; color: #f2f2ea; font-weight: 700; }
+.pov-3d .pov-langsung { color: #ff6a5c; animation: cctv-kedip 1.6s steps(2, end) infinite; }
+@media (max-width: 640px) {
+  .cctv-3d .cctv-ubin-cap { font-size: 9px; letter-spacing: .04em; }
+  .pov-3d .pov-langsung { display: none; }
+}
+/* tombol "lihat dari kamera ini" & "buka dinding monitor" di bawah kolom kartu inventaris kamera */
 .kartu.kib .kartu-aksi { margin-top: 8px; }
 
 /* speech bubbles live in the overlay, drawn in CSS px so text stays crisp.

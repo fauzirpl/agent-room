@@ -8,6 +8,22 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Enam kamera CCTV dan dinding monitor pos satpam (📹).** Kantor kini diawasi
+  enam kamera kubah di tiga dinding: CAM 01 pojok kanan-atas, CAM 02 dan 03 di
+  dinding kiri (lajur atas & meja rapat; baris meja kerja), CAM 04 di dinding
+  kanan membidik pintu kadis, CAM 05 menyorot pantri, dan CAM 06 di kanan pintu
+  kadis menyorot sofa tamu dan meja rapat. Masing-masing punya kartu inventaris
+  BMN sendiri (NUP 1–6) dengan tombol "lihat dari kamera ini" dan "buka dinding
+  monitor". Tombol 📹 di bilah panggung (cuma di 3D) membuka dinding monitor:
+  keenam kamera sekaligus, 3×2 (layar tegak 2×3), tiap layar siaran langsung
+  dari lensanya dengan cap "CAM 0N · LOKASI" dan satu jam berjalan. Klik layar
+  (atau tombol 1–6) membuka kamera itu sepenuh panggung, ‹ › pindah kamera, Esc
+  kembali ke maket. Tiap lensa menyapu sendiri dan menoleh ke orang yang
+  berjalan di bidangnya, tapi dijepit di rentang yang sudah diukur lega —
+  dibuktikan uji dengan sinar ke perabot 3D di enam sudut rentangnya, plafon di
+  bawah 5% layar — dan tidak ada kamera di WC. Murni pantauan langsung: tanpa
+  rekaman, putar ulang, atau tanda REC; dinding monitor disegarkan ±15 fps
+  supaya ringan, foto 📷 tetap utuh.
 - **Papan nama melayang saat kursor melintas.** Arahkan tetikus ke perabot atau
   pegawai — di 2D maupun 3D — dan papan kecil muncul di dekatnya sebelum apa pun
   diklik: barang mendapat stiker inventaris bergaya BMN (kop MILIK NEGARA, nama
@@ -493,6 +509,13 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diubah
 
+- **Pantauan CCTV: ‹ › kini pindah kamera, dan rupa monitornya lebih lunak.**
+  Di pantauan CCTV, ‹ › (dan [ ]) pindah ke kamera sebelumnya atau berikutnya,
+  bukan ke mata pegawai; klik orang tetap pindah ke matanya. Tombol kartu "lihat
+  dari CCTV" jadi "lihat dari kamera ini". Filter hitam-putihnya diturunkan
+  (kontras 1,18, terang 0,96): dulu lantai terazo dan dinding siang hari
+  terpotong putih rata dan abu-abu malam jadi hitam. Sapuan CAM 01 dipersempit
+  supaya lensanya tidak menatap kusen pintu kanan.
 - **Pos satpam pindah ke samping pintu masuk.** Meja jaga (buku mutasi, HT,
   papan POS, kursi lipat) kini berdiri tepat di sebelah pintu samping kiri di
   lajur bawah — pintu tempat semua pegawai baru dan tamu masuk — bersebelahan
@@ -567,6 +590,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **Event tidak lagi meminjam pegawai yang masih memegang tool call lewat
+  stasiun kerjanya.** `pemeranStasiun()` memilih dari yang berstatus `work`,
+  padahal status itu tetap menempel sesudah tool call selesai; yang berarti
+  "masih bekerja" adalah `adaTugas`, dan itu yang kini disaring. Akibatnya dulu
+  `kucing-di-atas-keyboard` bisa membekukan pegawai yang sedang menjelajah web
+  di mejanya (Aturan 1; `uji-ulang` merah di benih bawaan sesudah pos satpam
+  pindah, dan di benih 18). `pulpen-jatuh-menggelinding`, yang memilih sendiri
+  siapa pun yang diam di meja, kini menyaring hal yang sama dan tidak lagi
+  menyuruh orang yang sudah direbut tool call jongkok dari callback
+  tertundanya (benih 4).
 - **`sapu-ruang.mjs` menelusuri rute dengan langkah lurus.** Ruas rute dulu
   dilangkahi dengan tanda selisihnya saja, jadi ruas yang tidak tepat 45°
   tercatat melenceng jauh ke samping dan memunculkan lalu lintas hantu (salah

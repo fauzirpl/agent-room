@@ -206,6 +206,7 @@ Saringan jenis dan pegawai tetap jalan.
 | 💬 | buka kotak kabar; lencananya jumlah kabar yang belum dibaca |
 | 📚 | buka **meja disposisi**: cari, saring, sematkan, salin kabar; cari di buku agenda |
 | 📷 | jepret **foto dokumentasi kegiatan**: satu PNG bercap tanggal dari ruangan yang tampak (2D/3D), diunduh peramban — lihat [Ruangan → Jepret foto](02-ruangan.md#jepret-foto-dokumentasi-kegiatan) |
+| 📹 | buka/tutup **dinding monitor CCTV** (cuma tampak di 3D): keenam kamera kubah sekaligus, satu layar per kamera, pantauan langsung tanpa rekaman; klik layar = kamera itu sepenuh panggung, Esc = maket — lihat [Ruangan → Tampilan 3D](02-ruangan.md#tampilan-3d-maket-kantor) |
 
 Lima setelan yang dulu masing-masing punya tombol sendiri di bilah ini sekarang
 digabung ke satu panel **Pengaturan** (⚙️), supaya tidak perlu menghafal lima

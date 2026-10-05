@@ -85,6 +85,13 @@ const PERABOT = [
     pemilik: ['PROPS:drawNomorAntre', 'bayangDinding'],   // bayangnya sendiri jatuh ke kanan-bawah
     dinding: true,                           // di dinding, orang lewat di depannya
   },
+  // kubah CCTV dinding belakang (KAMERA_CCTV room.js; yang di dinding samping cuma ada di 3D)
+  ...G.KAMERA_CCTV.filter((K) => K.dinding === 'belakang').map((K) => ({
+    nama: 'kubah CCTV ' + K.label.split(' · ')[0],
+    kotak: G.kubah2D(K),
+    pemilik: ['drawKubahCCTV', 'bayangDinding'],
+    dinding: true,
+  })),
 ];
 /* Penggambar yang sah DI MANA SAJA. Bayangan awan menyapu SELURUH lantai (pita
    tembus pandang 7,5% yang bergeser tiap tick), tapi sapuan tidak menjalankan

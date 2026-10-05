@@ -1037,6 +1037,49 @@ export function ujiPenjadwal(ctx, pristine) {
     harus(eventHidup.length === 0, 'penilai meninggalkan event di eventHidup');
   });
 
+  /* Aturan 1 di pintu masuk peminjaman per stasiun. S.bekerja berisi state
+     'work', yang tetap menempel sesudah tool call selesai — jadi pemeranStasiun()
+     WAJIB menyaring adaTugas sendiri. Dulu tidak: kucing-di-atas-keyboard
+     meminjam pegawai yang masih menjelajah web di mejanya (invarian J
+     uji-ulang.mjs, benih bawaan sesudah pos satpam pindah). */
+  uji('pemeranStasiun() tidak meminjam pegawai yang masih memegang tool call', () => {
+    bersih();
+    const S = buatS(ctx, { jam: 10, hujan: 0, petir: false, ramai: false });
+    const a = buatSatuOrang(ctx, 'kerja');
+    a.adaTugas = true;
+    S.bekerja = [a]; S.stasiunAktif = new Set([a.station]);
+    const E = buatE({ id: 'uji-pemeran-stasiun', kelas: 'latar', durasi: 5 });
+    const dapat = ctx.pemeranStasiun(E, a.station);
+    harus(dapat === null && !a.eventKerja && !E.aktor.length,
+      'pemeranStasiun() meminjam pegawai yang adaTugas-nya masih menyala');
+    a.adaTugas = false;
+    harus(ctx.pemeranStasiun(E, a.station) === a && a.eventKerja === E,
+      'kontrol: pegawai yang tool call-nya sudah selesai (state tetap work) harus tetap bisa dipinjam');
+    a.eventKerja = null;
+  });
+
+  /* Kelas yang sama, tapi event yang memilih pemerannya sendiri tanpa
+     pemeranStasiun(): pulpen-jatuh-menggelinding mengambil siapa pun yang diam
+     di meja — termasuk yang sedang menjalankan perintah shell di mejanya
+     (adaTugas, state 'idle'). Ketahuan di uji-ulang.mjs --benih 4. */
+  uji('pulpen-jatuh-menggelinding tidak meminjam pegawai yang masih memegang tool call', () => {
+    bersih();
+    const def = eventById.get('pulpen-jatuh-menggelinding');
+    harus(def, 'event pulpen-jatuh-menggelinding hilang dari registri');
+    const S = buatS(ctx, { jam: 10, hujan: 0, petir: false, ramai: false });
+    const a = buatSatuOrang(ctx, 'diam-di-meja');
+    a.adaTugas = true;
+    S.orang = [a];
+    const E = buatE(def);
+    def.mulai(E, S);
+    harus(!E.aktor.length && !a.eventKerja, 'pulpen meminjam pegawai yang adaTugas-nya masih menyala');
+    a.adaTugas = false;
+    const E2 = buatE(def);
+    def.mulai(E2, S);
+    harus(E2.aktor[0] === a, 'kontrol: pegawai yang diam di mejanya tanpa tool call harus tetap bisa dipinjam');
+    a.eventKerja = null;
+  });
+
   /* Dua lapis. Lapis pertama: suasana yang membuat syarat() benar, lalu
      nyalakanEvent() asli. Lapis kedua, untuk yang syaratnya tidak bisa dibuat
      fixture (tanggal Lebaran, RUANGAN.emberIsi >= 88, toolCount, rapatAktif):

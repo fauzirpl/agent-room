@@ -57,7 +57,11 @@ daftarEvent(
   kelas: 'latar', bobot: B.sedang, cooldown: 300, durasi: 3.5,
   syarat: () => kursiKosong() > 0,
   mulai(E, S) {
-    const kandidat = S.orang.filter((o) => (o.station === 'think' || o.station === 'rapat') && o.diam);
+    // diam di meja BUKAN berarti bebas: perintah shell non-git juga dikerjakan
+    // di meja (station 'think'), jadi adaTugas & eventKerja wajib disaring
+    // (Aturan 1; invarian J uji-ulang.mjs --benih 4)
+    const kandidat = S.orang.filter((o) => (o.station === 'think' || o.station === 'rapat') && o.diam
+      && !o.adaTugas && !o.eventKerja);
     if (!kandidat.length) return;
     const a = pilih(kandidat);
     a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
@@ -67,9 +71,11 @@ daftarEvent(
   tick(E) {
     const a = E.aktor[0];
     if (!a) return;
-    pada(E, 0.4, () => { a.pose = 'jongkok'; });
-    pada(E, 1.5, () => { a.pose = null; a.goToXY(a.x + 8, a.y, a.face); });
-    pada(E, 2.6, () => { a.goToXY(a.x - 8, a.y, a.face); });
+    // tool call yang datang di tengah jalan melepasnya dari E.aktor, tapi `a`
+    // di closure ini tetap menunjuk orangnya — jangan disuruh jongkok/bergeser lagi
+    pada(E, 0.4, () => { if (masihMain(E, a)) a.pose = 'jongkok'; });
+    pada(E, 1.5, () => { if (masihMain(E, a)) { a.pose = null; a.goToXY(a.x + 8, a.y, a.face); } });
+    pada(E, 2.6, () => { if (masihMain(E, a)) a.goToXY(a.x - 8, a.y, a.face); });
   },
   selesai(E) { if (E.aktor[0]) E.aktor[0].pose = null; },
 },

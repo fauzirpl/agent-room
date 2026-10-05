@@ -15,7 +15,7 @@
       <!-- maket 3D: ruangan yang sama, digambar public/ruang3d.js; tersembunyi di tampilan 2D.
            Bisa difokus (Tab): selama fokusnya di sini, papan ketik memutar maketnya. -->
       <canvas id="room3d" hidden tabindex="0" role="application"
-        aria-label="Maket 3D kantor. Panah: putar. Shift dan panah: geser. Plus dan minus: dekat atau jauh. Nol: tampak awal. Kurung siku: lihat dari mata pegawai sebelumnya atau berikutnya. Esc: keluar."></canvas>
+        aria-label="Maket 3D kantor. Panah: putar. Shift dan panah: geser. Plus dan minus: dekat atau jauh. Nol: tampak awal. Kurung siku: lihat dari mata pegawai sebelumnya atau berikutnya. Esc: keluar. Di dinding monitor CCTV: angka 1 sampai 6 membuka kamera itu."></canvas>
       <div class="overlay" id="overlay"></div>
       <!-- kartu detail pegawai; isinya dibangun room.js waktu ada yang diklik -->
       <div class="kartu" id="kartu" hidden></div>
@@ -26,6 +26,7 @@
       <span class="sep">/</span>
       <span id="nowDoing">kantor masih sepi</span>
       <button id="tampilanBtn" class="ghost" aria-pressed="false" title="ganti tampilan 2D / 3D">2D</button>
+      <button id="cctvBtn" class="ghost" aria-pressed="false" title="dinding monitor CCTV — semua kamera kubah sekaligus, pantauan langsung (cuma di 3D)">📹</button>
       <button id="settingBtn" class="ghost" title="pengaturan">⚙️</button>
       <button id="kabarBtn" class="ghost kabar-tombol" title="kotak kabar">💬<b id="kabarLencana" hidden>0</b></button>
       <button id="statsBtn" class="ghost" title="statistik token">📊</button>

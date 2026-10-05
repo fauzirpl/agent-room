@@ -63,8 +63,14 @@ function pemeranDekat(E, x, y, radius) {
 // Pemeran yang SEDANG bekerja di satu stasiun — beda dari pemeran(): ini
 // buat event yang justru mengINTERUPSI pekerjaan yang berlangsung (kucing naik
 // ke keyboard, HP bergetar), bukan meminjam yang sedang menganggur.
+/* Pegawai yang DUDUK BEKERJA di stasiun itu — kucing naik ke keyboard-nya,
+   printer macet di depannya. S.bekerja = state 'work', dan state itu cuma
+   kosmetik: tetap 'work' sesudah tool call-nya selesai, sampai dia beranjak.
+   Yang berarti "masih memegang tool call" adalah adaTugas, jadi itu yang
+   disaring (Aturan 1; invarian J uji-ulang.mjs dulu merah lewat
+   kucing-di-atas-keyboard yang meminjam pegawai yang sedang menjelajah web). */
 function pemeranStasiun(E, station) {
-  const calon = S.bekerja.filter((o) => o.station === station && !o.eventKerja);
+  const calon = S.bekerja.filter((o) => o.station === station && !o.eventKerja && !o.adaTugas);
   if (!calon.length) return null;
   const a = calon[(Math.random() * calon.length) | 0];
   a.eventKerja = E; a.betahAsli = a.betah; a.betah = true; E.aktor.push(a);
