@@ -159,6 +159,7 @@ function ruangRujukan() {
     STATIONS, MEJA_KERJA_X, MEJA_KERJA_Y, WC, GUDANG, BACA, FOTOKOPI_TITIK,
     ABSEN_X, ABSEN_Y, PANTRI, PANTRI_LUAR, SATPAM_RUTE, PANEL_MCB, FOTOKOPI, NOMOR_ANTRE,
     POS_SATPAM: typeof POS_SATPAM === 'undefined' ? null : POS_SATPAM,
+    TANAMAN: typeof TANAMAN === 'undefined' ? null : TANAMAN,
     route,
   };
 }
@@ -282,18 +283,44 @@ function bacaLepas(orang) {
   orang.bacaSlot = -1;
 }
 
-/* Pos satpam — meja jaga di pojok kanan bawah. Satpam yang berpatroli dulu
-   "pulang ke pos" ke STATIONS.idle (ruang tunggu) karena memang tidak ada pos;
-   sekarang ada. Tempatnya dicari `node sapu-ruang.mjs kosong 26 46 540 248 132
-   108`: satu-satunya calon di pojok itu x643..669 y276..322 — nol piksel perabot
-   lama, nol rute pegawai (43.056 rute route() antar 208 titik tujuan). Yang
-   mengepungnya: lajur memutar di bawah pojok baca (y244..275 sampai x651) dan
-   baji rute diagonal ke bantal pojok baca di kirinya. Titik berdirinya x658,
-   bukan x656 di tengah kotak: badan di x656 menyentuh kolom 651 lajur memutar.
-   Kursi di belakang (sortY 296) dan meja di depan (sortY 318) dua entri PROPS
-   terpisah supaya satpam yang berdiri di antaranya (garis kaki 298) tertutup
-   meja, tapi menutupi kursinya sendiri. */
-const POS_SATPAM = { x: 643, y: 276, w: 26, h: 46, titikX: 658, titikY: 298 };
+/* Pos satpam — meja jaga di samping PINTU MASUK. Semua yang datang masuk lewat
+   pintu samping kiri di lajur bawah (Agent: x -14, LANE_DOWN; di 3D ambang
+   berkusen di dinding kiri, z 239..265), jadi pos jaganya di situ: tepat di
+   selatan kusen, merapat ke dinding kiri, bersebelahan dengan meja buku tamu.
+   Versi pertama pos ini ada di pojok kanan bawah (x643..669 y276..322) karena
+   cuma itu kotak yang bebas waktu dicari; yang menempati petak ini dulu pot
+   tanaman, dan keduanya TUKAR TEMPAT (lihat TANAMAN di bawah).
+
+   Diukur dengan sapu-ruang.mjs (langkah lurus): kotak x2..28 y266..312 nol rute
+   route(), dan satu-satunya penggambar selain pot lama cuma bayangan awan yang
+   menyapu seluruh lantai. Batas-batasnya:
+   - atas y266: pejalan lajur bawah (garis kaki 252, badan sampai 255) — kepala
+     satpam yang berdiri di titikY 288 berhenti di 258, tidak menyentuh kaki mereka;
+   - bawah y312: papan meja kerja paling kiri mulai x54 y314, dan kolom x<30 di
+     bawahnya lantai kosong;
+   - kanan x28: meja buku tamu x52..66 — celah x30..50 tempat tamu berdiri lapor
+     di samping meja jaga (40-pos-satpam.js).
+   Dua tamu event yang dulu masuk menembus tembok di y=288 (buku tamu, ruang
+   tunggu) — persis melewati titik berdiri satpam — kini masuk lewat pintunya
+   di lajur bawah, baru turun di kolom x≥74.
+   Kursi di belakang (sortY y+20) dan meja di depan (sortY y+42) dua entri PROPS
+   terpisah supaya satpam yang berdiri di antaranya (garis kaki titikY = y+22)
+   tertutup meja, tapi menutupi kursinya sendiri. Semua angka gambar 2D, maket
+   3D, dan event pos diturunkan dari kotak ini. */
+const POS_SATPAM = { x: 2, y: 266, w: 26, h: 46, titikX: 17, titikY: 288 };
+
+/* Tanaman pot — dulu di samping pintu masuk (x20 y258), sekarang di pojok kanan
+   bawah bekas pos satpam lama: kotak x643..669 y276..322 yang dulu dicari
+   sapu-ruang.mjs sebagai satu-satunya tempat bebas piksel & rute di pojok itu.
+   x/y = titik acuan drawPlant (pot x+1..x+25, dasar y+36, daun sampai ±y-3 dan
+   x-2..x+26 — x645 adalah yang paling kanan sebelum daunnya menembus dinding
+   kanan W=672). Yang menyiram berdiri di KIRI pot menghadap kanan (dinding ada
+   di kanannya) — cermin dari titik lama (44,268) yang berdiri di kanan pot. */
+const TANAMAN = { x: 645, y: 282 };
+TANAMAN.siramX = TANAMAN.x - 1;          // 644: di belakang tepi kiri pot, daunnya menutupi bahu
+TANAMAN.siramY = TANAMAN.y + 10;         // 292: di atas bibir pot (y+19), potnya menutupi tulang kering
+TANAMAN.akarX = TANAMAN.x + 14;          // tempat air/sisa teh jatuh: tengah pot
+TANAMAN.akarY = TANAMAN.y + 4;
 
 /* Perabot pengisi ruang kosong. Letaknya TIDAK ditebak: diambil dari peta
    keterisian ruangan — piksel dinding+lantai polos dibandingkan dengan
@@ -1369,7 +1396,7 @@ function bayangBulat() {
    maupun garis pijak, dan memindai piksel tiap frame jauh lebih mahal
    daripada tiga belas baris angka. Angkanya diambil dari fungsi gambar
    masing-masing (drawArsip x26 w56 dasar 118, drawServer x364 w52 dasar 118,
-   drawPlant x20 y258, ...). Meja rapat TIDAK ada di sini: drawRapat sudah
+   drawPlant di TANAMAN, ...). Meja rapat TIDAK ada di sini: drawRapat sudah
    menggambar bayangannya sendiri, dan meja kerja dibaca dari MEJA_KERJA_X
    supaya tidak ada tabel kedua yang bisa basi waktu deretnya digeser.
    x = titik tengah, y = garis pijak, w/h = poros elips, a = kepekatan. */
@@ -1382,7 +1409,7 @@ const BAYANG_KAKI = [
   { x: 29,  y: 241, w: 36, h: 9,  a: 0.26 },   // x-banner
   { x: 95,  y: 113, w: 28, h: 8,  a: 0.26 },   // papan visi-misi (kaki X, dasar 112)
   { x: 133, y: 275, w: 22, h: 7,  a: 0.28 },   // tiang bendera
-  { x: 33,  y: 296, w: 34, h: 10, a: 0.30 },   // pot tanaman
+  { x: TANAMAN.x + 13, y: TANAMAN.y + 38, w: 34, h: 10, a: 0.30 },   // pot tanaman
   { x: 59,  y: 298, w: 22, h: 7,  a: 0.24 },   // meja buku tamu
   { x: 400, y: 298, w: 32, h: 9,  a: 0.28 },   // kipas berdiri
   { x: pantriX(446), y: 289, w: 68, h: 11, a: 0.24 },   // sekat pantry
@@ -2620,7 +2647,7 @@ function gambarKarpetBaca() {
 // Kursi lipat pos satpam, sandaran menghadap penonton: satpam berdiri di
 // depannya menghadap ruangan.
 function drawPosSatpamKursi() {
-  const x = POS_SATPAM.titikX - 6, y = 284;
+  const x = POS_SATPAM.titikX - 6, y = POS_SATPAM.y + 8;
   r(x, y, 12, 3, '#3a4048');                                // sandaran
   r(x + 1, y + 3, 1, 9, '#5a626c');
   r(x + 10, y + 3, 1, 9, '#5a626c');
@@ -2631,7 +2658,7 @@ function drawPosSatpamKursi() {
 // muka meja. Huruf 5 px — 4 px di kanvas segini jadi noda, bukan tulisan
 // (lihat catatan 'KUOTA' di public/event/29-gel4-b.js).
 function drawPosSatpam() {
-  const x = POS_SATPAM.x + 3, y = 302;
+  const x = POS_SATPAM.x + 3, y = POS_SATPAM.y + 26;
   r(x, y, 23, 12, '#8a6844');                               // daun meja
   r(x, y, 23, 2, '#a5825a');
   r(x + 1, y + 12, 2, 4, '#6b4f34');                        // kaki
@@ -4052,8 +4079,9 @@ function drawPenghancur() {
    menghasilkan 282,305,259,328,236,351,213,374,190,... — slot ke-8 jatuh
    tepat di x=190, jadi meja di sana akan berdiri di atas kepala pegawai
    ke-9 yang menganggur. Di x52..66 tidak ada slot mana pun (rentang slot
-   yang wajar 167..420), tanaman berhenti di x=44, dan papan meja kerja
-   slot cx=86 baru mulai di y=322 — sementara meja ini berakhir di y=296. */
+   yang wajar 167..420), meja pos satpam di kirinya berhenti di x=28 (dulu
+   pot tanaman, sampai x=44), dan papan meja kerja slot cx=86 baru mulai di
+   y=322 — sementara meja ini berakhir di y=296. */
 function drawBukuTamu() {
   const x = 52, y = 296;                       // y = garis kaki meja
   r(x, y - 8, 14, 3, '#8d5738');               // papan
@@ -4602,7 +4630,7 @@ function leafP(x, y, dx, dy, col) {
   }
 }
 function drawPlant() {
-  const x = 20, y = 258;
+  const { x, y } = TANAMAN;
   r(x + 3, y + 22, 20, 14, '#7a4a30');
   r(x + 1, y + 19, 24, 4, '#8d5738');
   r(x + 1, y + 19, 24, 1, '#a56a46');
@@ -4767,7 +4795,7 @@ const PROPS = [
   { sortY: 288, station: null,     draw: drawTongSampah },
   { sortY: 296, station: null,     draw: drawBukuTamu },
   { sortY: 274, station: null,     draw: drawBendera },
-  { sortY: 294, station: null,     draw: drawPlant },
+  { sortY: TANAMAN.y + 36, station: null, draw: drawPlant },   // dasar pot
   { sortY: 295, station: null,     draw: drawKipas },
   { sortY: 348, station: 'think',  draw: drawMejaKerja },
   { sortY: 152, station: null,     draw: drawAbsensi },
@@ -4796,9 +4824,9 @@ const PROPS = [
   // karpet, meja lesehan, dan bantalnya ada di drawFloor, yang tersisa di sini
   // cuma dua rak pendek yang berdiri di tepi atas pita.
   { sortY: 186, station: null, draw: drawPojokBaca },
-  // Pos satpam: kursi DI BELAKANG garis kaki satpam (298), meja DI DEPANNYA.
-  { sortY: 296, station: null, draw: drawPosSatpamKursi },
-  { sortY: 318, station: null, draw: drawPosSatpam },
+  // Pos satpam: kursi DI BELAKANG garis kaki satpam (titikY), meja DI DEPANNYA.
+  { sortY: POS_SATPAM.y + 20, station: null, draw: drawPosSatpamKursi },
+  { sortY: POS_SATPAM.y + 42, station: null, draw: drawPosSatpam },
   { sortY: 270, station: null, draw: drawRadio },          // di atas counter pantri, sesudah drawPantry
 ];
 
@@ -7623,7 +7651,7 @@ class Standby extends Agent {
      (SATPAM_RUTE, dideklarasikan di bawah class ini persis seperti
      NOTULEN_X dkk.) — singgah sebentar (pose 'nunjuk', menyorotkan senter)
      di tiap satu, baru lanjut ke titik berikutnya, dan balik ke pos jaga
-     (POS_SATPAM, pojok kanan bawah) sesudah titik terakhir. 'jalan' -> 'cek' berulang untuk
+     (POS_SATPAM, samping pintu masuk) sesudah titik terakhir. 'jalan' -> 'cek' berulang untuk
      tiap titik, lalu 'pulang' sekali di akhir. */
   mulaiSatpam() {
     petugasSatpam = this;
@@ -7817,8 +7845,8 @@ function calonPetugasNotulen() {
    STATIONS.agent, supaya tidak berhimpit dengan sesi nyata yang sedang
    antre/bekerja tepat di depan pintu itu), depan pintu pantri (titik
    PANTRI_LUAR yang sama dipakai route() sendiri), dan mesin absen dekat
-   pintu keluar. Pos jaganya POS_SATPAM — meja jaga di pojok kanan bawah
-   (lihat komentarnya di kepala berkas). Dulu STATIONS.idle, ruang tunggu,
+   pintu keluar. Pos jaganya POS_SATPAM — meja jaga di samping pintu masuk
+   kiri (lihat komentarnya di kepala berkas). Dulu STATIONS.idle, ruang tunggu,
    semata karena kantor ini belum punya pos. */
 const SATPAM_RUTE = [
   { x: ABSEN_X, y: ABSEN_Y, hadap: 'up' },                 // dekat pintu keluar & mesin absen
@@ -10545,7 +10573,7 @@ function daftarBarang() {
       lokasi: 'sisi kiri meja rapat', kotak: k(122, 196, 22, 80), uraian: 'bendera meja bertiang kuningan',
       kondisi: () => (RUANGAN.benderaBelit ? ['B', 'kainnya membelit tiang'] : ['B']) },
     { id: 'tanaman', nama: 'Tanaman Pot', kode: '-', nup: 0, tahun: 2021,
-      lokasi: 'pojok kiri', kotak: k(18, 236, 30, 60), uraian: 'disiram sisa teh kalau ada yang ingat',
+      lokasi: 'pojok kanan bawah', kotak: k(TANAMAN.x - 2, TANAMAN.y - 22, 30, 60), uraian: 'disiram sisa teh kalau ada yang ingat',
       kondisi: () => (RUANGAN.tanamanLayu > 0.5 ? ['RR', 'layu'] : ['B']) },
     { id: 'buku-tamu', nama: 'Meja Buku Tamu', kode: '3.05.01.03.020', nup: 1, tahun: 2019,
       lokasi: 'pojok kiri bawah', kotak: k(50, 282, 16, 16), uraian: 'buku tamu terbuka dengan bolpoin bertali',

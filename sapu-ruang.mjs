@@ -263,6 +263,7 @@ export function sapuRuangan({ halus = false, atas = false, kotak = [] } = {}) {
   tambah('depan pintu pantri', R.PANTRI_LUAR, R.PANTRI.ambang);
   (R.SATPAM_RUTE || []).forEach((t, i) => tambah(`rute satpam ${i}`, t.x, t.y));
   if (R.POS_SATPAM) tambah('pos satpam', R.POS_SATPAM.titikX, R.POS_SATPAM.titikY);
+  if (R.TANAMAN) tambah('siram tanaman', R.TANAMAN.siramX, R.TANAMAN.siramY);
   if (R.PANEL_MCB) tambah('bawah panel MCB', R.PANEL_MCB.titikX, R.PANEL_MCB.titikY);
   const dirEvent = path.join(__dirname, 'public', 'event');
   for (const f of fs.readdirSync(dirEvent).filter((x) => x.endsWith('.js'))) {
@@ -287,10 +288,15 @@ export function sapuRuangan({ halus = false, atas = false, kotak = [] } = {}) {
       let cx = a.x, cy = a.y;
       const kena = kotak.map(() => false);
       for (const t of p) {
-        const dx = Math.sign(t.x - cx), dy = Math.sign(t.y - cy);
+        /* Lurus, persis Agent.update() melangkah (dx/dist). Dulu tiap langkah
+           cuma memakai TANDA selisihnya (±1 di kedua sumbu), jadi ruas yang
+           tidak tepat 45° melenceng sejauh selisih sumbunya: (88,250)->(86,350)
+           tercatat menyerong 100 px ke kiri dan menembus pojok kiri bawah,
+           padahal orangnya berjalan hampir tegak lurus. */
         const lang = Math.max(Math.abs(t.x - cx), Math.abs(t.y - cy));
         for (let i = 0; i <= lang; i++) {
-          const px = Math.round(cx + dx * i), py = Math.round(cy + dy * i);
+          const f = lang ? i / lang : 0;
+          const px = Math.round(cx + (t.x - cx) * f), py = Math.round(cy + (t.y - cy) * f);
           if (px >= 0 && px < DW && py >= 0 && py < DH) kaki[py * DW + px] = 1;
           for (let k = 0; k < kotak.length; k++) {
             const K = kotak[k];

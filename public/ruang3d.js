@@ -797,7 +797,7 @@ void main() { hasil = vec4(1.0); }`;
       microwave: kulit('microwave', { x: PANTRI.x + 34, y: PANTRI.y + PANTRI.atas - 7, w: 21, h: 16 }, () => drawPantry(), 2),
       papanPantri: kulit('papanPantri', { x: PANTRI.x + 14, y: PANTRI.y - 9, w: 26, h: 9 }, () => drawPantry(), 0.3),
       dispenser: kulit('dispenser', { x: pantriX(462), y: 254, w: 18, h: 34 }, () => drawDispenserPantry(), 1),
-      posSatpam: kulit('posSatpam', { x: POS_SATPAM.x + 3, y: 296, w: 23, h: 18 }, () => drawPosSatpam(), 1),
+      posSatpam: kulit('posSatpam', { x: POS_SATPAM.x + 3, y: POS_SATPAM.y + 20, w: 23, h: 18 }, () => drawPosSatpam(), 1),
       // trio pejabat ruang kadis: dilukis fungsi yang sama dengan dinding ruang utama
       fotoKadis: kulit('fotoKadis', { x: 268, y: 6, w: 12, h: 15 }, () => drawPortrait(268, 6), 0.2),
       garudaKadis: kulit('garudaKadis', { x: 290, y: 6, w: 20, h: 16 }, () => drawGaruda(300, 6), 0.2),
@@ -1051,9 +1051,10 @@ void main() { hasil = vec4(1.0); }`;
     kotak(S, 129, 137, 3, 5, 269, 275, BESI);
     tabung(S, 133, 272, 1.1, 5, 62, warna('#c9ced4'), { segmen: 6 });
     kotak(S, 131.5, 134.5, 62, 65, 270.5, 273.5, warna(P.gold));
-    // tanaman pot kiri: pot bata; daunnya voxel di grup perabot (bisa layu)
-    kotak(S, 23, 43, 0, 14, 283, 297, warna('#7a4a30'), { w: { atas: warna('#5a3a26') } });
-    kotak(S, 21, 45, 12, 16, 281, 299, warna('#8d5738'), { w: { atas: warna('#3a2a1a') } });
+    // tanaman pot pojok kanan bawah: pot bata; daunnya voxel di grup perabot (bisa layu)
+    const TN = TANAMAN;
+    kotak(S, TN.x + 3, TN.x + 23, 0, 14, TN.y + 25, TN.y + 39, warna('#7a4a30'), { w: { atas: warna('#5a3a26') } });
+    kotak(S, TN.x + 1, TN.x + 25, 12, 16, TN.y + 23, TN.y + 41, warna('#8d5738'), { w: { atas: warna('#3a2a1a') } });
     // meja buku tamu + bukunya yang terbuka (tintanya di grup perabot)
     meja(52, 66, 290, 297, 8, warna('#8d5738'), warna('#6b4126'), { palang: false, tebal: 2, kaki: 2 });
     bukuTamu(S);
@@ -1089,12 +1090,13 @@ void main() { hasil = vec4(1.0); }`;
     rakPojokBaca(S);                                         // korannya di grup perabot (kemarin = kekuningan)
     bacaanLesehan(S);
 
-    // --- pos satpam
-    meja(POS_SATPAM.x + 3, POS_SATPAM.x + 26, 303, 314, 16, KAYU, warna('#6b4f34'), { palang: false });
-    if (k.posSatpam) G.kulit.segi([POS_SATPAM.x + 3, 4, 314.3], [POS_SATPAM.x + 26, 4, 314.3], [POS_SATPAM.x + 26, 13, 314.3], [POS_SATPAM.x + 3, 13, 314.3], [0, 0, 1], PUTIH,
+    // --- pos satpam (samping pintu masuk kiri); kedalaman z dari POS_SATPAM.y
+    const POS = POS_SATPAM, mukaPos = POS.y + 38.3;
+    meja(POS.x + 3, POS.x + 26, POS.y + 27, POS.y + 38, 16, KAYU, warna('#6b4f34'), { palang: false });
+    if (k.posSatpam) G.kulit.segi([POS.x + 3, 4, mukaPos], [POS.x + 26, 4, mukaPos], [POS.x + 26, 13, mukaPos], [POS.x + 3, 13, mukaPos], [0, 0, 1], PUTIH,
       [k.posSatpam.uv[0], k.posSatpam.uv[1] + (k.posSatpam.uv[3] - k.posSatpam.uv[1]) * (9 / 18), k.posSatpam.uv[2], k.posSatpam.uv[3]]);
-    kotak(S, POS_SATPAM.x + 5, POS_SATPAM.x + 14, 16, 16.5, 304, 311, warna(P.paper), { sisi: S_ATAS });
-    kotak(S, POS_SATPAM.x + 18, POS_SATPAM.x + 21, 16, 22, 306, 308, warna('#20242c'));
+    kotak(S, POS.x + 5, POS.x + 14, 16, 16.5, POS.y + 28, POS.y + 35, warna(P.paper), { sisi: S_ATAS });
+    kotak(S, POS.x + 18, POS.x + 21, 16, 22, POS.y + 30, POS.y + 32, warna('#20242c'));
     kursiLipatSatpam(S);
 
     pantri(S);
@@ -1260,7 +1262,7 @@ void main() { hasil = vec4(1.0); }`;
     }
   }
 
-  /* Tanaman pot sudut kiri (drawPlant): daun dari kubus yang mengecil ke
+  /* Tanaman pot pojok kanan bawah (drawPlant, TANAMAN): daun dari kubus yang mengecil ke
      ujung, persis leafP 2D (4,3,3,2,2,1,1 piksel), tapi menyebar ke segala
      arah. Layu = hijaunya luntur ke cokelat dan ujungnya menunduk (2D: daun
      turun sampai 4 px). [arah, jangkau, naik, warna]; arah 0 = +x, π/2 = +z. */
@@ -1270,7 +1272,7 @@ void main() { hasil = vec4(1.0); }`;
   ];
   function tanamanVoxel(S) {
     const L = Math.max(0, Math.min(1, RUANGAN.tanamanLayu || 0));
-    const cx = 33, cz = 290, y0 = 15.5, cokelat = warna('#8a7a3a');
+    const cx = TANAMAN.x + 13, cz = TANAMAN.y + 32, y0 = 15.5, cokelat = warna('#8a7a3a');
     for (const [arah, jangkau, naik, c] of DAUN_TANAMAN) {
       const col = L > 0.01 ? campur(warna(c), cokelat, L) : warna(c);
       const ux = Math.cos(arah), uz = Math.sin(arah);
@@ -1494,7 +1496,7 @@ void main() { hasil = vec4(1.0); }`;
   // Kursi lipat pos satpam (drawPosSatpamKursi): sandaran menghadap ruangan.
   // Di 2D satpamnya berdiri di depannya; di 3D dia duduk di sini selama
   // berjaga (dudukDiPos) — papan dudukannya setinggi KURSI_POS.atas.
-  const KURSI_POS = { x: POS_SATPAM.titikX - 6, zs: 286, atas: 8.4 };
+  const KURSI_POS = { x: POS_SATPAM.titikX - 6, zs: POS_SATPAM.y + 10, atas: 8.4 };
   function kursiLipatSatpam(S) {
     const { x, zs, atas } = KURSI_POS, besi = warna('#5a626c');
     for (const kx of [x + 0.6, x + 10.6]) {

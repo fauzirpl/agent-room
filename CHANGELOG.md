@@ -493,6 +493,16 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diubah
 
+- **Pos satpam pindah ke samping pintu masuk.** Meja jaga (buku mutasi, HT,
+  papan POS, kursi lipat) kini berdiri tepat di sebelah pintu samping kiri di
+  lajur bawah — pintu tempat semua pegawai baru dan tamu masuk — bersebelahan
+  dengan meja buku tamu, di 2D maupun maket 3D. Pot tanaman yang tadinya di situ
+  tukar tempat ke pojok kanan bawah bekas pos lama, dan yang menyiramnya ikut ke
+  sana. Tamu "lapor ke pos" kini masuk lewat pintu itu dan berdiri di samping
+  meja jaga; tamu buku tamu dan tamu ruang tunggu, yang dulu masuk menembus
+  tembok di bawah pintu (melintasi titik berdiri satpam), kini lewat pintunya
+  juga. Boneka katak di pojok kiri bawah bergeser sedikit supaya tidak menimpa
+  meja jaga.
 - **Gerak dikurangi kini juga membekukan guncangan layar.** Uji genset bulanan,
   gempa kecil, dan hentakan kaki tamu tenar tidak lagi mengguncang 2D maupun 3D
   bagi penonton yang menyalakan `prefers-reduced-motion`; kejadiannya tetap
@@ -557,6 +567,12 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diperbaiki
 
+- **`sapu-ruang.mjs` menelusuri rute dengan langkah lurus.** Ruas rute dulu
+  dilangkahi dengan tanda selisihnya saja, jadi ruas yang tidak tepat 45°
+  tercatat melenceng jauh ke samping dan memunculkan lalu lintas hantu (salah
+  satunya menembus pojok kiri bawah yang sebenarnya sepi). Sekarang sama dengan
+  cara pegawai benar-benar berjalan. `uji-tempat.mjs` ikut menjaga letak pot
+  tanaman.
 - **Isi kaca jendela akhirnya kelihatan, di 2D maupun 3D.** Tujuh event yang
   menggambar di kaca — Monas & lampu kota, bulan purnama, layangan, kucing
   berantem di parkiran, burung di kusen, gerobak bakso, asap genset — selama ini

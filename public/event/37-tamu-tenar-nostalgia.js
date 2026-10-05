@@ -800,14 +800,13 @@ daftarEvent(
    khusus stasiun dan seringnya null, sedangkan face selalu terisi — dan face
    yang menentukan ke mana wajahnya digambar.
 
-   Berdiri di (26,316): pojok kiri bawah, di depan pot tanaman (badan pot
-   x23..42, y280..293; daunnya berhenti di y=252 jadi tidak tersentuh) dan di
-   kiri meja kerja paling kiri (x=86, papannya x54..118 mulai y=322). Sosoknya
-   25 px, lebar x20..x32, jadi ujung atasnya di y=291 dan tiga baris teratasnya
-   MEMANG bertumpuk dengan dasar pot — itu benar, bukan kelalaian: sortY-nya
-   316 lawan 294 milik pot, jadi ia digambar DI DEPAN pot, persis seperti orang
-   yang berdiri satu langkah lebih dekat ke kamera. Titik terjauh dari lalu
-   lintas ruangan yang masih di dalam bingkai. ----------------------------------- */
+   Berdiri di (40,316): pojok kiri bawah, di kanan pos satpam (meja jaganya
+   x5..28, dasar y308 — lihat POS_SATPAM) dan di kiri meja kerja paling kiri
+   (x=86, papannya x54..118 mulai y=322). Sosoknya 25 px, lebar x34..x46, jadi
+   ujung atasnya di y=291: tidak menyentuh meja jaga, meja buku tamu (x52..66),
+   maupun papan meja kerja. Dulu ia di x=26, di depan pot tanaman yang kini
+   pindah ke pojok kanan bawah — x=26 sekarang menimpa sudut meja jaga. Titik
+   terjauh dari lalu lintas ruangan yang masih di dalam bingkai. ------------- */
 {
   id: 'boneka-kepala-katak-badan-ban',
   kelas: 'latar', bobot: B.langka, cooldown: 5400, durasi: 40,
@@ -816,7 +815,7 @@ daftarEvent(
   syarat: (S) => !TOKOH.adaTamu() && S.jam >= 7 && S.jam < 20,
   mulai(E) {
     // Sudah berdiri di pojok sejak detik nol: tidak ada fase 'masuk'.
-    E.data.b = { x: 26, y: 316, wp: [], fase: 'diam' };
+    E.data.b = { x: 40, y: 316, wp: [], fase: 'diam' };
   },
   tick(E, dt, S) {
     const B2 = E.data.b;
@@ -852,8 +851,9 @@ daftarEvent(
     if (!B2 || B2.lenyap) return;
     NOSTALGIA.katakBan(Math.round(B2.x), Math.round(B2.y));
   },
-  // y=316 di luar pita lajur bawah: sortY = garis kakinya. Di depan pot
-  // tanaman (294) dan meja buku tamu (296), di belakang meja kerja (348).
+  // y=316 di luar pita lajur bawah: sortY = garis kakinya. Di depan meja jaga
+  // pos satpam (POS_SATPAM.y + 42) dan meja buku tamu (296), di belakang meja
+  // kerja (348).
   sortY: 316,
 },
 

@@ -1,8 +1,8 @@
 /* ==========================================================================
    POS SATPAM — tiga kejadian di meja jaga yang baru
    ==========================================================================
-   Pos satpam (POS_SATPAM di room.js, pojok kanan bawah x643..669 y276..322)
-   lahir sebagai tempat pulang rutinitas patroli, tapi seperti pojok baca
+   Pos satpam (POS_SATPAM di room.js, samping pintu masuk kiri x2..28
+   y266..312) lahir sebagai tempat pulang rutinitas patroli, tapi seperti pojok baca
    kemarin, perabot baru tidak punya kejadiannya sendiri. Tiga di sini: tamu
    yang lapor ke pos lalu diarahkan balik ke loket, petugas ronda malam yang
    titip laporan di buku mutasi pagi-pagi, dan penjaga pos yang ketiduran.
@@ -15,14 +15,13 @@
    event itu: dua satpam di ruangan yang sama membuat yang satu tampak seperti
    penyusup.
 
-   TAMUNYA orang luar, masuk dari TEPI KANAN di y=334 lalu naik ke samping
-   meja (x636, y312). Bukan lewat lajur pulang y=164 seperti pegawai yang
-   pamit: dari situ tamu harus menembus pojok baca untuk sampai ke pos.
-   Pojok kanan bawah itu memang kosong — lihat komentar POS_SATPAM — dan
-   dua ruas jalannya (x636..686 di y334, lalu x636 dari y334 ke y312)
-   berada di kotak yang sama. Samping meja, bukan depannya: gambarOrangLuar
-   selalu menghadap penonton, jadi tamu yang berdiri di depan meja akan
-   membelakangi penjaganya.
+   TAMUNYA orang luar, masuk lewat PINTU MASUK — tepi kiri di lajur bawah,
+   persis jalan masuk pegawai, dan di 3D persis ambang berkusen di dinding
+   kiri — lalu turun ke samping kanan meja (x35, y302), di celah antara meja
+   jaga dan meja buku tamu (x52). Dulu, waktu posnya masih di pojok kanan
+   bawah, tamunya masuk dari tepi kanan di y=334: di 3D itu tembok pejal.
+   Samping meja, bukan depannya: gambarOrangLuar selalu menghadap penonton,
+   jadi tamu yang berdiri di depan meja akan membelakangi penjaganya.
 
    Standby tidak bisa bicara (say() dibungkam), jadi yang bercerita di sini
    gerak: tinta di buku mutasi, telunjuk ke arah ruangan, HT yang berbunyi.
@@ -30,26 +29,26 @@
    ========================================================================== */
 
 // Titik-titik yang dipakai ketiga event; semuanya diturunkan dari POS_SATPAM.
-const POS_TAMU = { masukY: 334, x: POS_SATPAM.x - 7, y: 312 };      // samping kiri meja jaga
-const POS_BUKU = { x: POS_SATPAM.x + 10, y: 306 };                   // buku mutasi jaga di daun meja
-const POS_HT = { x: POS_SATPAM.x + 19, y: 300 };                     // HT berdiri di ujung meja
+const POS_TAMU = { masukY: LANE_DOWN, x: POS_SATPAM.x + POS_SATPAM.w + 7, y: POS_SATPAM.y + 36 };   // samping kanan meja jaga
+const POS_BUKU = { x: POS_SATPAM.x + 10, y: POS_SATPAM.y + 30 };    // buku mutasi jaga di daun meja
+const POS_HT = { x: POS_SATPAM.x + 19, y: POS_SATPAM.y + 24 };      // HT berdiri di ujung meja
 const BENTROK_TAMU = [
   'satpam-patroli', 'buku-tamu-ditandatangani', 'tamu-di-ruang-tunggu', 'tamu-nyasar',
   'tamu-salah-alamat', 'pemohon-surat-di-loket', 'tamu-dinas-kabupaten', 'rombongan-studi-banding',
 ];
 
-/* Satu langkah orang luar di dua ruas siku: masuk = tepi kanan -> x samping
-   meja di y334, lalu naik ke samping meja; pulang = kebalikannya. Mengembalikan
-   true kalau sudah sampai. */
+/* Satu langkah orang luar di dua ruas siku: masuk = pintu kiri -> x samping
+   meja di lajur bawah, lalu turun ke samping meja; pulang = kebalikannya.
+   Mengembalikan true kalau sudah sampai. */
 function langkahTamuPos(T, dt, arah) {
   if (arah === 'masuk') {
-    if (T.x > POS_TAMU.x) { T.x = Math.max(POS_TAMU.x, T.x - 46 * dt); return false; }
-    T.y = Math.max(POS_TAMU.y, T.y - 40 * dt);
-    return T.y <= POS_TAMU.y;
+    if (T.x < POS_TAMU.x) { T.x = Math.min(POS_TAMU.x, T.x + 46 * dt); return false; }
+    T.y = Math.min(POS_TAMU.y, T.y + 40 * dt);
+    return T.y >= POS_TAMU.y;
   }
-  if (T.y < POS_TAMU.masukY) { T.y = Math.min(POS_TAMU.masukY, T.y + 40 * dt); return false; }
-  T.x += 46 * dt;
-  return T.x > W + 16;
+  if (T.y > POS_TAMU.masukY) { T.y = Math.max(POS_TAMU.masukY, T.y - 40 * dt); return false; }
+  T.x -= 46 * dt;
+  return T.x < -16;
 }
 
 daftarEvent(
@@ -71,7 +70,7 @@ daftarEvent(
     E.data.a = a;
     a.doingEvent = 'jaga pos, menerima tamu';
     a.goToXY(POS_SATPAM.titikX, POS_SATPAM.titikY, 'down');
-    E.data.t = { x: W + 14, y: POS_TAMU.masukY, fase: 'masuk' };
+    E.data.t = { x: -14, y: POS_TAMU.masukY, fase: 'masuk' };
     E.data.tinta = 0;
   },
   tick(E, dt, S) {
@@ -116,11 +115,11 @@ daftarEvent(
   },
   gambarProp(E) {
     const T = E.data.t;
-    if (!T || T.x > W + 16) return;
+    if (!T || T.x < -16) return;
     gambarOrangLuar(Math.round(T.x), Math.round(T.y) + (T.fase === 'lapor' ? 1 : 0),
       '#4a6a8a', null, T.fase === 'masuk' ? 'map' : null);
   },
-  sortY: 335,                                  // sesudah meja jaga (318): tamu di sampingnya, tidak tertutup
+  sortY: POS_SATPAM.y + 43,                    // sesudah meja jaga (y+42): tamu di sampingnya, tidak tertutup
   selesai(E) { if (E.data.a) E.data.a.pose = null; },
 },
 
@@ -141,7 +140,7 @@ daftarEvent(
     E.data.a = a;
     a.doingEvent = 'terima laporan ronda malam';
     a.goToXY(POS_SATPAM.titikX, POS_SATPAM.titikY, 'down');
-    E.data.t = { x: W + 14, y: POS_TAMU.masukY, fase: 'masuk' };
+    E.data.t = { x: -14, y: POS_TAMU.masukY, fase: 'masuk' };
     E.data.tinta = 0;
   },
   tick(E, dt) {
@@ -177,11 +176,11 @@ daftarEvent(
   },
   gambarProp(E) {
     const T = E.data.t;
-    if (!T || T.x > W + 16) return;
+    if (!T || T.x < -16) return;
     gambarOrangLuar(Math.round(T.x), Math.round(T.y), '#6b5a3a', null,
       T.fase === 'serah' ? null : 'senter', '#20242c');
   },
-  sortY: 335,
+  sortY: POS_SATPAM.y + 43,
   selesai(E) { if (E.data.a) E.data.a.pose = null; },
 },
 

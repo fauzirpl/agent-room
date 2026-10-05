@@ -201,12 +201,12 @@ daftarEvent(
     if (!a) return;
     a.doingEvent = 'menyiram sisa teh';
     a.bawa = 'gelas';
-    a.goToXY(44, 268, 'left');
+    a.goToXY(TANAMAN.siramX, TANAMAN.siramY, 'right');      // pot di pojok kanan bawah (TANAMAN di room.js)
   },
   tick(E) {
     const a = E.aktor[0];
     if (!a || !a.diam) return;
-    pada(E, 3, () => { for (let i = 0; i < 5; i++) spawn('ink', 34, 262, '#8a6844'); a.say('biar subur'); });
+    pada(E, 3, () => { for (let i = 0; i < 5; i++) spawn('ink', TANAMAN.akarX, TANAMAN.akarY, '#8a6844'); a.say('biar subur'); });
     pada(E, 5, () => a.goToXY(pantriX(439), 270, 'up'));       // buang gelas ke tong
     pada(E, 8, () => { a.bawa = null; a.bawaSampai = 0; });
   },

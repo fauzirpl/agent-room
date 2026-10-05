@@ -423,11 +423,13 @@ daftarEvent(
     if (!E.data.taruh) return;
     gambarPayungLipat(54, 270, false);
   },
-  // 273: di depan pejalan lajur bawah, tetap di belakang pot tanaman (sortY
-  // 294) yang berdiri lebih dekat ke penonton. x=54 dipilih supaya payungnya
-  // bersandar DI SEBELAH pot, bukan tersangkut di daunnya (pot + daun memakan
-  // x16..48, lihat drawPlant) — usulan aslinya menaruhnya di x=36, tepat di
-  // tengah tanaman
+  // 273: di depan pejalan lajur bawah, di belakang meja buku tamu (sortY 296)
+  // dan pos satpam (POS_SATPAM) yang berdiri lebih dekat ke penonton. x=54
+  // dulu dipilih supaya payungnya bersandar DI SEBELAH pot tanaman, bukan
+  // tersangkut di daunnya (pot + daun memakan x16..48) — usulan aslinya
+  // menaruhnya di x=36. Potnya sudah pindah ke pojok kanan bawah dan petaknya
+  // jadi pos satpam (meja x5..28), jadi x=54 kini berarti: di pojok pintu
+  // masuk, antara pos jaga dan meja buku tamu, tidak menimpa keduanya.
   sortY: 273,
   gambarAtas(E) {
     // Selagi masih dijinjing, payungnya digambar di lapis ATAS — bukan lewat

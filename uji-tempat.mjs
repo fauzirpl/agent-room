@@ -67,6 +67,13 @@ const PERABOT = [
     tujuanSah: ['pos satpam'],
   },
   {
+    // pot + daun drawPlant: x-2..x+26, y-3..y+36 (dasar pot)
+    nama: 'tanaman pot',
+    kotak: { x: G.TANAMAN.x - 2, y: G.TANAMAN.y - 3, w: 28, h: 39 },
+    pemilik: ['PROPS:drawPlant'],
+    tujuanSah: ['siram tanaman'],
+  },
+  {
     nama: 'pojok baca',
     kotak: { x: G.BACA.x, y: G.BACA.y, w: G.BACA.w, h: G.BACA.h },
     pemilik: ['PROPS:drawPojokBaca', 'gambarKarpetBaca'],
@@ -79,6 +86,12 @@ const PERABOT = [
     dinding: true,                           // di dinding, orang lewat di depannya
   },
 ];
+/* Penggambar yang sah DI MANA SAJA. Bayangan awan menyapu SELURUH lantai (pita
+   tembus pandang 7,5% yang bergeser tiap tick), tapi sapuan tidak menjalankan
+   tick() — E.data.x-nya tetap 0, jadi di sapuan ia tampak membeku di x−42..130
+   dan "menabrak" apa pun yang ditaruh di situ (pos satpam di samping pintu
+   masuk yang pertama kena). Itu bukan perabot yang bertumpuk. */
+const BOLEH_DI_MANA_SAJA = ['EVENT:bayangan-awan-lewat (gambarLantai)'];
 const KONTROL_RAMADAN = { x: 422, y: 74, w: 14, h: 18 };
 const KONTROL_LAJUR = { x: 300, y: 150, w: 10, h: 10 };
 const KONTROL_JENDELA = { x: 210, y: 30, w: 16, h: 10 };
@@ -118,7 +131,7 @@ console.log(tebal('\nPerabot'));
 PERABOT.forEach((p, k) => {
   const { sumber, rute } = siapaDiKotak(hasil, k);
   const { x, y, w, h } = p.kotak;
-  const liar = sumber.filter((s) => !p.pemilik.includes(s.nama));
+  const liar = sumber.filter((s) => !p.pemilik.includes(s.nama) && !BOLEH_DI_MANA_SAJA.includes(s.nama));
   ok(`${p.nama}: cuma dirinya yang menggambar di x${x}..${x + w} y${y}..${y + h}`, liar.length === 0,
     liar.length ? liar.map((s) => `${s.nama} (${s.piksel} px)`).join(', ') : sumber.map((s) => s.nama).join(', '));
   ok(`${p.nama}: gambarnya sendiri benar-benar ada di kotak itu`, sumber.some((s) => p.pemilik.includes(s.nama)),

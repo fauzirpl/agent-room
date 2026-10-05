@@ -899,12 +899,23 @@ perlengkapan dinding pakai `--abaikan-lalu-lintas`: orang yang lewat di depan
 dinding tidak tertutup panel di belakangnya. `gambarAtas` sengaja tidak
 dihitung kecuali `--atas` — isinya cahaya yang memang harus lewat.
 
+Tiap ruas rute ditelusuri **lurus**, persis cara `Agent.update()` melangkah
+(`dx/dist`). Versi awalnya melangkah dengan tanda selisih saja (±1 di kedua
+sumbu), jadi ruas yang tidak tepat 45° melenceng sejauh selisih sumbunya —
+`(88,250)→(86,350)` tercatat menyerong 100 px ke kiri dan "menembus" pojok kiri
+bawah yang sebenarnya sepi. Dua batas lain yang perlu diingat: gerakan tamu
+event yang ditulis tangan (`T.x += 46 * dt`, bukan `goToXY`) tidak tersapu —
+dua tamu yang dulu berjalan di y=288 baru ketahuan dari membaca eventnya waktu
+pos satpam dipindah; dan hook gambar disapu tanpa `tick()`, jadi gambar yang
+posisinya diisi `tick` (bayangan awan, `E.data.x`) tampak membeku di satu tempat.
+
 Sapuan pertama alat ini langsung menemukan satu kesalahan lama: panel MCB
 gelombang 5 menumpuk dengan dekor tema ramadan.
 
 Supaya kesalahan kelas itu tidak lagi bergantung pada kebetulan ada yang
 menjalankan alatnya, `uji-tempat.mjs` (ikut `npm test`) menyapu kotak panel
-MCB, rim kertas, pos satpam, dan pojok baca sekaligus: pemilik pikselnya harus
+MCB, rim kertas, pos satpam, tanaman pot, dan pojok baca sekaligus (bayangan
+awan yang membeku tadi dibolehkan di mana saja): pemilik pikselnya harus
 cuma perabot itu sendiri, dan untuk perabot lantai tidak boleh ada rute yang
 cuma **lewat** — rute yang sah berujung di dalam kotaknya. Kontrol negatifnya
 kotak panel MCB versi pertama, yang harus ketahuan menumpuk dekor ramadan.
@@ -934,10 +945,21 @@ Titik-titik kelilingnya **bukan geometri baru** — dunia `W = 672` tidak
 dilebarkan untuk fitur ini, dan semuanya dipinjam dari yang sudah ada. Yang
 BARU cuma satu, dan datang belakangan: **pos jaganya** (`POS_SATPAM`). Versi
 pertama memulangkan satpam ke ruang tunggu semata karena kantor ini belum
-punya pos; sekarang ada meja jaga di pojok kanan bawah (x643..669 y276..322 —
-buku mutasi jaga, HT, papan POS, kursi lipat). Tempatnya dicari dengan
-`sapu-ruang.mjs` (lihat "Alat sapu ruangan" di bawah): satu-satunya calon di
-pojok itu yang bebas piksel dan bebas rute. Sampai di pos, satpam berjaga
+punya pos; sekarang ada meja jaga di **samping pintu masuk** (x2..28
+y266..312 — buku mutasi jaga, HT, papan POS, kursi lipat): tepat di selatan
+pintu samping kiri di lajur bawah, tempat semua pegawai baru dan tamu masuk,
+bersebelahan dengan meja buku tamu. Versi pertamanya di pojok kanan bawah
+(x643..669 y276..322), satu-satunya kotak bebas yang ditemukan `sapu-ruang.mjs`
+waktu itu; petak di samping pintu dulu ditempati pot tanaman, dan keduanya
+**tukar tempat** — tanaman (`TANAMAN` di `room.js`) kini di pojok kanan bawah,
+yang menyiramnya berdiri di kiri pot menghadap kanan. Letak baru diperiksa
+ulang dengan sapuan berlangkah lurus (lihat "Alat sapu ruangan"): nol rute
+yang cuma lewat. Dua tamu event yang dulu masuk menembus tembok di y=288
+(buku tamu, ruang tunggu) — melintasi titik berdiri penjaga — kini masuk
+lewat pintunya di lajur bawah lalu turun di kolom x=74; tamu pos satpam
+masuk lewat pintu yang sama dan berdiri di samping kanan meja jaga (x35).
+Semua angka gambar 2D, maket 3D, dan event pos diturunkan dari `POS_SATPAM`,
+jadi menggeser pos lagi cukup mengubah satu baris. Sampai di pos, satpam berjaga
 25–45 detik menghadap ruangan sebelum ikut mondar-mandir lagi. Posnya
 punya tiga kejadian sendiri (`public/event/40-pos-satpam.js`): tamu yang
 lapor lalu diputar balik ke loket, laporan ronda malam di buku mutasi, dan
@@ -950,7 +972,7 @@ penjaga yang ketiduran sampai HT-nya berbunyi.
 | ambang pintu gudang | `GUDANG.titikX, GUDANG.titikY` (624,116) | `keGudang()` |
 | depan ruang kadis | `STATIONS.agent.x, 152` (452,152) | ambang `agent` — y digeser dari 140 ke 152 supaya tidak berhimpit dengan sesi nyata yang sedang antre/bekerja tepat di depan pintu |
 | depan pintu pantri | `PANTRI_LUAR, PANTRI.ambang` (500,272) | titik hinge yang sudah dipakai `route()` sendiri buat menembus sekat pantri |
-| pos jaga (pulang) | `POS_SATPAM.titikX, POS_SATPAM.titikY` (658,298) | meja jaga baru — dulu `goTo('idle')`, ruang tunggu |
+| pos jaga (pulang) | `POS_SATPAM.titikX, POS_SATPAM.titikY` (17,288) | meja jaga di samping pintu masuk — dulu `goTo('idle')`, ruang tunggu, lalu pojok kanan bawah (658,298) |
 
 Perannya (`satpam` di `JABATAN`: peci, kumis, seragam khaki-coklat sendiri,
 kerudung `#4a3c1f` buat yang jenis kelaminnya perempuan — lihat "Persona
@@ -2821,9 +2843,10 @@ Yang **masih** beda dari 2D, sengaja dicatat supaya tidak dikira hilang:
   belakang tetap setinggi aslinya, tidak ikut dipotong rendah seperti dinding
   samping;
 - tamu event yang datang atau pergi di lajur tanpa pintu (teknisi AC di lajur
-  atas kiri, tamu buku tamu, tamu pos satpam) memudar di tembok samping yang
-  pejal, dan barang yang dilukis 2D di tangan tamu lewat `gambarAtas` (bukan
-  model) tidak ikut memudar bersamanya.
+  atas kiri) memudar di tembok samping yang pejal — tamu buku tamu, ruang
+  tunggu, dan pos satpam sudah masuk lewat pintu kiri di lajur bawah — dan
+  barang yang dilukis 2D di tangan tamu lewat `gambarAtas` (bukan model) tidak
+  ikut memudar bersamanya.
 
 Waktu per tahap (lukis dinding, lantai, kulit, kartu, susun mesh) bisa dilihat
 dari konsol: `RUANG3D.waktu`. Diukur di mesin penulisnya (150 frame, `SS` 2,

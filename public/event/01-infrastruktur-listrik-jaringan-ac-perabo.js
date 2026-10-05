@@ -373,11 +373,11 @@ daftarEvent(
   tick(E, dt) {
     const a = E.aktor[0];
     if (!a) return;
-    pada(E, 6, () => { a.bawa = 'gelas'; a.goToXY(44, 268, 'left'); });
+    pada(E, 6, () => { a.bawa = 'gelas'; a.goToXY(TANAMAN.siramX, TANAMAN.siramY, 'right'); });   // pot: TANAMAN di room.js
     pada(E, 18, () => a.say('kasihan, kering'));
     if (E.umur > 18 && E.umur < 26) {
       a.pose = 'jongkok';
-      if (Math.random() < 0.25) spawn('drip', 34, 262);
+      if (Math.random() < 0.25) spawn('drip', TANAMAN.akarX, TANAMAN.akarY);
       RUANGAN.tanamanLayu = Math.max(0, RUANGAN.tanamanLayu - dt * 0.14);
     }
     pada(E, 27, () => { a.pose = null; a.bawa = null; });

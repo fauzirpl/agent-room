@@ -24,8 +24,9 @@
    di x185..199, dan itu salah — slotKe(k,23) dari STATIONS.idle.x=282
    menghasilkan 282,305,259,328,236,351,213,374,190,... jadi slot menganggur
    ke-8 jatuh tepat di x=190, di dalam mejanya. Mejanya dipindah ke x52..66,
-   di luar rentang slot yang wajar (167..420), sesudah tanaman (berhenti di
-   x=44) dan di atas papan meja kerja slot cx=86 (baru mulai y=322). */
+   di luar rentang slot yang wajar (167..420), sesudah pos satpam (berhenti di
+   x=28; dulu pot tanaman sampai x=44) dan di atas papan meja kerja slot cx=86
+   (baru mulai y=322). */
 
 daftarEvent(
 
@@ -35,11 +36,13 @@ daftarEvent(
    satu baris tinta yang menetap. */
 {
   id: 'buku-tamu-ditandatangani',
-  // Durasi 24, bukan 34. Adegannya terukur: jalan masuk 1,9 dtk (-14 -> 74
-  // pada 46 px/dtk) + tanda tangan 6 + berdiri kikuk 8 + keluar 2,3 = 18,2
-  // detik. Sisanya dulu event hidup yang tidak menggambar apa pun karena
-  // gambarProp sudah return di T.x < -16. Penjaga selesaiCepat di bawah
-  // yang jadi pengaman sebenarnya; 24 cuma batas atas.
+  // Durasi 24, bukan 34. Adegannya terukur: masuk lewat pintu di lajur bawah
+  // 1,9 dtk (-14 -> 74 pada 46 px/dtk) + turun ke samping meja 0,9 (252 ->
+  // 288 pada 40 px/dtk) + tanda tangan 6 + berdiri kikuk 8 + keluar 3,3
+  // (balik ke kolom 74, naik ke lajur, keluar pintu) = 20,1 detik. Sisanya
+  // dulu event hidup yang tidak menggambar apa pun karena gambarProp sudah
+  // return di T.x < -16. Penjaga selesaiCepat di bawah yang jadi pengaman
+  // sebenarnya; 24 cuma batas atas.
   kelas: 'latar', bobot: B.sedang, cooldown: 720, durasi: 24,
   babak: { malam: 0, libur: 0 },
   // Di-cap 10 supaya bukunya berhenti terisi sebelum barisnya tumpah keluar
@@ -53,7 +56,10 @@ daftarEvent(
     'pemohon-surat-di-loket', 'tamu-dinas-kabupaten', 'rombongan-studi-banding',
   ],
   mulai(E) {
-    E.data.t = { x: -14, y: 288, fase: 'masuk' };
+    // Masuk lewat PINTU MASUK (tepi kiri lajur bawah, ambang berkusen di 3D),
+    // bukan menembus tembok di y=288: garis itu kini melintasi pos satpam
+    // (POS_SATPAM, x2..28 y266..312) tepat di titik berdiri penjaganya.
+    E.data.t = { x: -14, y: LANE_DOWN, fase: 'masuk' };
     E.data.tinta = 0;                 // partikel tinta yang sudah dilepas
     E.data.tambah = 0;                // baris yang sudah ditambahkan, maks 2
   },
@@ -64,8 +70,10 @@ daftarEvent(
       // Berhenti di x=74, DI SAMPING mejanya (x52..66), bukan di atasnya:
       // sosoknya selebar ~10px, jadi di 74 dia berdiri utuh terlihat dan
       // mejanya tetap menutupi tulang keringnya lewat sortY 296 > 292.
-      T.x = Math.min(74, T.x + 46 * dt);
-      if (T.x >= 74) {
+      // Dua ruas siku: menyusur lajur bawah sampai kolom 74, lalu turun.
+      if (T.x < 74) { T.x = Math.min(74, T.x + 46 * dt); return; }
+      T.y = Math.min(288, T.y + 40 * dt);
+      if (T.y >= 288) {
         T.fase = 'tanda';
         // Tenggat MUTLAK disimpan sekali. pada(E, E.umur + 6, ...) tidak
         // akan pernah menyala — pada() itu one-shot pada detik TETAP.
@@ -123,6 +131,12 @@ daftarEvent(
     }
 
     if (T.fase === 'pulang') {
+      // Jalan masuknya dibalik: ke kolom 74, naik ke lajur bawah, keluar pintu.
+      if (T.y > LANE_DOWN) {
+        if (T.x > 74) T.x = Math.max(74, T.x - 46 * dt);
+        else T.y = Math.max(LANE_DOWN, T.y - 40 * dt);
+        return;
+      }
       T.x -= 46 * dt;
       // Begitu tamunya lewat tepi kiri, tidak ada lagi yang tersisa untuk
       // digambar — eventnya mati sekarang, bukan menunggu durasi habis.

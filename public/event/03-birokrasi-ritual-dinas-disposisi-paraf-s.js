@@ -357,17 +357,26 @@ daftarEvent(
     const a = pemeran(E, ['humas']);
     if (!a) return;
     a.doingEvent = 'melayani tamu';
-    E.data.tamu = { x: -14, y: 288, fase: 'masuk' };
+    // Masuk lewat pintu (tepi kiri lajur bawah), baru turun ke y=288 di kolom
+    // 74 (kolom yang sama dengan tamu buku tamu) — melewati pos satpam
+    // (POS_SATPAM) dan meja buku tamu, tidak menembus keduanya; di 3D tembok
+    // kiri cuma berlubang di lajur bawah.
+    E.data.tamu = { x: -14, y: LANE_DOWN, fase: 'masuk' };
     a.goToXY(288, 282, 'right');
   },
   tick(E, dt) {
     const T = E.data.tamu, a = E.aktor[0];
     if (!T || !a) return;
     if (T.fase === 'masuk') {
-      T.x = Math.min(300, T.x + 46 * dt);
+      if (T.x < 74 && T.y < 288) T.x = Math.min(74, T.x + 46 * dt);
+      else if (T.y < 288) T.y = Math.min(288, T.y + 40 * dt);
+      else T.x = Math.min(300, T.x + 46 * dt);
       if (T.x >= 300) T.fase = 'tunggu';
     } else if (T.fase === 'pulang') {
-      T.x -= 46 * dt;
+      // kebalikannya: ke kolom 74, naik ke lajur bawah, keluar pintu
+      if (T.x > 74 && T.y > LANE_DOWN) T.x = Math.max(74, T.x - 46 * dt);
+      else if (T.y > LANE_DOWN) T.y = Math.max(LANE_DOWN, T.y - 40 * dt);
+      else T.x -= 46 * dt;
     } else if (T.fase === 'ikut') {
       T.x += (292 - T.x) * Math.min(1, dt * 1.6);
       T.y += (168 - T.y) * Math.min(1, dt * 1.6);
