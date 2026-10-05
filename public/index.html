@@ -12,8 +12,10 @@
   <section class="stage">
     <div class="stage-inner" id="stageInner">
       <canvas id="room"></canvas>
-      <!-- maket 3D: ruangan yang sama, digambar public/ruang3d.js; tersembunyi di tampilan 2D -->
-      <canvas id="room3d" hidden></canvas>
+      <!-- maket 3D: ruangan yang sama, digambar public/ruang3d.js; tersembunyi di tampilan 2D.
+           Bisa difokus (Tab): selama fokusnya di sini, papan ketik memutar maketnya. -->
+      <canvas id="room3d" hidden tabindex="0" role="application"
+        aria-label="Maket 3D kantor. Panah: putar. Shift dan panah: geser. Plus dan minus: dekat atau jauh. Nol: tampak awal. Kurung siku: lihat dari mata pegawai sebelumnya atau berikutnya. Esc: keluar."></canvas>
       <div class="overlay" id="overlay"></div>
       <!-- kartu detail pegawai; isinya dibangun room.js waktu ada yang diklik -->
       <div class="kartu" id="kartu" hidden></div>
@@ -30,6 +32,7 @@
       <button id="klipingBtn" class="ghost" title="arsip kliping mingguan">🗃️</button>
       <button id="riwayatBtn" class="ghost" title="buku riwayat kantor">📜</button>
       <button id="mejaBtn" class="ghost" title="meja disposisi">📚</button>
+      <button id="jepretBtn" class="ghost" title="jepret foto dokumentasi kegiatan — satu PNG ruangan yang tampak, diunduh peramban ini">📷</button>
     </div>
   </section>
 

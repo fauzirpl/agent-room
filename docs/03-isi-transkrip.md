@@ -205,6 +205,7 @@ Saringan jenis dan pegawai tetap jalan.
 | ⚙️ | buka panel **Pengaturan** — lihat di bawah |
 | 💬 | buka kotak kabar; lencananya jumlah kabar yang belum dibaca |
 | 📚 | buka **meja disposisi**: cari, saring, sematkan, salin kabar; cari di buku agenda |
+| 📷 | jepret **foto dokumentasi kegiatan**: satu PNG bercap tanggal dari ruangan yang tampak (2D/3D), diunduh peramban — lihat [Ruangan → Jepret foto](02-ruangan.md#jepret-foto-dokumentasi-kegiatan) |
 
 Lima setelan yang dulu masing-masing punya tombol sendiri di bilah ini sekarang
 digabung ke satu panel **Pengaturan** (⚙️), supaya tidak perlu menghafal lima

@@ -125,6 +125,24 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
 .pov-3d .pov-keluar:hover, .pov-3d .pov-pindah:hover { background: rgba(255, 255, 255, .18); }
 @media (max-width: 640px) { .pov-3d .pov-kunci { display: none; } }
 
+/* Kenyamanan kamera 3D. Petunjuk kendali boleh membungkus: satu baris
+   ±125 huruf mono 11px lebih lebar dari panggung HP (dan laptop 1024px
+   berpanel), dan yang nowrap terpotong di kedua sisi. max-content + max-width
+   = tetap sebaris selama muat, membungkus begitu tidak. Tombol ⟲ tampak awal
+   di pojok kanan atas — tepi bawah milik petunjuk & pita POV. Kanvas yang
+   difokus lewat Tab bergaris emas di DALAM tepinya (kanvasnya sepenuh
+   panggung, garis di luar akan terpotong). */
+.petunjuk-3d { white-space: normal; width: max-content; max-width: calc(100% - 32px); text-align: center; }
+.awal-3d {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  font: 11px/1.4 var(--mono); color: var(--khaki-muda); cursor: pointer;
+  background: rgba(20, 15, 10, .72); border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 12px; padding: 3px 10px;
+}
+.awal-3d:hover { background: rgba(20, 15, 10, .9); color: #f6ecd0; }
+.awal-3d[hidden], body:not(.tampil-3d) .awal-3d { display: none; }
+#room3d:focus-visible { outline: 2px solid var(--emas); outline-offset: -3px; }
+
 /* Pantauan CCTV 3D (kartu Kamera CCTV Kubah → "lihat dari CCTV"): kamera di
    lensa kubah, rupanya monitor pos satpam — maket hitam-putih kontras, garis
    pindai, cap kamera & jam berjalan. Kanvasnya di-clear transparan, jadi
@@ -301,6 +319,16 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
   border-radius: 4px; padding: 2px 7px; cursor: pointer; font: inherit; font-size: 11px;
 }
 .ghost:hover { color: var(--krem); border-color: #8a7048; }
+
+/* Jepret foto dokumentasi (tombol 📷, jepretKlik() di room.js): kilat rana
+   sekejap di atas panggung — cuma DOM, tidak pernah ikut ke fotonya. Rupa
+   diamnya tak terlihat (opacity 0), jadi gerak dikurangi (animation: none)
+   berarti tanpa kilat, bukan panggung yang memutih. */
+.stage-inner.jepret::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: #fff; opacity: 0; animation: jepretKilat .35s ease-out;
+}
+@keyframes jepretKilat { from { opacity: .55; } to { opacity: 0; } }
 
 /* ---------- panel ---------- */
 .panel {
@@ -702,6 +730,33 @@ body:not(.tampil-3d) .petunjuk-3d { display: none; }
 .kartu-riwayat .t { color: var(--tinta-samar); font-size: 9px; flex: none; }
 .kartu-riwayat li.err span:last-child { color: var(--merah); }
 .kartu-riwayat li.kosong { color: var(--tinta-pudar); font-style: italic; }
+
+/* ---------- papan nama melayang (room.js: papanTunjuk) ----------
+   Muncul waktu kursor tetikus melintas di atas barang atau orang, sebelum
+   apa pun diklik. Barang = stiker inventaris yang ditempel di perabot milik
+   negara: kop kecil MILIK NEGARA, nama, kode barang & NUP. Orang = papan nama
+   akrilik hitam di dada seragam, sekeluarga dengan .jab di baris kru: nama
+   kapital putih, jabatan emas di bawahnya. Strip kiri = warna chip kartunya
+   (emas untuk barang, warna jabatan untuk orang). Tembus klik, dan di bawah
+   #kartu (z-index 3) supaya tidak pernah menutupi yang sedang dibaca.
+   left/top = pojok kiri-atasnya, dihitung room.js tiap frame. */
+.papan-tunjuk {
+  position: absolute; z-index: 2; pointer-events: none;
+  max-width: 210px; padding: 2px 7px 3px 6px;
+  border: 1px solid; border-left: 3px solid var(--pt-warna, var(--emas)); border-radius: 2px;
+  line-height: 1.3; box-shadow: 0 5px 12px -5px #000c;
+  animation: papanMuncul .14s ease-out;
+}
+.papan-tunjuk > * { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.papan-tunjuk.pt-barang { background: var(--krem); border-color: var(--khaki-tua); color: var(--tinta); }
+.pt-barang .pt-kop { font-size: 7.5px; letter-spacing: .16em; color: var(--navy); font-weight: 700; }
+.pt-barang .pt-nama { font-size: 10.5px; }
+.pt-barang .pt-sub { font-size: 9px; color: var(--tinta-pudar); letter-spacing: .02em; }
+.papan-tunjuk.pt-orang { background: var(--hitam-papan); border-color: #3a3128; color: #efe8d5; }
+.pt-orang .pt-nama { font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase; }
+.pt-orang .pt-sub { font-size: 8.5px; color: var(--emas); letter-spacing: .03em; }
+@keyframes papanMuncul { from { opacity: 0; transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { .papan-tunjuk { animation: none; } }
 
 .kendali-mati code {
   display: block; margin-top: 6px; padding: 5px 7px;

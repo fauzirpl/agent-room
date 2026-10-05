@@ -279,7 +279,10 @@ function buatKanvasPalsu(ctx, dummy) {
     width: 0, height: 0, style: {},
     getContext: (jenis) => (jenis === '2d' ? ctx : null),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: kv.width, height: kv.height, right: kv.width, bottom: kv.height }),
-    addEventListener() {}, removeEventListener() {},
+    // pendengar dicatat per jenis, bukan dibuang: uji bisa memanggil handler
+    // kanvas 2D yang sungguhan (ctx.__ctxPalsu.canvas.dengar.mousemove dst.)
+    dengar: {},
+    addEventListener(jenis, fn) { (kv.dengar[jenis] = kv.dengar[jenis] || []).push(fn); }, removeEventListener() {},
     toDataURL: () => '', toBlob() {},
   };
   ctx.canvas = kv;
@@ -392,8 +395,14 @@ export function bacaEventAcak() {
   return manifest.berkas.map((n) => fs.readFileSync(path.join(EVENT_ACAK_DIR, n), 'utf8')).join('');
 }
 
-export function muatKonteks() {
+/* `global` (opsional): nama sungguhan yang dipasang di sandbox SEBELUM room.js
+ * jalan, untuk yang dibaca room.js sekali waktu dimuat — mis. matchMedia:
+ * `geraKurang` dipegang sejak awal, dan dummy-nya selalu "gerak dikurangi"
+ * (`.matches` truthy), jadi cabang gerak penuh tidak pernah teruji tanpa ini.
+ * Tanpa argumen: persis seperti sebelumnya. */
+export function muatKonteks({ global: tambahan = null } = {}) {
   const sandbox = buatSandbox();
+  if (tambahan) Object.assign(sandbox, tambahan);
   const ctx = vm.createContext(sandbox);
   const roomSrc = fs.readFileSync(ROOM_JS, 'utf8');
   const eventSrc = bacaEventAcak();

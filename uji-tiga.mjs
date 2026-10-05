@@ -188,6 +188,46 @@
 //      (spandukTema), bukan daftar id di ruang3d.js: spanduk hari nasional
 //      (Hari Pahlawan, Sumpah Pemuda, Kesaktian Pancasila) berkain persis
 //      sebanyak spanduk HUT KORPRI, tanpa tema tidak ada kain.
+//  32. kenyamanan kamera: getar layar MOD.getar (genset, gempa, hentakan tamu)
+//      diam waktu prefers-reduced-motion — 2D (translate di antara setTransform
+//      kamera dan drawWall, room.js dimuat dengan matchMedia sungguhan) dan 3D
+//      (mata kamera maket), kontrol: tanpa gerak dikurangi tetap bergetar;
+//      petunjuk & judul tombol 3D versi jari di pointer: coarse, versi tetikus
+//      di luar itu, versi papan ketik waktu kanvas difokus lewat Tab (bukan
+//      klik); tombol "⟲ tampak awal" muncul cuma kalau sudut, pitch, zoom, atau
+//      sasaran bergeser dan tidak selama POV / 2D, mengembalikan semuanya (versi
+//      lunak ikut), menyerahkan fokus ke kanvas, dan dihitung memegang maket
+//      seperti klik dua kali (sinematik tertahan); papan ketik di kanvas yang
+//      difokus — panah memutar, shift+panah menggeser, + − dekat–jauh, 0 tampak
+//      awal, [ ] pindah mata (POV: menoleh, lebar pandang, lirikan semula) —
+//      dengan preventDefault, dan diam (tanpa preventDefault) waktu fokus di
+//      kolom isian, dialog terbuka, Ctrl/Cmd/Alt (kecuali AltGr), atau 2D;
+//      kanvasnya ber-tabindex & aria-label, petunjuknya boleh membungkus, dan
+//      tombolnya di pojok atas (tepi bawah milik petunjuk & pita POV).
+//  33. jepret foto dokumentasi kegiatan (tombol 📷): klik cuma memasang
+//      permintaan, frame() berikutnya memotret TEPAT sesudah TIGA.gambar di
+//      task yang sama (WebGL2 tanpa preserveDrawingBuffer) — kanvas #room3d
+//      seukuran pikselnya, di atas latar panel kayu (--kayu/--kayu-tua
+//      style.css) yang diisi LEBIH DULU; pantauan CCTV berlatar & berfilter
+//      #room3d.cctv; 2D dari #room sesudah gambar 2D terakhir; cap "DOKUMENTASI
+//      KEGIATAN · DINAS AI KLOD · <tanggal> <jam>" di pita di bawah foto;
+//      dokumentasi-kegiatan-YYYYMMDD-HHMM.png lewat toBlob + URL objek +
+//      <a download> yang dicabut sesudahnya; satu klik = satu foto (tidak
+//      diulang, klik ganda & klik dalam jeda rana diabaikan); toBlob yang
+//      melempar tidak membekukan ruangan; tanpa rekaman/unggah.
+//  34. papan nama melayang: kursor tetikus di atas barang memunculkan stiker
+//      BMN (kop, nama, kode · NUP; barang habis pakai tanpa NUP), di atas
+//      orang papan nama dada (namaTampil di-escape + jabatan) — tanpa klik,
+//      di 2D (handler mousemove kanvas sungguhan) dan 3D (hover() yang
+//      dijepit 50 ms), dari satu pembangun: isi & kelasnya identik, cuma
+//      penempatnya beda (keLayar jalur kanvas vs proyeksi kotak pilih 3D).
+//      Letaknya di bawah bingkai bendanya, di tengah, ukurannya diukur
+//      selagi tampil; ikut kamera tiap frame (frame() → taruhPapanTunjuk);
+//      pindah ke atas kalau tempatnya tertutup balon, tidak tampil kalau dua
+//      sisinya tertutup. Turun: kursor keluar kanvas, ketukan jari, tombol
+//      ditekan / maket diseret, POV, kartu benda itu sendiri terbuka, orang
+//      pulang / masuk WC / lenyap di ambang, benda di luar bidikan kamera.
+//      CSS: tembus klik, di bawah #kartu, tanpa animasi saat gerak dikurangi.
 //
 // Pakai:
 //   node uji-tiga.mjs
@@ -4136,6 +4176,959 @@ const ringkas = (ps) => ps.length + ' titik, alfa ' + [...new Set(ps.map((p) => 
     `korpri ${n.korpri}, tanpa tema ${n.null}; ${log.join(' | ')}`);
   cek(['hari-pahlawan', 'sumpah-pemuda', 'kesaktian-pancasila'].every((t) => n[t] === n.korpri),
     '3D spanduk: spanduk hari nasional berkain persis sebanyak HUT KORPRI', JSON.stringify(n));
+}
+
+// ------------------------------------------------------------------ 32
+/* Kenyamanan kamera. 2D: matchMedia sandbox uji-event.mjs itu dummy yang
+   .matches-nya truthy (selalu "gerak dikurangi"), jadi room.js dimuat dengan
+   matchMedia sungguhan lewat muatKonteks({ global }) — sekali gerak penuh
+   (kontrol), sekali gerak dikurangi. MOD di-reset tiap frame, jadi getarnya
+   dipasang lewat defineProperty; yang dicari: translate di ctx ruangan di
+   antara setTransform kamera dan drawWall frame itu. 3D: ruang3d.js di atas
+   WebGL2 palsu dengan elemen DOM palsu (seperti 24: mengingat hidden, teks,
+   kelas, pendengar; document.addEventListener, activeElement, querySelector
+   dialog dicatat/diatur dari sini) dan empat nama room.js dibayangi (seperti
+   26): stageInner, ringanAktif, matchMedia — reduced-motion & pointer: coarse
+   dari sakelar `kendali`, dibaca hidup — dan kameraSinematikBoleh. */
+{
+  console.log(tebal('\n3D: kenyamanan kamera — getar & gerak dikurangi, petunjuk sentuh, tombol tampak awal, papan ketik'));
+
+  // --- getar 2D
+  const getar2D = (gerakKurang) => {
+    const media = (q) => ({ matches: gerakKurang && /reduced-motion/.test(q), addEventListener() {}, removeEventListener() {} });
+    const ctx = muatKonteks({ global: { matchMedia: media } });
+    ctx.__ctxPalsu.__kendali.ketat = false;
+    const P = ctx.__ctxPalsu, jejak = [];
+    for (const m of ['setTransform', 'translate']) {
+      const asli = P[m];
+      P[m] = function (...a) { jejak.push(m); return asli.apply(this, a); };
+    }
+    ctx.__jejak32 = jejak;
+    jalankan(ctx, `globalThis.__getar32 = 0; globalThis.__dinding32 = drawWall;
+      drawWall = function () { __jejak32.push('dinding'); return __dinding32(); };
+      Object.defineProperty(MOD, 'getar', { get: () => __getar32, set() {}, configurable: true });`);
+    const hasil = {};
+    for (const g of [0, 1.4]) {
+      jejak.length = 0;
+      ctx.__getar32 = g;
+      const log = konsol(() => jalankan(ctx, 'frame(performance.now() + 16)'));
+      const i = jejak.indexOf('dinding'), j = jejak.lastIndexOf('setTransform', i);
+      hasil[g] = { gambar: i > 0 && j >= 0 && !log.length, geser: jejak.slice(j + 1, i).includes('translate'), log };
+    }
+    hasil.ringan = jalankan(ctx, 'ringanAktif()');
+    return hasil;
+  };
+  const penuh2D = getar2D(false), kurang2D = getar2D(true);
+  cek(penuh2D[0].gambar && penuh2D[1.4].gambar && !penuh2D.ringan && penuh2D[1.4].geser && !penuh2D[0].geser,
+    'kontrol 2D: tanpa gerak dikurangi MOD.getar menggeser kanvas ruangan (translate sesudah setTransform kamera), getar 0 tidak',
+    JSON.stringify(penuh2D));
+  cek(kurang2D[1.4].gambar && !kurang2D[1.4].geser,
+    '2D: prefers-reduced-motion — MOD.getar tidak menggeser kanvas ruangan sama sekali', JSON.stringify(kurang2D));
+
+  // --- ruang3d.js dengan DOM palsu
+  const elemen = (tag) => {
+    const kelas = new Set(), dengar = {}, anak = [], pilih = new Map();
+    const el = {
+      tag, tagName: String(tag).toUpperCase(), hidden: false, className: '', textContent: '', innerHTML: '', title: '', type: '', style: {},
+      onclick: null, kelas, anak, dengar,
+      classList: {
+        add: (...k) => k.forEach((x) => kelas.add(x)), remove: (...k) => k.forEach((x) => kelas.delete(x)), contains: (k) => kelas.has(k),
+        toggle: (k, v) => { const ya = v === undefined ? !kelas.has(k) : !!v; if (ya) kelas.add(k); else kelas.delete(k); return ya; },
+      },
+      addEventListener(j, fn) { (dengar[j] = dengar[j] || []).push(fn); },
+      appendChild(c) { anak.push(c); return c; },
+      setAttribute() {},
+      querySelector(p) { if (!pilih.has(p)) pilih.set(p, elemen(p)); return pilih.get(p); },
+      klik() { if (el.onclick) el.onclick({ type: 'click' }); for (const fn of dengar.click || []) fn({ type: 'click' }); },
+    };
+    return el;
+  };
+  function muat32(awal = {}) {
+    const ctx = muatKonteks();
+    const H = ctx.__jembatan__;
+    ctx.__ctxPalsu.__kendali.ketat = false;
+    Object.assign(ctx, { WeakMap, Proxy, Uint32Array, Uint8Array, Infinity, NaN, undefined });
+    jalankan(ctx, 'globalThis.window = globalThis; globalThis.devicePixelRatio = 1');
+    const tombolBaru = [], divBaru = [], dengarDok = {}, dialog = { buka: false };
+    const buatAsli = ctx.document.createElement;
+    ctx.document.createElement = (tag) => {
+      if (String(tag).toLowerCase() === 'canvas') return buatAsli(tag);
+      const el = elemen(tag);
+      (tag === 'button' ? tombolBaru : divBaru).push(el);
+      return el;
+    };
+    ctx.document.addEventListener = (j, fn) => { (dengarDok[j] = dengarDok[j] || []).push(fn); };
+    ctx.document.querySelector = (q) => (dialog.buka && /\.dlg-latar:not\(\[hidden\]\)/.test(q) ? elemen('div') : null);
+    ctx.document.activeElement = null;
+    const pendengar = pasang3D(ctx, glPalsu());
+    const kanvas = ctx.document.getElementById('room3d'), kk = elemen('canvas');
+    Object.assign(kanvas, { classList: kk.classList, kelas: kk.kelas, fokusTerlihat: false,
+      matches: (s) => s === ':focus-visible' && kanvas.fokusTerlihat,
+      focus() { ctx.document.activeElement = kanvas; } });
+    const tombol3D = ctx.document.getElementById('tampilanBtn');
+    const cariAsli = ctx.document.getElementById;
+    ctx.document.getElementById = (id) => (id === 'kartuAksi' ? elemen('div') : cariAsli(id));
+    const kendali = { gerakKurang: true, kasar: false, ...awal };
+    ctx.__k32 = {
+      panggung: { clientWidth: 800, clientHeight: 450, appendChild() {} }, ringan: () => false,
+      media: (q) => ({
+        get matches() { return /reduced-motion/.test(q) ? kendali.gerakKurang : /pointer: coarse/.test(q) ? kendali.kasar : false; },
+        addEventListener() {},
+      }),
+      sinematik: () => !kendali.gerakKurang,
+    };
+    const galat = [];
+    const diam = (fn) => { galat.push(...konsol(fn)); };
+    diam(() => jalankan(ctx, '((stageInner, ringanAktif, matchMedia, kameraSinematikBoleh) => {\n' + SRC_3D
+      + '\n})(__k32.panggung, __k32.ringan, __k32.media, __k32.sinematik)'));
+    resetRuangan(ctx, buatPristine(ctx));
+    buatS(ctx, { jam: 10.5, hujan: 0, petir: false, ramai: false });
+    H.eventHidup.length = 0;
+    jalankan(ctx, `renderCrew = () => {}; muatBukuInduk = () => {};
+      agents.clear(); peserta.length = 0; standby.length = 0; terpilih = null; barangTerpilih = null;`);
+    const vm32 = (src) => { let r; diam(() => { r = jalankan(ctx, src); }); return r; };
+    // n tick kamera 3D (+ satu gambar), jam ruangan maju `maju` ms sebelum tiap tick
+    const tick = (n = 1, maju = 0, dt = 0.016) => diam(() => {
+      for (let i = 0; i < n; i++) jalankan(ctx, `now += ${maju}; TIGA.kamera(${dt}); TIGA.gambar(new Set())`);
+    });
+    return {
+      ctx, H, kendali, dialog, kanvas, tombol3D, pendengar, dengarDok, galat, vm32, tick, KAM: jalankan(ctx, 'RUANG3D.kamera'),
+      awal: tombolBaru.find((t) => t.className === 'awal-3d'),
+      petunjuk: divBaru.find((d) => d.className === 'petunjuk-3d'), hud: divBaru.find((d) => d.className === 'pov-3d'),
+    };
+  }
+  const U = muat32();
+  const { KAM, awal: tAwal, petunjuk, hud, kanvas, kendali, vm32, tick } = U;
+  const SASARAN0 = [...KAM.sasaran];
+  const tetikus = { petunjuk: petunjuk && petunjuk.textContent, judul: U.tombol3D.title };   // pointer: fine, sesudah dimuat
+  cek(jalankan(U.ctx, 'TIGA.aktif === true') && tAwal && petunjuk && hud && !U.galat.length,
+    'WebGL2 palsu: ruang3d.js menyala dengan elemen palsu — tombol ⟲ tampak awal, petunjuk, dan pita POV dibuat', U.galat.join(' | '));
+  const orang = (id, sifat) => {
+    const o = Object.assign(buatSatuOrang(U.ctx), { id, phase: 0, path: [], riwayat: [], perStasiun: {}, sejak: 0, calls: 0 }, sifat);
+    U.H.agents.set(id, o);
+    return o;
+  };
+  orang('uji-a', { x: 100, y: 300 });
+  orang('uji-b', { x: 250, y: 260 });
+  const kira = (a, b, e = 1e-6) => Math.abs(a - b) < e;
+  const diAwal = () => kira(KAM.yaw, 0) && kira(KAM.pitch, 0.7) && kira(KAM.zoom, 1) && KAM.sasaran.every((v, i) => kira(v, SASARAN0[i]));
+  const lunakDiAwal = () => kira(KAM.yawK, 0) && kira(KAM.pitchK, 0.7) && KAM.sasaranK.every((v, i) => kira(v, SASARAN0[i]));
+  const sudutTeks = () => `yaw ${KAM.yaw.toFixed(3)}, pitch ${KAM.pitch.toFixed(3)}, zoom ${KAM.zoom.toFixed(3)}, sasaran ${KAM.sasaran.map((v) => v.toFixed(1))}`;
+  const kunci = (e) => { for (const fn of U.dengarDok.keydown || []) fn(e); return e; };
+  const ketik = (key, opsi = {}) => {
+    const e = { type: 'keydown', key, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, isComposing: false,
+      defaultPrevented: false, target: U.ctx.document.activeElement, dicegah: false,
+      getModifierState: (m) => m === 'AltGraph' && !!opsi.altGr,
+      preventDefault() { e.defaultPrevented = true; e.dicegah = true; }, ...opsi };
+    return kunci(e);
+  };
+  const jari = (jenis, e = {}) => {
+    for (const fn of U.pendengar[jenis] || []) {
+      fn({ type: jenis, pointerId: 1, clientX: 0, clientY: 0, button: 0, pointerType: 'mouse', shiftKey: false, ctrlKey: false,
+        deltaY: 0, preventDefault() {}, ...e });
+    }
+  };
+  const seret = (dx) => {
+    jari('pointerdown', { clientX: 400, clientY: 225 });
+    jari('pointermove', { clientX: 400 + dx, clientY: 225 });
+    jari('pointerup', { clientX: 400 + dx, clientY: 225 });
+  };
+
+  // --- getar 3D: mata kamera maket di jam yang sama, getar 1,4 vs 0
+  const mataGetar = (g) => { U.H.MOD.getar = g; tick(1, 0, 1); return KAM.mata[1]; };
+  vm32('now = 40 * (Math.PI / 2 + 2 * Math.PI * 30)');            // sin(now / 40) = 1
+  const getar3D = {};
+  for (const gk of [false, true]) {
+    kendali.gerakKurang = gk;
+    tick(3, 0, 1);
+    const tenang = mataGetar(0), goyang = mataGetar(1.4);
+    getar3D[gk ? 'kurang' : 'penuh'] = goyang - tenang;
+  }
+  U.H.MOD.getar = 0;
+  kendali.gerakKurang = true;
+  cek(Math.abs(getar3D.penuh - 1.4 * 0.9) < 1e-3, 'kontrol 3D: tanpa gerak dikurangi MOD.getar mengangkat mata kamera maket (1,4 x 0,9)',
+    'selisih ' + getar3D.penuh);
+  cek(Math.abs(getar3D.kurang) < 1e-9, '3D: prefers-reduced-motion — MOD.getar tidak menggoyang kamera maket', 'selisih ' + getar3D.kurang);
+
+  // --- tombol ⟲ tampak awal: muncul kalau sudut/zoom/sasaran bergeser, mengembalikan semuanya
+  tick(2);
+  const awalSembunyi = tAwal.hidden;
+  const geser = [
+    ['yaw', () => { KAM.yaw += 0.2; }],
+    ['pitch', () => { KAM.pitch += 0.1; }],
+    ['zoom', () => { KAM.zoom = 1.6; }],
+    ['sasaran', () => { KAM.sasaran[0] += 30; }],
+  ];
+  for (const [apa, ubah] of geser) {
+    ubah();
+    tick(1);
+    const tampak = !tAwal.hidden;
+    tAwal.klik();
+    const pulang = diAwal(), langsung = tAwal.hidden;
+    tick(1);
+    cek(tampak && pulang && langsung && tAwal.hidden && lunakDiAwal(),
+      `tombol ⟲: ${apa} bergeser — tombolnya muncul, kliknya mengembalikan sudut/zoom/sasaran (dan versi lunaknya) ke tampak awal, tombolnya lenyap`,
+      `muncul ${tampak}, pulang ${pulang} (${sudutTeks()}), lenyap ${langsung}/${tAwal.hidden}, lunak ${lunakDiAwal()}`);
+  }
+  cek(awalSembunyi, 'tombol ⟲: di tampak awal tidak ada (kamera belum disentuh)');
+  seret(40);
+  tick(1);
+  const sesudahSeret = !tAwal.hidden;
+  U.vm32('TIGA.pov(agents.get("uji-a"))');
+  tick(1);
+  const diPov = tAwal.hidden && !hud.hidden;
+  kunci({ key: 'Escape' });
+  tick(1);
+  const pulangPov = !tAwal.hidden && hud.hidden;
+  U.vm32('RUANG3D.pilih(false)');
+  const di2D = tAwal.hidden;
+  U.vm32('RUANG3D.pilih(true)');
+  tick(1);
+  const balik3D = !tAwal.hidden;
+  cek(sesudahSeret && diPov && pulangPov && di2D && balik3D,
+    'tombol ⟲: muncul sesudah seret sungguhan, tersembunyi selama POV dan di 2D, muncul lagi sesudahnya (kamera masih bergeser)',
+    `seret ${sesudahSeret}, POV ${diPov}, Esc ${pulangPov}, 2D ${di2D}, 3D lagi ${balik3D}`);
+  U.ctx.document.activeElement = tAwal;                          // Tab ke tombolnya, lalu Enter
+  tAwal.klik();
+  const fokusKanvas = U.ctx.document.activeElement === kanvas;
+  KAM.yaw = 0.3; tick(1);
+  const lain = elemen('input');
+  U.ctx.document.activeElement = lain;                           // diklik tetikus: fokusnya bukan di tombol
+  tAwal.klik();
+  cek(fokusKanvas && U.ctx.document.activeElement === lain && diAwal(),
+    'tombol ⟲ dari papan ketik: fokusnya diserahkan ke kanvas maket, bukan jatuh ke <body> (kontrol: fokus di tempat lain tidak direbut)');
+
+  // --- papan ketik di kanvas yang difokus
+  U.ctx.document.activeElement = kanvas;
+  tick(1);
+  const langkah = [];
+  const catat = (ket, e, syarat) => langkah.push([ket, e.dicegah && syarat, `${ket}: dicegah ${e.dicegah}, ${sudutTeks()}`]);
+  catat('→', ketik('ArrowRight'), kira(KAM.yaw, -0.1) && kira(KAM.pitch, 0.7));
+  catat('←', ketik('ArrowLeft'), kira(KAM.yaw, 0));
+  catat('↓', ketik('ArrowDown'), kira(KAM.pitch, 0.76) && kira(KAM.yaw, 0));
+  catat('↑', ketik('ArrowUp'), kira(KAM.pitch, 0.7));
+  catat('+', ketik('+'), kira(KAM.zoom, 1.15));
+  catat('=', ketik('='), kira(KAM.zoom, 1.15 * 1.15));
+  catat('-', ketik('-'), kira(KAM.zoom, 1.15));
+  const s0 = [...KAM.sasaran];
+  catat('shift+→', ketik('ArrowRight', { shiftKey: true }), kira(KAM.yaw, 0) && KAM.sasaran[0] < s0[0] - 1);
+  catat('0', ketik('0'), diAwal());
+  const gagalKetik = langkah.filter(([, ok]) => !ok);
+  cek(!gagalKetik.length, 'papan ketik: panah memutar (seperti menyeret ke arah itu), shift+panah menggeser, + = − dekat–jauh, 0 tampak awal — semuanya preventDefault',
+    gagalKetik.map(([, , ket]) => ket).join(' | '));
+  ketik('ArrowRight');
+  tick(1);
+  const tampakKetik = !tAwal.hidden;
+  const huruf = ketik('a');
+  cek(tampakKetik && !huruf.dicegah && kira(KAM.yaw, -0.1), 'papan ketik: tombol lain dibiarkan (tanpa preventDefault, kamera diam); geseran papan ketik memunculkan ⟲');
+
+  const diamKetik = [];
+  const harusDiam = (ket, e) => diamKetik.push([ket, !e.dicegah && kira(KAM.yaw, -0.1) && kira(KAM.zoom, 1), `${ket}: dicegah ${e.dicegah}, ${sudutTeks()}`]);
+  harusDiam('Ctrl+0', ketik('0', { ctrlKey: true }));
+  harusDiam('Ctrl++', ketik('+', { ctrlKey: true }));
+  harusDiam('Cmd+−', ketik('-', { metaKey: true }));
+  harusDiam('Alt+←', ketik('ArrowLeft', { altKey: true }));
+  for (const tag of ['input', 'textarea', 'select']) {
+    U.ctx.document.activeElement = elemen(tag);
+    harusDiam(`fokus di <${tag}>`, ketik('ArrowLeft'));
+  }
+  U.ctx.document.activeElement = kanvas;
+  U.dialog.buka = true;
+  harusDiam('dialog terbuka', ketik('ArrowLeft'));
+  harusDiam('dialog terbuka, 0', ketik('0'));
+  U.dialog.buka = false;
+  U.vm32('RUANG3D.pilih(false)');
+  harusDiam('tampilan 2D', ketik('ArrowLeft'));
+  U.vm32('RUANG3D.pilih(true)');
+  const gagalDiam = diamKetik.filter(([, ok]) => !ok);
+  cek(!gagalDiam.length, `papan ketik diam tanpa preventDefault: Ctrl/Cmd/Alt (zoom halaman tetap milik peramban), fokus di input/textarea/select, dialog terbuka, 2D (${diamKetik.length} kasus)`,
+    gagalDiam.map(([, , ket]) => ket).join(' | '));
+  const lewat = ketik('ArrowLeft');
+  cek(lewat.dicegah && kira(KAM.yaw, 0), 'kontrol: fokus kembali di kanvas, dialog tertutup, 3D — panah jalan lagi', sudutTeks());
+
+  // --- papan ketik di POV: [ ] pindah mata, panah menoleh, + − lebar pandang, 0 lirikan semula
+  const fov = () => 2 * Math.atan(1 / KAM.p[5]) * 180 / Math.PI;
+  const arah = () => [-KAM.v[2], -KAM.v[6], -KAM.v[10]];
+  const sudutAntara = (d, e) => Math.acos(Math.max(-1, Math.min(1, (d[0] * e[0] + d[1] * e[1] + d[2] * e[2]) / Math.hypot(...d) / Math.hypot(...e))));
+  const siapa = () => jalankan(U.ctx, 'terpilih && terpilih.id');
+  const jejakMata = [];
+  for (const k of [']', ']', '[']) {
+    const e = ketik(k);
+    tick(1);
+    jejakMata.push(siapa() + (e.dicegah && !hud.hidden ? '' : '(!)'));
+  }
+  cek(jejakMata.join(' ') === 'uji-a uji-b uji-a', '[ ]: dari maket ] masuk ke mata pegawai pertama, lalu ] / [ berpindah seperti › ‹ di pita (preventDefault)',
+    jejakMata.join(' '));
+  const yawMaket = KAM.yaw, zoomMaket = KAM.zoom, fov0 = fov(), arah0 = arah();
+  const eKanan = ketik('ArrowRight');
+  tick(1);
+  const menoleh = sudutAntara(arah0, arah());
+  ketik('+'); tick(1);
+  const fovDekat = fov();
+  ketik('-'); ketik('-'); tick(1);
+  const fovJauh = fov();
+  ketik('0'); tick(1);
+  const fovPulang = fov(), lirikPulang = sudutAntara(arah0, arah());
+  cek(eKanan.dicegah && menoleh > 0.05 && kira(fov0, 58, 0.01) && fovDekat < fov0 - 5 && fovJauh > fov0 + 5
+    && kira(fovPulang, 58, 0.01) && lirikPulang < 1e-3 && KAM.yaw === yawMaket && KAM.zoom === zoomMaket,
+  'POV: panah menoleh, + menyempitkan / − melebarkan pandang, 0 kembali ke lirikan & lebar pandang semula — maketnya tidak disentuh',
+  `menoleh ${menoleh.toFixed(3)} rad, fov ${fov0.toFixed(1)} → + ${fovDekat.toFixed(1)} → −− ${fovJauh.toFixed(1)} → 0 ${fovPulang.toFixed(1)}°, `
+    + `lirikan sisa ${lirikPulang.toFixed(4)}, maket yaw ${KAM.yaw}/${yawMaket}, zoom ${KAM.zoom}/${zoomMaket}`);
+  const altGr = ketik(']', { ctrlKey: true, altKey: true, altGr: true });
+  tick(1);
+  const sesudahAltGr = siapa();
+  const ctrlKurung = ketik(']', { ctrlKey: true });
+  tick(1);
+  cek(altGr.dicegah && sesudahAltGr === 'uji-b' && !ctrlKurung.dicegah && siapa() === 'uji-b',
+    'AltGr (Ctrl+Alt bertanda AltGraph — kurung siku papan ketik Eropa) tetap lewat; Ctrl+] biasa tidak',
+    `AltGr: ${sesudahAltGr}, dicegah ${altGr.dicegah}; Ctrl+]: ${siapa()}, dicegah ${ctrlKurung.dicegah}`);
+  kunci({ key: 'Escape' });
+  tick(1);
+
+  // --- tombol ⟲ & 0 dihitung memegang maket: sinematik tertahan 10 dtk sejak tekannya, bukan sejak seret terakhir
+  const RUTE = JSON.parse(jalankan(U.ctx, 'JSON.stringify(KAMERA_RUTE)')), iServer = RUTE.indexOf('server');
+  const singgah = () => vm32(`(() => {
+    const s = STATIONS[KAMERA_RUTE[${iServer}]];
+    Object.assign(KAMERA, { mode: 'sinematik', sinematikIdx: ${iServer}, sinematikSejak: now, targetX: s.x, targetY: s.y - 12, targetZoom: 2 });
+  })()`);
+  const sudutK = () => [KAM.yawK, KAM.pitchK];
+  const diSudutAwal = ([y, p]) => Math.abs(y) < 1e-3 && Math.abs(p - 0.7) < 1e-3;
+  kendali.gerakKurang = false;
+  for (const [ket, tekan] of [['tombol ⟲', () => tAwal.klik()], ['0 di papan ketik', () => ketik('0')]]) {
+    vm32('now += 20000');
+    singgah();
+    tick(2, 1250, 1);
+    seret(30);                                     // penonton memegang maket di t0
+    tick(1, 0, 1);
+    const munculSaatSinematik = !tAwal.hidden;
+    tick(4, 2000, 1);                              // t0 + 8 dtk: masih tertahan oleh seretnya
+    U.ctx.document.activeElement = kanvas;
+    tekan();                                       // tampak awal di t0 + 8 dtk
+    const tahan = [];
+    for (let i = 0; i < 6; i++) { tick(1, 1250, 1); tahan.push(sudutK()); }   // sampai t0 + 15,5 dtk
+    const lepas = [];
+    for (let i = 0; i < 4; i++) { tick(1, 1250, 1); lepas.push(sudutK()); }   // lewat t0 + 18 dtk
+    const teks = (j) => j.map(([y, p]) => y.toFixed(3) + '/' + p.toFixed(3)).join(' ');
+    cek(munculSaatSinematik && tahan.every(diSudutAwal) && !lepas.slice(-2).some(diSudutAwal),
+      `${ket} memegang maket seperti klik dua kali: sinematik tertahan 10 dtk sejak tekannya (di tampak awal), lalu kembali (kontrol)`,
+      `muncul ${munculSaatSinematik}; tahan ${teks(tahan)}; lepas ${teks(lepas)}`);
+  }
+  vm32("Object.assign(KAMERA, { mode: 'mati', sinematikIdx: -1, targetZoom: 1 })");
+  kendali.gerakKurang = true;
+  tick(2);
+
+  // --- petunjuk: tetikus, papan ketik (fokus lewat Tab, bukan klik), layar sentuh
+  const kataTetikus = (t) => /klik kanan/.test(t) && /roda/.test(t) && !/jari/.test(t);
+  const kataSentuh = (t) => /satu jari/.test(t) && /dua jari/.test(t) && !/klik kanan|roda|shift/.test(t);
+  const kataKetik = (t) => /panah/.test(t) && /\[ \]/.test(t) && /0: tampak awal/.test(t);
+  // klik kanan di kanvas: petunjuknya padam, dan bukan klik yang membuka kartu
+  jari('pointerdown', { clientX: 10, clientY: 10, button: 2 });
+  jari('pointerup', { clientX: 10, clientY: 10, button: 2 });
+  kanvas.fokusTerlihat = false;
+  for (const fn of U.pendengar.focus || []) fn({ type: 'focus' });
+  const klikFokus = petunjuk.kelas.has('tampak');
+  kanvas.fokusTerlihat = true;
+  for (const fn of U.pendengar.focus || []) fn({ type: 'focus' });
+  const tabFokus = { teks: petunjuk.textContent, tampak: petunjuk.kelas.has('tampak') };
+  cek(kataTetikus(tetikus.petunjuk) && /roda/.test(tetikus.judul) && /papan ketik/.test(tetikus.judul),
+    'pointer: fine — petunjuk & judul tombol 3D versi tetikus (klik kanan, roda), judulnya menyebut papan ketik', JSON.stringify(tetikus));
+  cek(!klikFokus && tabFokus.tampak && kataKetik(tabFokus.teks),
+    'kanvas difokus lewat Tab (:focus-visible): petunjuk versi papan ketik muncul; difokus karena klik tidak (kontrol)',
+    `klik ${klikFokus}, Tab ${JSON.stringify(tabFokus)}`);
+  const US = muat32({ kasar: true });
+  const sentuh = { petunjuk: US.petunjuk.textContent, judul: US.tombol3D.title, tampak: US.petunjuk.kelas.has('tampak') };
+  US.kendali.kasar = false;
+  US.vm32('RUANG3D.pilih(false); RUANG3D.pilih(true)');
+  const ganti = US.petunjuk.textContent;
+  cek(sentuh.tampak && kataSentuh(sentuh.petunjuk) && /satu jari/.test(sentuh.judul) && !/roda/.test(sentuh.judul) && !US.galat.length,
+    'pointer: coarse — petunjuk & judul tombol 3D versi jari (satu jari putar, dua jari cubit & geser, ketuk pegawai)', JSON.stringify(sentuh) + US.galat.join(' | '));
+  cek(kataTetikus(ganti), 'petunjuk dipilih saat ditampilkan: layar sentuh yang berganti ke tetikus dapat versi tetikus waktu 3D dibuka lagi', ganti);
+
+  // --- yang dibaca peramban dari berkasnya sendiri
+  const html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+  const tag = (html.match(/<canvas id="room3d"[^>]*>/) || [''])[0];
+  cek(/\btabindex="0"/.test(tag) && /\baria-label="[^"]*[Pp]anah[^"]*"/.test(tag),
+    'index.html: kanvas #room3d bisa difokus (tabindex="0") dan aria-label-nya menyebut kendali papan ketik', tag.replace(/\s+/g, ' '));
+  const css = fs.readFileSync(path.join(__dirname, 'public', 'style.css'), 'utf8');
+  const aturan = (sel) => [...css.matchAll(new RegExp(sel.replace(/[.#-]/g, '\\$&') + '\\s*\\{([^}]*)\\}', 'g'))].map((m) => m[1]);
+  const bungkus = aturan('.petunjuk-3d').filter((r) => /white-space/.test(r)).at(-1) || '';
+  const pojok = aturan('.awal-3d')[0] || '';
+  cek(/white-space:\s*normal/.test(bungkus) && /max-width/.test(bungkus) && /width:\s*max-content/.test(bungkus),
+    'style.css: petunjuk 3D boleh membungkus (aturan terakhirnya white-space normal, max-content, max-width) — tidak terpotong di HP', bungkus.trim());
+  cek(/\btop:/.test(pojok) && /\bright:/.test(pojok) && !/\bbottom:/.test(pojok),
+    'style.css: tombol ⟲ di pojok kanan atas, tidak di tepi bawah milik petunjuk & pita POV', pojok.trim());
+
+  const angka = [KAM.yaw, KAM.pitch, KAM.zoom, KAM.yawK, KAM.pitchK, KAM.jarakK, ...KAM.sasaran, ...KAM.sasaranK, ...KAM.vp];
+  cek(angka.every(Number.isFinite) && !U.galat.length, 'uji kenyamanan kamera: angka kamera hingga, tanpa galat', U.galat.join(' | '));
+}
+
+// ------------------------------------------------------------------ 33
+/* Jepret foto dokumentasi kegiatan (tombol 📷). Konteks WebGL2 ruang3d.js
+   dibuat tanpa preserveDrawingBuffer: isi kanvas 3D cuma utuh sampai task
+   penggambarnya selesai, jadi foto yang diambil dari pendengar klik adalah
+   kanvas kosong — di peramban gagal diam-diam, cuma PNG bening berlatar
+   hitam. Klik cuma memasang permintaan; frame() melayaninya TEPAT sesudah
+   TIGA.gambar di frame yang sama. Diuji dengan frame() room.js sungguhan
+   dan ruang3d.js sungguhan di atas glPalsu; kanvas foto, tautan unduh, URL
+   objek, dan toBlob dicatat lewat document.createElement & URL palsu. */
+{
+  console.log(tebal('\nJepret foto dokumentasi kegiatan'));
+  const U = muat3D();
+  const { ctx } = U;
+  cek(U.siap, 'WebGL2 perekam menyala untuk uji jepret foto', U.ket);
+  resetRuangan(ctx, buatPristine(ctx));
+  buatS(ctx, { jam: 9.05, hujan: 0, petir: false, ramai: false });   // 15 April 2026 09.03: jam & menit berawalan nol
+  const kanvas3d = ctx.document.getElementById('room3d'), kanvas2d = ctx.document.getElementById('room');
+  let cctv = false, gagalBlob = false, nBlob = 0;
+  kanvas3d.classList = { toggle() {}, add() {}, remove() {}, contains: (c) => cctv && c === 'cctv' };
+
+  // urutan kejadian di frame yang sedang diuji: 'gambar3D', 'utama:<op>'
+  // (kanvas 2D ruangan), 'unduh'/'lepas' (tautan), atau catatan kanvas baru
+  const urut = [], kanvasBaru = [], unduhan = [], urlDibuat = [], urlDicabut = [];
+  ctx.__urut = urut;
+  jalankan(ctx, `(() => { const asli = TIGA.gambar; TIGA.gambar = (st) => { asli(st); __urut.push('gambar3D'); }; })()`);
+  jalankan(ctx, 'globalThis.__jf = 0; globalThis.__jfAsli = jadwalFrame; jadwalFrame = function () { __jf++; return __jfAsli(); }');
+  const kUtama = ctx.__ctxPalsu;
+  for (const m of ['fillRect', 'drawImage', 'fillText', 'fill', 'stroke', 'restore']) {
+    const asli = kUtama[m];
+    kUtama[m] = function (...a) { urut.push('utama:' + m); return asli.apply(this, a); };
+  }
+  const buatAsli = ctx.document.createElement;
+  ctx.document.createElement = (tag) => {
+    const t = String(tag).toLowerCase();
+    if (t === 'a') {
+      const a = { href: '', download: '', style: {},
+        click() { urut.push('unduh'); unduhan.push({ href: a.href, nama: a.download }); },
+        remove() { urut.push('lepas'); } };
+      return a;
+    }
+    const el = buatAsli(tag);
+    if (t !== 'canvas') return el;
+    const k = el.getContext('2d'), rek = { kv: el, log: [], blob: 0, tunda: null };
+    for (const m of ['fillRect', 'fillText', 'drawImage']) {
+      const asli = k[m];
+      k[m] = function (...a) {
+        rek.log.push([m, { a, gaya: k.fillStyle, filter: k.filter, font: k.font }]);
+        urut.push(rek);
+        return asli.apply(this, a);
+      };
+    }
+    const gradAsli = k.createRadialGradient;
+    k.createRadialGradient = function (...a) {
+      const g = gradAsli.apply(this, a), henti = [], tambah = g.addColorStop;
+      g.addColorStop = (o, w) => { henti.push([o, w]); return tambah.call(g, o, w); };
+      g.henti = henti;
+      return g;
+    };
+    el.toBlob = (cb, jenis) => {
+      rek.blob++; rek.jenis = jenis;
+      if (gagalBlob) throw new Error('kanvas tercemar (sengaja)');
+      const blob = { uji: ++nBlob };
+      const tAsli = ctx.setTimeout;
+      ctx.setTimeout = (fn, ms) => { rek.tunda = { fn, ms }; return 0; };
+      try { cb(blob); } finally { ctx.setTimeout = tAsli; }
+    };
+    kanvasBaru.push(rek);
+    return el;
+  };
+  ctx.URL = {
+    // URL objek lain (ticker Worker mode ringan) tidak dicatat: cuma blob foto
+    createObjectURL: (b) => { const u = 'blob:uji/' + (b && typeof b.uji === 'number' ? b.uji : 'lain'); if (b && typeof b.uji === 'number') urlDibuat.push(u); return u; },
+    revokeObjectURL: (u) => { urlDicabut.push(u); },
+  };
+
+  let ts = performance.now() + 1000;
+  const satu = (lompat = 16) => {            // satu frame() room.js sungguhan
+    urut.length = 0;
+    ts += lompat;
+    return konsol(() => jalankan(ctx, `frame(${ts})`));
+  };
+  const klik = () => jalankan(ctx, 'jepretKlik()');
+  const fotoSemua = () => kanvasBaru.filter((r) => r.blob > 0);
+  const op = (F, nama) => F.log.filter(([m]) => m === nama).map(([, isi]) => isi);
+  const iOp = (F, nama) => F.log.findIndex(([m]) => m === nama);
+
+  const CSS = fs.readFileSync(path.join(__dirname, 'public', 'style.css'), 'utf8');
+  const varCss = (n) => ((CSS.match(new RegExp('--' + n + ':\\s*(#[0-9a-fA-F]{3,8})')) || [])[1] || '?').toLowerCase();
+  const KAYU = varCss('kayu'), KAYU_TUA = varCss('kayu-tua');
+  const gradStage = /\.stage\s*\{[^}]*radial-gradient\(120% 90% at 50% 0%, var\(--kayu\) 0%, var\(--kayu-tua\) 70%\)/.test(CSS);
+  const [, saringCctv = '?', latarCctv = '?'] = CSS.match(/#room3d\.cctv\s*\{\s*filter:\s*([^;]+);\s*background-color:\s*([^;]+);/) || [];
+
+  // --- tanpa klik tidak ada foto; klik cuma memasang permintaan
+  const logAwal = [...satu(), ...satu()];
+  cek(fotoSemua().length === 0 && !unduhan.length && !logAwal.length, 'kontrol: frame biasa tanpa klik tidak memotret apa pun',
+    `${fotoSemua().length} foto, ${unduhan.length} unduhan; ${logAwal.join(' | ')}`);
+  klik();
+  cek(fotoSemua().length === 0 && !unduhan.length, 'klik 📷 cuma memasang permintaan (belum ada yang disalin di pendengar klik)');
+
+  // --- frame berikutnya: foto 3D tepat sesudah TIGA.gambar
+  const log1 = satu();
+  const [F1] = fotoSemua();
+  cek(fotoSemua().length === 1 && !log1.length, 'frame berikutnya menghasilkan tepat satu foto, tanpa galat',
+    `${fotoSemua().length} foto; ${log1.join(' | ')}`);
+  const iGambar = urut.indexOf('gambar3D'), iFoto = F1 ? urut.indexOf(F1) : -1;
+  cek(iGambar >= 0 && iFoto > iGambar && urut.lastIndexOf('gambar3D') === iGambar,
+    '3D: permintaan dilayani di frame yang sama TEPAT sesudah TIGA.gambar (buffer WebGL tanpa preserveDrawingBuffer masih utuh)',
+    `gambar3D di ${iGambar}, foto mulai di ${iFoto}`);
+  const tempel1 = F1 ? op(F1, 'drawImage') : [];
+  cek(tempel1.length === 1 && tempel1[0].a[0] === kanvas3d && JSON.stringify(tempel1[0].a.slice(1)) === JSON.stringify([0, 0, kanvas3d.width, kanvas3d.height])
+    && kanvas3d.width === 800 && F1.kv.width === kanvas3d.width,
+    '3D: yang disalin kanvas #room3d, seukuran piksel aslinya (800x450)',
+    tempel1.map((t) => (t.a[0] === kanvas3d ? '#room3d' : t.a[0] === kanvas2d ? '#room' : 'lain') + ' ' + t.a.slice(1).join(',')).join(' | '));
+  const isi1 = F1 ? iOp(F1, 'fillRect') : -1, henti = isi1 >= 0 ? F1.log[isi1][1].gaya.henti : null;
+  cek(isi1 >= 0 && isi1 < iOp(F1, 'drawImage') && henti
+    && JSON.stringify(henti) === JSON.stringify([[0, KAYU], [0.7, KAYU_TUA], [1, KAYU_TUA]]) && gradStage,
+    '3D: latar panel kayu (--kayu → --kayu-tua 70%, gradien .stage di style.css) diisi LEBIH DULU, baru kanvas bening 3D ditempel',
+    `isi di ${isi1}, tempel di ${F1 && iOp(F1, 'drawImage')}, henti ${JSON.stringify(henti)} vs ${KAYU}/${KAYU_TUA}, gradien .stage ${gradStage}`);
+  const cap1 = F1 ? op(F1, 'fillText') : [];
+  const CAP = 'DOKUMENTASI KEGIATAN · DINAS AI KLOD · 15 APRIL 2026 09.03';
+  cek(cap1.length === 1 && cap1[0].a[0] === CAP, 'cap foto: "' + CAP + '"', cap1.map((c) => c.a[0]).join(' | '));
+  cek(cap1.length === 1 && cap1[0].a.slice(1).every(Number.isFinite) && cap1[0].a[2] > kanvas3d.height && cap1[0].a[2] < F1.kv.height
+    && F1.kv.height > kanvas3d.height && /^700 \d+px /.test(cap1[0].font) && cap1[0].filter === 'none',
+    'cap di pita keterangan di BAWAH ruangan (fotonya dipanjangkan, ruangan tidak tertutup), huruf berukuran hingga',
+    cap1.map((c) => `${c.a.slice(1).join(',')} font "${c.font}" filter "${c.filter}"; foto ${F1.kv.width}x${F1.kv.height}`).join(' | '));
+  const NAMA = 'dokumentasi-kegiatan-20260415-0903.png';
+  cek(F1 && F1.jenis === 'image/png' && urlDibuat.length === 1 && unduhan.length === 1 && unduhan[0].href === urlDibuat[0] && unduhan[0].nama === NAMA,
+    'disimpan lewat toBlob PNG → URL objek → <a download="' + NAMA + '">',
+    `jenis ${F1 && F1.jenis}, url ${JSON.stringify(urlDibuat)}, unduhan ${JSON.stringify(unduhan)}`);
+  const iUnduh = urut.indexOf('unduh'), iLepas = urut.indexOf('lepas');
+  const cabutDulu = urlDicabut.length;
+  if (F1 && F1.tunda) F1.tunda.fn();
+  cek(iUnduh >= 0 && iLepas > iUnduh && cabutDulu === 0 && F1.tunda && F1.tunda.ms > 0
+    && JSON.stringify(urlDicabut) === JSON.stringify(urlDibuat),
+    'tautan sementaranya dilepas sesudah diklik, URL objeknya dicabut sesudah unduhan sempat mulai (setTimeout)',
+    `unduh ${iUnduh}, lepas ${iLepas}, dicabut sebelum waktunya ${cabutDulu}, tunda ${F1 && F1.tunda && F1.tunda.ms} ms, dicabut ${JSON.stringify(urlDicabut)}`);
+
+  // --- satu klik = satu foto: tidak diulang, klik ganda & klik dalam jeda diabaikan
+  satu(); satu(); satu();
+  cek(fotoSemua().length === 1 && unduhan.length === 1, 'satu klik = satu foto: frame-frame sesudahnya tidak memotret lagi',
+    `${fotoSemua().length} foto, ${unduhan.length} unduhan`);
+  satu(1100);
+  klik(); klik();
+  satu();
+  const sesudahGanda = fotoSemua().length;
+  klik();                                   // 16 ms sesudah klik terakhir: masih dalam jeda rana
+  satu(); satu();
+  cek(sesudahGanda === 2 && fotoSemua().length === 2 && unduhan.length === 2,
+    'dua klik sebelum frame = satu foto; klik di dalam jeda rana 1 detik diabaikan (Enter yang ditahan tidak jadi jepret beruntun)',
+    `sesudah klik ganda ${sesudahGanda}, sesudah klik dalam jeda ${fotoSemua().length}`);
+
+  // --- pantauan CCTV: latar & filter monitor dari #room3d.cctv
+  cctv = true;
+  satu(1100); klik(); satu();
+  cctv = false;
+  const F3 = fotoSemua()[2];
+  const isi3 = F3 ? F3.log[iOp(F3, 'fillRect')][1] : null, tempel3 = F3 ? op(F3, 'drawImage') : [];
+  cek(F3 && isi3.gaya === latarCctv.trim() && iOp(F3, 'fillRect') < iOp(F3, 'drawImage')
+    && tempel3.length === 1 && tempel3[0].a[0] === kanvas3d && tempel3[0].filter === saringCctv.trim(),
+    'pantauan CCTV: foto berlatar & berfilter monitor persis #room3d.cctv di style.css (rupa layar = filter CSS, bukan isi kanvas)',
+    `latar ${isi3 && isi3.gaya} vs ${latarCctv}, filter "${tempel3[0] && tempel3[0].filter}" vs "${saringCctv}"`);
+
+  // --- 2D: dari #room, sesudah gambar 2D terakhir frame itu
+  jalankan(ctx, 'TIGA.aktif = false');
+  const log2 = [...satu(1100)];
+  klik();
+  log2.push(...satu());
+  jalankan(ctx, 'TIGA.aktif = true');
+  const F4 = fotoSemua()[3], tempel4 = F4 ? op(F4, 'drawImage') : [];
+  const iUtama = urut.reduce((n, e, i) => (typeof e === 'string' && e.startsWith('utama:') ? i : n), -1);
+  cek(F4 && tempel4.length === 1 && tempel4[0].a[0] === kanvas2d && tempel4[0].a[3] === kanvas2d.width && tempel4[0].a[4] === kanvas2d.height
+    && iUtama >= 0 && urut.indexOf(F4) > iUtama && !urut.includes('gambar3D') && !log2.length,
+    '2D: foto dari #room seukuran pikselnya, sesudah perintah gambar 2D terakhir frame itu',
+    `${tempel4.map((t) => (t.a[0] === kanvas2d ? '#room' : 'lain') + ' ' + t.a.slice(1).join(',')).join(' | ')}; utama terakhir ${iUtama}, foto ${F4 && urut.indexOf(F4)}; ${log2.join(' | ')}`);
+
+  // --- toBlob yang melempar (kanvas tercemar dsb.) tidak boleh membekukan ruangan
+  gagalBlob = true;
+  satu(1100); klik();
+  const jf0 = ctx.__jf, blob0 = kanvasBaru.reduce((n, r) => n + r.blob, 0);
+  let galat = null, logGagal = [];
+  try { logGagal = satu(); } catch (e) { galat = e; }
+  const jf1 = ctx.__jf;
+  satu(); satu();
+  const blob1 = kanvasBaru.reduce((n, r) => n + r.blob, 0);
+  gagalBlob = false;
+  cek(!galat && jf1 === jf0 + 1 && logGagal.some((l) => l.includes('[jepret]')),
+    'foto yang gagal (toBlob melempar) cuma diperingatkan: frame() tidak melempar dan tetap menjadwalkan frame berikutnya',
+    `galat ${galat && galat.message}, jadwalFrame ${jf0} → ${jf1}; ${logGagal.join(' | ')}`);
+  cek(blob1 === blob0 + 1 && unduhan.length === 4, 'foto yang gagal tidak dicoba ulang frame-frame berikutnya',
+    `toBlob ${blob0} → ${blob1}, unduhan ${unduhan.length}`);
+
+  // --- statis: tombolnya, dan tetap foto diam tanpa rekaman/unggah
+  const HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+  const bilah = (HTML.match(/<div class="stage-bar">([\s\S]*?)<\/div>/) || [])[1] || '';
+  cek(/<button id="jepretBtn" class="ghost" title="[^"]+">📷<\/button>/.test(bilah), 'tombol 📷 #jepretBtn (ghost, bertitle) ada di bilah panggung');
+  const SRC_ROOM = fs.readFileSync(path.join(__dirname, 'public', 'room.js'), 'utf8');
+  const kodeJepret = jalankan(ctx, '[jepretKlik, jepretSesudahGambar, susunFotoDokumentasi].map(String).join("\\n")');
+  cek(!/captureStream|MediaRecorder|requestVideoFrame/.test(SRC_ROOM) && (SRC_ROOM.match(/\.toBlob\(/g) || []).length === 1
+    && !/fetch|sendBeacon|XMLHttpRequest|WebSocket|EventSource|localStorage|indexedDB/.test(kodeJepret),
+    'tetap foto diam: room.js tanpa captureStream/MediaRecorder, toBlob cuma di satu tempat, fotonya tidak diunggah atau disimpan di peramban');
+  buatS(ctx, { jam: 10, hujan: 0, petir: false, ramai: false });   // jam palsu kembali ke acuan
+}
+
+// ------------------------------------------------------------------ 34
+/* Papan nama melayang (papanTunjuk di room.js, papan3D di ruang3d.js). Elemen
+   papannya dibuat room.js lewat document.createElement waktu pertama dipakai:
+   di sini jadi elemen palsu yang mengingat hidden, kelas, isi, dan left/top,
+   berukuran 120x26 selama tampil dan 0 selagi hidden (seperti display:none).
+   Handler 2D yang sungguhan dipanggil dari pendengar kanvas yang dicatat
+   sandbox (canvas.dengar), handler 3D dari pasang3D. Ukuran panggung & skala
+   2D dipasang tangan — fit() di VM membaca dummy. Balon = orang palsu yang
+   el-nya tampil (display '') dan dipasang lewat left/top seperti
+   Agent#update; kotak balonnya dihitung sendiri di sini dari translate(-50%,
+   -100%) style.css. Letak yang diharapkan dihitung dari keLayar 2D tulisan
+   tangan / TIGA.keLayar 3D (titik kaki & dasar kotak), bukan dari penempat
+   papan itu sendiri. */
+function elemenPapan(tag) {
+  const el = {
+    tag, hidden: false, className: '', textContent: '', innerHTML: '', title: '', attr: {}, anak: [],
+    style: { setProperty(k, v) { this[k] = v; } },
+    get offsetWidth() { return el.hidden ? 0 : 120; },
+    get offsetHeight() { return el.hidden ? 0 : 26; },
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    setAttribute(k, v) { el.attr[k] = v; }, addEventListener() {}, appendChild(c) { el.anak.push(c); return c; },
+    querySelector: () => elemenPapan('anak'),
+  };
+  return el;
+}
+const pxAngka = (v) => parseFloat(v);
+const kotakPapan = (el) => [pxAngka(el.style.left), pxAngka(el.style.top), pxAngka(el.style.left) + 120, pxAngka(el.style.top) + 26];
+const tumpang = (p, q) => p[0] < q[2] && p[2] > q[0] && p[1] < q[3] && p[3] > q[1];
+const pakaiElemenPapan = (ctx) => {
+  const dibuat = [];
+  const buatAsli = ctx.document.createElement;
+  ctx.document.createElement = (tag) => {
+    if (String(tag).toLowerCase() === 'canvas') return buatAsli(tag);
+    const el = elemenPapan(tag);
+    dibuat.push(el);
+    return el;
+  };
+  return () => dibuat.find((e) => /^papan-tunjuk/.test(e.className));
+};
+const cariBarang = (id) => `daftarBarang().find((b) => b.id === '${id}')`;
+{
+  console.log(tebal('\nPapan nama melayang: kursor di atas barang & orang (2D)'));
+  const ctx = muatKonteks();
+  const H = ctx.__jembatan__;
+  const papan = pakaiElemenPapan(ctx);
+  const [W, TINGGI] = JSON.parse(jalankan(ctx, 'JSON.stringify([W, H])'));
+  const SK = 2, OX = 30, OY = 20;
+  jalankan(ctx, `scale = ${SK}; offX = ${OX}; offY = ${OY}; panggungW = ${OX * 2 + W * SK}; panggungH = ${OY * 2 + TINGGI * SK};
+    agents.clear(); peserta.length = 0; standby.length = 0; terpilih = null; barangTerpilih = null`);
+  const dengar = ctx.__ctxPalsu.canvas.dengar;
+  const kirim = (jenis, e) => { for (const fn of dengar[jenis] || []) fn(e); };
+  // tetikus (atau jari) di titik dunia (x, y): pointer event dulu, lalu mousemove (tiruan, untuk jari)
+  const tunjuk = (x, y, jenis = 'mouse') => {
+    kirim(jenis === 'mouse' ? 'pointermove' : 'pointerdown', { pointerType: jenis, clientX: x * SK, clientY: y * SK });
+    kirim('mousemove', { clientX: x * SK, clientY: y * SK });
+  };
+  const ke2 = (x, y) => [OX + x * SK, OY + y * SK];               // keLayar 2D di zoom 1, tanpa geser
+  const kotak = (id) => JSON.parse(jalankan(ctx, `JSON.stringify(${cariBarang(id)}.kotak)`));
+  const taruh = () => jalankan(ctx, 'taruhPapanTunjuk()');
+  const orang = (id, sifat) => {
+    const o = Object.assign(buatSatuOrang(ctx), { id, update() {} }, sifat);
+    H.agents.set(id, o);
+    return o;
+  };
+
+  const kA = kotak('arsip'), tA = [kA.x + kA.w / 2, kA.y + kA.h / 2];
+  tunjuk(...tA);
+  // elemen pengganti yang selalu tersembunyi kalau papannya tidak pernah dibuat: semua cek merah, bukan melempar
+  const p = papan() || Object.assign(elemenPapan('tidak-dibuat'), { hidden: true });
+  cek(papan() && !p.hidden && /pt-barang/.test(p.className) && /MILIK NEGARA/.test(p.innerHTML) && /Lemari Arsip Kayu/.test(p.innerHTML)
+    && /3\.05\.01\.04\.003 · NUP 000017/.test(p.innerHTML) && p.attr['aria-hidden'] === 'true',
+  '2D: tetikus di atas Lemari Arsip Kayu → stiker BMN (MILIK NEGARA, nama, kode barang · NUP) tanpa diklik',
+  papan() ? `hidden ${p.hidden}, ${p.className} | ${p.innerHTML}` : 'elemen papan tidak dibuat');
+  const [bx0, by0] = ke2(kA.x, kA.y), [bx1, by1] = ke2(kA.x + kA.w, kA.y + kA.h);
+  const L0 = pxAngka(p.style.left), T0 = pxAngka(p.style.top);
+  cek(Math.abs(L0 + 60 - (bx0 + bx1) / 2) <= 1 && T0 > by1 && T0 <= by1 + 12,
+    '2D: papannya di bawah kotak barang (keLayar jalur kanvas), di tengahnya — lebarnya diukur selagi tampil',
+    `papan (${L0}, ${T0}), kotak x ${bx0}..${bx1}, bawah ${by1}`);
+
+  const kE = kotak('ember'), tE = [kE.x + kE.w / 2, kE.y + kE.h / 2];
+  tunjuk(...tE);
+  cek(/BARANG HABIS PAKAI/.test(p.innerHTML) && /Ember Penadah AC/.test(p.innerHTML) && /tidak dicatat BMN/.test(p.innerHTML)
+    && !/NUP/.test(p.innerHTML), '2D: barang habis pakai (Ember Penadah AC) → kop BARANG HABIS PAKAI, "tidak dicatat BMN", tanpa NUP', p.innerHTML);
+
+  const A = orang('uji-papan-a', { x: 300, y: 300, peran: 'arsiparis' });
+  jalankan(ctx, `namaPanggilan.set('uji-papan-a', 'Budi & <Sari>')`);
+  const jabA = jalankan(ctx, 'jabatanDari("arsiparis").nama');
+  tunjuk(A.x, A.y - 12);
+  const [kx, ky] = ke2(A.x, A.y + 4), LA = pxAngka(p.style.left), TA = pxAngka(p.style.top);
+  cek(!p.hidden && /pt-orang/.test(p.className) && p.innerHTML.includes('Budi &amp; &lt;Sari&gt;') && p.innerHTML.includes(jabA)
+    && !p.innerHTML.includes('<Sari>'), '2D: tetikus di atas pegawai → papan nama dada: namaTampil (di-escape) + jabatannya', p.innerHTML);
+  cek(Math.abs(LA + 60 - kx) <= 1 && TA > ky && TA <= ky + 12, '2D: papan nama orang di bawah kakinya, di tengah badannya',
+    `papan (${LA}, ${TA}), kaki (${kx}, ${ky})`);
+
+  kirim('mouseleave', {});
+  const turunKeluar = p.hidden;
+  tunjuk(...tA);
+  const naikLagi = !p.hidden && /Arsip/.test(p.innerHTML);
+  cek(turunKeluar && naikLagi, '2D: kursor keluar kanvas menurunkan papan; tetikus masuk lagi memunculkannya', `keluar ${turunKeluar}, masuk ${naikLagi}`);
+  tunjuk(...tE, 'touch');                                         // ketukan jari di barang lain
+  cek(p.hidden, '2D layar sentuh: ketukan jari (pointerdown sentuh + mousemove tiruan) tidak memunculkan papan',
+    `hidden ${p.hidden}, isi ${p.innerHTML}`);
+
+  // kartunya sendiri terbuka → turun; kartu benda lain tidak mengganggu
+  tunjuk(...tA);
+  jalankan(ctx, `barangTerpilih = ${cariBarang('arsip')}`); taruh();
+  const kartuSendiri = p.hidden;
+  jalankan(ctx, `barangTerpilih = ${cariBarang('filing')}`); taruh();
+  const kartuLain = !p.hidden;
+  jalankan(ctx, 'barangTerpilih = null');
+  tunjuk(A.x, A.y - 12);
+  jalankan(ctx, 'terpilih = agents.get("uji-papan-a")'); taruh();
+  const kartuOrang = p.hidden;
+  jalankan(ctx, 'terpilih = null'); taruh();
+  cek(kartuSendiri && kartuLain && kartuOrang && !p.hidden,
+    'kartu benda itu sendiri terbuka → papannya turun (barang & orang); kartu benda lain tidak menurunkannya',
+    `kartu arsip ${kartuSendiri}, kartu filing ${kartuLain}, kartu orang ${kartuOrang}, tutup ${!p.hidden}`);
+
+  // balon: tempat di bawah tertutup → ke atas; dua sisi tertutup → tidak tampil
+  tunjuk(...tA);
+  const cx = (bx0 + bx1) / 2;
+  const B = orang('uji-papan-balon', { x: 600, y: 300,
+    el: { style: { display: '', left: cx + 'px', top: by1 + 30 + 'px' }, offsetWidth: 160, offsetHeight: 34 } });
+  taruh();
+  const atasBalon = kotakPapan(p), balonUcap = [cx - 80, by1 - 4, cx + 80, by1 + 30];
+  cek(!p.hidden && atasBalon[3] <= by0 && !tumpang(atasBalon, balonUcap),
+    'balon ucap menutupi tempat papan di bawah barang → papannya pindah ke atas barang, tidak menimpa balonnya',
+    `papan [${atasBalon}], balon [${balonUcap}], atas kotak ${by0}`);
+  B.elPikir = { style: { display: '', left: cx + 'px', top: by0 - 2 + 'px' }, offsetWidth: 160, offsetHeight: 40 };
+  taruh();
+  const duaSisi = p.hidden;
+  B.el.style.display = 'none'; B.elPikir.style.display = 'none';
+  taruh();
+  cek(duaSisi && !p.hidden && pxAngka(p.style.top) === T0,
+    'balon di bawah DAN di atas barang → papan tidak tampil sama sekali; balonnya padam → kembali ke bawah barang',
+    `dua sisi: hidden ${duaSisi}; padam: hidden ${p.hidden}, top ${p.style.top} (semula ${T0}px)`);
+  H.agents.delete('uji-papan-balon');
+
+  // orang masuk WC/gudang (alpha 0) atau pulang
+  tunjuk(A.x, A.y - 12);
+  A.alpha = 0; taruh();
+  const diWc = p.hidden;
+  A.alpha = 1; taruh();
+  const keluarWc = !p.hidden;
+  H.agents.delete('uji-papan-a'); taruh();
+  cek(diWc && keluarWc && p.hidden, 'orang yang masuk WC/gudang (alpha 0) atau pulang (keluar dari penghuni) → papannya turun',
+    `WC ${diWc}, keluar WC ${keluarWc}, pulang ${p.hidden}`);
+
+  // tiap frame: papan ikut kamera 2D — frame() memanggil taruhPapanTunjuk. Kartu
+  // filing kabinet di sebelahnya dibuka: kamera membidik & menzoom ke sana,
+  // lemari arsip tinggal separuh terlihat di tepi kiri bidikan.
+  tunjuk(...tA);
+  const galat = [];
+  const [e0, w0] = [console.error, console.warn];
+  console.error = console.warn = (...a) => { galat.push(a.map(String).join(' ')); };
+  try { jalankan(ctx, `barangTerpilih = ${cariBarang('filing')}; frame(now + 16)`); } catch (e) { galat.push(String(e)); } finally { [console.error, console.warn] = [e0, w0]; }
+  const kam = JSON.parse(jalankan(ctx, 'JSON.stringify({ z: KAMERA.zoom, tx: KAMERA.tx, ty: KAMERA.ty, lebar: panggungW })'));
+  const kk = (x, y) => [OX + (x * kam.z + kam.tx) * SK, OY + (y * kam.z + kam.ty) * SK];
+  const [fx0] = kk(kA.x, kA.y), [fx1, fy1] = kk(kA.x + kA.w, kA.y + kA.h);
+  const tengahF = (Math.max(0, fx0) + Math.min(kam.lebar, fx1)) / 2;        // bagian yang terlihat saja
+  const Lf = pxAngka(p.style.left), Tf = pxAngka(p.style.top);
+  cek(!galat.length && kam.z > 1 && !p.hidden && Tf !== T0 && Tf > fy1 && Tf <= fy1 + 12 && Math.abs(Lf + 60 - Math.max(64, tengahF)) <= 1,
+    '2D tiap frame: kamera menzoom tanpa tetikus bergerak → frame() memindah papan, tetap di bawah bagian barang yang terlihat',
+    `zoom ${kam.z}, papan (${Lf}, ${Tf}) semula (${L0}, ${T0}), barang x ${fx0}..${fx1} bawah ${fy1}; ${galat.join(' | ')}`);
+  jalankan(ctx, 'barangTerpilih = null; KAMERA.zoom = 4; KAMERA.tx = -2000; KAMERA.ty = 0; taruhPapanTunjuk()');
+  const diLuar = p.hidden;
+  jalankan(ctx, 'KAMERA.zoom = 1; KAMERA.tx = 0; KAMERA.ty = 0; taruhPapanTunjuk()');
+  cek(diLuar && !p.hidden, '2D: barang yang keluar bidikan kamera → papannya turun (tidak terjepit di tepi panggung), kembali begitu terlihat',
+    `di luar: hidden ${diLuar}; terlihat lagi: hidden ${p.hidden}`);
+
+  const css = fs.readFileSync(path.join(__dirname, 'public', 'style.css'), 'utf8');
+  const blok = (css.match(/\.papan-tunjuk \{([^}]*)\}/) || [])[1] || '';
+  const zKartu = Number((css.match(/\.kartu \{[^}]*z-index:\s*(\d+)/) || [])[1]);
+  const zPapan = Number((blok.match(/z-index:\s*(\d+)/) || [])[1]);
+  cek(/pointer-events:\s*none/.test(blok) && zPapan < zKartu && /animation:\s*papanMuncul/.test(blok)
+    && /@media \(prefers-reduced-motion: reduce\) \{\s*\.papan-tunjuk \{ animation: none; \}/.test(css),
+  'style.css: papan tembus klik (kursor tidak "keluar" kanvas), di bawah #kartu, animasi munculnya mati waktu gerak dikurangi',
+  `z papan ${zPapan} vs kartu ${zKartu}; blok: ${blok.replace(/\s+/g, ' ')}`);
+}
+{
+  console.log(tebal('\nPapan nama melayang di maket 3D'));
+  const ctx = muatKonteks();
+  const H = ctx.__jembatan__;
+  ctx.__ctxPalsu.__kendali.ketat = false;
+  Object.assign(ctx, { WeakMap, Proxy, Uint32Array, Uint8Array, Infinity, NaN, undefined });
+  jalankan(ctx, 'globalThis.window = globalThis; globalThis.devicePixelRatio = 1');
+  const papan = pakaiElemenPapan(ctx);
+  const dengarDok = {};
+  ctx.document.addEventListener = (j, fn) => { (dengarDok[j] = dengarDok[j] || []).push(fn); };
+  const pendengar = pasang3D(ctx, glPalsu(null, new Map()));
+  // gerak dikurangi: POV & kamera berpindah dalam satu tick (tanpa luncuran)
+  ctx.__k32 = { panggung: { clientWidth: 800, clientHeight: 450, appendChild() {} }, ringan: () => false,
+    media: (q) => ({ matches: /reduced-motion/.test(q), addEventListener() {} }) };
+  const galat = [];
+  const diam = (fn) => {
+    const [e, w] = [console.error, console.warn];
+    console.error = console.warn = (...a) => { galat.push(a.map(String).join(' ')); };
+    try { return fn(); } finally { [console.error, console.warn] = [e, w]; }
+  };
+  diam(() => jalankan(ctx, '((stageInner, ringanAktif, matchMedia) => {\n' + SRC_3D + '\n})(__k32.panggung, __k32.ringan, __k32.media)'));
+  resetRuangan(ctx, buatPristine(ctx));
+  buatS(ctx, { jam: 10.5, hujan: 0, petir: false, ramai: false });
+  H.eventHidup.length = 0;
+  const vm32 = (src) => diam(() => jalankan(ctx, src));
+  vm32(`renderCrew = () => {}; muatBukuInduk = () => {};
+    agents.clear(); peserta.length = 0; standby.length = 0; terpilih = null; barangTerpilih = null;
+    panggungW = 800; panggungH = 450`);
+  const bingkai = (n = 1) => { for (let i = 0; i < n; i++) vm32('now += 100; TIGA.kamera(0.016); TIGA.gambar(new Set())'); };
+  const layar = (x, y, kaki) => JSON.parse(jalankan(ctx, `JSON.stringify(TIGA.keLayar(${x}, ${y}, ${kaki}))`));
+  const pointer = (jenis, x, y, tipe = 'mouse') => diam(() => {
+    for (const fn of pendengar[jenis] || []) {
+      fn({ type: jenis, pointerId: 1, clientX: x, clientY: y, button: 0, pointerType: tipe, shiftKey: false, ctrlKey: false, preventDefault() {} });
+    }
+  });
+  const hover = (x, y, tipe) => { vm32('now += 60'); pointer('pointermove', x, y, tipe); };   // lewat jepitan 50 ms hover()
+  const orang = (id, sifat) => {
+    const o = Object.assign(buatSatuOrang(ctx), { id, update() {}, phase: 0, path: [], riwayat: [], perStasiun: {}, sejak: 0, calls: 0 }, sifat);
+    H.agents.set(id, o);
+    return o;
+  };
+  const A = orang('uji-papan-3d', { x: 480, y: 290, peran: 'kasi' });
+  const jabA = jalankan(ctx, 'jabatanDari("kasi").nama');
+  cek(jalankan(ctx, 'TIGA.aktif === true && typeof TIGA.papan === "function"') && !galat.length,
+    'WebGL2 palsu: ruang3d.js menyala dan mengisi kait TIGA.papan', galat.join(' | '));
+  bingkai(2);
+
+  // rak server: kotak pilih [362..418] x [0..88] tinggi x [100..120] kedalaman
+  const kS = JSON.parse(jalankan(ctx, `JSON.stringify(${cariBarang('server')}.kotak)`));
+  const tengahServer = () => layar(kS.x + kS.w / 2, kS.y + kS.h / 2, kS.y + kS.h);
+  hover(...tengahServer());
+  const p = papan() || Object.assign(elemenPapan('tidak-dibuat'), { hidden: true });
+  cek(papan() && !p.hidden && /pt-barang/.test(p.className) && /Rak PC Server/.test(p.innerHTML) && /3\.10\.02\.02\.001 · NUP 000001/.test(p.innerHTML),
+    '3D: hover() — tetikus di atas rak server — memunculkan stiker BMN-nya tanpa diklik', papan() ? `hidden ${p.hidden} | ${p.innerHTML}` : 'elemen papan tidak dibuat');
+  // dasar depan kotak pilihnya (tinggi 0, z = garis kaki) = tepi bawah bingkai layarnya
+  const dasarKiri = layar(kS.x, kS.y + kS.h, kS.y + kS.h), dasarKanan = layar(kS.x + kS.w, kS.y + kS.h, kS.y + kS.h);
+  const bawahS = Math.max(dasarKiri[1], dasarKanan[1]), tengahS = (dasarKiri[0] + dasarKanan[0]) / 2;
+  const LS = pxAngka(p.style.left), TS = pxAngka(p.style.top);
+  cek(TS > bawahS && TS <= bawahS + 8 && Math.abs(LS + 60 - tengahS) <= 8,
+    '3D: papannya di bawah bingkai layar kotak pilih barang itu, di tengahnya (dibanding TIGA.keLayar dasar depannya)',
+    `papan (${LS}, ${TS}), dasar depan x ${dasarKiri[0].toFixed(1)}..${dasarKanan[0].toFixed(1)}, y ${bawahS.toFixed(1)}`);
+
+  // orang: hover() dijepit 50 ms — gerakan kedua di jendela yang sama belum mengganti papan
+  const badanA = () => layar(A.x, A.y - 15, A.y);
+  pointer('pointermove', ...badanA());
+  const masihServer = /Rak PC Server/.test(p.innerHTML);
+  hover(...badanA());
+  const kakiA = layar(A.x, A.y, A.y), LA = pxAngka(p.style.left), TA = pxAngka(p.style.top);
+  const namaA = jalankan(ctx, 'namaTampil(agents.get("uji-papan-3d"))');
+  cek(masihServer && !p.hidden && /pt-orang/.test(p.className) && p.innerHTML.includes(namaA) && p.innerHTML.includes(jabA),
+    '3D: papan berganti cuma lewat hover() yang dijepit 50 ms (gerakan kedua di jendela yang sama belum menggantinya); orang dapat papan nama dada',
+    `masih server ${masihServer}, ${p.className} | ${p.innerHTML}`);
+  cek(TA > kakiA[1] && TA <= kakiA[1] + 30 && Math.abs(LA + 60 - kakiA[0]) <= 8,
+    '3D: papan nama orang di bawah kakinya (bingkai layar badan pilihOrang), di tengah badannya',
+    `papan (${LA}, ${TA}), kaki (${kakiA[0].toFixed(1)}, ${kakiA[1].toFixed(1)})`);
+
+  // balon menutupi tempat di bawah kaki → papan pindah ke atas kepala
+  const B = orang('uji-papan-balon3d', { x: 100, y: 300,
+    el: { style: { display: '', left: kakiA[0] + 'px', top: TA + 30 + 'px' }, offsetWidth: 160, offsetHeight: 40 } });
+  vm32('taruhPapanTunjuk()');
+  const kepalaA = layar(A.x, A.y - 29, A.y), atasBalon = kotakPapan(p), balon = [kakiA[0] - 80, TA - 10, kakiA[0] + 80, TA + 30];
+  cek(!p.hidden && atasBalon[3] <= kepalaA[1] + 2 && !tumpang(atasBalon, balon),
+    '3D: balon menutupi tempat papan di bawah kaki → papannya pindah ke atas kepala, tidak menimpa balonnya',
+    `papan [${atasBalon}], balon [${balon}], kepala y ${kepalaA[1].toFixed(1)}`);
+  H.agents.delete('uji-papan-balon3d');
+  B.el.style.display = 'none';
+
+  // tiap frame: maket diputar tanpa tetikus bergerak → papan tetap di bawah kakinya
+  vm32('taruhPapanTunjuk()');
+  const sebelumPutar = [pxAngka(p.style.left), pxAngka(p.style.top)];
+  vm32('RUANG3D.kamera.yaw += 0.35; frame(now + 16)');
+  const kakiPutar = layar(A.x, A.y, A.y), Lp = pxAngka(p.style.left), Tp = pxAngka(p.style.top);
+  cek(!p.hidden && (Lp !== sebelumPutar[0] || Tp !== sebelumPutar[1]) && Tp > kakiPutar[1] && Tp <= kakiPutar[1] + 30
+    && Math.abs(Lp + 60 - kakiPutar[0]) <= 8,
+  '3D tiap frame: maket berputar tanpa tetikus bergerak → frame() memindah papan, tetap di bawah kaki orangnya',
+  `papan (${Lp}, ${Tp}) semula (${sebelumPutar}), kaki (${kakiPutar[0].toFixed(1)}, ${kakiPutar[1].toFixed(1)})`);
+
+  // keluar kanvas & jari
+  for (const fn of pendengar.mouseleave || []) diam(() => fn({ type: 'mouseleave' }));
+  const turunKeluar = p.hidden;
+  bingkai(1);
+  hover(...tengahServer(), 'touch');
+  cek(turunKeluar && p.hidden, '3D: kursor keluar kanvas menurunkan papan; jari yang lewat (pointerType sentuh) tidak memunculkannya',
+    `keluar ${turunKeluar}, sesudah jari: hidden ${p.hidden}`);
+
+  // tombol ditekan → turun seketika, tetap turun selama maket diputar, muncul lagi sesudah dilepas
+  hover(...tengahServer());
+  const naik = !p.hidden;
+  const [sx, sy] = tengahServer();
+  pointer('pointerdown', sx, sy);
+  const turunTekan = p.hidden;
+  hover(sx + 60, sy + 10);
+  hover(sx + 90, sy + 12);
+  const turunSeret = p.hidden;
+  pointer('pointerup', sx + 90, sy + 12);
+  bingkai(1);
+  hover(...tengahServer());
+  cek(naik && turunTekan && turunSeret && !p.hidden && /Rak PC Server/.test(p.innerHTML),
+    '3D: tombol ditekan menurunkan papan seketika, tetap turun selama maket diseret, muncul lagi begitu tetikus bergerak sesudah dilepas',
+    `sebelum ${naik}, ditekan ${turunTekan}, diseret ${turunSeret}, dilepas: hidden ${p.hidden}`);
+
+  // POV: tidak ada papan, juga untuk barang yang KELIHATAN dari matanya (dia
+  // menghadap dinding, rak server di kiri depannya); Esc → kembali
+  A.face = A.hadap = 'up';
+  vm32('TIGA.pov(agents.get("uji-papan-3d"))');
+  bingkai(1);
+  vm32(`papanTunjuk(${cariBarang('server')}); taruhPapanTunjuk()`);
+  const turunPov = p.hidden && jalankan(ctx, 'terpilih && terpilih.id') === 'uji-papan-3d';
+  for (const fn of dengarDok.keydown || []) diam(() => fn({ key: 'Escape' }));
+  bingkai(1);
+  vm32('taruhPapanTunjuk()');
+  cek(turunPov && !p.hidden && /Rak PC Server/.test(p.innerHTML),
+    '3D POV: selama melihat dari mata pegawai papan tidak tampil (juga untuk barang); Esc → muncul lagi',
+    `POV: ${turunPov}, sesudah Esc: hidden ${p.hidden}`);
+  vm32('tutupKartu()');
+  bingkai(1);
+
+  // klik barang membuka kartunya (kamera terbang ke sana) → papan barang itu
+  // tidak muncul; APAR di sebelahnya tetap dapat papan
+  pointer('pointerdown', ...tengahServer());
+  pointer('pointerup', ...tengahServer());
+  const kartuBuka = jalankan(ctx, 'barangTerpilih && barangTerpilih.id');
+  bingkai(1);
+  hover(...tengahServer());
+  const turunKartu = p.hidden;
+  const kP = JSON.parse(jalankan(ctx, `JSON.stringify(${cariBarang('apar')}.kotak)`));
+  hover(...layar(kP.x + kP.w / 2, kP.y + kP.h / 2, kP.y + kP.h));
+  cek(kartuBuka === 'server' && turunKartu && !p.hidden && /APAR 3 kg/.test(p.innerHTML),
+    '3D: klik barang membuka kartunya → papan barang itu tidak muncul selama kartunya terbuka; barang di sebelahnya tetap dapat papan',
+    `kartu ${kartuBuka}, hover barangnya: hidden ${turunKartu}, hover APAR: hidden ${p.hidden} | ${p.innerHTML}`);
+  vm32('tutupKartuBarang()');
+  bingkai(1);
+
+  // orang di ambang pintu samping: memudar masih dapat papan, lenyap tidak
+  const LANE_DOWN = jalankan(ctx, 'LANE_DOWN');
+  const C = orang('uji-papan-ambang', { x: -3, y: LANE_DOWN });
+  vm32('papanTunjuk(agents.get("uji-papan-ambang")); taruhPapanTunjuk()');
+  const memudar = !p.hidden;
+  C.x = -14;
+  vm32('taruhPapanTunjuk()');
+  cek(memudar && p.hidden, '3D: orang yang memudar di ambang pintu samping masih dapat papan, yang sudah lenyap di sana tidak (alfaOrang)',
+    `memudar: tampil ${memudar}; lenyap: hidden ${p.hidden}`);
+  H.agents.delete('uji-papan-ambang');
+
+  // SATU pembangun: isi & kelas papan barang yang sama di 3D dan 2D identik, cuma letaknya beda penempat
+  hover(...tengahServer());
+  const isi3 = { kelas: p.className, html: p.innerHTML }, letak3 = [pxAngka(p.style.left), pxAngka(p.style.top)];
+  vm32('RUANG3D.pilih(false); papanTunjuk(null)');
+  const SK = 2, OX = 30, OY = 20, [W, TINGGI] = JSON.parse(jalankan(ctx, 'JSON.stringify([W, H])'));
+  vm32(`scale = ${SK}; offX = ${OX}; offY = ${OY}; panggungW = ${OX * 2 + W * SK}; panggungH = ${OY * 2 + TINGGI * SK};
+    KAMERA.zoom = 1; KAMERA.tx = 0; KAMERA.ty = 0`);
+  const dengar2 = ctx.__ctxPalsu.canvas.dengar;
+  for (const [jenis, e] of [['pointermove', { pointerType: 'mouse' }],
+    ['mousemove', { clientX: (kS.x + kS.w / 2) * SK, clientY: (kS.y + kS.h / 2) * SK }]]) {
+    for (const fn of dengar2[jenis] || []) diam(() => fn(e));
+  }
+  const isi2 = { kelas: p.className, html: p.innerHTML }, letak2 = [pxAngka(p.style.left), pxAngka(p.style.top)];
+  const pembangun = jalankan(ctx, `isiPapanTunjuk(${cariBarang('server')}).html`);
+  const bawah2 = OY + (kS.y + kS.h) * SK, tengah2 = OX + (kS.x + kS.w / 2) * SK;
+  cek(!p.hidden && isi2.html === isi3.html && isi2.kelas === isi3.kelas && isi2.html === pembangun
+    && letak2[1] > bawah2 && letak2[1] <= bawah2 + 12 && Math.abs(letak2[0] + 60 - tengah2) <= 1,
+  '2D & 3D: papan barang yang sama dari satu pembangun — isi & kelasnya identik, letaknya dari penempat masing-masing',
+  `3D ${isi3.kelas} (${letak3}) | 2D ${isi2.kelas} (${letak2}), bawah 2D ${bawah2}; sama ${isi2.html === isi3.html}`);
+  vm32('RUANG3D.pilih(true)');
+  cek(!galat.length, 'frame-frame uji papan nama 3D tanpa galat', galat.join(' | '));
 }
 
 console.log('');

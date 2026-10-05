@@ -75,6 +75,8 @@
   const TEBAL_KARPET = 0.8;
   const BANTAL_BACA = { r: 9, z0: 220, z1: 232, h: 3.5 };
   const geraKurang3 = matchMedia('(prefers-reduced-motion: reduce)');
+  // layar sentuh sebagai penunjuk utama: petunjuk kendali bicara soal jari, bukan tetikus
+  const jariKasar = matchMedia('(pointer: coarse)');
 
   // --------------------------------------------------------------- warna
   /* Yang disimpan cuma satu rgba beralfa 1 per warna. Alfa pecahan (debu yang
@@ -2982,9 +2984,26 @@ void main() { hasil = vec4(1.0); }`;
     sinematikDitahanSampai = now + TAHAN_SINEMATIK_MS;
   }
 
+  /* Tampak awal atas permintaan penonton — klik dua kali, tombol ⟲ di pojok
+     panggung, atau 0 di papan ketik: satu pintu untuk ketiganya. Di POV:
+     kembali memandang lurus ke depan orangnya dengan lebar pandang semula
+     (maketnya tidak disentuh). Di maket: dihitung memegang maket (sinematik
+     berhenti dulu), sudut/zoom/sasaran disalin dari KAM_AWAL, dan versi
+     lunaknya meluncur pulang sendiri — kecuali sudah rusak. */
+  function tampakAwal() {
+    if (POV.orang) { POV.otomatis = true; POV.fov = 58 * Math.PI / 180; return; }
+    pegangMaket();
+    kameraAwal();
+    if (!lunakSehat()) salinLunak(KAM.dasar / KAM_AWAL.zoom, KAM_AWAL.sasaran);
+  }
+  // sudut, zoom, dan sasaran penonton masih persis tampak awal (tombol ⟲ tidak perlu)
+  const diTampakAwal = () => Math.abs(KAM.yaw - KAM_AWAL.yaw) < 1e-3 && Math.abs(KAM.pitch - KAM_AWAL.pitch) < 1e-3
+    && Math.abs(KAM.zoom - KAM_AWAL.zoom) < 1e-3 && KAM.sasaran.every((v, i) => Math.abs(v - KAM_AWAL.sasaran[i]) < 0.5);
+
   function tickKamera3D(dt) {
     ukurKanvas();
     if (!hingga(KAM.yaw, KAM.pitch, KAM.zoom, ...KAM.sasaran)) { laporKameraRusak('tujuan'); kameraAwal(); }
+    perbaruiTombolAwal();
     const f = fokus3D();
     const sasaran = f ? f.titik : KAM.sasaran;
     const jarak = KAM.dasar / (f ? Math.max(KAM.zoom, f.zoom) : KAM.zoom);
@@ -2999,7 +3018,8 @@ void main() { hasil = vec4(1.0); }`;
     for (let i = 0; i < 3; i++) KAM.sasaranK[i] += (sasaran[i] - KAM.sasaranK[i]) * k;
     if (!lunakSehat()) { laporKameraRusak('lunak'); salinLunak(jarak, sasaran); }
     const s = [...KAM.sasaranK];
-    if (MOD.getar) s[1] += Math.sin(now / 40) * MOD.getar * 0.9;   // getaran genset/gempa
+    // getaran genset/gempa; gerak dikurangi: maketnya diam, seperti 2D
+    if (MOD.getar && !geraKurang3.matches) s[1] += Math.sin(now / 40) * MOD.getar * 0.9;
     const m = matriksKamera(KAM.yawK, KAM.pitchK, KAM.jarakK, s);
 
     // POV menyatu dengan kamera maket lewat POV.t (0 = maket, 1 = mata)
@@ -6626,13 +6646,8 @@ void main() { hasil = vec4(1.0); }`;
     KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * Math.exp(-e.deltaY * 0.0012)));
   }, { passive: false });
   const lebarPandang = (kali) => { POV.fov = Math.max(0.6, Math.min(1.5, POV.fov * kali)); };   // ±34°..86°
-  kanvas.addEventListener('dblclick', () => {
-    // POV: kembali memandang lurus ke depan orangnya (maketnya tidak disentuh)
-    if (POV.orang) { POV.otomatis = true; POV.fov = 58 * Math.PI / 180; return; }
-    pegangMaket();
-    kameraAwal();
-    if (!lunakSehat()) salinLunak(KAM.dasar / KAM_AWAL.zoom, KAM_AWAL.sasaran);   // yang sehat tetap meluncur pulang
-  });
+  // POV: kembali memandang lurus ke depan orangnya; maket: tampak awal
+  kanvas.addEventListener('dblclick', () => tampakAwal());
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && POV.orang) keluarPov(); });
   kanvas.addEventListener('mouseleave', () => { barangHover = null; kanvas.classList.remove('tunjuk'); });
   /* Geser = "memegang lantai": titik lantai di bawah kursor ikut kursor.
@@ -6656,7 +6671,41 @@ void main() { hasil = vec4(1.0); }`;
     const b = orang ? null : pilihBarang(r);
     barangHover = b;
     kanvas.classList.toggle('tunjuk', !!(orang || b));
+    papanTunjuk(orang || b);           // papan nama melayang (room.js); letaknya dari papan3D
   }
+  /* Papan nama melayang: penempat 3D-nya. Pembangun isi dan pemilih sisinya
+     milik room.js (papanTunjuk, letakPapan) — yang di sini cuma bingkai layar
+     bendanya: kotak pilih YANG SAMA dengan sinar hover() (kotakBarang3D untuk
+     barang, badan pilihOrang untuk orang), kedelapan pojoknya diproyeksikan.
+     Dari sudut mana pun maketnya dilihat, papan menempel di bawah (atau di
+     atas) bingkai itu. null = jangan tampil: POV dan peralihannya, orang
+     yang tak kelihatan (alfaOrang: juga yang sudah lenyap di ambang pintu
+     samping), pojok di belakang kamera. */
+  function papan3D(s) {
+    if (POV.orang || POV.t > 0) return null;
+    let k;
+    if (s.kotak) k = kotakBarang3D(s.kotak);
+    else {
+      if (alfaOrang(s) <= 0.02) return null;
+      const [X, Z] = posisiOrang(s), hw = 6 * SKALA_ORANG;
+      k = [X - hw, X + hw, 0, 29 * SKALA_ORANG, Z - hw, Z + hw];
+    }
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      const p = proyeksi(k[i & 1], k[2 + ((i >> 1) & 1)], k[4 + (i >> 2)]);
+      if (!p) return null;
+      if (!j) j = { x0: p[0], x1: p[0], atas: p[1], bawah: p[1] };
+      j.x0 = Math.min(j.x0, p[0]); j.x1 = Math.max(j.x1, p[0]);
+      j.atas = Math.min(j.atas, p[1]); j.bawah = Math.max(j.bawah, p[1]);
+    }
+    return j;
+  }
+  TIGA.papan = papan3D;
+  // Tombol ditekan = mungkin mulai memutar/menggeser maket, dan selama seret
+  // hover() memang tidak jalan: papannya turun sekarang, hover() berikutnya
+  // (tetikus bergerak lagi sesudah tombol dilepas) yang memunculkannya.
+  kanvas.addEventListener('pointerdown', () => papanTunjuk(null));
+  kanvas.addEventListener('mouseleave', () => papanTunjuk(null));
 
   // ------------------------------------------------------------ nyala/mati
   function pilihTampilan(tiga, simpan) {
@@ -6669,12 +6718,13 @@ void main() { hasil = vec4(1.0); }`;
       tombol.setAttribute('aria-pressed', aktif ? 'true' : 'false');
       tombol.classList.toggle('nyala', aktif);
       tombol.textContent = aktif ? '3D' : '2D';
-      tombol.title = aktif ? 'tampilan 3D — seret untuk memutar, roda untuk zoom, klik dua kali untuk kembali, klik pegawai untuk melihat dari matanya. Klik: kembali ke 2D'
+      tombol.title = aktif ? JUDUL_3D[jariKasar.matches ? 'sentuh' : 'tetikus']
         : 'tampilan 2D pixel-art — klik: pindah ke maket 3D';
     }
     if (simpan) ingatan.tulis('tampilan', aktif ? '3d' : '2d');
     if (aktif) { lebarCss = -1; ukurKanvas(); tunjukkanPetunjuk(); }
     else { keluarPov(); fit(); petunjuk.classList.remove('tampak'); }
+    perbaruiTombolAwal();
     // kartu yang sedang terbuka dibangun ulang: tombol 3D-nya (lihat dari
     // matanya / dari CCTV) cuma ada selama 3D menyala
     if (terpilih) bukaKartu(terpilih); else if (barangTerpilih) bukaKartuBarang(barangTerpilih);
@@ -6707,11 +6757,24 @@ void main() { hasil = vec4(1.0); }`;
     monitor.classList.toggle('ringan', ringanAktif());
   }
 
-  // Petunjuk kendali, sekali tiap masuk 3D, memudar sendiri: orang yang baru
-  // pertama melihat maket ini tidak tahu kanvasnya bisa diputar.
+  /* Petunjuk kendali, sekali tiap masuk 3D, memudar sendiri: orang yang baru
+     pertama melihat maket ini tidak tahu kanvasnya bisa diputar. Tiga versi:
+     tetikus, layar sentuh (pointer: coarse — klik kanan, shift, dan roda tidak
+     ada di HP), dan papan ketik (waktu kanvasnya difokus lewat Tab). Teksnya
+     dipilih saat ditampilkan, jadi laptop layar sentuh yang ganti mode ikut. */
+  const PETUNJUK = {
+    tetikus: 'seret: putar maket · klik kanan / shift+seret: geser · roda: dekat–jauh · klik dua kali: tampak awal · klik pegawai: lihat dari matanya',
+    sentuh: 'satu jari: putar · dua jari: cubit & geser · ketuk pegawai: lihat dari matanya',
+    ketik: 'panah: putar · shift+panah: geser · + −: dekat–jauh · 0: tampak awal · [ ]: lihat dari mata pegawai · Esc: keluar',
+  };
+  const JUDUL_3D = {
+    tetikus: 'tampilan 3D — seret untuk memutar, roda untuk zoom, klik dua kali untuk kembali, klik pegawai untuk melihat dari matanya;'
+      + ' papan ketik: Tab ke maket, lalu panah, + −, 0, [ ]. Klik: kembali ke 2D',
+    sentuh: 'tampilan 3D — satu jari memutar, dua jari mencubit & menggeser, ketuk pegawai untuk melihat dari matanya. Ketuk: kembali ke 2D',
+  };
   const petunjuk = document.createElement('div');
   petunjuk.className = 'petunjuk-3d';
-  petunjuk.textContent = 'seret: putar maket · klik kanan / shift+seret: geser · roda: dekat–jauh · klik dua kali: tampak awal · klik pegawai: lihat dari matanya';
+  petunjuk.textContent = PETUNJUK.tetikus;
   stageInner.appendChild(petunjuk);
 
   // Pita POV: mata siapa yang sedang dipakai, ‹ › pindah mata, cara menoleh,
@@ -6734,8 +6797,12 @@ void main() { hasil = vec4(1.0); }`;
     hudPov.hidden = !POV.orang;
     if (POV.orang) {
       judulPov.textContent = lensa ? 'CCTV pojok kanan-atas · pantauan langsung' : 'dari mata ' + namaTampil(POV.orang);
-      kunciPov.textContent = lensa ? 'lensa menoleh sendiri · roda: zoom · klik orang / ‹ ›: pindah ke matanya · Esc: keluar'
-        : 'seret: menoleh · roda: lebar pandang · klik orang lain / ‹ ›: pindah · Esc: keluar';
+      const sentuh = jariKasar.matches;
+      kunciPov.textContent = lensa
+        ? (sentuh ? 'lensa menoleh sendiri · cubit: zoom · ketuk orang / ‹ ›: pindah ke matanya'
+          : 'lensa menoleh sendiri · roda / + −: zoom · klik orang / ‹ › / [ ]: pindah ke matanya · Esc: keluar')
+        : (sentuh ? 'seret: menoleh · cubit: lebar pandang · ketuk orang lain / ‹ ›: pindah'
+          : 'seret / panah: menoleh · roda / + −: lebar pandang · klik orang lain / ‹ › / [ ]: pindah · Esc: keluar');
       petunjuk.classList.remove('tampak');
     }
     // rupa monitor CCTV cuma selama kamera di lensa
@@ -6767,12 +6834,100 @@ void main() { hasil = vec4(1.0); }`;
     keMata(daftar[i < 0 ? (arah > 0 ? 0 : daftar.length - 1) : (i + arah + daftar.length) % daftar.length]);
   }
   let petunjukTimer = 0;
-  function tunjukkanPetunjuk() {
+  function tunjukkanPetunjuk(jenis = jariKasar.matches ? 'sentuh' : 'tetikus') {
+    petunjuk.textContent = PETUNJUK[jenis];
     petunjuk.classList.add('tampak');
     clearTimeout(petunjukTimer);
     petunjukTimer = setTimeout(() => petunjuk.classList.remove('tampak'), 6500);
   }
   kanvas.addEventListener('pointerdown', () => petunjuk.classList.remove('tampak'));
+
+  /* Tombol "⟲ tampak awal" di pojok kanan atas panggung. Klik dua kali tidak
+     kelihatan begitu petunjuknya pudar, dan ketuk dua kali di layar sentuh
+     tidak bisa diandalkan. Muncul cuma kalau sudut, zoom, atau sasaran
+     penonton sudah bergeser dari KAM_AWAL, dan tidak selama POV (pita POV
+     punya jalan pulangnya sendiri). Pojok atas, bukan bawah: tepi bawah milik
+     petunjuk & pita POV; cap monitor CCTV di pojok atas cuma ada selama POV,
+     waktu tombol ini memang tersembunyi. Diperbarui tiap tick kamera 3D. */
+  const tombolAwal = document.createElement('button');
+  tombolAwal.type = 'button';
+  tombolAwal.className = 'awal-3d';
+  tombolAwal.hidden = true;
+  tombolAwal.textContent = '⟲ tampak awal';
+  tombolAwal.title = 'kembali ke tampak awal maket (sama dengan klik dua kali, atau 0 di papan ketik)';
+  stageInner.appendChild(tombolAwal);
+  let tombolAwalTampak = false;
+  function perbaruiTombolAwal() {
+    const tampak = TIGA.aktif && !POV.orang && !diTampakAwal();
+    if (tampak === tombolAwalTampak) return;
+    tombolAwalTampak = tampak;
+    tombolAwal.hidden = !tampak;
+  }
+  tombolAwal.addEventListener('click', () => {
+    const dariKetik = document.activeElement === tombolAwal;
+    tampakAwal();
+    perbaruiTombolAwal();
+    // tombolnya lenyap di bawah jari pemakai papan ketik: fokusnya pindah ke maket, bukan jatuh ke <body>
+    if (dariKetik && typeof kanvas.focus === 'function') kanvas.focus({ preventScroll: true });
+  });
+
+  /* Papan ketik. Kanvasnya bisa difokus (tabindex di index.html); tombol
+     cuma berlaku selama FOKUSNYA di kanvas itu — fokus di kolom isian,
+     select kartu pegawai, atau tombol mana pun = bukan urusan maket — dan
+     diam selama dialog terbuka: klik X-banner membuka papan informasi sambil
+     fokusnya tetap di kanvas, dan panah di situ bukan untuk memutar maket di
+     belakangnya. Ctrl/Cmd/Alt dibiarkan ke peramban (Ctrl + − 0 = zoom
+     halaman); AltGr — kurung siku di papan ketik Eropa — tetap lewat.
+     Panah = menyeret sejauh satu langkah ke arah itu (POV: menoleh),
+     shift+panah = menggeser, + − = dekat–jauh (POV: lebar pandang), 0 =
+     tampakAwal(), [ ] = pindahMata() seperti ‹ › di pita — dari maket, ]
+     masuk ke mata pegawai pertama: satu-satunya jalan ke POV tanpa tetikus. */
+  const LANGKAH_KETIK = { yaw: 0.1, pitch: 0.06, geser: 24, zoom: 1.15, lirikYaw: 0.1, lirikPitch: 0.06 };
+  function ketikBoleh(e) {
+    if (!TIGA.aktif || e.defaultPrevented || e.isComposing) return false;
+    const altGr = typeof e.getModifierState === 'function' && e.getModifierState('AltGraph');
+    if (!altGr && (e.ctrlKey || e.metaKey || e.altKey)) return false;
+    if (document.activeElement !== kanvas) return false;
+    return !document.querySelector('.dlg-latar:not([hidden]), dialog[open]');
+  }
+  function tombolKetik(e) {
+    const k = e.key, L = LANGKAH_KETIK;
+    const panah = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[k];
+    if (panah) {
+      const [dx, dy] = panah;
+      if (POV.orang) {
+        POV.otomatis = false;
+        POV.lirikYaw = Math.max(-Math.PI, Math.min(Math.PI, POV.lirikYaw - dx * L.lirikYaw));
+        POV.lirikPitch = Math.max(-0.95, Math.min(0.8, POV.lirikPitch - dy * L.lirikPitch));
+      } else {
+        pegangMaket();
+        if (e.shiftKey) geserSasaran(dx * L.geser, dy * L.geser);
+        else [KAM.yaw, KAM.pitch] = jepitSudut(KAM.yaw - dx * L.yaw, KAM.pitch + dy * L.pitch);
+      }
+      return true;
+    }
+    const dekat = k === '+' || k === '=' ? 1 : k === '-' || k === '_' ? -1 : 0;
+    if (dekat) {
+      if (POV.orang) lebarPandang(Math.pow(L.zoom, -dekat));
+      else {
+        pegangMaket();
+        KAM.zoom = Math.max(0.6, Math.min(4.5, KAM.zoom * Math.pow(L.zoom, dekat)));
+      }
+      return true;
+    }
+    if (k === '0') { tampakAwal(); return true; }
+    if (k === '[' || k === ']') { pindahMata(k === ']' ? 1 : -1); return true; }
+    return false;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (ketikBoleh(e) && tombolKetik(e)) e.preventDefault();
+  });
+  // fokus lewat Tab (bukan klik): petunjuknya versi papan ketik
+  kanvas.addEventListener('focus', () => {
+    let lewatKetik = false;
+    try { lewatKetik = kanvas.matches(':focus-visible'); } catch { /* peramban tanpa :focus-visible: diam */ }
+    if (lewatKetik && TIGA.aktif && !POV.orang) tunjukkanPetunjuk('ketik');
+  });
 
   // Konteks WebGL bisa dicabut peramban (driver GPU diulang, tab lain rakus
   // memori). Membangun ulang semua sumber daya tidak sepadan: pulang ke 2D,

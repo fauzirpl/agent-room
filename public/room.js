@@ -395,6 +395,7 @@ let scale = 2, offX = 0, offY = 0;
 // lebar panggung, dicatat waktu fit(): balon pikiran dijaga supaya tidak
 // separuh keluar layar waktu orangnya berdiri di tepi ruangan
 let panggungW = 0;
+let panggungH = 0;     // tingginya: papan nama melayang dijepit di dalam panggung
 
 /* Dua rupa halaman dari URL, dibaca SEBELUM fit() karena fit() ikut berubah:
    ?kadis=1   — tampilan HP buat kepala dinas: kanvas disembunyikan, panel jadi
@@ -449,6 +450,7 @@ function fit() {
   offX = cr.left - pr.left;
   offY = cr.top - pr.top;
   panggungW = pr.width;
+  panggungH = pr.height;
 }
 new ResizeObserver(fit).observe(stageInner);
 
@@ -9956,8 +9958,17 @@ canvas.addEventListener('mousemove', (e) => {
   const orang = agenDiTitik(cx, cy);
   barangHover = orang || diSisip || diBanner ? null : barangDiTitik(cx, cy);
   canvas.style.cursor = orang || diSisip || diBanner || barangHover ? 'pointer' : '';
+  papanTunjuk(tunjukTetikus ? orang || barangHover : null);   // papan nama melayang, cuma tetikus
 });
-canvas.addEventListener('mouseleave', () => { barangHover = null; });
+canvas.addEventListener('mouseleave', () => { barangHover = null; papanTunjuk(null); });
+/* Ketukan jari juga melahirkan mousemove tiruan tepat sebelum click-nya, dan
+   MouseEvent tidak menyebut jenis penunjuknya. Pointer event menyebutnya dan
+   selalu datang lebih dulu, jadi dicatat di sini: layar sentuh tidak dapat
+   papan nama melayang — ketukannya sudah membuka kartu. */
+let tunjukTetikus = false;
+const catatPenunjuk = (e) => { tunjukTetikus = e.pointerType === 'mouse'; };
+canvas.addEventListener('pointerdown', catatPenunjuk);
+canvas.addEventListener('pointermove', catatPenunjuk);
 // Esc melepas zoom bukaan. Dialog lain punya handler Escape-nya sendiri dan
 // tidak terganggu: gerbang RUANG_KADIS.zoom bikin handler ini diam kalau
 // zoomnya memang tidak menyala. Kartu barang ikut ditutup Esc, dengan gerbang
@@ -10774,6 +10785,158 @@ function drawSorotBarang() {
     ctx.strokeRect(K.x - 1.5, K.y - 1.5, K.w + 3, K.h + 3);
     ctx.restore();
   }
+}
+
+/* ================================================== papan nama melayang ===
+   Kursor tetikus yang melintas di atas perabot atau pegawai memunculkan papan
+   kecil di dekatnya SEBELUM apa pun diklik. Dulu yang ada cuma kursor tangan
+   dan bingkai tipis, dan satu-satunya jalan tahu "ini apa" adalah membuka
+   kartunya. Barang dapat STIKER BMN — nama, kode barang, dan NUP, persis
+   baris kode kartu inventarisnya; orang dapat PAPAN NAMA DADA akrilik hitam
+   — namaTampil() dan jabatan, persis kepala kartu pegawainya.
+
+   SATU pembangun, DUA penempat. isiPapanTunjuk() menyusun isinya untuk 2D
+   dan 3D sekaligus. Penempatnya cuma menjawab "di layar, benda ini selebar
+   x0..x1 dan setinggi atas..bawah": papan2D() di bawah lewat keLayar() jalur
+   kanvas, TIGA.papan milik ruang3d.js lewat proyeksi kotak pilih 3D-nya.
+   Memilih sisi, menjepit ke panggung, dan menghindari balon dikerjakan
+   sekali di letakPapan(), jadi rupa dan perilaku 2D–3D tidak bisa hanyut.
+
+   Sasarannya dipilih hover yang sudah ada — mousemove kanvas 2D, hover() 3D
+   yang dijepit 50 ms — tanpa sinar atau pendengar gerak baru. Letaknya
+   diperbarui tiap frame (frame() → taruhPapanTunjuk, seperti taruhKartu),
+   jadi papan orang yang berjalan atau maket yang berputar sendiri tetap
+   menempel pada bendanya.
+
+   Turun kalau: kursor keluar kanvas, tombol ditekan di maket 3D (mungkin
+   mulai memutar/menggeser), POV, kartu benda itu sendiri sedang terbuka,
+   orangnya pulang atau masuk WC/gudang, atau kedua sisinya tertutup balon
+   ucap/pikir/lencana galat — balon membawa kabar yang sedang terjadi, papan
+   ini cuma nama yang bisa dibaca lagi sebentar kemudian. Di bawah #kartu
+   (z-index), tembus klik. Tidak ada versi tekan-lama untuk layar sentuh:
+   ketukan di sana sudah membuka kartunya. */
+let papanEl = null, papanSasaran = null, papanIsi = '', papanW = 0, papanH = 0, papanLetak = '';
+const PAPAN_JARAK = 5;      // px CSS antara bingkai benda dan papannya
+const PAPAN_TEPI = 4;       // jarak papan ke tepi panggung
+
+function isiPapanTunjuk(s) {
+  if (s.kotak) {
+    const bmn = s.kode !== '-';
+    return { kelas: 'papan-tunjuk pt-barang', warna: P.gold,
+      html: '<span class="pt-kop">' + (bmn ? 'MILIK NEGARA' : 'BARANG HABIS PAKAI') + '</span>'
+        + '<b class="pt-nama">' + esc(s.nama) + '</b>'
+        + '<span class="pt-sub">' + (bmn ? esc(s.kode) + ' · NUP ' + String(s.nup).padStart(6, '0') : 'tidak dicatat BMN') + '</span>' };
+  }
+  const j = jabatanDari(s.peran);
+  return { kelas: 'papan-tunjuk pt-orang', warna: j.pal.main,
+    html: '<b class="pt-nama">' + esc(namaTampil(s)) + '</b><span class="pt-sub">' + esc(j.nama) + '</span>' };
+}
+
+function elPapan() {
+  if (!papanEl) {
+    papanEl = document.createElement('div');
+    papanEl.className = 'papan-tunjuk';
+    papanEl.hidden = true;
+    papanEl.setAttribute('aria-hidden', 'true');   // salinan kepala kartu; pembaca layar dapat kartunya
+    stageInner.appendChild(papanEl);
+  }
+  return papanEl;
+}
+
+// s = barang (daftarBarang) atau orang (penghuni); null = turunkan
+function papanTunjuk(s) {
+  if (!s) {
+    papanSasaran = null;
+    if (papanEl && !papanEl.hidden) papanEl.hidden = true;
+    return;
+  }
+  const isi = isiPapanTunjuk(s);
+  if (s === papanSasaran && isi.html === papanIsi) return;   // letaknya urusan frame
+  papanSasaran = s;
+  const el = elPapan();
+  if (isi.html !== papanIsi) {
+    papanIsi = isi.html;
+    el.className = isi.kelas;
+    el.style.setProperty('--pt-warna', isi.warna);
+    el.innerHTML = isi.html;
+    papanW = 0;                                   // diukur ulang begitu tampil
+  }
+  taruhPapanTunjuk();
+}
+
+// Gerbang 2D & 3D sekaligus; yang khusus 3D (POV, ambang pintu) di TIGA.papan
+function papanBoleh(s) {
+  if (s === terpilih || s === barangTerpilih) return false;   // kartunya sendiri sudah terbuka
+  if (s.kotak) return true;
+  if (s.alpha != null && s.alpha <= 0.02) return false;         // di balik pintu WC / gudang
+  for (const a of penghuni()) if (a === s) return true;
+  return false;                                                 // sudah pulang
+}
+
+// Penempat 2D: bingkai benda dalam px CSS panggung lewat keLayar() jalur
+// kanvas (ikut zoom & geser kamera). Orang = kotak klik agenDiTitik().
+function papan2D(s) {
+  const K = s.kotak || { x: s.x - 8, y: s.y - 30, w: 16, h: 34 };
+  const [x0, atas] = keLayar(K.x, K.y), [x1, bawah] = keLayar(K.x + K.w, K.y + K.h);
+  return { x0, x1, atas, bawah };
+}
+
+/* Balon yang sedang tampil, dalam px CSS panggung. Ketiganya dipasang lewat
+   left/top dengan translate(-50%, -100%) (style.css), jadi kotaknya terbaca
+   dari situ plus ukurannya; bawahnya dilebihkan untuk ekor balon ucap dan
+   dua gelembung balon pikir. */
+function kotakBalon() {
+  const hasil = [];
+  for (const a of penghuni()) {
+    for (const el of [a.el, a.elPikir, a.elMacet]) {
+      if (!el || !el.style || el.style.display === 'none' || el.style.visibility === 'hidden') continue;
+      const x = parseFloat(el.style.left), y = parseFloat(el.style.top), w = el.offsetWidth, h = el.offsetHeight;
+      if (w > 0 && h > 0 && Number.isFinite(x) && Number.isFinite(y)) hasil.push([x - w / 2 - 2, y - h - 2, x + w / 2 + 2, y + 14]);
+    }
+  }
+  return hasil;
+}
+
+/* Sisi: di BAWAH bendanya dulu. Balon ucap, balon pikir, dan lencana galat
+   selalu tumbuh ke atas dari kepala, jadi papan nama di bawah kaki hampir
+   tidak pernah berebut tempat dengan balon orangnya sendiri; papan barang
+   ikut aturan yang sama, seperti keterangan di bawah gambar. Yang tidak muat
+   di panggung baru di ATAS; yang dua-duanya tidak muat (benda sebesar layar)
+   dijepit masuk panggung. Tiap calon yang tertutup balon dilewati; semuanya
+   tertutup = null, tidak tampil. Mendatar: di tengah bagian benda yang
+   kelihatan, dijepit ke panggung. Hasil [kiri, atas] px CSS, bulat. */
+function letakPapan(j, w, h, lebar, tinggi, balon) {
+  if (![j.x0, j.x1, j.atas, j.bawah, w, h, lebar, tinggi].every(Number.isFinite)) return null;
+  if (j.x1 < 0 || j.x0 > lebar || j.bawah < 0 || j.atas > tinggi) return null;   // di luar bidikan
+  const tengah = (Math.max(0, j.x0) + Math.min(lebar, j.x1)) / 2;
+  const kiri = Math.round(Math.max(PAPAN_TEPI, Math.min(lebar - w - PAPAN_TEPI, tengah - w / 2)));
+  const muat = (y) => y >= PAPAN_TEPI && y + h <= tinggi - PAPAN_TEPI;
+  const sisi = [j.bawah + PAPAN_JARAK, j.atas - PAPAN_JARAK - h];
+  const calon = [...sisi.filter(muat),
+    ...sisi.filter((y) => !muat(y)).map((y) => Math.max(PAPAN_TEPI, Math.min(tinggi - h - PAPAN_TEPI, y)))];
+  for (const c of calon) {
+    const atas = Math.round(c);
+    if (!balon.some((b) => kiri < b[2] && kiri + w > b[0] && atas < b[3] && atas + h > b[1])) return [kiri, atas];
+  }
+  return null;
+}
+
+function taruhPapanTunjuk() {
+  const s = papanSasaran;
+  if (!s) return;
+  const j = !papanBoleh(s) ? null : TIGA.aktif ? (TIGA.papan ? TIGA.papan(s) : null) : papan2D(s);
+  const el = elPapan();
+  if (j) {
+    if (el.hidden) el.hidden = false;             // terukur cuma selagi tampil
+    if (!papanW) { papanW = el.offsetWidth; papanH = el.offsetHeight; }
+  }
+  const letak = j && letakPapan(j, papanW, papanH, panggungW, panggungH, kotakBalon());
+  if (!letak) { if (!el.hidden) el.hidden = true; return; }
+  const kunci = letak.join(',');
+  if (kunci === papanLetak) return;
+  papanLetak = kunci;
+  el.style.left = letak[0] + 'px';
+  el.style.top = letak[1] + 'px';
 }
 
 /* ------------------------------------------------------------------ events */
@@ -12887,6 +13050,9 @@ const kameraSinematikBoleh = () => !geraKurang.matches;
      gambar(stasiun)     menggantikan seluruh penggambaran 2D di frame()
      keLayar(x, y, kaki) titik dunia 2D + garis kakinya → px CSS relatif stageInner
      tampak(x, y)        pengganti kameraTampak() untuk balon
+     papan(s)            penempat 3D papan nama melayang: bingkai layar barang/orang s
+                         {x0, x1, atas, bawah} px CSS, null = jangan tampil (diisi
+                         ruang3d.js begitu menyala; tidak ada di literal di bawah)
      tanpaNeon           drawWall melewatkan tabung neon: di 3D neon itu benda gantung
      tanpaCCTV           drawWall melewatkan kubah CCTV & bayangan tempelnya: di 3D
                          kubahnya benda yang menoleh dan berbayang sungguhan
@@ -16359,6 +16525,126 @@ function gambarTemaMeja(x, y) {
   r(x + 39, y - 8, 5, 2, '#f4f2ec');
 }
 
+/* ----------------------------------------------- jepret foto dokumentasi ---
+   Tombol 📷 di bilah panggung: SATU foto diam per klik — "dokumentasi
+   kegiatan" ala lampiran SPJ — yang disimpan peramban penonton sendiri
+   sebagai PNG. Tidak ada jepret beruntun, video, rekaman, penyangga, putar
+   ulang, atau unggah ke server: rekaman video sudah DITOLAK pemilik kantor
+   ini, dan tombol ini sengaja tidak pernah tumbuh ke arah sana.
+
+   Klik cuma memasang permintaan; yang memotret frame() berikutnya, SESUDAH
+   ruangan selesai digambar, di task yang sama. Untuk 3D itu wajib: konteks
+   WebGL2 ruang3d.js dibuat tanpa preserveDrawingBuffer, jadi isi kanvasnya
+   cuma utuh sampai task penggambarnya selesai — drawImage dari pendengar klik
+   menyalin kanvas kosong. 2D ikut jalur yang sama supaya cuma ada satu jalur.
+
+   Yang masuk foto cuma isi KANVAS yang sedang tampil (#room atau #room3d),
+   ditempel di atas latar yang dilukis lebih dulu: kanvas 3D di-clear
+   transparan, dan panel kayu jati di belakangnya cuma latar CSS (.stage).
+   Balon ucap/pikir (#overlay), kartu pegawai, petunjuk kendali, pita POV, dan
+   cap monitor CCTV semuanya DOM — TIDAK ikut, sengaja di versi pertama ini:
+   fotonya bersih. Karena yang disalin persis yang sudah tampil, mode
+   panggung (?panggung=1) aman: tidak satu huruf pun di foto yang belum ada di
+   layar — malah lebih sedikit, isi balonnya tidak ikut. Capnya cuma nama
+   kantor dan waktu, tanpa nama pegawai, proyek, atau folder. */
+const JEPRET_JEDA_MS = 1000;        // jeda rana: Enter yang ditahan di tombol tidak jadi jepret beruntun
+const JEPRET_CABUT_MS = 4000;       // URL objek dicabut sesudah unduhannya sempat dimulai
+// Latar foto = latar panggung di style.css: --kayu/--kayu-tua (.stage), dan
+// rupa monitor #room3d.cctv selama pantauan CCTV. Dijaga uji-tiga.mjs bagian 33.
+const JEPRET_KAYU = '#4a3826', JEPRET_KAYU_TUA = '#241a11';
+const JEPRET_CCTV_LATAR = '#0b0d0c', JEPRET_CCTV_SARING = 'grayscale(1) contrast(1.45) brightness(1.08)';
+const JEPRET = { minta: false, terakhir: -1e9 };
+const capFotoDokumentasi = (d) => 'DOKUMENTASI KEGIATAN · DINAS AI KLOD · '
+  + tanggalID(d).toUpperCase() + ' ' + jam(d).slice(0, 5);
+const namaFotoDokumentasi = (d) => 'dokumentasi-kegiatan-' + tanggalLokal(d).replace(/-/g, '') + '-'
+  + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '.png';
+
+const jepretBtn = document.getElementById('jepretBtn');
+function jepretKlik() {
+  if (JEPRET.minta || now - JEPRET.terakhir < JEPRET_JEDA_MS) return;
+  JEPRET.minta = true;
+  JEPRET.terakhir = now;
+  // kilat rana sekejap (.stage-inner.jepret) — DOM, tidak pernah masuk foto
+  stageInner.classList.remove('jepret');
+  void stageInner.offsetWidth;
+  stageInner.classList.add('jepret');
+}
+if (jepretBtn) jepretBtn.onclick = jepretKlik;
+
+// Dipanggil frame() tepat sesudah ruangan digambar, di task yang sama.
+function jepretSesudahGambar(tiga) {
+  if (!JEPRET.minta) return;
+  JEPRET.minta = false;              // satu klik = satu foto; yang gagal pun tidak diulang frame berikutnya
+  try {
+    const d = new Date();
+    const sumber = tiga ? document.getElementById('room3d') : canvas;
+    const foto = susunFotoDokumentasi(sumber, tiga && sumber.classList.contains('cctv'), capFotoDokumentasi(d));
+    foto.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = namaFotoDokumentasi(d);
+      document.body.appendChild(a);  // peramban lama cuma mengunduh dari tautan yang menempel di dokumen
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), JEPRET_CABUT_MS);
+    }, 'image/png');
+  } catch (e) {
+    // foto yang gagal tidak boleh membekukan ruangan: frame() tetap menjadwalkan frame berikutnya
+    console.warn('[jepret] foto gagal:', e);
+    laporGalat('jepret: ' + galatPesan(e), 'room.js');
+  }
+}
+
+// Foto = latar panggung, kanvas yang tampil seukuran piksel aslinya, lalu pita
+// keterangan di BAWAH-nya (tidak menutupi ruangan), seperti keterangan foto
+// yang ditempel di lampiran SPJ.
+function susunFotoDokumentasi(sumber, cctv, teks) {
+  const w = sumber.width, h = sumber.height;
+  const kv = document.createElement('canvas');
+  const k = kv.getContext('2d');
+  const huruf = (n) => '700 ' + n + 'px ui-monospace, Consolas, monospace';
+  // huruf cap mengikuti lebar foto, dikecilkan kalau kalimatnya tidak muat
+  let px = Math.max(11, Math.round(w / 64));
+  k.font = huruf(px);
+  while (px > 8 && k.measureText(teks).width > w - 2 * px) { px--; k.font = huruf(px); }
+  const pita = Math.round(px * 2.2);
+  kv.width = w;                      // mengubah ukuran mengosongkan state ctx: font dipasang lagi di bawah
+  kv.height = h + pita;
+  // 1. latar DULU
+  if (cctv) {
+    k.fillStyle = JEPRET_CCTV_LATAR;
+    k.fillRect(0, 0, w, h);
+  } else {
+    // radial-gradient(120% 90% at 50% 0%, kayu 0%, kayu-tua 70%) milik .stage:
+    // lingkaran satuan diregang jadi elips gradiennya
+    k.save();
+    k.setTransform(w * 1.2, 0, 0, h * 0.9, w / 2, 0);
+    const g = k.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, JEPRET_KAYU);
+    g.addColorStop(0.7, JEPRET_KAYU_TUA);
+    g.addColorStop(1, JEPRET_KAYU_TUA);
+    k.fillStyle = g;
+    k.fillRect(-1, 0, 2, 2);
+    k.restore();
+  }
+  // 2. ruangan yang tampil; rupa monitor CCTV di layar itu filter CSS, bukan isi kanvasnya
+  if (cctv) k.filter = JEPRET_CCTV_SARING;
+  k.drawImage(sumber, 0, 0, w, h);
+  k.filter = 'none';
+  // 3. pita keterangan: papan akrilik hitam bergaris emas, huruf krem
+  k.fillStyle = '#1a1611';
+  k.fillRect(0, h, w, pita);
+  k.fillStyle = '#d9b64a';
+  k.fillRect(0, h, w, Math.max(1, Math.round(px / 8)));
+  k.font = huruf(px);
+  k.textBaseline = 'middle';
+  k.fillStyle = '#f3edda';
+  k.fillText(teks, px, h + pita / 2);
+  return kv;
+}
+
 /* -------------------------------------------------------------------- loop */
 let last = performance.now();
 let dripT = 0;
@@ -16428,11 +16714,17 @@ function frame(ts) {
 
   const busy = [...agents.values(), ...peserta, ...standby].filter((a) => a.state === 'work');
   const activeStations = new Set(busy.map((a) => a.station));
+  // papan nama melayang ikut bendanya — sesudah kamera (2D & 3D) dan balon
+  // (update() di atas) sama-sama dipasang untuk frame ini
+  taruhPapanTunjuk();
 
   // Tampilan 3D: simulasi di atas sudah jalan apa adanya (Aturan 1 tidak
   // tahu-menahu soal tampilan); yang diganti cuma cara menggambarnya.
   if (TIGA.aktif) {
     TIGA.gambar(activeStations);
+    // foto 📷 SEKARANG, sebelum task ini selesai dan buffer WebGL-nya dikosongkan;
+    // 3D yang mati di tengah gambar (gagalTotal) menyerahkannya ke frame 2D berikutnya
+    if (TIGA.aktif) jepretSesudahGambar(true);
     taruhKartu();
     jadwalFrame();
     return;
@@ -16445,7 +16737,9 @@ function frame(ts) {
   // Kamera: sesudah skala integer fit() (yang itu CSS, bukan ctx), sebelum
   // segala gambar. tx/ty sudah bulat, zoom bulat di luar masa easing.
   ctx.setTransform(KAMERA.zoom * SS, 0, 0, KAMERA.zoom * SS, KAMERA.tx * SS, KAMERA.ty * SS);
-  if (MOD.getar) ctx.translate(0, Math.round(Math.sin(now / 40) * MOD.getar));
+  // prefers-reduced-motion: guncangannya dibekukan seperti kipas plafon —
+  // layar yang bergetar itu hiasan, gensetnya tetap menyala di narasinya
+  if (MOD.getar && !geraKurang.matches) ctx.translate(0, Math.round(Math.sin(now / 40) * MOD.getar));
 
   drawWall();
   gambarLapis('gambarDinding');
@@ -16519,6 +16813,7 @@ function frame(ts) {
     ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();
+  jepretSesudahGambar(false);   // foto 📷 dari kanvas 2D yang baru selesai digambar
 
   taruhKartu();
   jadwalFrame();

@@ -8,6 +8,35 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Ditambahkan
 
+- **Papan nama melayang saat kursor melintas.** Arahkan tetikus ke perabot atau
+  pegawai — di 2D maupun 3D — dan papan kecil muncul di dekatnya sebelum apa pun
+  diklik: barang mendapat stiker inventaris bergaya BMN (kop MILIK NEGARA, nama
+  barang, kode barang · NUP; barang habis pakai ditandai "tidak dicatat BMN"),
+  pegawai mendapat papan nama dada akrilik hitam berisi nama dan jabatannya.
+  Papannya duduk di bawah bendanya, pindah ke atas kalau tertutup balon ucap
+  atau pikir, ikut bendanya saat orangnya berjalan atau maket bergerak, dan
+  turun selama maket diseret, selama POV, atau saat kartu benda itu sendiri
+  terbuka. Di layar sentuh tidak ada papan — ketukan sudah membuka kartunya.
+- **Jepret foto dokumentasi kegiatan (📷).** Tombol baru di bilah panggung
+  memotret satu foto diam PNG dari ruangan yang sedang tampil — 2D atau maket
+  3D — dan peramban penonton sendiri mengunduhnya sebagai
+  `dokumentasi-kegiatan-YYYYMMDD-HHMM.png`, dengan pita keterangan ala lampiran
+  SPJ: "DOKUMENTASI KEGIATAN · DINAS AI KLOD · 3 OKTOBER 2026 14.05". Satu klik
+  satu foto (jeda rana 1 detik); tanpa video, rekaman, atau unggahan ke server.
+  Foto 3D diambil tepat sesudah maket digambar di frame yang sama, karena
+  kanvas WebGL tidak menyimpan isinya. Balon, kartu, dan petunjuk tidak ikut,
+  jadi aman di `?panggung=1`; selama pantauan CCTV fotonya ikut hitam-putih.
+- **Tampilan 3D: kendali papan ketik dan tombol tampak awal.** Maket 3D kini
+  bisa difokus dengan Tab: panah memutar, shift+panah menggeser, + − mendekat
+  dan menjauh, 0 kembali ke tampak awal, [ ] pindah ke mata pegawai sebelumnya
+  atau berikutnya (dari maket, `]` langsung masuk ke mata pegawai pertama),
+  Esc keluar. Tombolnya diam selama mengetik di kolom isian, selama dialog
+  terbuka, dan waktu Ctrl/Cmd/Alt ditekan. Begitu kamera bergeser, tombol kecil
+  **⟲ tampak awal** muncul di pojok kanan atas panggung — klik dua kali bukan
+  lagi satu-satunya jalan pulang.
+- **Tampilan 3D: petunjuk untuk layar sentuh.** Di HP dan tablet petunjuknya
+  berbunyi "satu jari: putar · dua jari: cubit & geser · ketuk pegawai: lihat
+  dari matanya", dan petunjuk yang panjang membungkus alih-alih terpotong.
 - **Upacara Hari Kesadaran Nasional tiap tanggal 17.** Apel pagi tanggal 17
   (hari kerja) menjadi upacara: mengheningkan cipta dengan kepala tertunduk,
   pembacaan Pancasila dan Panca Prasetya Korpri, lalu amanat HKN — sekitar 73
@@ -464,6 +493,10 @@ Semua perubahan yang berarti dicatat di sini. Formatnya mengikuti
 
 ### Diubah
 
+- **Gerak dikurangi kini juga membekukan guncangan layar.** Uji genset bulanan,
+  gempa kecil, dan hentakan kaki tamu tenar tidak lagi mengguncang 2D maupun 3D
+  bagi penonton yang menyalakan `prefers-reduced-motion`; kejadiannya tetap
+  berjalan.
 - **Tool MCP tidak lagi semuanya menghadap kadis.** Sekitar 87% panggilan MCP
   ternyata peramban otomatis, sehingga pintu kadis buka-tutup terus. Kini
   dipilah menurut servernya (`MCP_MEJA` di `room.js`): peramban dan kendali

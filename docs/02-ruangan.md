@@ -1132,6 +1132,40 @@ bisa diklik; yang kartunya terbuka dibingkai lebih tebal dan berdenyut.
 Kartunya meminjam `#kartu` milik kartu pegawai, tapi keadaannya terpisah
 (`barangTerpilih`), jadi `terpilih` tetap cuma berarti pegawai.
 
+### Papan nama saat kursor melintas
+
+Kursor tetikus yang melintas di atas perabot atau pegawai — di 2D maupun 3D —
+memunculkan papan kecil di dekatnya **sebelum apa pun diklik**. Dulu yang ada
+cuma kursor tangan dan bingkai tipis; untuk tahu "ini apa" harus membuka
+kartunya.
+
+| Yang ditunjuk | Papannya |
+|---|---|
+| barang | stiker inventaris: kop **MILIK NEGARA**, nama barang, kode barang · NUP — sama persis dengan baris kode kartu inventarisnya; barang habis pakai berkop **BARANG HABIS PAKAI** dan "tidak dicatat BMN" |
+| pegawai | papan nama dada akrilik hitam: nama (`namaTampil`) kapital dan jabatannya, strip kiri berwarna jabatan seperti chip kartunya |
+
+Letaknya di **bawah** bendanya: balon ucap, balon pikir, dan lencana galat
+selalu tumbuh ke atas dari kepala, jadi papan di bawah kaki hampir tidak pernah
+berebut tempat dengan balon orangnya sendiri. Kalau tempat itu tertutup balon
+atau tidak muat di panggung, papannya pindah ke atas; kalau dua-duanya tertutup
+balon, papannya tidak tampil — balon membawa kabar yang sedang terjadi, papan
+ini cuma nama. Papan ikut bendanya tiap frame (orang yang berjalan, kamera yang
+menzoom, maket yang berputar sendiri) dan turun kalau kursor keluar kanvas,
+tombol ditekan di maket 3D (mungkin mulai memutar/menggeser), selama POV,
+selama kartu benda itu sendiri terbuka, waktu orangnya pulang, masuk WC/gudang,
+atau lenyap di ambang pintu samping, dan kalau bendanya keluar bidikan kamera.
+Di layar sentuh tidak ada papan, juga tidak versi tekan-lama: ketukan di sana
+sudah membuka kartunya.
+
+Satu pembangun (`isiPapanTunjuk`), dua penempat: 2D lewat `keLayar()` jalur
+kanvas, 3D lewat `TIGA.papan` — kotak pilih yang sama dengan sinar hover-nya,
+kedelapan pojoknya diproyeksikan. Memilih sisi, menjepit ke panggung, dan
+menghindari balon dikerjakan sekali (`letakPapan`), jadi 2D dan 3D tidak bisa
+hanyut. Sasarannya dipilih hover yang sudah ada (mousemove kanvas 2D, `hover()`
+3D yang dijepit 50 ms) — tidak ada sinar atau pendengar gerak baru. Papannya
+tembus klik, di bawah `#kartu`, dan animasi munculnya mati kalau
+`prefers-reduced-motion`. `uji-tiga.mjs` bagian 34 menjaganya.
+
 ## Peserta rapat
 
 Subagent punya hook sendiri: `SubagentStart` menandai satu agen masuk,
@@ -1448,6 +1482,9 @@ antre.
 Klik pegawainya — di ruangan atau di barisnya pada panel — untuk membuka kartu
 detail. Kartunya menempel pada orangnya dan ikut berjalan, jadi tidak perlu
 ditebak kartu ini punya siapa; yang sedang dibuka juga diberi sorotan di lantai.
+Sebelum diklik pun, kursor tetikus yang melintas di atasnya sudah memunculkan
+papan nama dada berisi nama dan jabatannya (lihat **Papan nama saat kursor
+melintas**).
 
 | Isi kartu | Keterangan |
 |---|---|
@@ -2115,7 +2152,9 @@ tidak ada, ya tidak ada). Yang berubah:
   karena pemanggil boleh memegang partikel yang dikembalikan `spawn`), debu
   mati, rim light mati. Kedip neon **tidak** dimatikan: itu identitas
   ruangan, bukan hiasan. `prefers-reduced-motion` juga membekukan kipas
-  plafon.
+  plafon dan guncangan layar (`MOD.getar`: uji genset, gempa kecil, hentakan
+  kaki tamu tenar) — kanvas 2D tidak digeser dan kamera maket 3D tidak
+  digoyang; kejadiannya sendiri tetap berjalan.
 
 Fps sebenarnya (frame yang benar-benar digambar) tampil kecil di panel ⚙️
 selagi panelnya terbuka, berikut sebab otomatisnya kalau ada.
@@ -2161,6 +2200,52 @@ bikin garis tepi sprite belang di layar penonton. Balon ucap dan balon pikiran
 tetap tampil (mereka anak stageInner), jadi padukan dengan `?panggung=1` kalau
 siarannya ditonton orang lain: isi balon dan kabar disamarkan, animasinya tetap.
 
+### Jepret foto dokumentasi kegiatan
+
+Tombol **📷** di bilah bawah memotret **satu foto diam** ruangan yang sedang
+tampil — 2D atau 3D, mana pun yang menyala — dan peramban kamu sendiri
+mengunduhnya sebagai `dokumentasi-kegiatan-YYYYMMDD-HHMM.png`, seperti foto
+lampiran SPJ. Di bawah fotonya ada pita keterangan bergaris emas:
+`DOKUMENTASI KEGIATAN · DINAS AI KLOD · 15 APRIL 2026 09.03` — tanggal dari
+`tanggalID()` dan jam dari `jam()` yang dipakai bagian lain halaman, menurut jam
+mesin penontonnya. Pitanya memanjangkan foto ke bawah, tidak menutupi ruangan.
+
+Satu klik = satu foto. Tidak ada jepret beruntun, video, rekaman, penyangga,
+putar ulang, atau unggahan ke server — rekaman video sudah ditolak, dan tombol
+ini sengaja tidak tumbuh ke sana. Dua klik sebelum frame berikutnya tetap satu
+foto, dan klik dalam jeda rana 1 detik sesudahnya diabaikan (Enter yang ditahan
+di tombol tidak jadi jepret beruntun). Kilat putih sekejap di panggung menandai
+rananya; dengan gerak dikurangi kilatnya tidak ada.
+
+**Kenapa fotonya diambil di frame, bukan di klik.** Konteks WebGL2 maket 3D
+dibuat tanpa `preserveDrawingBuffer`: isi kanvasnya cuma utuh sampai task yang
+menggambarnya selesai, sesudah itu peramban boleh mengosongkannya. Jadi klik
+cuma memasang permintaan (`jepretKlik()`), dan `frame()` melayaninya tepat
+sesudah `TIGA.gambar()` — atau sesudah gambar 2D selesai — di task yang sama
+(`jepretSesudahGambar()`). Kalau 3D mati di tengah gambar, permintaannya
+dilayani frame 2D berikutnya. Foto yang gagal (mis. `toBlob` melempar) cuma
+diperingatkan di konsol: ruangannya jalan terus dan fotonya tidak dicoba ulang.
+
+**Yang masuk foto** cuma isi kanvas yang tampil (`#room` atau `#room3d`),
+seukuran piksel aslinya, ditempel di atas latar yang dilukis lebih dulu: kanvas
+3D di-clear bening dan panel kayu jati di belakangnya cuma latar CSS, jadi
+gradien `--kayu`/`--kayu-tua` milik `.stage` dilukis ulang di kanvas foto.
+Selama pantauan CCTV latarnya hitam monitor dan fotonya ikut filter hitam-putih
+`#room3d.cctv`, persis seperti di layar. Yang hidup di DOM **tidak** ikut —
+sengaja, di versi pertama ini: balon ucap & balon pikir (`#overlay`), kartu
+pegawai, petunjuk kendali 3D, pita POV, dan cap "CAM 01" monitor CCTV. Fotonya
+bersih.
+
+**Mode panggung tetap aman.** Yang disalin persis yang sudah tampil, jadi di
+`?panggung=1` tidak ada satu huruf pun di foto yang belum terlihat di layar —
+malah lebih sedikit, karena isi balon tidak ikut. Capnya cuma nama kantor dan
+waktu, tanpa nama pegawai, proyek, atau folder. Di `?overlay=1` dan `?kadis=1`
+bilah bawahnya tersembunyi, jadi tombolnya juga.
+
+`uji-tiga.mjs` bagian 33 menjaga waktunya (sesudah `TIGA.gambar`, di frame yang
+sama), urutan latar-lalu-tempel, warna latar yang sama dengan `style.css`, cap
+dan nama berkas, URL objek yang dicabut, dan satu klik = satu foto.
+
 ### Tampilan 3D: maket kantor
 
 Ruangan yang sama bisa dilihat sebagai **maket tiga dimensi** — seperti maket
@@ -2173,9 +2258,31 @@ mengalahkannya. Bawaannya 3D, kecuali di `?overlay=1` (siaran butuh piksel
 yang dikunci) dan `?kadis=1` (tidak ada kanvas sama sekali).
 
 Kendalinya: **seret** memutar maket, **klik kanan / shift+seret** menggeser,
-**roda** mendekat-menjauh, **klik dua kali** kembali ke tampak awal. Di layar
+**roda** mendekat-menjauh, **klik dua kali** kembali ke tampak awal. Klik dua
+kali tidak kelihatan begitu petunjuknya pudar, jadi begitu sudut, zoom, atau
+sasaran kamera bergeser dari tampak awal muncul tombol kecil **⟲ tampak awal**
+di pojok kanan atas panggung (pojok atas: tepi bawah milik petunjuk dan pita
+POV; selama POV tombolnya tidak ada). Klik dua kali, tombol itu, dan `0` di
+papan ketik lewat satu pintu yang sama (`tampakAwal()`), dan ketiganya
+dihitung memegang maket seperti seret. Di layar
 sentuh, satu jari memutar dan dua jari mencubit & menggeser — angkat
 salah satu jari di tengah cubitan dan jari yang tersisa melanjutkan putaran.
+Petunjuk yang muncul tiap masuk 3D (dan judul tombol 3D/2D) punya versi jari
+untuk `pointer: coarse` — klik kanan, shift, dan roda tidak ada di HP — dan
+boleh membungkus jadi dua-tiga baris di panggung sempit alih-alih terpotong.
+
+**Papan ketik.** Kanvas maket bisa difokus (Tab; `tabindex` dan `aria-label`
+di index.html), dan selama fokusnya di situ: **panah** memutar seperti menyeret
+ke arah itu, **shift+panah** menggeser, **+ / −** mendekat-menjauh, **0** tampak
+awal, **[ ]** pindah ke mata pegawai sebelumnya/berikutnya — dari maket, `]`
+masuk ke mata pegawai pertama, satu-satunya jalan ke POV tanpa tetikus — dan
+**Esc** keluar dari POV. Tombol yang dipakai di-`preventDefault` supaya
+halamannya tidak ikut bergulir. Diam total kalau fokusnya di tempat lain
+(kolom isian, select kartu pegawai), selama dialog `.dlg-latar` terbuka — klik
+X-banner membuka papan informasi sementara fokusnya masih di kanvas — dan
+waktu Ctrl/Cmd/Alt ditekan (Ctrl + − 0 tetap zoom halaman milik peramban;
+AltGr tetap lewat untuk kurung siku papan ketik Eropa). Fokus lewat Tab
+memunculkan petunjuk versi papan ketik; fokus karena diklik tidak.
 Klik pegawai atau
 perabot membuka kartu yang sama seperti di 2D, dan kamera ikut terbang ke
 barangnya.
@@ -2193,6 +2300,9 @@ menggambarnya, dan menempel lewat satu kait saja — objek `TIGA` di room.js:
   memuat titik itu. 2D tidak membutuhkannya; 3D butuh untuk tahu seberapa jauh
   titiknya ke dalam. Balon ucap, balon pikir, lencana galat, dan kartu pegawai
   memberikannya (`this.y`).
+- `TIGA.papan(s)`: penempat 3D papan nama melayang — bingkai layar kotak pilih
+  barang/orang `s` (`{x0, x1, atas, bawah}` px CSS), `null` selama POV atau
+  kalau orangnya tak kelihatan. Isi papannya tetap dibangun `room.js`.
 - `let ctx` (bukan `const` lagi) + `gambarKe(k, fn)`: menukar `ctx` sementara
   lalu SELALU mengembalikannya. Itu yang membuat semua fungsi gambar 2D bisa
   dipakai ulang tanpa tahu dirinya sedang dipakai 3D.
@@ -2662,8 +2772,9 @@ klik barang, X-banner, dan bukaan ruang kadis semuanya masih dihitung
 sementara sudut putar tetap milik orang yang memegang tetikus — kecuali di mode
 sinematik: tiap singgahan membawa sudutnya sendiri (`SUDUT_SINGGAH`: arsip dari
 kiri, server dari kanan, rapat dari atas, ruang tunggu dari depan) dan maketnya
-mengayun pelan selama singgah; seret, roda, cubit, atau klik dua kali
-menghentikannya 10 detik di sudut yang sedang tampak. Dinding samping
+mengayun pelan selama singgah; seret, roda, cubit, klik dua kali, tombol
+⟲ tampak awal, atau papan ketik menghentikannya 10 detik di sudut yang sedang
+tampak (tampak awal: di tampak awal). Dinding samping
 yang membelakangi kamera dipotong rendah, seperti maket arsitek. Keduanya
 berpintu: ambang berkusen jati dengan lampu KELUAR hijau, kiri di lajur bawah
 dan kanan di lajur atas. Pegawai baru dan peserta rapat masuk lewat pintu kiri
@@ -2678,8 +2789,9 @@ ikut turun waktu dia duduk, ikut menoleh ke arah hadapnya, terkantuk-kantuk,
 dan naik-turun sedikit waktu dia berjalan. Pegawai yang duduk di meja kerja
 otomatis menatap laptopnya — layar kode yang bergerak di kanan depannya, yang
 dari arah hadap lurus jatuh di luar bidang pandang — sampai penonton menoleh
-sendiri. Seret = menoleh, roda atau cubit = lebar pandang, klik dua kali =
-kembali ke lirikan semula, klik orang lain yang kelihatan = pindah ke matanya.
+sendiri. Seret (atau panah) = menoleh, roda, cubit, atau + − = lebar pandang,
+klik dua kali (atau 0) = kembali ke lirikan & lebar pandang semula, klik orang
+lain yang kelihatan = pindah ke matanya.
 Selama POV badan pegawai itu sendiri tidak digambar dan tidak bisa diklik
 (sinar kliknya berangkat dari dalam kepalanya), kartunya diparkir di tepi
 kiri, dan maket ditutup dinding depan berpita serta plafon: cuma muka dalamnya
@@ -2689,7 +2801,7 @@ lewat pintu itu: begitu orangnya lenyap di ambang, POV selesai sendiri. Keluar
 lewat Esc, tombol "kembali ke maket" di pita bawah, menutup kartunya, atau klik
 tempat kosong. POV dibuka dari klik di ruangan 3D atau tombol "lihat dari
 matanya" di kartu pegawai — klik baris kru sendiri tetap membuka kartu tanpa
-memindah kamera; ‹ › di pita pindah ke mata pegawai sebelumnya/berikutnya (tamu
+memindah kamera; ‹ › di pita (atau [ ]) pindah ke mata pegawai sebelumnya/berikutnya (tamu
 ruang kadis ikut selama bukaannya tampil). Kartu Kamera CCTV Kubah punya "lihat
 dari CCTV": mesin POV yang sama dengan mata di lensa kubah, rupa monitor pos
 satpam (hitam-putih, garis pindai, "CAM 01", jam berjalan), tanpa rekaman apa

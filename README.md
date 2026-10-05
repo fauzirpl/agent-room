@@ -50,7 +50,8 @@ sendiri tiap login, `dinas --layanan` mendaftarkannya ke penjadwal bawaan OS
 ### Yang ada
 
 - Setiap tool call Claude Code jadi gerakan di ruangan, bukan cuma baris log
-- **Maket 3D**: kantornya bisa diputar dan dilihat dari sudut mana pun —
+- **Maket 3D**: kantornya bisa diputar (tetikus, jari, atau papan ketik: panah,
+  + −, 0 untuk tampak awal) dan dilihat dari sudut mana pun —
   perabot dan tanaman voxel yang benar-benar berdiri (sampai isi rak arsip dan
   pernak-pernik tiap meja), akuarium berair dengan arwana yang berenang,
   pegawai voxel yang duduk di kursi rapat, mengetik di mejanya, hormat, dan
@@ -179,7 +180,8 @@ removes it, `--coba` only shows what would be run).
 ### What's in it
 
 - Every Claude Code tool call becomes motion in the room, not just a log line
-- **A 3D model of the office**: orbit around it and look from any angle — real
+- **A 3D model of the office**: orbit around it (mouse, touch, or keyboard:
+  arrows, + −, 0 to reset) and look from any angle — real
   standing voxel furniture and plants (down to the binders on the archive
   shelf and the knick-knacks on each desk), a water-filled aquarium with a
   swimming arowana, voxel civil servants who sit at the meeting table, type
